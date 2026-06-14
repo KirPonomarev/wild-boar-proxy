@@ -387,6 +387,185 @@ def routes_list_packet_for_operator_flow() -> dict[str, object]:
     )
 
 
+REASONING_VARIANT_SPECS: dict[str, dict[str, object]] = {
+    "fast": {
+        "route_id": "wbp-deepseek-v4-pro-fast",
+        "display_name": "DeepSeek V4 Pro Fast",
+        "thinking": {"type": "disabled"},
+    },
+    "high": {
+        "route_id": "wbp-deepseek-v4-pro-high",
+        "display_name": "DeepSeek V4 Pro High",
+        "thinking": {"type": "enabled", "reasoning_effort": "high"},
+    },
+    "max": {
+        "route_id": "wbp-deepseek-v4-pro-max",
+        "display_name": "DeepSeek V4 Pro Max",
+        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+    },
+}
+
+
+def reasoning_live_format_call(route_id: str) -> tuple[str, ...]:
+    return (
+        "external-models",
+        "live-format-check",
+        "--route",
+        route_id,
+        "--prompt",
+        "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
+        "--expected-text",
+        "API_ONLY_DEEPSEEK_READY",
+        "--json",
+    )
+
+
+def routes_list_packet_with_reasoning_variants(
+    levels: tuple[str, ...] = ("fast", "high", "max"),
+) -> dict[str, object]:
+    routes: list[dict[str, object]] = []
+    for level in levels:
+        spec = REASONING_VARIANT_SPECS[level]
+        route_id = str(spec["route_id"])
+        routes.append(
+            {
+                "schema_version": 1,
+                "route_id": route_id,
+                "display_name": str(spec["display_name"]),
+                "provider": "deepseek",
+                "base_url": "http://127.0.0.1:54321/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-v4-pro",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "secret_ref": "DEEPSEEK_API_KEY",
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+                "thinking": dict(spec["thinking"]),  # type: ignore[arg-type]
+            }
+        )
+    return command_packet(
+        human_message="External-models routes listed from local registry.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        data={"count": len(routes), "routes": routes},
+    )
+
+
+def models_packet_with_reasoning_variants(
+    levels: tuple[str, ...] = ("fast", "high", "max"),
+) -> dict[str, object]:
+    models: list[dict[str, object]] = []
+    for level in levels:
+        spec = REASONING_VARIANT_SPECS[level]
+        models.append(
+            {
+                "route_id": str(spec["route_id"]),
+                "display_name": str(spec["display_name"]),
+                "provider": "deepseek",
+                "base_url": "http://127.0.0.1:54321/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-v4-pro",
+                "compatibility": "openai_chat_completions",
+                "cost_class": "paid_or_free_limited",
+                "enabled": True,
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "thinking": dict(spec["thinking"]),  # type: ignore[arg-type]
+                "synthetic_adapter_state": "stopped",
+                "profile_ready": False,
+            }
+        )
+    return command_packet(
+        human_message="External-models route models listed from local registry.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        data={
+            "count": len(models),
+            "source": "local_routes_registry",
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "models": models,
+        },
+    )
+
+
+def live_format_packet_for_reasoning(
+    route_id: str,
+    thinking: dict[str, object],
+    *,
+    api_parameter_sent: bool = True,
+) -> dict[str, object]:
+    return command_packet(
+        human_message=(
+            "External-models route live format check captured one provider response "
+            "without writing state or evidence."
+        ),
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        data={
+            "check_kind": "api_only_live_route_format",
+            "network_dependent": True,
+            "verification_scope": "route_provider_only_no_write",
+            "route_state": "live_response_observed_no_write",
+            "requested_model": route_id,
+            "effective_model": "deepseek-v4-pro",
+            "provider": "deepseek",
+            "fallback_used": False,
+            "fallback_chain": [route_id],
+            "cost_class": "paid_or_free_limited",
+            "latency_ms": 21,
+            "request_count": 1,
+            "retry_count": 0,
+            "parallel_fanout_attempted": False,
+            "expected_text": "API_ONLY_DEEPSEEK_READY",
+            "expected_text_observed": True,
+            "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+            "response_text_length": 23,
+            "changed_files": [],
+            "state_written": False,
+            "evidence_written": False,
+            "file_mutation_attempted": False,
+            "commands_started_by_provider": False,
+            "codex_history_sent": False,
+            "repo_context_sent": False,
+            "request_shape": "openai_chat_messages",
+            "response_profile": "openai_chat_choices_message",
+            "response_shape": "choices_message",
+            "thinking": dict(thinking),
+            "api_parameter_sent": api_parameter_sent,
+            "label_source": "provider_declared_plus_operator_mapping",
+            "intelligence_measured": False,
+        },
+    )
+
+
+def live_payloads_with_reasoning_variants(
+    levels: tuple[str, ...] = ("fast", "high", "max"),
+) -> dict[tuple[str, ...], dict[str, object]]:
+    payloads = live_payloads()
+    payloads[("external-models", "routes", "list", "--json")] = (
+        routes_list_packet_with_reasoning_variants(levels)
+    )
+    payloads[("external-models", "models", "--json")] = (
+        models_packet_with_reasoning_variants(levels)
+    )
+    for level in levels:
+        spec = REASONING_VARIANT_SPECS[level]
+        route_id = str(spec["route_id"])
+        payloads[reasoning_live_format_call(route_id)] = live_format_packet_for_reasoning(
+            route_id,
+            dict(spec["thinking"]),  # type: ignore[arg-type]
+        )
+    return payloads
+
+
 class MappingRunner:
     def __init__(self, payloads: dict[tuple[str, ...], dict[str, object]]) -> None:
         self.payloads = payloads
@@ -20464,19 +20643,342 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertIn("api_key", packet["forbidden_fields"])
         self.assertFalse(packet["provider_called"])
         self.assertFalse(packet["live_call_attempted"])
-        self.assertEqual(runner.calls.count(
-            (
-                "external-models",
-                "live-format-check",
-                "--route",
-                "wbp-deepseek-v3",
-                "--prompt",
-                "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
-                "--expected-text",
-                "API_ONLY_DEEPSEEK_READY",
-                "--json",
+        self.assertEqual(
+            runner.calls.count(
+                (
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--prompt",
+                    "Return exactly this single line, with no quotes and no extra text: API_ONLY_DEEPSEEK_READY",
+                    "--expected-text",
+                    "API_ONLY_DEEPSEEK_READY",
+                    "--json",
+                )
+            ),
+            0,
+        )
+
+    def test_codex_custom_reasoning_dispatch_matrix_proves_all_catalog_levels(self) -> None:
+        runner = MappingRunner(live_payloads_with_reasoning_variants())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
             )
-        ), 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["reasoning_dispatch_matrix_proven"])
+        self.assertTrue(packet["api_reasoning_dispatch_proven"])
+        self.assertTrue(packet["api_provider_acknowledged"])
+        self.assertTrue(packet["chatgpt_slot_selection_proven"])
+        self.assertFalse(packet["chatgpt_provider_backed_reasoning_proven"])
+        self.assertTrue(packet["api_only_levels_provider_backed"])
+        self.assertFalse(packet["chatgpt_lane_provider_backed"])
+        self.assertEqual(packet["provider_call_count"], 3)
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(packet["required_operator_levels"], ["fast", "high", "max"])
+        self.assertEqual(packet["catalog_supported_operator_levels"], ["fast", "high", "max"])
+        self.assertEqual(packet["missing_operator_levels"], [])
+        self.assertEqual(packet["forbidden_fields"], [])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertEqual(len(packet["level_results"]), 3)
+        for result in packet["level_results"]:
+            level = result["operator_level"]
+            expected_spec = REASONING_VARIANT_SPECS[level]
+            route_id = expected_spec["route_id"]
+            self.assertTrue(result["reasoning_level_dispatch_proven"])
+            self.assertTrue(result["chatgpt_slot_selection_proven"])
+            self.assertFalse(result["chatgpt_provider_backed_reasoning_proven"])
+            self.assertTrue(result["api_reasoning_dispatch_proven"])
+            self.assertTrue(result["api_provider_acknowledged"])
+            self.assertTrue(result["provider_called"])
+            self.assertEqual(result["request_count"], 1)
+            self.assertFalse(result["fallback_used"])
+            self.assertFalse(result["intelligence_measured"])
+            self.assertTrue(result["not_intelligence_proof"])
+            self.assertEqual(result["api_model_id"], route_id)
+            self.assertEqual(result["expected_thinking"], expected_spec["thinking"])
+            self.assertEqual(result["observed_thinking"], expected_spec["thinking"])
+            self.assertEqual(result["api_only_packet"]["status"], "ok")
+            self.assertEqual(result["api_only_packet"]["machine_error_code"], "OK")
+            self.assertTrue(result["api_only_packet"]["provider_called"])
+            self.assertFalse(result["chatgpt_selection_packet"]["provider_called"])
+            self.assertFalse(result["chatgpt_selection_packet"]["live_call_attempted"])
+            self.assertIn(reasoning_live_format_call(str(route_id)), runner.calls)
+
+    def test_codex_custom_reasoning_dispatch_matrix_rejects_browser_reasoning_authority(self) -> None:
+        runner = MappingRunner(live_payloads_with_reasoning_variants())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {
+                            "api_model_id": "browser-route",
+                            "api_reasoning_option_id": "provider_declared_max",
+                            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_MATRIX_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("browser_reasoning_authority_rejected", packet["blocking_reasons"])
+        self.assertEqual(
+            packet["forbidden_fields"],
+            ["api_model_id", "api_reasoning_option_id", "thinking"],
+        )
+        self.assertFalse(packet["reasoning_dispatch_matrix_proven"])
+        self.assertEqual(packet["provider_call_count"], 0)
+        for level in ("fast", "high", "max"):
+            route_id = str(REASONING_VARIANT_SPECS[level]["route_id"])
+            self.assertNotIn(reasoning_live_format_call(route_id), runner.calls)
+
+    def test_codex_custom_reasoning_dispatch_matrix_requires_owner_auth_before_provider_calls(self) -> None:
+        runner = MappingRunner(live_payloads_with_reasoning_variants())
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=runner),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_MATRIX_OWNER_AUTH_REQUIRED",
+        )
+        self.assertIn("owner_authorization_required", packet["blocking_reasons"])
+        self.assertEqual(packet["catalog_supported_operator_levels"], ["fast", "high", "max"])
+        self.assertFalse(packet["reasoning_dispatch_matrix_proven"])
+        self.assertEqual(packet["provider_call_count"], 0)
+        for level in ("fast", "high", "max"):
+            route_id = str(REASONING_VARIANT_SPECS[level]["route_id"])
+            self.assertNotIn(reasoning_live_format_call(route_id), runner.calls)
+
+    def test_codex_custom_reasoning_dispatch_matrix_blocks_missing_catalog_level(self) -> None:
+        runner = MappingRunner(live_payloads_with_reasoning_variants(("fast", "max")))
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_MATRIX_CATALOG_LEVELS_MISSING",
+        )
+        self.assertEqual(packet["catalog_supported_operator_levels"], ["fast", "max"])
+        self.assertEqual(packet["missing_operator_levels"], ["high"])
+        self.assertFalse(packet["reasoning_dispatch_matrix_proven"])
+        self.assertEqual(packet["provider_call_count"], 0)
+        self.assertNotIn(
+            reasoning_live_format_call(str(REASONING_VARIANT_SPECS["fast"]["route_id"])),
+            runner.calls,
+        )
+        self.assertNotIn(
+            reasoning_live_format_call(str(REASONING_VARIANT_SPECS["max"]["route_id"])),
+            runner.calls,
+        )
+
+    def test_codex_custom_reasoning_dispatch_matrix_blocks_provider_ack_mismatch(self) -> None:
+        payloads = live_payloads_with_reasoning_variants()
+        high_route_id = str(REASONING_VARIANT_SPECS["high"]["route_id"])
+        payloads[reasoning_live_format_call(high_route_id)] = live_format_packet_for_reasoning(
+            high_route_id,
+            {"type": "enabled", "reasoning_effort": "max"},
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_NOT_PROVEN",
+        )
+        self.assertIn("reasoning_level_dispatch_failed", packet["blocking_reasons"])
+        self.assertFalse(packet["reasoning_dispatch_matrix_proven"])
+        self.assertFalse(packet["api_reasoning_dispatch_proven"])
+        self.assertFalse(packet["api_provider_acknowledged"])
+        self.assertEqual(packet["provider_call_count"], 3)
+        by_level = {result["operator_level"]: result for result in packet["level_results"]}
+        self.assertTrue(by_level["fast"]["reasoning_level_dispatch_proven"])
+        self.assertFalse(by_level["high"]["reasoning_level_dispatch_proven"])
+        self.assertTrue(by_level["max"]["reasoning_level_dispatch_proven"])
+        self.assertIn(
+            "api_reasoning_dispatch_not_proven",
+            by_level["high"]["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_provider_reasoning_not_acknowledged",
+            by_level["high"]["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_reasoning_thinking_mismatch",
+            by_level["high"]["api_only_packet"]["api_reasoning_blocking_reasons"],
+        )
+        for level in ("fast", "high", "max"):
+            route_id = str(REASONING_VARIANT_SPECS[level]["route_id"])
+            self.assertIn(reasoning_live_format_call(route_id), runner.calls)
+
+    def test_codex_custom_reasoning_dispatch_matrix_blocks_live_format_command_error(self) -> None:
+        payloads = live_payloads_with_reasoning_variants()
+        high_route_id = str(REASONING_VARIANT_SPECS["high"]["route_id"])
+        payloads[reasoning_live_format_call(high_route_id)] = command_packet(
+            status="command_error",
+            exit_code=1,
+            human_message="Live format check failed before provider acknowledgement.",
+            machine_error_code="EXTERNAL_MODELS_LIVE_FORMAT_TRANSPORT_FAILED",
+            next_action="retry_or_fix_route",
+            changed_files=[],
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/reasoning-dispatch-matrix",
+                        {},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_NOT_PROVEN",
+        )
+        self.assertFalse(packet["reasoning_dispatch_matrix_proven"])
+        self.assertFalse(packet["api_reasoning_dispatch_proven"])
+        self.assertFalse(packet["api_provider_acknowledged"])
+        self.assertEqual(packet["provider_call_count"], 2)
+        by_level = {result["operator_level"]: result for result in packet["level_results"]}
+        self.assertTrue(by_level["fast"]["reasoning_level_dispatch_proven"])
+        self.assertFalse(by_level["high"]["reasoning_level_dispatch_proven"])
+        self.assertTrue(by_level["max"]["reasoning_level_dispatch_proven"])
+        self.assertEqual(
+            by_level["high"]["api_only_packet"]["machine_error_code"],
+            "EXTERNAL_MODELS_LIVE_FORMAT_TRANSPORT_FAILED",
+        )
+        self.assertEqual(
+            by_level["high"]["api_only_packet"]["live_error_packet"]["status"],
+            "command_error",
+        )
+        self.assertFalse(by_level["high"]["api_only_packet"]["provider_called"])
+        for level in ("fast", "high", "max"):
+            route_id = str(REASONING_VARIANT_SPECS[level]["route_id"])
+            self.assertIn(reasoning_live_format_call(route_id), runner.calls)
 
     def test_codex_custom_api_action_gate_blocks_live_api_without_owner_auth(self) -> None:
         runner = MappingRunner(live_payloads())

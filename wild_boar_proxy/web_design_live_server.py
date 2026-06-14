@@ -72,6 +72,11 @@ from wild_boar_proxy.codex_model_registry import (
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
     CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+    CUSTOM_CODEX_API_REASONING_OPTION_FAST,
+    CUSTOM_CODEX_API_REASONING_OPTION_HIGH,
+    CUSTOM_CODEX_API_REASONING_OPTION_MAX,
+    CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+    CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
     build_api_only_deepseek_live_route_format_packet,
     build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
@@ -1284,6 +1289,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     ),
     _post_route(
         "/api/codex/custom/agent-alias-acceptance-matrix",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/reasoning-dispatch-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -3723,6 +3733,339 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
         "next_action": "none" if matrix_ok else "stop_and_diagnose_alias_matrix",
+    }
+
+
+REASONING_DISPATCH_MATRIX_LEVELS: tuple[tuple[str, str], ...] = (
+    ("fast", CUSTOM_CODEX_API_REASONING_OPTION_FAST),
+    ("high", CUSTOM_CODEX_API_REASONING_OPTION_HIGH),
+    ("max", CUSTOM_CODEX_API_REASONING_OPTION_MAX),
+)
+REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS: set[str] = set()
+
+
+def _reasoning_dispatch_option_for_row(row: dict[str, Any]) -> tuple[str, str]:
+    thinking = row.get("thinking") if isinstance(row.get("thinking"), dict) else {}
+    thinking_type = str(thinking.get("type") or "").strip().lower()
+    if thinking_type == "disabled":
+        return "fast", CUSTOM_CODEX_API_REASONING_OPTION_FAST
+    if thinking_type == "enabled":
+        effort = str(thinking.get("reasoning_effort") or "").strip().lower()
+        if effort == "high":
+            return "high", CUSTOM_CODEX_API_REASONING_OPTION_HIGH
+        if effort == "max":
+            return "max", CUSTOM_CODEX_API_REASONING_OPTION_MAX
+    return "", ""
+
+
+def _reasoning_dispatch_matrix_candidates(
+    *,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    selector = build_dual_lane_model_selection_ui_packet(
+        operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    api_rows = [
+        row
+        for row in dict(selector.get("api_lane") or {}).get("models") or []
+        if isinstance(row, dict)
+    ]
+    candidates_by_level: dict[str, dict[str, Any]] = {}
+    for row in api_rows:
+        if row.get("selection_enabled") is not True:
+            continue
+        if str(row.get("provider") or "").strip().lower() != "deepseek":
+            continue
+        if row.get("api_parameter_sent") is not True:
+            continue
+        operator_level, option_id = _reasoning_dispatch_option_for_row(row)
+        if not operator_level or operator_level in candidates_by_level:
+            continue
+        model_id = str(row.get("model_id") or "").strip()
+        if not model_id:
+            continue
+        candidates_by_level[operator_level] = {
+            "operator_level": operator_level,
+            "api_reasoning_option_id": option_id,
+            "api_model_id": model_id,
+            "provider": str(row.get("provider") or ""),
+            "thinking": dict(row.get("thinking") or {}),
+            "api_parameter_sent": row.get("api_parameter_sent") is True,
+            "selection_enabled": row.get("selection_enabled") is True,
+            "server_issued": row.get("model_catalog_entry_server_issued") is True,
+            "source": str(row.get("source") or ""),
+            "label_source": str(row.get("label_source") or ""),
+        }
+    ordered = [
+        candidates_by_level[level]
+        for level, _option_id in REASONING_DISPATCH_MATRIX_LEVELS
+        if level in candidates_by_level
+    ]
+    missing = [
+        level
+        for level, _option_id in REASONING_DISPATCH_MATRIX_LEVELS
+        if level not in candidates_by_level
+    ]
+    return ordered, missing
+
+
+def _reasoning_dispatch_level_packet(
+    *,
+    candidate: dict[str, Any],
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    availability_lattice_packet: dict[str, Any] | None,
+    owner_authorized: bool,
+    live_result: dict[str, Any] | None,
+    live_error: dict[str, Any] | None,
+) -> dict[str, Any]:
+    route_id = str(candidate.get("api_model_id") or "")
+    option_id = str(candidate.get("api_reasoning_option_id") or "")
+    operator_level = str(candidate.get("operator_level") or "")
+    api_payload = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+        "api_model_id": route_id,
+        "api_reasoning_option_id": option_id,
+    }
+    api_only_packet = build_api_only_deepseek_live_route_format_packet(
+        api_payload,
+        operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+        owner_authorized=owner_authorized,
+        live_result=live_result,
+        live_error=live_error,
+    )
+    chatgpt_selection_packet = build_server_model_selection_and_reasoning_truth_packet(
+        {
+            "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+            "api_model_id": route_id,
+            "api_reasoning_option_id": option_id,
+        },
+        operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    primary_slot = (
+        chatgpt_selection_packet.get("primary_model_slot")
+        if isinstance(chatgpt_selection_packet.get("primary_model_slot"), dict)
+        else {}
+    )
+    coding_slot = (
+        chatgpt_selection_packet.get("coding_agent_model_slot")
+        if isinstance(chatgpt_selection_packet.get("coding_agent_model_slot"), dict)
+        else {}
+    )
+    chatgpt_selection_proven = bool(
+        chatgpt_selection_packet.get("status") == "ok"
+        and chatgpt_selection_packet.get("model_selection_truth_proven") is True
+        and chatgpt_selection_packet.get("execution_mode")
+        == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API
+        and chatgpt_selection_packet.get("dual_lane_slots_preserved") is True
+        and chatgpt_selection_packet.get("slots_coherent") is True
+        and primary_slot.get("lane") == CODEX_ACCOUNT_MODEL_LANE
+        and primary_slot.get("selection_enabled") is True
+        and coding_slot.get("lane") == API_ROUTE_MODEL_LANE
+        and coding_slot.get("selection_enabled") is True
+        and str(coding_slot.get("model_id") or "") == route_id
+        and str(coding_slot.get("provider") or "").lower() == "deepseek"
+        and chatgpt_selection_packet.get("api_reasoning_option_model_bound") is True
+        and chatgpt_selection_packet.get("provider_called") is False
+        and chatgpt_selection_packet.get("live_call_attempted") is False
+    )
+    expected_thinking = (
+        api_only_packet.get("api_reasoning_expected_thinking")
+        if isinstance(api_only_packet.get("api_reasoning_expected_thinking"), dict)
+        else {}
+    )
+    observed_thinking = (
+        api_only_packet.get("api_reasoning_observed_thinking")
+        if isinstance(api_only_packet.get("api_reasoning_observed_thinking"), dict)
+        else {}
+    )
+    api_dispatch_proven = bool(
+        api_only_packet.get("status") == "ok"
+        and api_only_packet.get("api_reasoning_live_evidence_proven") is True
+        and api_only_packet.get("provider_called") is True
+        and api_only_packet.get("api_line_used_as_executor") is True
+        and api_only_packet.get("fallback_attempted") is False
+        and api_only_packet.get("secret_value_exposed") is False
+    )
+    provider_acknowledged = bool(
+        api_dispatch_proven
+        and api_only_packet.get("api_reasoning_option_provider_parameter_sent") is True
+        and api_only_packet.get("api_reasoning_thinking_matched") is True
+        and observed_thinking == expected_thinking
+        and bool(observed_thinking)
+    )
+    level_ok = bool(
+        chatgpt_selection_proven
+        and api_dispatch_proven
+        and provider_acknowledged
+        and api_only_packet.get("api_reasoning_intelligence_measured") is False
+    )
+    blocking_reasons: list[str] = []
+    if not chatgpt_selection_proven:
+        blocking_reasons.append("chatgpt_selection_readout_not_proven")
+    if not api_dispatch_proven:
+        blocking_reasons.append("api_reasoning_dispatch_not_proven")
+    if not provider_acknowledged:
+        blocking_reasons.append("api_provider_reasoning_not_acknowledged")
+    if api_only_packet.get("api_reasoning_intelligence_measured") is True:
+        blocking_reasons.append("api_reasoning_intelligence_measured_claimed")
+    return {
+        "operator_level": operator_level,
+        "api_reasoning_option_id": option_id,
+        "api_model_id": route_id,
+        "expected_thinking": expected_thinking,
+        "observed_thinking": observed_thinking,
+        "chatgpt_slot_selection_proven": chatgpt_selection_proven,
+        "chatgpt_provider_backed_reasoning_proven": False,
+        "api_reasoning_dispatch_proven": api_dispatch_proven,
+        "api_provider_acknowledged": provider_acknowledged,
+        "reasoning_level_dispatch_proven": level_ok,
+        "intelligence_measured": api_only_packet.get("api_reasoning_intelligence_measured")
+        is True,
+        "not_intelligence_proof": True,
+        "provider_called": api_only_packet.get("provider_called") is True,
+        "request_count": int(api_only_packet.get("request_count") or 0),
+        "fallback_used": api_only_packet.get("fallback_attempted") is True,
+        "local_imitation_used": False,
+        "secret_value_exposed": api_only_packet.get("secret_value_exposed") is True,
+        "blocking_reasons": blocking_reasons,
+        "api_only_packet": api_only_packet,
+        "chatgpt_selection_packet": chatgpt_selection_packet,
+    }
+
+
+def _custom_reasoning_dispatch_matrix_packet(
+    *,
+    payload: dict[str, Any] | None,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+    availability_lattice_packet: dict[str, Any] | None,
+    owner_authorized: bool,
+    live_results_by_route: dict[str, dict[str, Any]] | None = None,
+    live_errors_by_route: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(set(payload) - REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS)
+    candidates, missing_levels = _reasoning_dispatch_matrix_candidates(
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    live_results_by_route = live_results_by_route or {}
+    live_errors_by_route = live_errors_by_route or {}
+    level_results = [
+        _reasoning_dispatch_level_packet(
+            candidate=candidate,
+            operator_status=operator_status,
+            api_snapshot=api_snapshot,
+            availability_lattice_packet=availability_lattice_packet,
+            owner_authorized=owner_authorized,
+            live_result=live_results_by_route.get(str(candidate.get("api_model_id") or "")),
+            live_error=live_errors_by_route.get(str(candidate.get("api_model_id") or "")),
+        )
+        for candidate in candidates
+    ]
+    required_level_count = len(REASONING_DISPATCH_MATRIX_LEVELS)
+    full_level_count = len(level_results) == required_level_count
+    all_api_dispatch_ok = bool(
+        full_level_count
+        and all(result.get("api_reasoning_dispatch_proven") is True for result in level_results)
+    )
+    all_provider_acknowledged = bool(
+        full_level_count
+        and all(result.get("api_provider_acknowledged") is True for result in level_results)
+    )
+    all_chatgpt_selection_ok = bool(
+        full_level_count
+        and all(result.get("chatgpt_slot_selection_proven") is True for result in level_results)
+    )
+    all_levels_ok = bool(
+        len(level_results) == len(REASONING_DISPATCH_MATRIX_LEVELS)
+        and all(result.get("reasoning_level_dispatch_proven") is True for result in level_results)
+    )
+    matrix_ok = bool(
+        not forbidden_fields
+        and not missing_levels
+        and owner_authorized
+        and all_levels_ok
+    )
+    blocking_reasons: list[str] = []
+    if forbidden_fields:
+        blocking_reasons.append("browser_reasoning_authority_rejected")
+    if missing_levels:
+        blocking_reasons.append("catalog_reasoning_levels_missing")
+    if not owner_authorized:
+        blocking_reasons.append("owner_authorization_required")
+    if level_results and not all_levels_ok:
+        blocking_reasons.append("reasoning_level_dispatch_failed")
+    if matrix_ok:
+        machine_error_code = "OK"
+    elif forbidden_fields:
+        machine_error_code = "CUSTOM_CODEX_REASONING_MATRIX_BROWSER_AUTHORITY_REJECTED"
+    elif missing_levels:
+        machine_error_code = "CUSTOM_CODEX_REASONING_MATRIX_CATALOG_LEVELS_MISSING"
+    elif not owner_authorized:
+        machine_error_code = "CUSTOM_CODEX_REASONING_MATRIX_OWNER_AUTH_REQUIRED"
+    else:
+        machine_error_code = "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_NOT_PROVEN"
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if matrix_ok else "blocked",
+        "machine_error_code": machine_error_code,
+        "final_status": (
+            "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_PROVEN_WITH_LIMITS"
+            if matrix_ok
+            else "CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_NOT_PROVEN"
+        ),
+        "allowed_browser_fields": sorted(REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS),
+        "forbidden_fields": forbidden_fields,
+        "browser_can_supply_reasoning_authority": False,
+        "browser_can_supply_route_authority": False,
+        "supported_operator_levels_source": "wbp_contract_required_levels_and_server_catalog_candidates",
+        "required_operator_levels_source": "wbp_reasoning_dispatch_contract",
+        "catalog_supported_operator_levels_source": "server_catalog_deepseek_route_thinking",
+        "required_operator_levels": [
+            level for level, _option_id in REASONING_DISPATCH_MATRIX_LEVELS
+        ],
+        "catalog_supported_operator_levels": [
+            str(candidate.get("operator_level") or "") for candidate in candidates
+        ],
+        "missing_operator_levels": missing_levels,
+        "candidate_levels": candidates,
+        "level_results": level_results,
+        "reasoning_dispatch_matrix_proven": matrix_ok,
+        "api_reasoning_dispatch_proven": all_api_dispatch_ok,
+        "api_provider_acknowledged": all_provider_acknowledged,
+        "chatgpt_slot_selection_proven": all_chatgpt_selection_ok,
+        "chatgpt_provider_backed_reasoning_proven": False,
+        "api_only_levels_provider_backed": all_api_dispatch_ok and all_provider_acknowledged,
+        "chatgpt_lane_provider_backed": False,
+        "provider_call_count": sum(
+            int(result.get("request_count") or 0)
+            for result in level_results
+            if result.get("provider_called") is True
+        ),
+        "fallback_used": any(result.get("fallback_used") is True for result in level_results),
+        "local_imitation_used": False,
+        "secret_value_exposed": any(
+            result.get("secret_value_exposed") is True for result in level_results
+        ),
+        "intelligence_measured": any(
+            result.get("intelligence_measured") is True for result in level_results
+        ),
+        "not_intelligence_proof": True,
+        "blocking_reasons": blocking_reasons,
+        "next_action": "none" if matrix_ok else "stop_and_diagnose_reasoning_dispatch",
     }
 
 
@@ -13977,6 +14320,68 @@ def build_handler(
                     owner_authorized=codex_custom_live_prompt_authorized,
                     live_result=live_result,
                     live_error=live_error,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_reasoning_dispatch_matrix(self, actual_path: str) -> None:
+            payload = self._read_optional_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status = operator_surface_session.status_payload()
+            availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                operator_status,
+                api_snapshot=api_snapshot,
+            )
+            candidates, missing_levels = _reasoning_dispatch_matrix_candidates(
+                operator_status=operator_status,
+                api_snapshot=api_snapshot,
+                availability_lattice_packet=availability_lattice_packet,
+            )
+            forbidden_fields = sorted(
+                set(payload if isinstance(payload, dict) else {})
+                - REASONING_DISPATCH_MATRIX_ALLOWED_FIELDS
+            )
+            live_results_by_route: dict[str, dict[str, Any]] = {}
+            live_errors_by_route: dict[str, dict[str, Any]] = {}
+            if (
+                not forbidden_fields
+                and not missing_levels
+                and codex_custom_live_prompt_authorized
+            ):
+                for candidate in candidates:
+                    route_id = str(candidate.get("api_model_id") or "")
+                    if not route_id:
+                        continue
+                    live_command = execute_command(
+                        action_runner,
+                        "external_models_live_format_check",
+                        structured_args={
+                            "route_id": route_id,
+                            "prompt": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
+                            "expected_text": API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
+                        },
+                    )
+                    packet = live_command.get("packet")
+                    packet_data = packet.get("data") if isinstance(packet, dict) else None
+                    if live_command.get("status") == "ok" and isinstance(packet_data, dict):
+                        live_results_by_route[route_id] = packet_data
+                    else:
+                        live_errors_by_route[route_id] = {
+                            "status": live_command.get("status"),
+                            "machine_error_code": live_command.get("machine_error_code"),
+                            "human_message": live_command.get("human_message"),
+                            "next_action": live_command.get("next_action"),
+                            "changed_files": live_command.get("changed_files") or [],
+                        }
+            self._send_json(
+                _custom_reasoning_dispatch_matrix_packet(
+                    payload=payload,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    live_results_by_route=live_results_by_route,
+                    live_errors_by_route=live_errors_by_route,
                 )
             )
             return
