@@ -1179,18 +1179,29 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["alias_prompt_seen"])
         self.assertTrue(packet["primary_alias_prompt_seen"])
         self.assertTrue(packet["coding_alias_prompt_seen"])
+        self.assertTrue(packet["session_dispatch_proven"])
         self.assertTrue(packet["same_session_dispatch_proven"])
+        self.assertTrue(packet["primary_alias_resolved"])
+        self.assertTrue(packet["coding_alias_resolved"])
+        self.assertTrue(packet["primary_alias_not_api_route"])
+        self.assertTrue(packet["coding_alias_api_route_proven"])
+        self.assertTrue(packet["api_lane_used"])
+        self.assertTrue(packet["primary_orchestration_trace_proven"])
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertTrue(packet["coding_dispatch_proven"])
         self.assertTrue(packet["deepseek_response_token_matched"])
+        self.assertTrue(packet["exact_token_matched"])
+        self.assertEqual(packet["response_match_basis"], "response_digest_exact")
         self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
         self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
         self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["native_free_text_activation_proven"])
         self.assertFalse(packet["native_free_text_tool_bridge_proven"])
         self.assertTrue(packet["does_not_prove_native_free_text_tool_bridge"])
         self.assertFalse(packet["ui_label_counts_as_runtime_truth"])
         self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
         self.assertEqual(packet["next_action"], "none")
         self.assertEqual(
             reloaded_detail["agent_alias_binding_packet"]["labels"]["coding_alias"],
@@ -1214,6 +1225,214 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_agent_alias_dispatch_proof_accepts_arbitrary_saved_aliases(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id == "wbp-deepseek-v3"
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_RANDOM_ALIAS_OK" if route_backed else "ORCH_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Агент Шмель",
+                    "coding_alias": "Агент Птичка",
+                    "agent_1_alias": "Оркестратор",
+                    "agent_2_alias": "Кодовый агент",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Оркестратор, дай Агент Птичка команду ответить ровно: WBP_RANDOM_ALIAS_OK",
+                    "expected_coding_response": "WBP_RANDOM_ALIAS_OK",
+                },
+                runner,
+                owner_authorized=True,
+            )
+            detail = manager.get_packet(session_id)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["session_dispatch_proven"])
+        self.assertTrue(packet["primary_alias_resolved"])
+        self.assertTrue(packet["coding_alias_resolved"])
+        self.assertTrue(packet["primary_alias_not_api_route"])
+        self.assertTrue(packet["coding_alias_api_route_proven"])
+        self.assertTrue(packet["exact_token_matched"])
+        self.assertEqual(
+            detail["agent_alias_binding_packet"]["labels"]["primary_alias"],
+            "Агент Шмель",
+        )
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "prompt": "Alias activation check. Confirm orchestration intent for: Оркестратор, дай Агент Птичка команду ответить ровно: WBP_RANDOM_ALIAS_OK",
+                    "model_id": "gpt-5.3-codex",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Ответь одной строкой: WBP_RANDOM_ALIAS_OK",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
+
+    def test_agent_alias_dispatch_proof_rejects_missing_expected_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "expected_coding_response": " ",
+                },
+                lambda _payload: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "EXPECTED_CODING_RESPONSE_MISSING")
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertFalse(packet["exact_token_matched"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_agent_alias_dispatch_proof_blocks_non_exact_coding_response(self) -> None:
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id == "wbp-deepseek-v3"
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "prefix WBP_ALIAS_RUNTIME_ACTIVATION_OK suffix"
+                if route_backed
+                else "ALIAS_ORCHESTRATOR_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "expected_coding_response": "WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                },
+                runner,
+                owner_authorized=True,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "DEEPSEEK_ALIAS_RESPONSE_NOT_EXACT")
+        self.assertTrue(packet["session_dispatch_proven"])
+        self.assertFalse(packet["deepseek_response_token_matched"])
+        self.assertFalse(packet["exact_token_matched"])
+        self.assertFalse(packet["manual_activation_proven"])
 
     def test_agent_alias_dispatch_proof_rejects_browser_route_authority_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

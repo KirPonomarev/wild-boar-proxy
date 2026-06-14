@@ -225,11 +225,11 @@ def _agent_alias_key(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip()).casefold()
 
 
-def _normalize_agent_alias_response_token(value: Any) -> str:
+def _agent_alias_response_token_from_payload(value: Any) -> tuple[bool, str]:
     normalized = re.sub(r"\s+", " ", str(value or "")).strip()
     if not normalized:
-        normalized = "WBP_ALIAS_RUNTIME_ACTIVATION_OK"
-    return normalized[:AGENT_ALIAS_RESPONSE_TOKEN_MAX_CHARS]
+        return False, ""
+    return True, normalized[:AGENT_ALIAS_RESPONSE_TOKEN_MAX_CHARS]
 
 
 def _model_ids(
@@ -1228,9 +1228,28 @@ class CodexCustomSessionManager:
                 "prompt_runner_called": False,
                 "next_action": "repair_alias_runtime_binding",
             }
-        expected_coding_response = _normalize_agent_alias_response_token(
+        expected_present, expected_coding_response = _agent_alias_response_token_from_payload(
             payload.get("expected_coding_response")
         )
+        if not expected_present:
+            return {
+                **self._base_packet("rejected", "EXPECTED_CODING_RESPONSE_MISSING"),
+                "session_id": session_id,
+                "packet_kind": "codex_custom_agent_alias_dispatch_proof",
+                "manual_activation_proven": False,
+                "alias_runtime_binding_proven": True,
+                "agent_alias_binding_packet": alias_binding,
+                "prompt_runner_called": False,
+                "exact_token_matched": False,
+                "deepseek_response_token_matched": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "browser_can_supply_route_authority": False,
+                "browser_backend_intake": False,
+                "browser_secret_intake": False,
+                "secret_value_exposed": False,
+                "next_action": "provide_exact_expected_coding_response",
+            }
         primary_aliases = list(alias_binding.get("primary_aliases") or [])
         coding_aliases = list(alias_binding.get("coding_aliases") or [])
         default_prompt = (
@@ -1297,16 +1316,47 @@ class CodexCustomSessionManager:
             expected_provider="external_route",
             expected_source_provenance="route_proven",
         )
-        coding_response_preview = str(coding_packet.get("response_preview_bounded") or "")
+        expected_response_digest = _digest(expected_coding_response)
+        coding_response_digest = str(coding_packet.get("response_digest") or "")
         deepseek_response_token_matched = bool(
-            coding_dispatch_proven and expected_coding_response in coding_response_preview
+            coding_dispatch_proven and coding_response_digest == expected_response_digest
         )
-        manual_activation_proven = bool(
-            alias_binding.get("alias_runtime_binding_proven") is True
-            and alias_prompt_seen
+        exact_token_matched = deepseek_response_token_matched
+        primary_alias_resolved = bool(
+            primary_alias_prompt_seen
+            and alias_binding.get("alias_runtime_binding_proven") is True
             and primary_dispatch_proven
+            and primary_packet.get("requested_slot_id") == PRIMARY_MODEL_SLOT
+            and primary_packet.get("selected_source_class") != "route_backed"
+            and primary_packet.get("configured_provider") == "cliproxy"
+        )
+        coding_alias_resolved = bool(
+            coding_alias_prompt_seen
+            and alias_binding.get("alias_runtime_binding_proven") is True
             and coding_dispatch_proven
-            and deepseek_response_token_matched
+            and coding_packet.get("requested_slot_id") == CODING_AGENT_MODEL_SLOT
+            and coding_packet.get("selected_source_class") == "route_backed"
+            and coding_packet.get("configured_provider") == "external_route"
+        )
+        primary_alias_not_api_route = bool(
+            primary_alias_resolved
+            and primary_packet.get("route_provenance_required") is False
+            and primary_packet.get("selected_route_server_issued") is False
+            and primary_packet.get("selected_source_provenance") == "backend_proven"
+        )
+        coding_alias_api_route_proven = bool(
+            coding_alias_resolved
+            and coding_packet.get("route_provenance_required") is True
+            and coding_packet.get("selected_route_server_issued") is True
+            and coding_packet.get("route_execution_proven") is True
+            and coding_packet.get("provider_response_proven") is True
+            and coding_packet.get("selected_source_provenance") == "route_proven"
+        )
+        api_lane_used = coding_alias_api_route_proven
+        primary_orchestration_trace_proven = bool(
+            primary_dispatch_proven
+            and primary_packet.get("independent_wbp_trace_observed") is True
+            and primary_packet.get("wbp_path_proven") is True
         )
         fallback_used = bool(
             primary_packet.get("fallback_attempted") is True
@@ -1320,16 +1370,38 @@ class CodexCustomSessionManager:
             and primary_model_id != coding_model_id
             and not fallback_used
         )
+        session_dispatch_proven = bool(
+            same_session_dispatch_proven
+            and primary_alias_resolved
+            and coding_alias_resolved
+            and primary_alias_not_api_route
+            and coding_alias_api_route_proven
+            and api_lane_used
+        )
+        manual_activation_proven = bool(
+            alias_binding.get("alias_runtime_binding_proven") is True
+            and alias_prompt_seen
+            and session_dispatch_proven
+            and exact_token_matched
+        )
         machine_error_code = (
             "OK"
             if manual_activation_proven
             else (
                 "ALIAS_ACTIVATION_CONTEXT_NOT_APPLIED"
-                if not primary_dispatch_proven
+                if not primary_alias_resolved
                 else (
                     "CODING_AGENT_SLOT_NOT_DISPATCHED"
-                    if not coding_dispatch_proven
-                    else "DEEPSEEK_ALIAS_RESPONSE_NOT_PROVEN"
+                    if not coding_alias_resolved
+                    else (
+                        "PRIMARY_ALIAS_RESOLVED_TO_API_ROUTE"
+                        if not primary_alias_not_api_route
+                        else (
+                            "CODING_ALIAS_API_ROUTE_NOT_PROVEN"
+                            if not coding_alias_api_route_proven
+                            else "DEEPSEEK_ALIAS_RESPONSE_NOT_EXACT"
+                        )
+                    )
                 )
             )
         )
@@ -1352,11 +1424,22 @@ class CodexCustomSessionManager:
             "alias_prompt_seen": alias_prompt_seen,
             "primary_alias_prompt_seen": primary_alias_prompt_seen,
             "coding_alias_prompt_seen": coding_alias_prompt_seen,
+            "session_dispatch_proven": session_dispatch_proven,
             "same_session_dispatch_proven": same_session_dispatch_proven,
+            "primary_alias_resolved": primary_alias_resolved,
+            "coding_alias_resolved": coding_alias_resolved,
+            "primary_alias_not_api_route": primary_alias_not_api_route,
+            "coding_alias_api_route_proven": coding_alias_api_route_proven,
+            "api_lane_used": api_lane_used,
+            "primary_orchestration_trace_proven": primary_orchestration_trace_proven,
             "primary_dispatch_proven": primary_dispatch_proven,
             "coding_dispatch_proven": coding_dispatch_proven,
             "deepseek_response_token_matched": deepseek_response_token_matched,
+            "exact_token_matched": exact_token_matched,
+            "response_match_basis": "response_digest_exact",
             "expected_coding_response": expected_coding_response,
+            "expected_coding_response_digest": expected_response_digest,
+            "coding_response_digest": coding_response_digest,
             "primary_requested_slot_id": PRIMARY_MODEL_SLOT,
             "coding_requested_slot_id": CODING_AGENT_MODEL_SLOT,
             "primary_model_id": primary_model_id,
@@ -1369,6 +1452,7 @@ class CodexCustomSessionManager:
                 and coding_packet.get("prompt_runner_called") is True
             ),
             "fallback_used": fallback_used,
+            "local_imitation_used": False,
             "native_free_text_activation_proven": False,
             "native_free_text_tool_bridge_proven": False,
             "does_not_prove_native_free_text_tool_bridge": True,
@@ -1378,6 +1462,8 @@ class CodexCustomSessionManager:
             "browser_can_supply_route_authority": False,
             "browser_backend_intake": False,
             "browser_secret_intake": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
             "next_action": "none"
             if manual_activation_proven
             else "stop_and_diagnose_alias_runtime_activation",
@@ -4210,10 +4296,17 @@ class CodexCustomSessionManager:
             "runtime_selected_model": str(packet.get("runtime_selected_model") or ""),
             "configured_provider": str(packet.get("configured_provider") or ""),
             "selected_source_provenance": str(packet.get("selected_source_provenance") or ""),
+            "selected_source_class": str(packet.get("selected_source_class") or ""),
+            "selected_route_server_issued": packet.get("selected_route_server_issued") is True,
+            "route_provenance_required": packet.get("route_provenance_required") is True,
+            "route_execution_proven": packet.get("route_execution_proven") is True,
+            "provider_response_proven": packet.get("provider_response_proven") is True,
             "wbp_runner_payload_slot_id": str(packet.get("wbp_runner_payload_slot_id") or ""),
             "wbp_runner_payload_model_id": str(packet.get("wbp_runner_payload_model_id") or ""),
             "runtime_slot_dispatch_proven": packet.get("runtime_slot_dispatch_proven") is True,
             "live_prompt_full_success": packet.get("live_prompt_full_success") is True,
+            "wbp_path_proven": packet.get("wbp_path_proven") is True,
+            "independent_wbp_trace_observed": packet.get("independent_wbp_trace_observed") is True,
             "fallback_attempted": packet.get("fallback_attempted") is True,
         }
 

@@ -732,7 +732,7 @@ if (node("codexCustomSessionInference").textContent !== "response proof · sessi
 if (node("codexCustomSessionsChip").className.includes("green")) {
   throw new Error(`session bounded proof must not make chip green: ${node("codexCustomSessionsChip").className}`);
 }
-const rendered = JSON.parse(document.getElementById("codexCustomSessionResponse").textContent);
+const rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
 if (rendered.session_dual_lane_dispatch_proven_with_limits !== true) {
   throw new Error(`bounded proof flag missing: ${node("codexCustomSessionResponse").textContent}`);
 }
@@ -1600,7 +1600,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('metadataFor("launch_custom_client_native")', js)
         self.assertIn("await runCodexCustomLaunch()", js)
         self.assertIn('fetch("api/codex/custom/sessions"', js)
-        self.assertIn("mixed-slot-dispatch-probe", js)
+        self.assertIn("agent-alias-dispatch-proof", js)
+        self.assertIn("expected_coding_response", js)
         self.assertIn('document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight())', js)
         self.assertIn('fetch("api/codex/custom/native-launch-preflight"', js)
         self.assertIn("runQuickStartLaunchAdmissionProjection", js)
