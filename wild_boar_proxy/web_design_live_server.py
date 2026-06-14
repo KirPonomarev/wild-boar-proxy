@@ -2910,30 +2910,100 @@ def _custom_native_agent_runtime_context_candidates(
 def _load_custom_native_agent_runtime_context(
     last_launch_packet: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    candidates = _custom_native_agent_runtime_context_candidates(last_launch_packet)
     attempted = 0
-    for context_path in _custom_native_agent_runtime_context_candidates(last_launch_packet):
+    context_file_present = False
+    last_error_code = "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
+    for context_path in candidates:
         attempted += 1
         if not context_path.is_file():
             continue
+        context_file_present = True
         try:
             text = context_path.read_text(encoding="utf-8")
             packet = json.loads(text)
-        except (OSError, json.JSONDecodeError):
+        except OSError:
+            last_error_code = "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_UNREADABLE"
+            continue
+        except json.JSONDecodeError:
+            last_error_code = "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_INVALID_JSON"
             continue
         if not isinstance(packet, dict):
+            last_error_code = "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_NOT_OBJECT"
             continue
+        context_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return packet, {
             "status": "ok",
             "machine_error_code": "OK",
-            "context_candidate_count": attempted,
-            "context_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "context_candidate_count": len(candidates),
+            "context_candidate_attempt_count": attempted,
+            "context_file_present": True,
+            "context_file_sha256_present": True,
+            "context_sha256": context_sha256,
+            "native_alias_context_read": True,
+            "context_read_source": "profile_context_file",
             "context_path_redacted": True,
         }
     return {}, {
         "status": "blocked",
-        "machine_error_code": "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING",
-        "context_candidate_count": attempted,
+        "machine_error_code": last_error_code,
+        "fail_closed_code": "FAIL_ALIAS_CONTEXT_MISSING"
+        if not context_file_present
+        else "FAIL_ALIAS_CONTEXT_INVALID",
+        "context_candidate_count": len(candidates),
+        "context_candidate_attempt_count": attempted,
+        "context_file_present": context_file_present,
+        "context_file_sha256_present": False,
         "context_sha256": "",
+        "native_alias_context_read": False,
+        "context_read_source": "none",
+        "context_path_redacted": True,
+    }
+
+
+def _custom_native_injected_runtime_context_metadata() -> dict[str, Any]:
+    return {
+        "status": "provided",
+        "machine_error_code": "OK",
+        "context_candidate_count": 0,
+        "context_candidate_attempt_count": 0,
+        "context_file_present": False,
+        "context_file_sha256_present": False,
+        "context_sha256": "",
+        "native_alias_context_read": False,
+        "context_read_source": "injected_runtime_context",
+        "injected_runtime_context": True,
+        "context_path_redacted": True,
+    }
+
+
+def _custom_native_context_file_read_proven(
+    context_metadata: dict[str, Any] | None,
+) -> bool:
+    metadata = context_metadata if isinstance(context_metadata, dict) else {}
+    return bool(
+        metadata.get("native_alias_context_read") is True
+        and metadata.get("context_file_present") is True
+        and metadata.get("context_file_sha256_present") is True
+        and str(metadata.get("context_sha256") or "")
+        and str(metadata.get("context_read_source") or "") == "profile_context_file"
+    )
+
+
+def _custom_native_context_readout_fields(
+    context_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    metadata = context_metadata if isinstance(context_metadata, dict) else {}
+    context_sha256 = str(metadata.get("context_sha256") or "")
+    return {
+        "context_file_present": metadata.get("context_file_present") is True,
+        "context_file_sha256_present": bool(
+            metadata.get("context_file_sha256_present") is True and context_sha256
+        ),
+        "native_alias_context_read": metadata.get("native_alias_context_read") is True,
+        "alias_context_read": metadata.get("native_alias_context_read") is True,
+        "context_read_source": str(metadata.get("context_read_source") or "none"),
+        "injected_runtime_context": metadata.get("injected_runtime_context") is True,
         "context_path_redacted": True,
     }
 
@@ -2959,12 +3029,21 @@ def _custom_native_acceptance_blocked_packet(
         "expected_text": expected_text,
         "blocking_reasons": blocking_reasons or [machine_error_code],
         "context_metadata": context_metadata or {},
+        **_custom_native_context_readout_fields(context_metadata),
         "acceptance_smoke_proven": False,
         "file_bridge_acceptance_proven": False,
         "agent_alias_route_acceptance_proven": False,
+        "primary_alias_resolved_from_context": False,
+        "coding_alias_resolved_from_context": False,
+        "allowed_api_route_ids_enforced": False,
+        "forbidden_stale_route_ids_enforced": False,
+        "bridge_or_file_bridge_used": False,
+        "exact_token_matched": False,
         "native_coder_slot_dispatch_proven": False,
         "runtime_readiness_claimed": False,
         "fallback_used": False,
+        "local_imitation_used": False,
+        "browser_can_supply_route_authority": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
         "next_action": "stop_and_diagnose_acceptance_smoke",
@@ -3049,7 +3128,7 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("allowed_api_route_id_missing")
     if route_id in forbidden_stale_route_ids:
         blocking_reasons.append("acceptance_route_forbidden")
-    if "wbp-deepseek-v3" not in forbidden_stale_route_ids:
+    if not forbidden_stale_route_ids:
         blocking_reasons.append("stale_route_guard_missing")
     if str(response_packet.get("packet_kind") or "") != "custom_native_file_bridge_response":
         blocking_reasons.append("response_packet_kind_mismatch")
@@ -3087,6 +3166,10 @@ def _custom_native_validate_acceptance_response(
         "expected_route_id": route_id,
         "allowed_api_route_ids": allowed_route_ids,
         "forbidden_stale_route_ids": sorted(forbidden_stale_route_ids),
+        "forbidden_stale_route_id_count": len(forbidden_stale_route_ids),
+        "forbidden_stale_route_inventory_enforced": bool(
+            forbidden_stale_route_ids and route_id not in forbidden_stale_route_ids
+        ),
         "requested_model": requested_model,
         "provider": provider,
         "response_age_seconds": response_age_seconds,
@@ -3107,6 +3190,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
     payload: dict[str, Any] | None,
     file_bridge_worker: _CustomNativeFileBridgeWorker,
     agent_runtime_context: dict[str, Any] | None = None,
+    context_metadata: dict[str, Any] | None = None,
     last_launch_packet: dict[str, Any] | None = None,
     bridge_endpoint: str = "",
     timeout_seconds: float = 10.0,
@@ -3129,25 +3213,25 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_EXPECTED_TEXT_REQUIRED",
             human_message="Acceptance smoke expected_text must be non-empty.",
         )
-    context_metadata: dict[str, Any] = {
-        "status": "provided",
-        "machine_error_code": "OK",
-        "context_path_redacted": True,
-    }
+    resolved_context_metadata: dict[str, Any] = (
+        dict(context_metadata)
+        if isinstance(context_metadata, dict)
+        else _custom_native_injected_runtime_context_metadata()
+    )
     context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
     if context is None:
-        context, context_metadata = _load_custom_native_agent_runtime_context(
+        context, resolved_context_metadata = _load_custom_native_agent_runtime_context(
             last_launch_packet
         )
     if not context:
         return _custom_native_acceptance_blocked_packet(
             machine_error_code=str(
-                context_metadata.get("machine_error_code")
+                resolved_context_metadata.get("machine_error_code")
                 or "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
             ),
             human_message="Custom Codex agent runtime context is missing or unreadable.",
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     file_bridge = (
         context.get("deepseek_live_format_check_file_bridge")
@@ -3159,12 +3243,14 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             machine_error_code="CUSTOM_CODEX_FILE_BRIDGE_DISABLED",
             human_message="Custom Codex file bridge is not enabled in runtime context.",
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     api_model_id = str(context.get("api_model_id") or "")
     alias = str(payload.get("alias") or "").strip()
     alias_binding: dict[str, Any] = {}
     expected_route_id = api_model_id
+    primary_alias_resolved_from_context = False
+    coding_alias_resolved_from_context = False
     if alias:
         alias_binding = resolve_alias_binding(
             context.get("agent_bindings", [])
@@ -3177,7 +3263,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
                 machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_UNKNOWN",
                 human_message="Custom Codex agent alias is not present in runtime context bindings.",
                 expected_text=expected_text,
-                context_metadata=context_metadata,
+                context_metadata=resolved_context_metadata,
                 blocking_reasons=["alias_unknown"],
             ) | {"alias": alias}
         if alias_binding.get("enabled") is not True:
@@ -3185,24 +3271,30 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
                 machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_DISABLED",
                 human_message="Custom Codex agent alias maps to a disabled binding.",
                 expected_text=expected_text,
-                context_metadata=context_metadata,
+                context_metadata=resolved_context_metadata,
                 blocking_reasons=["alias_disabled"],
             ) | {"alias": alias}
         if alias_binding.get("lane") != API_ROUTE_LANE:
+            primary_alias_resolved_from_context = True
             return _custom_native_acceptance_blocked_packet(
                 machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_NOT_API_ROUTE",
                 human_message="Custom Codex acceptance smoke requires an API-route agent alias.",
                 expected_text=expected_text,
-                context_metadata=context_metadata,
+                context_metadata=resolved_context_metadata,
                 blocking_reasons=["alias_not_api_route"],
-            ) | {"alias": alias}
+            ) | {
+                "alias": alias,
+                "agent_binding": alias_binding,
+                "primary_alias_resolved_from_context": primary_alias_resolved_from_context,
+            }
+        coding_alias_resolved_from_context = True
         expected_route_id = str(alias_binding.get("route_id") or "")
         if not expected_route_id:
             return _custom_native_acceptance_blocked_packet(
                 machine_error_code="CUSTOM_CODEX_AGENT_ALIAS_ROUTE_MISSING",
                 human_message="Custom Codex API-route alias has no route_id.",
                 expected_text=expected_text,
-                context_metadata=context_metadata,
+                context_metadata=resolved_context_metadata,
                 blocking_reasons=["alias_route_missing"],
             ) | {"alias": alias}
     request_id = str(payload.get("request_id") or f"wbp-acceptance-{uuid.uuid4().hex}")
@@ -3214,7 +3306,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             machine_error_code="CUSTOM_CODEX_ACCEPTANCE_SMOKE_REQUEST_ID_INVALID",
             human_message="Acceptance smoke request_id must contain only letters, numbers, '-' or '_'.",
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     request_path = file_bridge_worker.request_dir / f"{request_id}.json"
     response_path = file_bridge_worker.response_dir / f"{request_id}.json"
@@ -3224,7 +3316,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             human_message="Acceptance smoke request_id already has request or response evidence.",
             request_id=request_id,
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     if bridge_endpoint:
         file_bridge_worker.ensure_started(bridge_endpoint=bridge_endpoint)
@@ -3254,7 +3346,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             human_message="Acceptance smoke file bridge response did not appear before timeout.",
             request_id=request_id,
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     try:
         response_packet = json.loads(response_path.read_text(encoding="utf-8"))
@@ -3264,7 +3356,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             human_message="Acceptance smoke file bridge response is not valid JSON.",
             request_id=request_id,
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     if not isinstance(response_packet, dict):
         return _custom_native_acceptance_blocked_packet(
@@ -3272,7 +3364,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             human_message="Acceptance smoke file bridge response must be a JSON object.",
             request_id=request_id,
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
         )
     proven, blocking_reasons, validation = _custom_native_validate_acceptance_response(
         agent_runtime_context=context,
@@ -3288,13 +3380,27 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
             human_message="Acceptance smoke response did not satisfy the runtime context and exact-response contract.",
             request_id=request_id,
             expected_text=expected_text,
-            context_metadata=context_metadata,
+            context_metadata=resolved_context_metadata,
             blocking_reasons=blocking_reasons,
         ) | {
             "validation": validation,
             "response_packet_kind": str(response_packet.get("packet_kind") or ""),
             "response_machine_error_code": str(response_packet.get("machine_error_code") or ""),
+            "primary_alias_resolved_from_context": primary_alias_resolved_from_context,
+            "coding_alias_resolved_from_context": coding_alias_resolved_from_context,
+            "allowed_api_route_ids_enforced": bool(
+                expected_route_id in validation.get("allowed_api_route_ids", [])
+            ),
+            "forbidden_stale_route_ids_enforced": bool(
+                validation.get("forbidden_stale_route_inventory_enforced") is True
+            ),
         }
+    allowed_api_route_ids_enforced = bool(
+        expected_route_id in validation.get("allowed_api_route_ids", [])
+    )
+    forbidden_stale_route_ids_enforced = bool(
+        validation.get("forbidden_stale_route_inventory_enforced") is True
+    )
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_gpt_plus_api_acceptance_smoke",
@@ -3311,12 +3417,21 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         "alias": alias,
         "agent_binding": alias_binding,
         "expected_text": expected_text,
-        "context_metadata": context_metadata,
+        "context_metadata": resolved_context_metadata,
+        **_custom_native_context_readout_fields(resolved_context_metadata),
         "validation": validation,
         "acceptance_smoke_proven": True,
         "file_bridge_acceptance_proven": True,
         "agent_alias_route_acceptance_proven": bool(alias),
-        "custom_codex_agent_runtime_context_proven": True,
+        "primary_alias_resolved_from_context": primary_alias_resolved_from_context,
+        "coding_alias_resolved_from_context": coding_alias_resolved_from_context,
+        "allowed_api_route_ids_enforced": allowed_api_route_ids_enforced,
+        "forbidden_stale_route_ids_enforced": forbidden_stale_route_ids_enforced,
+        "bridge_or_file_bridge_used": True,
+        "exact_token_matched": True,
+        "custom_codex_agent_runtime_context_proven": _custom_native_context_file_read_proven(
+            resolved_context_metadata
+        ),
         "custom_codex_external_client_invocation_proven": False,
         "native_coder_slot_dispatch_proven": False,
         "runtime_readiness_claimed": False,
@@ -3332,6 +3447,8 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         ],
         "thinking": validation["response_thinking"],
         "fallback_used": False,
+        "local_imitation_used": False,
+        "browser_can_supply_route_authority": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
         "next_action": "none",
@@ -3385,11 +3502,7 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
             "acceptance_matrix_proven": False,
             "next_action": "provide_expected_text",
         }
-    context_metadata: dict[str, Any] = {
-        "status": "provided",
-        "machine_error_code": "OK",
-        "context_path_redacted": True,
-    }
+    context_metadata: dict[str, Any] = _custom_native_injected_runtime_context_metadata()
     context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
     if context is None:
         context, context_metadata = _load_custom_native_agent_runtime_context(
@@ -3407,8 +3520,17 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
             ),
             "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
             "context_metadata": context_metadata,
+            **_custom_native_context_readout_fields(context_metadata),
             "blocking_reasons": ["agent_runtime_context_missing"],
             "acceptance_matrix_proven": False,
+            "allowed_api_route_ids_enforced": False,
+            "forbidden_stale_route_ids_enforced": False,
+            "bridge_or_file_bridge_used": False,
+            "exact_token_matched": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "browser_can_supply_route_authority": False,
+            "secret_value_exposed": False,
             "next_action": "stop_and_diagnose_alias_matrix",
         }
     coding_aliases = [
@@ -3430,10 +3552,48 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
             "machine_error_code": "CUSTOM_CODEX_AGENT_ALIAS_MATRIX_CODING_ALIASES_EMPTY",
             "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
             "context_metadata": context_metadata,
+            **_custom_native_context_readout_fields(context_metadata),
             "blocking_reasons": ["coding_aliases_empty"],
             "acceptance_matrix_proven": False,
             "custom_codex_agent_runtime_context_proven": True,
+            "allowed_api_route_ids_enforced": False,
+            "forbidden_stale_route_ids_enforced": False,
+            "bridge_or_file_bridge_used": False,
+            "exact_token_matched": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "browser_can_supply_route_authority": False,
+            "secret_value_exposed": False,
             "next_action": "repair_agent_bindings",
+        }
+    native_alias_context_read = _custom_native_context_file_read_proven(context_metadata)
+    if not native_alias_context_read:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_AGENT_ALIAS_CONTEXT_NOT_READ",
+            "final_status": "CUSTOM_CODEX_AGENT_ALIAS_ACCEPTANCE_MATRIX_NOT_PROVEN",
+            "context_metadata": context_metadata,
+            **_custom_native_context_readout_fields(context_metadata),
+            "blocking_reasons": ["native_alias_context_not_read"],
+            "acceptance_matrix_proven": False,
+            "custom_codex_agent_runtime_context_proven": False,
+            "primary_alias_resolved_from_context": False,
+            "coding_alias_resolved_from_context": False,
+            "allowed_api_route_ids_enforced": False,
+            "forbidden_stale_route_ids_enforced": False,
+            "bridge_or_file_bridge_used": False,
+            "exact_token_matched": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "browser_can_supply_route_authority": False,
+            "secret_value_exposed": False,
+            "provider_call_count": 0,
+            "coding_results": [],
+            "primary_guard_results": [],
+            "next_action": "stop_and_diagnose_alias_context",
         }
     suffix = uuid.uuid4().hex[:8]
     coding_results: list[dict[str, Any]] = []
@@ -3447,6 +3607,7 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
                 },
                 file_bridge_worker=file_bridge_worker,
                 agent_runtime_context=context,
+                context_metadata=context_metadata,
                 bridge_endpoint=bridge_endpoint,
                 timeout_seconds=timeout_seconds,
                 now=now,
@@ -3463,6 +3624,7 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
                 },
                 file_bridge_worker=file_bridge_worker,
                 agent_runtime_context=context,
+                context_metadata=context_metadata,
                 bridge_endpoint=bridge_endpoint,
                 timeout_seconds=timeout_seconds,
                 now=now,
@@ -3482,7 +3644,26 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
         not reasoning_evidence_required
         or all(result.get("api_reasoning_parameter_sent") is True for result in coding_results)
     )
-    matrix_ok = coding_ok and primary_ok and reasoning_parameter_sent
+    matrix_ok = (
+        coding_ok
+        and primary_ok
+        and reasoning_parameter_sent
+        and native_alias_context_read
+    )
+    allowed_api_route_ids_enforced = bool(
+        coding_ok
+        and all(
+            result.get("allowed_api_route_ids_enforced") is True
+            for result in coding_results
+        )
+    )
+    forbidden_stale_route_ids_enforced = bool(
+        coding_ok
+        and all(
+            result.get("forbidden_stale_route_ids_enforced") is True
+            for result in coding_results
+        )
+    )
     blocking_reasons: list[str] = []
     if not coding_ok:
         blocking_reasons.append("coding_alias_acceptance_failed")
@@ -3490,6 +3671,8 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
         blocking_reasons.append("primary_alias_api_route_guard_failed")
     if not reasoning_parameter_sent:
         blocking_reasons.append("api_reasoning_parameter_not_sent")
+    if not native_alias_context_read:
+        blocking_reasons.append("native_alias_context_not_read")
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_agent_alias_acceptance_matrix",
@@ -3505,10 +3688,17 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
         ),
         "expected_text": expected_text,
         "context_metadata": context_metadata,
+        **_custom_native_context_readout_fields(context_metadata),
         "acceptance_matrix_proven": matrix_ok,
         "all_coding_aliases_route_acceptance_proven": coding_ok,
         "primary_aliases_rejected_as_api_route": primary_ok,
-        "custom_codex_agent_runtime_context_proven": True,
+        "primary_alias_resolved_from_context": primary_ok,
+        "coding_alias_resolved_from_context": coding_ok,
+        "allowed_api_route_ids_enforced": allowed_api_route_ids_enforced,
+        "forbidden_stale_route_ids_enforced": forbidden_stale_route_ids_enforced,
+        "bridge_or_file_bridge_used": coding_ok,
+        "exact_token_matched": coding_ok,
+        "custom_codex_agent_runtime_context_proven": native_alias_context_read,
         "file_bridge_acceptance_proven": coding_ok,
         "agent_alias_route_acceptance_proven": coding_ok,
         "api_reasoning_evidence_required": reasoning_evidence_required,
@@ -3519,6 +3709,9 @@ def _custom_native_agent_alias_acceptance_matrix_packet(
         "custom_codex_external_client_invocation_proven": False,
         "native_coder_slot_dispatch_proven": False,
         "runtime_readiness_claimed": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "browser_can_supply_route_authority": False,
         "coding_alias_count": len(coding_aliases),
         "primary_alias_count": len(primary_aliases),
         "provider_call_count": sum(
@@ -6776,22 +6969,21 @@ def _custom_native_agent_runtime_context(
         bindings_packet.get("agent_bindings", []) if bindings_ok else [],
         route_records=route_records,
     )
-    primary_aliases = (
-        bindings_projection.get("primary_aliases") or ["Codex", "Agent 1", "1"]
-        if bindings_ok
-        else []
-    )
-    coding_aliases = (
-        bindings_projection.get("coding_aliases") or ["DIP", "Agent 2", "2"]
-        if bindings_ok
-        else []
-    )
+    primary_aliases = list(bindings_projection.get("primary_aliases") or []) if bindings_ok else []
+    coding_aliases = list(bindings_projection.get("coding_aliases") or []) if bindings_ok else []
     allowed_api_route_ids = (
-        bindings_projection.get("allowed_api_route_ids") or ([api_model_id] if api_model_id else [])
+        list(bindings_projection.get("allowed_api_route_ids") or [])
         if bindings_ok
         else []
     )
     forbidden_stale_route_ids = bindings_projection.get("forbidden_stale_route_ids") or stale_route_ids
+    alias_runtime_binding_present = bool(primary_aliases or coding_aliases)
+    alias_runtime_binding_proven = bool(
+        bindings_ok
+        and primary_aliases
+        and coding_aliases
+        and allowed_api_route_ids
+    )
     python_executable = os.environ.get("WBP_PYTHON_BIN") or sys.executable or "python3"
     cli_args = [
         "external-models",
@@ -6808,7 +7000,8 @@ def _custom_native_agent_runtime_context(
         "execution_mode": execution_mode,
         "context_truth_source": "server_launch_selection_packet",
         "alias_scope": "server_runtime_binding",
-        "alias_runtime_binding_present": True,
+        "alias_runtime_binding_present": alias_runtime_binding_present,
+        "alias_runtime_binding_proven": alias_runtime_binding_proven,
         "browser_can_supply_alias_authority": False,
         "browser_can_supply_route_authority": False,
         "native_free_text_activation_instruction_scope": "agent_runtime_context_only",

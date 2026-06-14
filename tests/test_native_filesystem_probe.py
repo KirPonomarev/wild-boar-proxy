@@ -4580,6 +4580,9 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             written = json.loads(context_path.read_text(encoding="utf-8"))
 
         self.assertTrue(packet["agent_runtime_context_written"])
+        self.assertTrue(packet["native_alias_context_written"])
+        self.assertTrue(packet["context_file_present"])
+        self.assertTrue(packet["context_file_sha256_present"])
         self.assertEqual(
             packet["agent_runtime_context_profile_relative_path"],
             "wbp-agent-runtime-context.json",

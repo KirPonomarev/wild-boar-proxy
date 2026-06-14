@@ -1665,6 +1665,9 @@ def launch_custom_native_app_packet(
         "launcher_exit_code_early": None,
         "launcher_failed_before_custom_process": False,
         "agent_runtime_context_written": False,
+        "native_alias_context_written": False,
+        "context_file_present": False,
+        "context_file_sha256_present": False,
         "agent_runtime_context_profile_relative_path": "",
         "agent_runtime_context_sha256": "",
         "agent_runtime_context_path_redacted": True,
@@ -1718,6 +1721,16 @@ def launch_custom_native_app_packet(
             "original_codex_profile_runtime_dependency": False,
             "agent_runtime_context_written": materialized_profile.get(
                 "agent_runtime_context_written"
+            )
+            is True,
+            "native_alias_context_written": materialized_profile.get(
+                "native_alias_context_written"
+            )
+            is True,
+            "context_file_present": materialized_profile.get("context_file_present")
+            is True,
+            "context_file_sha256_present": materialized_profile.get(
+                "context_file_sha256_present"
             )
             is True,
             "agent_runtime_context_profile_relative_path": str(
