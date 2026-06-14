@@ -559,9 +559,12 @@ def live_payloads_with_reasoning_variants(
     for level in levels:
         spec = REASONING_VARIANT_SPECS[level]
         route_id = str(spec["route_id"])
+        thinking = dict(spec["thinking"])  # type: ignore[arg-type]
+        disabled_reasoning = thinking.get("type") == "disabled"
         payloads[reasoning_live_format_call(route_id)] = live_format_packet_for_reasoning(
             route_id,
-            dict(spec["thinking"]),  # type: ignore[arg-type]
+            {} if disabled_reasoning else thinking,
+            api_parameter_sent=not disabled_reasoning,
         )
     return payloads
 
@@ -1574,6 +1577,129 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(urlopen.call_count, 1)
 
+    def test_custom_native_gpt_api_alias_command_loop_endpoint_refreshes_context_from_agent_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id="wbp-deepseek-chat",
+            )
+            bindings[0]["display_name"] = "Агент GPT"
+            bindings[0]["aliases"] = ["Агент GPT", "Оркестратор", "Codex", "Agent 1", "1"]
+            bindings[1]["display_name"] = "Агент Дип"
+            bindings[1]["aliases"] = ["Агент Дип", "Кодер", "DIP", "Agent 2", "2"]
+            payloads = live_payloads_with_reasoning_variants()
+            routes_packet = routes_list_packet_with_reasoning_variants()
+            routes_packet["data"]["routes"].append(
+                {
+                    "schema_version": 1,
+                    "route_id": "wbp-deepseek-chat",
+                    "display_name": "WBP DeepSeek Chat",
+                    "provider": "deepseek",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                    "secret_ref": "DEEPSEEK_API_KEY",
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": True,
+                }
+            )
+            routes_packet["data"]["count"] = len(routes_packet["data"]["routes"])
+            payloads[("external-models", "routes", "list", "--json")] = routes_packet
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text="WBP_ENDPOINT_LOOP_OK",
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    written = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/agent-bindings",
+                            {"agent_bindings": bindings},
+                        )
+                    )
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
+                            {
+                                "prompt": (
+                                    "Агент GPT: inspect and orchestrate. "
+                                    "Агент Дип: answer exactly one line."
+                                ),
+                                "expected_text": "WBP_ENDPOINT_LOOP_OK",
+                                "request_id": "endpoint-command-loop-russian-ok",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+            context_path = profile_dir / "wbp-agent-runtime-context.json"
+            context = json.loads(context_path.read_text(encoding="utf-8"))
+            self.assertEqual(written["status"], "ok")
+            self.assertTrue(context_path.exists())
+            self.assertEqual(context["primary_aliases"][0], "Агент GPT")
+            self.assertEqual(context["coding_aliases"][0], "Агент Дип")
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertTrue(packet["command_loop_proven"])
+            self.assertEqual(packet["primary_alias"], "Агент GPT")
+            self.assertEqual(packet["coding_alias"], "Агент Дип")
+            self.assertTrue(packet["native_alias_context_read"])
+            self.assertEqual(packet["context_read_source"], "profile_context_file")
+            self.assertTrue(packet["reasoning_prerequisite_proven"])
+            self.assertTrue(packet["api_lane_exact_token_matched"])
+            self.assertEqual(packet["reasoning_provider_call_count"], 3)
+            self.assertEqual(packet["command_loop_provider_call_count"], 1)
+            self.assertEqual(urlopen.call_count, 1)
+
     def test_custom_native_gpt_api_alias_command_loop_accepts_name_variants(self) -> None:
         variants = [
             ("Codex", "DIP"),
@@ -2425,8 +2551,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             base = f"http://127.0.0.1:{server.server_port}"
             initial = json.loads(fetch(f"{base}/api/codex/custom/agent-bindings"))
             bindings = initial["agent_bindings"]
-            bindings[1]["display_name"] = "Builder"
-            bindings[1]["aliases"] = ["Builder", "DIP"]
+            bindings[0]["display_name"] = "Агент GPT"
+            bindings[0]["aliases"] = ["Агент GPT", "Оркестратор", "Codex", "Agent 1", "1"]
+            bindings[1]["display_name"] = "Агент Дип"
+            bindings[1]["aliases"] = ["Агент Дип", "Кодер", "DIP"]
             try:
                 dry_run = json.loads(
                     post_json(
@@ -2454,7 +2582,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(written["changed_files"], [str(state_file)])
             self.assertTrue(state_file.exists())
             self.assertEqual(read_back["source"], "persisted_state")
-            self.assertEqual(read_back["alias_to_agent_id"]["Builder"], "dip")
+            self.assertEqual(read_back["alias_to_agent_id"]["Агент GPT"], "codex")
+            self.assertEqual(read_back["alias_to_agent_id"]["Агент Дип"], "dip")
         self.assertEqual(read_back["agent_id_to_route"]["dip"], route_id)
         self.assertFalse(read_back["browser_secret_intake"])
 
@@ -21429,7 +21558,12 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             self.assertTrue(result["not_intelligence_proof"])
             self.assertEqual(result["api_model_id"], route_id)
             self.assertEqual(result["expected_thinking"], expected_spec["thinking"])
-            self.assertEqual(result["observed_thinking"], expected_spec["thinking"])
+            if expected_spec["thinking"]["type"] == "disabled":
+                self.assertEqual(result["observed_thinking"], {})
+                self.assertTrue(result["api_disabled_reasoning_observed"])
+            else:
+                self.assertEqual(result["observed_thinking"], expected_spec["thinking"])
+                self.assertFalse(result["api_disabled_reasoning_observed"])
             self.assertEqual(result["api_only_packet"]["status"], "ok")
             self.assertEqual(result["api_only_packet"]["machine_error_code"], "OK")
             self.assertTrue(result["api_only_packet"]["provider_called"])

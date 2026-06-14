@@ -3649,6 +3649,66 @@ function setQuickStartRouteResponse(packet) {
         packet?.session_dual_lane_does_not_prove_native_launch === true,
       session_dual_lane_does_not_claim_product_readiness:
         packet?.session_dual_lane_does_not_claim_product_readiness === true,
+      gpt_api_alias_command_loop_packet:
+        packet?.gpt_api_alias_command_loop_packet === true,
+      command_loop_proven:
+        packet?.command_loop_proven === true,
+      runtime_context_file_proven:
+        packet?.runtime_context_file_proven === true,
+      custom_codex_agent_runtime_context_proven:
+        packet?.custom_codex_agent_runtime_context_proven === true,
+      native_alias_context_read:
+        packet?.native_alias_context_read === true,
+      alias_context_read:
+        packet?.alias_context_read === true,
+      context_read_source:
+        packet?.context_read_source || "",
+      context_file_present:
+        packet?.context_file_present === true,
+      context_file_sha256_present:
+        packet?.context_file_sha256_present === true,
+      context_path_redacted:
+        packet?.context_path_redacted === true,
+      primary_alias:
+        packet?.primary_alias || "",
+      coding_alias:
+        packet?.coding_alias || "",
+      primary_alias_position:
+        Number.isFinite(packet?.primary_alias_position) ? packet.primary_alias_position : null,
+      coding_alias_position:
+        Number.isFinite(packet?.coding_alias_position) ? packet.coding_alias_position : null,
+      primary_alias_resolved_from_context:
+        packet?.primary_alias_resolved_from_context === true,
+      coding_alias_resolved_from_context:
+        packet?.coding_alias_resolved_from_context === true,
+      primary_alias_bound_to_chatgpt_lane:
+        packet?.primary_alias_bound_to_chatgpt_lane === true,
+      coding_alias_bound_to_api_lane:
+        packet?.coding_alias_bound_to_api_lane === true,
+      primary_alias_precedes_coding_alias:
+        packet?.primary_alias_precedes_coding_alias === true,
+      reasoning_prerequisite_proven:
+        packet?.reasoning_prerequisite_proven === true,
+      api_lane_exact_token_matched:
+        packet?.api_lane_exact_token_matched === true,
+      file_bridge_acceptance_proven:
+        packet?.file_bridge_acceptance_proven === true,
+      agent_alias_route_acceptance_proven:
+        packet?.agent_alias_route_acceptance_proven === true,
+      allowed_api_route_ids_enforced:
+        packet?.allowed_api_route_ids_enforced === true,
+      forbidden_stale_route_ids_enforced:
+        packet?.forbidden_stale_route_ids_enforced === true,
+      bridge_or_file_bridge_used:
+        packet?.bridge_or_file_bridge_used === true,
+      command_loop_provider_call_count:
+        Number(packet?.command_loop_provider_call_count || 0),
+      reasoning_provider_call_count:
+        Number(packet?.reasoning_provider_call_count || 0),
+      not_intelligence_proof:
+        packet?.not_intelligence_proof === true,
+      intelligence_measured:
+        packet?.intelligence_measured === true,
       mixed_mode_launch_available_with_primary_trace_gap:
         packet?.mixed_mode_launch_available_with_primary_trace_gap === true,
       execution_mode: packet?.execution_mode || "",
@@ -4521,6 +4581,186 @@ function renderQuickStartSessionDualLaneExecution(packet) {
   });
 }
 
+function renderQuickStartGptApiAliasCommandLoopProof(packet) {
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.command_loop_proven === true
+    && packet?.runtime_context_file_proven === true
+    && packet?.primary_alias_bound_to_chatgpt_lane === true
+    && packet?.coding_alias_bound_to_api_lane === true
+    && packet?.primary_alias_precedes_coding_alias === true
+    && packet?.reasoning_prerequisite_proven === true
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.secret_value_exposed !== true
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? "green" : "amber",
+    proven ? "mixed ok" : (packet?.machine_error_code || "loop blocked")
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "green" : "amber",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "orchestrator" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "green" : "amber",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    proven ? "green" : "neutral",
+    proven ? "confirmed" : "preflight"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? "green" : "amber",
+    proven ? "loop ok" : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip("quickStartWindowState", "neutral", "not launched");
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.runtime_context_file_proven === true ? "green" : "amber",
+    packet?.runtime_context_file_proven === true ? "context ok" : "context missing"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_binding?.model_id || packet?.primary_model_id || "",
+    api_model_id: packet?.coding_binding?.route_id || packet?.requested_model || "",
+    gpt_api_alias_command_loop_packet: true,
+    session_probe_only: false,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    runtime_readiness_claimed: false,
+    browser_can_supply_route_authority: packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartGptApiAliasCommandLoopProof() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("command_loop_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "command loop");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_GPT_API_COMMAND_LOOP_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    gpt_api_alias_command_loop_packet: false,
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    reasoning_prerequisite_proven: false,
+    api_lane_exact_token_matched: false,
+    bridge_or_file_bridge_used: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_gpt_api_alias_command_loop"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("command_loop_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartGptApiAliasCommandLoopProof({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_NOT_PROVEN",
+        command_loop_proven: false,
+        runtime_context_file_proven: false,
+        primary_alias_bound_to_chatgpt_lane: false,
+        coding_alias_bound_to_api_lane: false,
+        primary_alias_precedes_coding_alias: false,
+        reasoning_prerequisite_proven: false,
+        api_lane_exact_token_matched: false,
+        bridge_or_file_bridge_used: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        secret_value_exposed: false,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const expectedCodingResponse = "WBP_UI_GPT_API_COMMAND_LOOP_OK";
+    const prompt = `${aliases.primary_model_slot}: inspect the request and orchestrate the check. ${aliases.coding_agent_model_slot}: answer exactly one line: ${expectedCodingResponse}`;
+    const response = await fetch("api/codex/custom/gpt-api-alias-command-loop-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        prompt,
+        expected_coding_response: expectedCodingResponse,
+        request_id: `ui-command-loop-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`gpt api command loop proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartGptApiAliasCommandLoopProof(packet);
+  } catch (error) {
+    renderQuickStartGptApiAliasCommandLoopProof({
+      status: "failed",
+      machine_error_code: "QUICK_START_GPT_API_COMMAND_LOOP_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_GPT_API_COMMAND_LOOP_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      primary_alias_bound_to_chatgpt_lane: false,
+      coding_alias_bound_to_api_lane: false,
+      primary_alias_precedes_coding_alias: false,
+      reasoning_prerequisite_proven: false,
+      api_lane_exact_token_matched: false,
+      bridge_or_file_bridge_used: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_gpt_api_alias_command_loop"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+  }
+}
+
 async function runQuickStartSessionDualLaneExecution() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -4633,6 +4873,11 @@ async function runQuickStartCustomLaunchAction() {
     applyActionAvailability();
   }
   setQuickStartMixedLaunchActionGuard(false);
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode === "chatgpt_plus_api") {
+    await runQuickStartGptApiAliasCommandLoopProof();
+    return;
+  }
   const launchMetadata = metadataFor("launch_custom_client_native");
   if (launchMetadata?.available === true) {
     await runCodexCustomLaunch();

@@ -184,6 +184,29 @@ class CustomAgentBindingTests(unittest.TestCase):
         self.assertIn("alias_confusable_mixed_script:\u0410gent 1", mixed_packet["blocking_reasons"])
         self.assertEqual(cyrillic_packet["status"], "ok")
 
+    def test_mixed_script_words_are_accepted_for_operator_agent_names(self) -> None:
+        bindings = default_agent_bindings(
+            primary_model_id="gpt-5.5",
+            api_route_id="wbp-deepseek-chat",
+        )
+        bindings[0]["display_name"] = "Агент GPT"
+        bindings[0]["aliases"] = ["Агент GPT", "Оркестратор", "Codex", "Agent 1", "1"]
+        bindings[1]["display_name"] = "Агент Дип"
+        bindings[1]["aliases"] = ["Агент Дип", "Кодер", "DIP", "Agent 2", "2"]
+
+        packet = dry_run_agent_bindings_packet(
+            {"agent_bindings": bindings},
+            primary_model_ids=["gpt-5.5"],
+            route_records=route_records(),
+            require_api_route_binding=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["alias_to_agent_id"]["Агент GPT"], "codex")
+        self.assertEqual(packet["alias_to_agent_id"]["Агент Дип"], "dip")
+        self.assertEqual(packet["agent_id_to_route"]["dip"], "wbp-deepseek-chat")
+
     def test_stale_and_unknown_routes_are_rejected(self) -> None:
         stale = default_agent_bindings(
             primary_model_id="gpt-5.5",

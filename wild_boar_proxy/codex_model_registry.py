@@ -2983,6 +2983,7 @@ def build_api_only_deepseek_live_route_format_packet(
     provider_parameter_expected = (
         selector_provider_option.get("api_parameter_sent") is True
     )
+    expected_disabled_reasoning = expected_thinking.get("type") == "disabled"
     reasoning_evidence_required = bool(
         requested_reasoning_option
         and requested_reasoning_option
@@ -2992,12 +2993,14 @@ def build_api_only_deepseek_live_route_format_packet(
     )
     reasoning_parameter_ok = (
         not reasoning_evidence_required
+        or expected_disabled_reasoning
         or live_result_packet["api_parameter_sent"] is True
     )
     reasoning_thinking_ok = (
         not reasoning_evidence_required
         or not expected_thinking
         or observed_thinking == expected_thinking
+        or (expected_disabled_reasoning and not observed_thinking)
     )
     reasoning_measurement_ok = live_result_packet["intelligence_measured"] is not True
     reasoning_live_ok = (

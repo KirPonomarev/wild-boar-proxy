@@ -3902,12 +3902,21 @@ def _reasoning_dispatch_level_packet(
         and api_only_packet.get("fallback_attempted") is False
         and api_only_packet.get("secret_value_exposed") is False
     )
-    provider_acknowledged = bool(
-        api_dispatch_proven
-        and api_only_packet.get("api_reasoning_option_provider_parameter_sent") is True
+    expected_disabled_reasoning = expected_thinking.get("type") == "disabled"
+    enabled_reasoning_acknowledged = bool(
+        api_only_packet.get("api_reasoning_option_provider_parameter_sent") is True
         and api_only_packet.get("api_reasoning_thinking_matched") is True
         and observed_thinking == expected_thinking
         and bool(observed_thinking)
+    )
+    disabled_reasoning_observed = bool(
+        expected_disabled_reasoning
+        and api_only_packet.get("api_reasoning_thinking_matched") is True
+        and observed_thinking in ({}, {"type": "disabled"})
+    )
+    provider_acknowledged = bool(
+        api_dispatch_proven
+        and (enabled_reasoning_acknowledged or disabled_reasoning_observed)
     )
     level_ok = bool(
         chatgpt_selection_proven
@@ -3934,6 +3943,7 @@ def _reasoning_dispatch_level_packet(
         "chatgpt_provider_backed_reasoning_proven": False,
         "api_reasoning_dispatch_proven": api_dispatch_proven,
         "api_provider_acknowledged": provider_acknowledged,
+        "api_disabled_reasoning_observed": disabled_reasoning_observed,
         "reasoning_level_dispatch_proven": level_ok,
         "intelligence_measured": api_only_packet.get("api_reasoning_intelligence_measured")
         is True,
@@ -13050,6 +13060,84 @@ def build_handler(
             require_api_route_binding=context["require_api_route_binding"],
         )
 
+    def _refresh_custom_agent_runtime_context_for_command_loop() -> tuple[dict[str, Any], dict[str, Any]]:
+        external_routes_packet = _external_routes_packet()
+        route_records = _enabled_external_route_records(external_routes_packet)
+        api_route_id = _custom_agent_default_api_route_id(route_records)
+        route_record = next(
+            (
+                route
+                for route in route_records
+                if str(route.get("route_id") or "").strip() == api_route_id
+            ),
+            {},
+        )
+        provider = str(route_record.get("provider") or "deepseek").strip() or "deepseek"
+        execution_packet = {
+            "status": "ok",
+            "execution_mode": "chatgpt_plus_api",
+            "chatgpt_model_id": "gpt-5.5",
+            "api_model_id": api_route_id,
+            "api_reasoning_option_id": CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": CODEX_ACCOUNT_MODEL_LANE,
+                "model_id": "gpt-5.5",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "bound",
+                "lane": API_ROUTE_MODEL_LANE,
+                "provider": provider,
+                "model_id": api_route_id,
+                "server_issued": True,
+            },
+            "chatgpt_line_used_as_executor": True,
+            "api_line_used_as_executor": True,
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "server_issued_catalog_used": True,
+        }
+        context = _custom_native_agent_runtime_context(
+            execution_packet=execution_packet,
+            launch_model_id="gpt-5.5",
+            route_model_id=api_route_id,
+            bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+        )
+        context["context_truth_source"] = "server_current_agent_bindings_state"
+        context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"
+        try:
+            default_paths = default_persistent_custom_profile_paths(
+                profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+            )
+            profile_root_text = str(
+                default_paths.get("persistent_profile_root") or ""
+            ).strip()
+            if not profile_root_text:
+                raise OSError("persistent profile root missing")
+            profile_root = Path(profile_root_text).expanduser()
+            write_text_atomic(
+                profile_root / AGENT_RUNTIME_CONTEXT_FILENAME,
+                json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True),
+            )
+        except OSError:
+            return {}, {
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_WRITE_FAILED",
+                "fail_closed_code": "FAIL_ALIAS_CONTEXT_MISSING",
+                "context_candidate_count": 0,
+                "context_candidate_attempt_count": 0,
+                "context_file_present": False,
+                "context_file_sha256_present": False,
+                "context_sha256": "",
+                "native_alias_context_read": False,
+                "context_read_source": "none",
+                "context_path_redacted": True,
+            }
+        return _load_custom_native_agent_runtime_context(
+            custom_native_launch_state["last_packet"]
+        )
+
     def build_rollback_point_create_admission_packet() -> dict[str, Any]:
         original_status = build_original_status_packet()
         custom_status = build_custom_status_packet(operator_surface_session.status_payload())
@@ -14783,10 +14871,16 @@ def build_handler(
                     owner_authorized=codex_custom_live_prompt_authorized,
                 )
 
+            payload = self._read_optional_json_body()
+            agent_runtime_context, context_metadata = (
+                _refresh_custom_agent_runtime_context_for_command_loop()
+            )
             self._send_json(
                 _custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload=self._read_optional_json_body(),
+                    payload=payload,
                     file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
                     last_launch_packet=custom_native_launch_state["last_packet"],
                     bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
                     reasoning_matrix_builder=reasoning_matrix_builder,

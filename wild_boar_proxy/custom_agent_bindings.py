@@ -156,12 +156,15 @@ def _letter_script_family(character: str) -> str:
 
 
 def _has_mixed_confusable_alias_scripts(text: str) -> bool:
-    families = {
-        family
-        for family in (_letter_script_family(character) for character in text)
-        if family in {"latin", "cyrillic", "greek"}
-    }
-    return "latin" in families and bool(families & {"cyrillic", "greek"})
+    for token in re.findall(r"[\w]+", text, flags=re.UNICODE):
+        families = {
+            family
+            for family in (_letter_script_family(character) for character in token)
+            if family in {"latin", "cyrillic", "greek"}
+        }
+        if "latin" in families and bool(families & {"cyrillic", "greek"}):
+            return True
+    return False
 
 
 def _route_records_by_id(

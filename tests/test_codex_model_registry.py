@@ -1358,7 +1358,8 @@ class CodexModelRegistryTests(unittest.TestCase):
             owner_authorized=True,
             live_result=api_only_live_result(
                 fallback_chain=["wbp-deepseek-v4-pro-fast"],
-                thinking={"type": "disabled"},
+                thinking={},
+                api_parameter_sent=False,
             ),
         )
 
@@ -1367,10 +1368,10 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_fast")
         self.assertEqual(packet["api_reasoning_operator_level"], "fast")
         self.assertTrue(packet["api_reasoning_live_evidence_required"])
-        self.assertTrue(packet["api_reasoning_option_provider_parameter_sent"])
+        self.assertFalse(packet["api_reasoning_option_provider_parameter_sent"])
         self.assertTrue(packet["api_reasoning_live_evidence_proven"])
         self.assertEqual(packet["api_reasoning_expected_thinking"], {"type": "disabled"})
-        self.assertEqual(packet["api_reasoning_observed_thinking"], {"type": "disabled"})
+        self.assertEqual(packet["api_reasoning_observed_thinking"], {})
         self.assertTrue(packet["api_reasoning_thinking_matched"])
         self.assertFalse(packet["api_reasoning_intelligence_measured"])
 
