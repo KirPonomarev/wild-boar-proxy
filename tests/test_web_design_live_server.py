@@ -2914,7 +2914,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "native_free_text_activation_attempted": True,
                 "native_free_text_activation_source": "server_runtime_context",
                 "bridge_alive": True,
-                "bridge_owner": "foreign_or_unavailable",
+                "bridge_owner": "foreign_or_unknown",
+                "bridge_ownership_status": "foreign_or_unknown",
+                "bridge_owner_current_process_proven": False,
+                "bridge_owner_unknown_or_foreign": True,
+                "bridge_cleanup_attempted": False,
+                "bridge_process_kill_attempted": False,
                 "secret_value_exposed": False,
                 "raw_backend_details_exposed": False,
             },
@@ -14545,6 +14550,245 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(packet["browser_trace_authority"])
         self.assertFalse(packet["secret_value_exposed"])
 
+    def test_custom_native_bridge_ownership_packet_classifies_port_provenance(self) -> None:
+        bridge_port = 50555
+
+        def listener_packet(
+            *,
+            found: bool,
+            pid: int = 0,
+            matches_wbp: bool = False,
+        ) -> dict[str, object]:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_bridge_listener_process",
+                "status": "ok" if found else "blocked",
+                "machine_error_code": "OK" if found else "CUSTOM_NATIVE_BRIDGE_PORT_FREE",
+                "bridge_port": bridge_port,
+                "listener_probe_attempted": True,
+                "listener_process_found": found,
+                "listener_pid": pid,
+                "listener_process_name": "Python" if found else "",
+                "listener_process_is_current": pid == os.getpid(),
+                "listener_command_matches_wbp": matches_wbp,
+                "listener_command_recorded": False,
+                "listener_command_redacted": True,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+
+        lease = live_server._CustomNativeBridgeLease(bridge_port=bridge_port)
+        lease.bridge = mock.Mock()
+        current = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=lease,
+            bridge_port=bridge_port,
+            route_selected=True,
+        )
+        self.assertEqual(current["status"], "ok")
+        self.assertEqual(current["bridge_ownership_status"], "current_process_owned")
+        self.assertTrue(current["bridge_owner_current_process_proven"])
+        self.assertFalse(current["bridge_rebind_admissible"])
+        self.assertFalse(current["bridge_cleanup_attempted"])
+        self.assertFalse(current["bridge_process_kill_attempted"])
+
+        other_wbp = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=lambda port: listener_packet(
+                found=True,
+                pid=os.getpid() + 1234,
+                matches_wbp=True,
+            ),
+        )
+        self.assertEqual(other_wbp["status"], "blocked")
+        self.assertEqual(other_wbp["bridge_ownership_status"], "wbp_stale_or_other_instance")
+        self.assertTrue(other_wbp["bridge_owner_other_wbp_instance"])
+        self.assertTrue(other_wbp["bridge_rebind_requires_owner_authorization"])
+        self.assertFalse(other_wbp["bridge_rebind_admissible"])
+        self.assertFalse(other_wbp["bridge_cleanup_attempted"])
+        self.assertFalse(other_wbp["bridge_process_kill_attempted"])
+
+        unknown = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=lambda port: listener_packet(
+                found=True,
+                pid=os.getpid() + 4321,
+                matches_wbp=False,
+            ),
+        )
+        self.assertEqual(unknown["bridge_ownership_status"], "foreign_or_unknown")
+        self.assertTrue(unknown["bridge_owner_unknown_or_foreign"])
+        self.assertTrue(unknown["bridge_rebind_requires_owner_authorization"])
+        self.assertFalse(unknown["listener_command_recorded"])
+        self.assertTrue(unknown["listener_command_redacted"])
+
+        current_unbound = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=lambda port: listener_packet(
+                found=True,
+                pid=os.getpid(),
+                matches_wbp=False,
+            ),
+        )
+        self.assertEqual(current_unbound["bridge_ownership_status"], "foreign_or_unknown")
+        self.assertTrue(current_unbound["bridge_owner_unknown_or_foreign"])
+        self.assertFalse(current_unbound["bridge_owner_current_process_proven"])
+
+        free = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=lambda port: listener_packet(found=False),
+        )
+        self.assertEqual(free["status"], "blocked")
+        self.assertEqual(free["bridge_ownership_status"], "free")
+        self.assertTrue(free["bridge_port_free"])
+        self.assertFalse(free["bridge_rebind_admissible"])
+
+        not_required = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=False,
+        )
+        self.assertEqual(not_required["status"], "ok")
+        self.assertEqual(not_required["bridge_ownership_status"], "not_required")
+        self.assertFalse(not_required["bridge_rebind_requires_owner_authorization"])
+
+    def test_custom_stable_bridge_preflight_endpoint_reports_other_wbp_owner(self) -> None:
+        bridge_port = 50555
+
+        with (
+            mock.patch.object(
+                live_server,
+                "_custom_native_stable_bridge_required_from_packet",
+                return_value=True,
+            ),
+            mock.patch.object(
+                live_server,
+                "_custom_native_bridge_listener_process_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_native_bridge_listener_process",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "bridge_port": bridge_port,
+                    "listener_probe_attempted": True,
+                    "listener_process_found": True,
+                    "listener_pid": os.getpid() + 1234,
+                    "listener_process_name": "Python",
+                    "listener_process_is_current": False,
+                    "listener_command_matches_wbp": True,
+                    "listener_command_recorded": False,
+                    "listener_command_redacted": True,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                },
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with NO_PROXY_OPENER.open(
+                    f"{base}/api/codex/custom/stable-bridge-preflight",
+                    timeout=2,
+                ) as response:
+                    packet = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "stable_bridge_preflight")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["launch_allowed"])
+        self.assertEqual(packet["bridge_ownership_status"], "wbp_stale_or_other_instance")
+        self.assertTrue(packet["bridge_owner_other_wbp_instance"])
+        self.assertFalse(packet["bridge_owner_current_process_proven"])
+        self.assertTrue(packet["bridge_rebind_requires_owner_authorization"])
+        self.assertFalse(packet["bridge_rebind_admissible"])
+        self.assertFalse(packet["bridge_cleanup_attempted"])
+        self.assertFalse(packet["bridge_process_kill_attempted"])
+        self.assertIn(
+            "stable_bridge_owner_not_current_process",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_bridge_recovery_and_live_stability_carry_ownership_fields(self) -> None:
+        bridge_port = 50555
+        ownership = live_server._custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=lambda port: {
+                "schema_version": 1,
+                "packet_kind": "custom_native_bridge_listener_process",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "bridge_port": bridge_port,
+                "listener_probe_attempted": True,
+                "listener_process_found": True,
+                "listener_pid": os.getpid() + 1234,
+                "listener_process_name": "Python",
+                "listener_process_is_current": False,
+                "listener_command_matches_wbp": True,
+                "listener_command_recorded": False,
+                "listener_command_redacted": True,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        )
+
+        recovery = live_server.build_custom_codex_bridge_failure_recovery_truth_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(),
+            bridge_ownership_packet=ownership,
+        )
+        self.assertEqual(recovery["bridge_ownership_status"], "wbp_stale_or_other_instance")
+        self.assertTrue(recovery["bridge_owner_other_wbp_instance"])
+        self.assertFalse(recovery["bridge_owner_current_process_proven"])
+        self.assertFalse(recovery["bridge_cleanup_attempted"])
+        self.assertFalse(recovery["bridge_process_kill_attempted"])
+
+        stability = live_server.build_custom_codex_live_bridge_stability_packet(
+            last_launch_packet=self._live_bridge_launch_fixture(),
+            bridge_trace_packet=self._live_bridge_trace_fixture(),
+            expected_bridge_port=bridge_port,
+            bridge_ownership_packet=ownership,
+        )
+        self.assertEqual(stability["status"], "blocked")
+        self.assertEqual(
+            stability["bridge_ownership_status"],
+            "wbp_stale_or_other_instance",
+        )
+        self.assertTrue(stability["bridge_owner_other_wbp_instance"])
+        self.assertFalse(stability["bridge_owner_current_process_proven"])
+        self.assertFalse(stability["bridge_cleanup_attempted"])
+        self.assertFalse(stability["bridge_process_kill_attempted"])
+        self.assertIn(
+            "stable_bridge_owner_not_current_process",
+            stability["stable_bridge_preflight_packet"]["blocking_reasons"],
+        )
+        self.assertEqual(
+            stability["stable_bridge_preflight_packet"]["bridge_ownership_status"],
+            "wbp_stale_or_other_instance",
+        )
+        self.assertEqual(
+            stability["bridge_failure_recovery_packet"]["bridge_ownership_status"],
+            "wbp_stale_or_other_instance",
+        )
+
     def test_custom_stable_bridge_preflight_endpoint_blocks_unknown_empty_bridge(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
@@ -20699,7 +20943,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["bridge_url"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertEqual(packet["bridge_port"], stable_port)
         self.assertTrue(packet["bridge_alive"])
-        self.assertEqual(packet["bridge_owner"], "wbp_current_process")
+        self.assertEqual(packet["bridge_owner"], "current_process_owned")
+        self.assertEqual(packet["bridge_ownership_status"], "current_process_owned")
+        self.assertTrue(packet["bridge_owner_current_process_proven"])
+        self.assertFalse(packet["bridge_owner_other_wbp_instance"])
+        self.assertFalse(packet["bridge_rebind_admissible"])
+        self.assertFalse(packet["bridge_cleanup_attempted"])
+        self.assertFalse(packet["bridge_process_kill_attempted"])
         self.assertTrue(packet["config_points_to_stable_bridge"])
         self.assertFalse(packet["random_port_used"])
         self.assertTrue(packet["route_selected"])
@@ -20773,6 +21023,27 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         "available_models": [{"lane": "wbp_api", "model_id": route_id}],
                     },
                 ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_bridge_listener_process_packet",
+                    return_value={
+                        "schema_version": 1,
+                        "packet_kind": "custom_native_bridge_listener_process",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "bridge_port": stable_port,
+                        "listener_probe_attempted": True,
+                        "listener_process_found": True,
+                        "listener_pid": os.getpid() + 1234,
+                        "listener_process_name": "test-listener",
+                        "listener_process_is_current": False,
+                        "listener_command_matches_wbp": False,
+                        "listener_command_recorded": False,
+                        "listener_command_redacted": True,
+                        "raw_backend_details_exposed": False,
+                        "secret_value_exposed": False,
+                    },
+                ),
             ):
                 lease = live_server._CustomNativeBridgeLease(bridge_port=stable_port)
                 packet = live_server._launch_custom_native_codex_packet(
@@ -20801,7 +21072,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["bridge_url"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertEqual(packet["bridge_port"], stable_port)
         self.assertTrue(packet["bridge_alive"])
-        self.assertEqual(packet["bridge_owner"], "foreign_or_unavailable")
+        self.assertEqual(packet["bridge_owner"], "foreign_or_unknown")
+        self.assertEqual(packet["bridge_ownership_status"], "foreign_or_unknown")
+        self.assertFalse(packet["bridge_owner_current_process_proven"])
+        self.assertFalse(packet["bridge_owner_other_wbp_instance"])
+        self.assertTrue(packet["bridge_owner_unknown_or_foreign"])
+        self.assertTrue(packet["bridge_rebind_requires_owner_authorization"])
+        self.assertFalse(packet["bridge_rebind_admissible"])
+        self.assertFalse(packet["bridge_cleanup_attempted"])
+        self.assertFalse(packet["bridge_process_kill_attempted"])
         self.assertFalse(packet["config_points_to_stable_bridge"])
         self.assertFalse(packet["random_port_used"])
         self.assertTrue(packet["route_selected"])
