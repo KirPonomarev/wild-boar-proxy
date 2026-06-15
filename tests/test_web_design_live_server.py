@@ -1706,6 +1706,117 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(packet["command_loop_provider_call_count"], 1)
             self.assertEqual(urlopen.call_count, 1)
 
+    def test_custom_native_free_text_endpoint_blocks_invalid_context_before_native_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            payloads = live_payloads_with_reasoning_variants()
+            routes_packet = routes_list_packet_with_reasoning_variants()
+            routes_packet["data"]["routes"].append(
+                {
+                    "schema_version": 1,
+                    "route_id": "wbp-deepseek-chat",
+                    "display_name": "WBP DeepSeek Chat",
+                    "provider": "deepseek",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                    "secret_ref": "DEEPSEEK_API_KEY",
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": True,
+                }
+            )
+            routes_packet["data"]["count"] = len(routes_packet["data"]["routes"])
+            payloads[("external-models", "routes", "list", "--json")] = routes_packet
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            original_context_builder = live_server._custom_native_agent_runtime_context
+
+            def context_with_wrong_execution_mode(**kwargs: object) -> dict[str, object]:
+                context = dict(original_context_builder(**kwargs))
+                context["execution_mode"] = "api_only"
+                return context
+
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context",
+                    side_effect=context_with_wrong_execution_mode,
+                ),
+                mock.patch.object(live_server, "show_custom_native_window_packet") as show_window,
+                mock.patch.object(live_server, "submit_custom_native_window_prompt_packet") as submit_prompt,
+                mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/native-free-text-command-loop-proof",
+                            {
+                                "expected_text": "NO_NATIVE_SUBMIT",
+                                "request_id": "endpoint-native-context-bad-mode",
+                                "timeout_seconds": 0.1,
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_EXECUTION_MODE_MISMATCH",
+        )
+        self.assertIn("execution_mode_not_chatgpt_plus_api", packet["blocking_reasons"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertTrue(packet["custom_codex_agent_runtime_context_proven"])
+        self.assertEqual(packet["context_read_source"], "profile_context_file")
+        self.assertFalse(packet["native_activation_attempted"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertFalse(packet["api_lane_exact_token_matched"])
+        show_window.assert_not_called()
+        submit_prompt.assert_not_called()
+        urlopen.assert_not_called()
+
     def test_custom_model_reasoning_availability_matrix_endpoint_blocks_combined_on_native_auth_wall(
         self,
     ) -> None:
@@ -2270,6 +2381,351 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(str(proof_root), json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packet["command_loop_provider_call_count"], 1)
         self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_free_text_command_loop_accepts_arbitrary_runtime_alias_variants(self) -> None:
+        variants = [
+            ("Codex", "DIP"),
+            ("Agent 1", "Agent 2"),
+            ("1", "2"),
+            ("Агент GPT", "Агент Дип"),
+            ("Теркистратор", "Ты кодишь"),
+            ("Agent_Ptichka", "Agent_Shmel"),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+
+            for index, (primary_alias, coding_alias) in enumerate(variants):
+                with self.subTest(primary_alias=primary_alias, coding_alias=coding_alias):
+                    context_path = self._write_command_loop_context(
+                        temp_dir=temp_dir,
+                        worker=worker,
+                        primary_aliases=[primary_alias, f"Primary-{index}"],
+                        coding_aliases=[coding_alias, f"Coding-{index}"],
+                    )
+                    with mock.patch.object(
+                        live_server,
+                        "_custom_native_agent_runtime_context_candidates",
+                        return_value=[context_path],
+                    ):
+                        context, metadata = live_server._load_custom_native_agent_runtime_context({})
+                    proof_root = root / f"native-proof-{index}"
+                    expected_text = f"WBP_NATIVE_VARIANT_{index}_OK"
+
+                    def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+                        self.assertIn(primary_alias, prompt)
+                        self.assertIn(coding_alias, prompt)
+                        proof_root.mkdir(parents=True, exist_ok=True)
+                        (proof_root / f"{request_id}.json").write_text(
+                            json.dumps(
+                                {
+                                    "schema_version": 1,
+                                    "packet_kind": "custom_codex_native_free_text_agent_proof",
+                                    "request_id": request_id,
+                                    "machine_error_code": "OK",
+                                    "alias_context_read": True,
+                                    "context_sha256": metadata["context_sha256"],
+                                    "primary_aliases": context["primary_aliases"],
+                                    "coding_aliases": context["coding_aliases"],
+                                    "allowed_api_route_ids": context["allowed_api_route_ids"],
+                                    "expected_token": expected_text,
+                                    "native_free_text_agent_ack": expected_text,
+                                    "no_secret_exposed": True,
+                                    "secret_value_exposed": False,
+                                },
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                            + "\n",
+                            encoding="utf-8",
+                        )
+                        return {
+                            "status": "ok",
+                            "machine_error_code": "OK",
+                            "native_window_observed": True,
+                            "input_capable_ui_observed": True,
+                            "input_text_insert_attempted": True,
+                            "input_text_insert_succeeded": True,
+                            "prompt_submitted": True,
+                            "prompt_text_recorded": False,
+                            "secret_value_exposed": False,
+                        }
+
+                    with mock.patch.object(
+                        live_server,
+                        "proxyless_urlopen",
+                        return_value=self._bridge_response(
+                            route_id="wbp-deepseek-chat",
+                            output_text=expected_text,
+                        ),
+                    ):
+                        packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                            payload={
+                                "expected_text": expected_text,
+                                "request_id": f"native-variant-{index}",
+                                "timeout_seconds": 0.1,
+                            },
+                            file_bridge_worker=worker,
+                            agent_runtime_context=context,
+                            context_metadata=metadata,
+                            bridge_endpoint="http://127.0.0.1:50555/v1",
+                            proof_root=proof_root,
+                            native_activator=lambda **_: {
+                                "status": "ok",
+                                "machine_error_code": "OK",
+                                "custom_process_observed": True,
+                                "process_started": True,
+                                "native_window_observed": True,
+                                "input_capable_ui_observed": True,
+                                "native_app_usable": True,
+                                "secret_value_exposed": False,
+                                "raw_backend_details_exposed": False,
+                            },
+                            native_prompt_submitter=submitter,
+                            reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                        )
+
+                    self.assertEqual(packet["status"], "ok")
+                    self.assertEqual(packet["machine_error_code"], "OK")
+                    self.assertEqual(packet["primary_alias"], primary_alias)
+                    self.assertEqual(packet["coding_alias"], coding_alias)
+                    self.assertTrue(packet["native_free_text_alias_routing_proven"])
+                    self.assertTrue(packet["native_free_text_command_loop_proven"])
+                    self.assertTrue(packet["api_lane_exact_token_matched"])
+                    self.assertTrue(packet["allowed_api_route_ids_enforced"])
+                    self.assertFalse(packet["local_imitation_used"])
+                    self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_native_free_text_blocks_invalid_runtime_context_before_native_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            cases: list[tuple[str, dict[str, object], str, str]] = []
+            bad_kind = json.loads(json.dumps(context))
+            bad_kind["packet_kind"] = "wrong_packet"
+            cases.append(
+                (
+                    "bad_kind",
+                    bad_kind,
+                    "CUSTOM_NATIVE_FREE_TEXT_CONTEXT_KIND_MISMATCH",
+                    "agent_runtime_context_kind_mismatch",
+                )
+            )
+            bad_mode = json.loads(json.dumps(context))
+            bad_mode["execution_mode"] = "api_only"
+            cases.append(
+                (
+                    "bad_mode",
+                    bad_mode,
+                    "CUSTOM_NATIVE_FREE_TEXT_EXECUTION_MODE_MISMATCH",
+                    "execution_mode_not_chatgpt_plus_api",
+                )
+            )
+            bad_bindings_status = json.loads(json.dumps(context))
+            bad_bindings_status["agent_bindings_status"] = "blocked"
+            cases.append(
+                (
+                    "bad_bindings_status",
+                    bad_bindings_status,
+                    "CUSTOM_NATIVE_FREE_TEXT_BINDINGS_NOT_OK",
+                    "agent_bindings_not_ok",
+                )
+            )
+            bad_primary = json.loads(json.dumps(context))
+            bad_primary["agent_bindings"][0]["lane"] = live_server.API_ROUTE_LANE
+            cases.append(
+                (
+                    "bad_primary",
+                    bad_primary,
+                    "CUSTOM_NATIVE_FREE_TEXT_PRIMARY_BINDING_INVALID",
+                    "primary_binding_not_chatgpt_orchestrator",
+                )
+            )
+            bad_coding = json.loads(json.dumps(context))
+            bad_coding["agent_bindings"][1]["enabled"] = False
+            cases.append(
+                (
+                    "bad_coding",
+                    bad_coding,
+                    "CUSTOM_NATIVE_FREE_TEXT_CODING_BINDING_INVALID",
+                    "coding_binding_not_api_coding_agent",
+                )
+            )
+            bad_route = json.loads(json.dumps(context))
+            bad_route["allowed_api_route_ids"] = ["wbp-other-deepseek"]
+            cases.append(
+                (
+                    "bad_route",
+                    bad_route,
+                    "CUSTOM_NATIVE_FREE_TEXT_ROUTE_NOT_ALLOWED",
+                    "coding_route_not_allowed",
+                )
+            )
+            missing_stale_guard = json.loads(json.dumps(context))
+            missing_stale_guard["forbidden_stale_route_ids"] = []
+            cases.append(
+                (
+                    "missing_stale_guard",
+                    missing_stale_guard,
+                    "CUSTOM_NATIVE_FREE_TEXT_ROUTE_NOT_ALLOWED",
+                    "stale_route_guard_missing",
+                )
+            )
+
+            for name, bad_context, machine_error_code, blocking_reason in cases:
+                with self.subTest(name=name):
+                    activator = mock.Mock()
+                    submitter = mock.Mock()
+                    with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                        packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                            payload={
+                                "expected_text": "NO_NATIVE_SUBMIT",
+                                "request_id": f"native-context-{name}",
+                                "timeout_seconds": 0.1,
+                            },
+                            file_bridge_worker=worker,
+                            agent_runtime_context=bad_context,
+                            context_metadata=metadata,
+                            proof_root=root / f"native-proof-{name}",
+                            native_activator=activator,
+                            native_prompt_submitter=submitter,
+                            reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                        )
+
+                    self.assertEqual(packet["status"], "blocked")
+                    self.assertEqual(packet["machine_error_code"], machine_error_code)
+                    self.assertIn(blocking_reason, packet["blocking_reasons"])
+                    self.assertFalse(packet["native_activation_attempted"])
+                    self.assertFalse(packet["prompt_submitted"])
+                    self.assertFalse(packet["native_free_text_command_loop_proven"])
+                    activator.assert_not_called()
+                    submitter.assert_not_called()
+                    urlopen.assert_not_called()
+
+    def test_custom_native_free_text_rejects_proof_contract_mismatches_before_api_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            proof_root = root / "native-proof-mismatch"
+
+            def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": "wrong-sha",
+                            "primary_aliases": ["Mallory"],
+                            "coding_aliases": ["Shadow"],
+                            "allowed_api_route_ids": ["wbp-wrong-route"],
+                            "expected_token": "WRONG_TOKEN",
+                            "native_free_text_agent_ack": "WRONG_TOKEN",
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                }
+
+            with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                        "request_id": "native-proof-mismatch",
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    native_prompt_submitter=submitter,
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_AGENT_PROOF_INVALID")
+        self.assertTrue(packet["prompt_submitted"])
+        self.assertFalse(packet["native_agent_proof_file_valid"])
+        self.assertFalse(packet["native_free_text_alias_routing_proven"])
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertIn("context_sha256_mismatch", packet["blocking_reasons"])
+        self.assertIn("primary_aliases_mismatch", packet["blocking_reasons"])
+        self.assertIn("coding_aliases_mismatch", packet["blocking_reasons"])
+        self.assertIn("allowed_api_route_ids_mismatch", packet["blocking_reasons"])
+        self.assertIn("expected_token_mismatch", packet["blocking_reasons"])
+        self.assertIn("native_free_text_agent_ack_mismatch", packet["blocking_reasons"])
+        self.assertIn(
+            "context_sha256_mismatch",
+            packet["native_agent_proof_blocking_reasons"],
+        )
+        self.assertFalse(packet["native_agent_proof_packet"]["context_sha256_match"])
+        self.assertFalse(packet["native_agent_proof_packet"]["primary_aliases_match"])
+        self.assertFalse(packet["native_agent_proof_packet"]["coding_aliases_match"])
+        self.assertFalse(packet["native_agent_proof_packet"]["allowed_api_route_ids_match"])
+        self.assertFalse(packet["native_agent_proof_packet"]["exact_token_matched"])
+        urlopen.assert_not_called()
 
     def test_custom_native_free_text_blocks_when_native_agent_proof_file_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -5571,6 +5571,33 @@ def _custom_native_free_text_command_loop_proof_packet(
             context_metadata=resolved_context_metadata,
             blocking_reasons=["native_alias_context_not_read"],
         )
+    if context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_CONTEXT_KIND_MISMATCH",
+            human_message="Runtime context packet kind does not match Custom Codex agent context.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_runtime_context_kind_mismatch"],
+        )
+    if context.get("execution_mode") != "chatgpt_plus_api":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_EXECUTION_MODE_MISMATCH",
+            human_message="Native free-text proof requires chatgpt_plus_api execution mode.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["execution_mode_not_chatgpt_plus_api"],
+        )
+    if context.get("agent_bindings_status") not in {None, "", "ok"}:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_BINDINGS_NOT_OK",
+            human_message="Runtime context agent bindings are not marked ok.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_bindings_not_ok"],
+        )
     primary_aliases = _custom_native_aliases_for_lane(
         context,
         context_key="primary_aliases",
@@ -5624,6 +5651,86 @@ def _custom_native_free_text_command_loop_proof_packet(
         for route_id in context.get("allowed_api_route_ids", [])
         if str(route_id)
     ]
+    agent_bindings = (
+        context.get("agent_bindings")
+        if isinstance(context.get("agent_bindings"), list)
+        else []
+    )
+    primary_binding = resolve_alias_binding(agent_bindings, primary_aliases[0])
+    coding_binding = resolve_alias_binding(agent_bindings, coding_aliases[0])
+    if not primary_binding or not coding_binding:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_BINDING_MISSING",
+            human_message="Native free-text aliases must resolve to server-owned runtime bindings.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["alias_binding_missing"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    primary_role = str(primary_binding.get("role") or "")
+    coding_role = str(coding_binding.get("role") or "")
+    if (
+        primary_binding.get("enabled") is not True
+        or primary_binding.get("lane") != PRIMARY_CHATGPT_LANE
+        or primary_role != "orchestrator"
+    ):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_PRIMARY_BINDING_INVALID",
+            human_message="Primary alias must map to the enabled ChatGPT orchestrator lane before native submit.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["primary_binding_not_chatgpt_orchestrator"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    if (
+        coding_binding.get("enabled") is not True
+        or coding_binding.get("lane") != API_ROUTE_LANE
+        or coding_role != "coding_agent"
+    ):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_CODING_BINDING_INVALID",
+            human_message="Coding alias must map to the enabled API coding-agent lane before native submit.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["coding_binding_not_api_coding_agent"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    route_id = str(coding_binding.get("route_id") or "")
+    forbidden_stale_route_ids = {
+        str(route_id_value)
+        for route_id_value in context.get("forbidden_stale_route_ids", [])
+        if str(route_id_value)
+    }
+    route_blocking_reasons: list[str] = []
+    if not route_id:
+        route_blocking_reasons.append("coding_route_missing")
+    if route_id and route_id not in allowed_api_route_ids:
+        route_blocking_reasons.append("coding_route_not_allowed")
+    if route_id and route_id in forbidden_stale_route_ids:
+        route_blocking_reasons.append("coding_route_forbidden_stale")
+    if not forbidden_stale_route_ids:
+        route_blocking_reasons.append("stale_route_guard_missing")
+    if route_blocking_reasons:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_ROUTE_NOT_ALLOWED",
+            human_message="Coding alias route must be allowed and stale-route guarded before native submit.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=route_blocking_reasons,
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
     root = proof_root or _native_free_text_proof_root()
     try:
         root.mkdir(parents=True, exist_ok=True)
