@@ -2901,6 +2901,34 @@ class WebDesignLiveServerTests(unittest.TestCase):
         submitter.assert_not_called()
         urlopen.assert_not_called()
 
+    def test_custom_native_free_text_activation_preserves_stable_bridge_blocker_code(self) -> None:
+        packet = live_server._custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+            human_message="Stable bridge port is already owned by another process.",
+            expected_text="NO_NATIVE_SUBMIT",
+            request_id="native-bridge-port-conflict",
+            blocking_reasons=["CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE"],
+            native_activation_packet={
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+                "native_free_text_activation_attempted": True,
+                "native_free_text_activation_source": "server_runtime_context",
+                "bridge_alive": True,
+                "bridge_owner": "foreign_or_unavailable",
+                "secret_value_exposed": False,
+                "raw_backend_details_exposed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["native_activation_machine_error_code"],
+            "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+        )
+        self.assertFalse(packet["native_window_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+
     def test_custom_native_free_text_activation_blocks_before_submit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

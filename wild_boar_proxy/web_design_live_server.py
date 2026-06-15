@@ -5070,7 +5070,13 @@ def _custom_native_free_text_activation_machine_error(packet: dict[str, Any]) ->
         "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO",
     }:
         return "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
-    if machine_code == "CUSTOM_NATIVE_API_MODEL_ID_MISSING":
+    if machine_code in {
+        "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+        "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+        "CUSTOM_CODEX_STABLE_WBP_BRIDGE_NOT_CONFIGURED",
+        "CUSTOM_CODEX_STABLE_WBP_BRIDGE_AUTH_UNAVAILABLE",
+        "CUSTOM_CODEX_STABLE_WBP_BRIDGE_SMOKE_FAILED",
+    }:
         return machine_code
     if not _custom_native_free_text_window_observed(packet):
         return "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED"
