@@ -559,7 +559,10 @@ let quickStartVoiceDraftState = {
   transcript: "",
   recognition: null,
   listening: false,
-  lastErrorCode: ""
+  lastErrorCode: "",
+  pasteBridgePacket: null,
+  pastePreflightOk: false,
+  pasteInFlight: false
 };
 
 function text(id, value) {
@@ -3720,6 +3723,30 @@ function quickStartVoiceAdapterAvailable() {
   return Boolean(quickStartVoiceRecognitionConstructor());
 }
 
+async function quickStartSha256Hex(value) {
+  if (
+    typeof window === "undefined" ||
+    !window.crypto?.subtle ||
+    typeof TextEncoder === "undefined"
+  ) {
+    return "";
+  }
+  const encoded = new TextEncoder().encode(String(value || ""));
+  const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function quickStartVoiceDraftMetadata() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  return {
+    draft_length: transcript.length,
+    draft_sha256: await quickStartSha256Hex(transcript),
+    request_id: `wbp-voice-${Date.now().toString(36)}`
+  };
+}
+
 function quickStartVoiceStatusVisual(packet) {
   const status = packet?.status || "";
   const code = packet?.machine_error_code || "";
@@ -3775,6 +3802,22 @@ function quickStartVoiceClientPacket(overrides = {}) {
     clipboard_contains_transcript: overrides.clipboard_contains_transcript === true,
     empty_transcript_copy_blocked: overrides.empty_transcript_copy_blocked === true,
     clipboard_copy_only: true,
+    paste_bridge_available: true,
+    paste_preflight_passed: quickStartVoiceDraftState.pastePreflightOk === true,
+    live_paste_attempted: false,
+    paste_attempted: false,
+    paste_ok: false,
+    clipboard_restore_required: true,
+    clipboard_restored: false,
+    submit_action_planned: false,
+    enter_key_planned: false,
+    enter_key_pressed: false,
+    send_button_planned: false,
+    send_button_pressed: false,
+    api_called: false,
+    model_endpoint_called: false,
+    operator_run_called: false,
+    session_prompt_endpoint_called: false,
     no_secret_exposed: true,
     secret_value_exposed: false,
     raw_backend_details_exposed: false,
@@ -3795,6 +3838,14 @@ function renderQuickStartVoiceDraft(packet = quickStartVoiceClientPacket()) {
   const recordButton = document.getElementById("quickStartVoiceRecordAction");
   const clearButton = document.getElementById("quickStartVoiceClearAction");
   const copyButton = document.getElementById("quickStartVoiceCopyAction");
+  const pastePreflightButton = document.getElementById("quickStartVoicePastePreflightAction");
+  const pasteCustomButton = document.getElementById("quickStartVoicePasteCustomAction");
+  const pastePacket = quickStartVoiceDraftState.pasteBridgePacket;
+  const pastePreflightFresh = (
+    quickStartVoiceDraftState.pastePreflightOk === true &&
+    pastePacket?.phase === "preflight" &&
+    pastePacket?.draft_length === String(quickStartVoiceDraftState.transcript || "").length
+  );
   if (recordButton?.lastElementChild) {
     recordButton.lastElementChild.textContent = quickStartVoiceDraftState.listening
       ? "Слушаю"
@@ -3805,6 +3856,12 @@ function renderQuickStartVoiceDraft(packet = quickStartVoiceClientPacket()) {
   }
   if (copyButton) {
     copyButton.disabled = !hasTranscript;
+  }
+  if (pastePreflightButton) {
+    pastePreflightButton.disabled = !hasTranscript || quickStartVoiceDraftState.pasteInFlight;
+  }
+  if (pasteCustomButton) {
+    pasteCustomButton.disabled = !hasTranscript || !pastePreflightFresh || quickStartVoiceDraftState.pasteInFlight;
   }
   const adapterAvailable = quickStartVoiceAdapterAvailable();
   setQuickStartChip("quickStartVoiceDraftChip", quickStartVoiceStatusVisual(packet), packet.machine_error_code || "pending");
@@ -3826,10 +3883,34 @@ function renderQuickStartVoiceDraft(packet = quickStartVoiceClientPacket()) {
       : "red",
     "не хранится"
   );
+  setQuickStartChip(
+    "quickStartVoicePasteState",
+    quickStartVoiceStatusVisual(pastePacket || {}),
+    pastePacket?.machine_error_code || "не проверен"
+  );
+  setQuickStartChip(
+    "quickStartVoiceSubmitState",
+    (pastePacket?.prompt_submitted === true ||
+      pastePacket?.enter_key_pressed === true ||
+      pastePacket?.send_button_pressed === true)
+      ? "red"
+      : "green",
+    (pastePacket?.prompt_submitted === true ||
+      pastePacket?.enter_key_pressed === true ||
+      pastePacket?.send_button_pressed === true)
+      ? "violation"
+      : "запрещен"
+  );
   const packetNode = document.getElementById("quickStartVoiceDraftPacket");
   if (packetNode) {
-    packetNode.textContent = JSON.stringify(packet, null, 2);
+    packetNode.textContent = JSON.stringify(pastePacket || packet, null, 2);
   }
+}
+
+function resetQuickStartVoicePasteBridge() {
+  quickStartVoiceDraftState.pasteBridgePacket = null;
+  quickStartVoiceDraftState.pastePreflightOk = false;
+  quickStartVoiceDraftState.pasteInFlight = false;
 }
 
 async function refreshQuickStartVoiceDraftContract() {
@@ -3922,7 +4003,12 @@ function startQuickStartVoiceDraft() {
         interimTranscript = `${interimTranscript} ${phrase}`.trim();
       }
     }
-    quickStartVoiceDraftState.transcript = `${finalTranscript} ${interimTranscript}`.trim();
+    const nextTranscript = `${finalTranscript} ${interimTranscript}`.trim();
+    if (nextTranscript !== quickStartVoiceDraftState.transcript) {
+      quickStartVoiceDraftState.pasteBridgePacket = null;
+      quickStartVoiceDraftState.pastePreflightOk = false;
+    }
+    quickStartVoiceDraftState.transcript = nextTranscript;
     renderQuickStartVoiceDraft(
       quickStartVoiceClientPacket({
         status: "recording",
@@ -3981,6 +4067,7 @@ function startQuickStartVoiceDraft() {
 function clearQuickStartVoiceDraft() {
   quickStartVoiceDraftState.transcript = "";
   quickStartVoiceDraftState.lastErrorCode = "";
+  resetQuickStartVoicePasteBridge();
   renderQuickStartVoiceDraft();
 }
 
@@ -4027,6 +4114,133 @@ async function copyQuickStartVoiceDraft() {
         empty_transcript_copy_blocked: false
       })
     );
+  }
+}
+
+function quickStartVoicePasteBridgeBlockedPacket(code, message = "") {
+  return {
+    schema_version: 1,
+    packet_kind: "wbp_custom_paste_bridge",
+    endpoint: "/api/wbp/custom-paste-bridge/preflight",
+    phase: "client_guard",
+    status: "blocked",
+    machine_error_code: code,
+    human_message: message,
+    draft_present: Boolean(quickStartVoiceDraftState.transcript),
+    draft_length: String(quickStartVoiceDraftState.transcript || "").length,
+    draft_text_in_packet: false,
+    custom_window_found: false,
+    custom_window_identity_proven: false,
+    target_input_unique: false,
+    clipboard_restore_required: true,
+    live_paste_attempted: false,
+    paste_attempted: false,
+    paste_ok: false,
+    custom_window_mutation_attempted: false,
+    prompt_submitted: false,
+    submit_action_planned: false,
+    enter_key_planned: false,
+    enter_key_pressed: false,
+    send_button_planned: false,
+    send_button_pressed: false,
+    api_called: false,
+    model_endpoint_called: false,
+    operator_run_called: false,
+    session_prompt_endpoint_called: false,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    no_secret_exposed: true,
+    next_action: "fix_voice_draft_paste_bridge_guard"
+  };
+}
+
+async function runQuickStartVoicePastePreflight() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  if (!transcript) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket("EMPTY_DRAFT");
+    quickStartVoiceDraftState.pastePreflightOk = false;
+    renderQuickStartVoiceDraft();
+    return;
+  }
+  quickStartVoiceDraftState.pasteInFlight = true;
+  renderQuickStartVoiceDraft();
+  try {
+    const metadata = await quickStartVoiceDraftMetadata();
+    const response = await fetch("api/wbp/custom-paste-bridge/preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(metadata)
+    });
+    if (!response.ok) {
+      throw new Error(`paste preflight http ${response.status}`);
+    }
+    const packet = await response.json();
+    quickStartVoiceDraftState.pasteBridgePacket = packet;
+    quickStartVoiceDraftState.pastePreflightOk = (
+      packet?.status === "ok" &&
+      packet?.draft_text_in_packet === false &&
+      packet?.target_input_unique === true &&
+      packet?.prompt_submitted === false &&
+      packet?.enter_key_pressed === false &&
+      packet?.send_button_pressed === false
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      "PASTE_PREFLIGHT_FETCH_FAILED",
+      error.message
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } finally {
+    quickStartVoiceDraftState.pasteInFlight = false;
+    renderQuickStartVoiceDraft();
+  }
+}
+
+async function runQuickStartVoicePasteCustom() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  const preflightPacket = quickStartVoiceDraftState.pasteBridgePacket;
+  const preflightFresh = (
+    quickStartVoiceDraftState.pastePreflightOk === true &&
+    preflightPacket?.phase === "preflight" &&
+    preflightPacket?.draft_length === transcript.length
+  );
+  if (!transcript || !preflightFresh) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      !transcript ? "EMPTY_DRAFT" : "PASTE_PREFLIGHT_REQUIRED"
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+    renderQuickStartVoiceDraft();
+    return;
+  }
+  quickStartVoiceDraftState.pasteInFlight = true;
+  renderQuickStartVoiceDraft();
+  try {
+    const metadata = await quickStartVoiceDraftMetadata();
+    const response = await fetch("api/wbp/custom-paste-bridge/live-paste", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        ...metadata,
+        draft_text: transcript
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`paste live http ${response.status}`);
+    }
+    const packet = await response.json();
+    quickStartVoiceDraftState.pasteBridgePacket = packet;
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } catch (error) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      "LIVE_PASTE_FETCH_FAILED",
+      error.message
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } finally {
+    quickStartVoiceDraftState.pasteInFlight = false;
+    renderQuickStartVoiceDraft();
   }
 }
 
@@ -16806,6 +17020,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartVoiceRecordAction")?.addEventListener("click", () => startQuickStartVoiceDraft());
   document.getElementById("quickStartVoiceClearAction")?.addEventListener("click", () => clearQuickStartVoiceDraft());
   document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft());
+  document.getElementById("quickStartVoicePastePreflightAction")?.addEventListener("click", () => runQuickStartVoicePastePreflight());
+  document.getElementById("quickStartVoicePasteCustomAction")?.addEventListener("click", () => runQuickStartVoicePasteCustom());
   await ensureActionMetadataLoaded();
   applyActionAvailability();
   setupCodexCustomAgentAliases();

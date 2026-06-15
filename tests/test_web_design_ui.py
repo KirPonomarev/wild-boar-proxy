@@ -1850,6 +1850,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('id="quickStartVoiceRecordAction"', voice_card)
         self.assertIn('id="quickStartVoiceClearAction"', voice_card)
         self.assertIn('id="quickStartVoiceCopyAction"', voice_card)
+        self.assertIn('id="quickStartVoicePastePreflightAction"', voice_card)
+        self.assertIn('id="quickStartVoicePasteCustomAction"', voice_card)
         self.assertIn('id="quickStartVoiceDraftText"', voice_card)
         self.assertIn('id="quickStartVoiceDraftPacket"', voice_card)
         self.assertNotIn("data-ui-action", voice_card)
@@ -1858,12 +1860,20 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn(".quick-start-voice-draft", css)
         self.assertIn('window.SpeechRecognition || window.webkitSpeechRecognition', voice_js)
         self.assertIn('fetch("api/wbp/voice-draft"', voice_js)
+        self.assertIn('fetch("api/wbp/custom-paste-bridge/preflight"', voice_js)
+        self.assertIn('fetch("api/wbp/custom-paste-bridge/live-paste"', voice_js)
         self.assertIn("navigator.clipboard.writeText(transcript)", voice_js)
         self.assertIn("clipboard_handoff_available: true", voice_js)
         self.assertIn("clipboard_handoff_attempted: overrides.clipboard_handoff_attempted === true", voice_js)
         self.assertIn("clipboard_handoff_ok: overrides.clipboard_handoff_ok === true", voice_js)
         self.assertIn("clipboard_contains_transcript: overrides.clipboard_contains_transcript === true", voice_js)
         self.assertIn("empty_transcript_copy_blocked: overrides.empty_transcript_copy_blocked === true", voice_js)
+        self.assertIn("draft_text_in_packet: false", voice_js)
+        self.assertIn("submit_action_planned: false", voice_js)
+        self.assertIn("enter_key_pressed: false", voice_js)
+        self.assertIn("send_button_pressed: false", voice_js)
+        self.assertIn("api_called: false", voice_js)
+        self.assertIn("model_endpoint_called: false", voice_js)
         self.assertIn("transcript_text_included_in_packet: false", voice_js)
         self.assertIn("server_audio_ingress_enabled: false", voice_js)
         self.assertIn("raw_audio_recorded_by_server: false", voice_js)
@@ -1887,6 +1897,14 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         )
         self.assertIn(
             'document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft())',
+            js,
+        )
+        self.assertIn(
+            'document.getElementById("quickStartVoicePastePreflightAction")?.addEventListener("click", () => runQuickStartVoicePastePreflight())',
+            js,
+        )
+        self.assertIn(
+            'document.getElementById("quickStartVoicePasteCustomAction")?.addEventListener("click", () => runQuickStartVoicePasteCustom())',
             js,
         )
 
@@ -2028,6 +2046,195 @@ sandbox.__clipboardFailure = null;
   }
   if (failedPacket.clipboard_contains_transcript !== false) {
     throw new Error("failure packet must not claim clipboard transcript: " + JSON.stringify(failedPacket));
+  }
+})()`, sandbox);
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_quick_start_voice_paste_bridge_packets_are_executable_and_redacted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.className = "";
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.id = "";
+    this.lastElementChild = { textContent: "" };
+    this.readOnly = false;
+    this.textContent = "";
+    this.value = "";
+  }
+  addEventListener() {}
+  append(...nodes) {
+    for (const item of nodes) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  removeAttribute(name) { delete this[name]; }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) { this[name] = value; }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const requests = [];
+function response(packet) {
+  return { ok: true, json: async () => packet };
+}
+
+const sandbox = {
+  console,
+  document: {
+    documentElement: { lang: "ru" },
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  navigator: { language: "ru-RU", clipboard: { async writeText() {} } },
+  window: {
+    SpeechRecognition: class {},
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  requests,
+  fetch: async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : {};
+    requests.push({ url, body });
+    if (url === "api/wbp/custom-paste-bridge/preflight") {
+      return response({
+        schema_version: 1,
+        packet_kind: "wbp_custom_paste_bridge",
+        endpoint: "/api/wbp/custom-paste-bridge/preflight",
+        phase: "preflight",
+        status: "ok",
+        machine_error_code: "OK",
+        draft_present: true,
+        draft_length: body.draft_length,
+        draft_text_in_packet: false,
+        custom_window_found: true,
+        custom_window_identity_proven: true,
+        target_input_unique: true,
+        target_input_candidate: "single",
+        clipboard_restore_required: true,
+        live_paste_attempted: false,
+        paste_attempted: false,
+        paste_ok: false,
+        prompt_submitted: false,
+        enter_key_pressed: false,
+        send_button_pressed: false,
+        api_called: false,
+        model_endpoint_called: false
+      });
+    }
+    if (url === "api/wbp/custom-paste-bridge/live-paste") {
+      return response({
+        schema_version: 1,
+        packet_kind: "wbp_custom_paste_bridge",
+        endpoint: "/api/wbp/custom-paste-bridge/live-paste",
+        phase: "live_paste",
+        status: "ok",
+        machine_error_code: "OK",
+        draft_present: true,
+        draft_length: body.draft_length,
+        draft_text_in_packet: false,
+        custom_window_found: true,
+        custom_window_identity_proven: true,
+        target_input_unique: true,
+        target_input_candidate: "single",
+        clipboard_restore_required: true,
+        clipboard_restored: true,
+        live_paste_attempted: true,
+        paste_attempted: true,
+        paste_ok: true,
+        custom_mutation_scope: "paste_only",
+        prompt_submitted: false,
+        submit_action_planned: false,
+        enter_key_planned: false,
+        enter_key_pressed: false,
+        send_button_planned: false,
+        send_button_pressed: false,
+        api_called: false,
+        model_endpoint_called: false,
+        operator_run_called: false,
+        session_prompt_endpoint_called: false
+      });
+    }
+    throw new Error("unexpected fetch " + url);
+  }
+};
+
+(async () => {
+  vm.createContext(sandbox);
+  const source = fs.readFileSync("scripts/overview.js", "utf8");
+  await vm.runInContext(`${source}
+(async () => {
+  const transcript = "WBP paste bridge raw draft";
+  quickStartVoiceDraftState.transcript = transcript;
+  renderQuickStartVoiceDraft();
+  if (document.getElementById("quickStartVoicePastePreflightAction").disabled !== false) {
+    throw new Error("preflight button must enable when transcript exists");
+  }
+  await runQuickStartVoicePastePreflight();
+  if (globalThis.requests[0].url !== "api/wbp/custom-paste-bridge/preflight") {
+    throw new Error("preflight endpoint mismatch");
+  }
+  if ("draft_text" in globalThis.requests[0].body) {
+    throw new Error("preflight must not send raw draft text");
+  }
+  if (document.getElementById("quickStartVoicePasteCustomAction").disabled !== false) {
+    throw new Error("live paste button must enable after fresh preflight");
+  }
+  await runQuickStartVoicePasteCustom();
+  if (globalThis.requests[1].url !== "api/wbp/custom-paste-bridge/live-paste") {
+    throw new Error("live endpoint mismatch");
+  }
+  if (globalThis.requests[1].body.draft_text !== transcript) {
+    throw new Error("live paste must send draft text transiently");
+  }
+  const rendered = document.getElementById("quickStartVoiceDraftPacket").textContent;
+  if (rendered.includes(transcript)) {
+    throw new Error("rendered packet must not include raw draft text");
+  }
+  const packet = JSON.parse(rendered);
+  if (packet.prompt_submitted !== false || packet.enter_key_pressed !== false || packet.send_button_pressed !== false) {
+    throw new Error("submit guard mismatch: " + rendered);
+  }
+  if (packet.api_called !== false || packet.model_endpoint_called !== false) {
+    throw new Error("model/API guard mismatch: " + rendered);
   }
 })()`, sandbox);
 })().catch((error) => {

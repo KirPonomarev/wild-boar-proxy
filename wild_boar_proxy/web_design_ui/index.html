@@ -469,6 +469,14 @@
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
                   <span>Скопировать</span>
                 </button>
+                <button id="quickStartVoicePastePreflightAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить вставку</span>
+                </button>
+                <button id="quickStartVoicePasteCustomAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Вставить в Custom</span>
+                </button>
               </div>
 
               <textarea id="quickStartVoiceDraftText" class="quick-start-voice-draft" readonly spellcheck="false" placeholder="Черновик появится здесь" aria-label="Текст голосового черновика"></textarea>
@@ -489,6 +497,14 @@
                 <div class="quick-start-check-row">
                   <span>audio</span>
                   <span id="quickStartVoiceAudioState" class="chip neutral"><span class="dot"></span><span>не хранится</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>paste</span>
+                  <span id="quickStartVoicePasteState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>submit</span>
+                  <span id="quickStartVoiceSubmitState" class="chip neutral"><span class="dot"></span><span>запрещен</span></span>
                 </div>
               </div>
 

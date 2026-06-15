@@ -11166,9 +11166,171 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         self.assertFalse(packet["clipboard_handoff_ok"])
         self.assertFalse(packet["clipboard_contains_transcript"])
         self.assertTrue(packet["empty_transcript_copy_blocked"])
+        self.assertTrue(packet["custom_paste_bridge_available"])
+        self.assertEqual(
+            packet["custom_paste_bridge_preflight_endpoint"],
+            "/api/wbp/custom-paste-bridge/preflight",
+        )
+        self.assertEqual(
+            packet["custom_paste_bridge_live_endpoint"],
+            "/api/wbp/custom-paste-bridge/live-paste",
+        )
         self.assertTrue(packet["custom_codex_not_mutated"])
         self.assertTrue(packet["prompt_not_submitted"])
+        self.assertFalse(packet["paste_attempted"])
+        self.assertFalse(packet["api_called"])
+        self.assertFalse(packet["model_endpoint_called"])
         self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_paste_bridge_routes_are_registered_and_auth_bound(self) -> None:
+        preflight = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "POST",
+            "/api/wbp/custom-paste-bridge/preflight",
+        )
+        live = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
+            "POST",
+            "/api/wbp/custom-paste-bridge/live-paste",
+        )
+
+        self.assertIsNotNone(preflight)
+        self.assertIsNotNone(live)
+        assert preflight is not None
+        assert live is not None
+        self.assertEqual(preflight.effect, live_server.EFFECT_PROBE)
+        self.assertEqual(live.effect, EFFECT_MUTATE)
+        self.assertTrue(preflight.auth_required)
+        self.assertTrue(live.auth_required)
+
+    def test_custom_paste_bridge_preflight_rejects_raw_text_before_native_probe(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with mock.patch.object(live_server, "inspect_custom_native_paste_target_packet") as probe:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/wbp/custom-paste-bridge/preflight",
+                        {
+                            "draft_length": 12,
+                            "draft_sha256": "a" * 64,
+                            "draft_text": "raw draft must not be accepted",
+                            "route_id": "browser-route",
+                        },
+                    )
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        probe.assert_not_called()
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "BROWSER_PAYLOAD_FORBIDDEN_FIELDS")
+        self.assertIn("draft_text", packet["blocking_reasons"])
+        self.assertIn("route_id", packet["blocking_reasons"])
+        self.assertFalse(packet["draft_text_in_packet"])
+        self.assertFalse(packet["live_paste_attempted"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["api_called"])
+        self.assertNotIn("raw draft must not be accepted", json.dumps(packet, ensure_ascii=False))
+
+    def test_custom_paste_bridge_live_requires_owner_auth_before_native_paste(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with mock.patch.object(live_server, "paste_custom_native_window_draft_packet") as paste:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/wbp/custom-paste-bridge/live-paste",
+                        {
+                            "draft_text": "live paste draft",
+                            "draft_length": 16,
+                            "draft_sha256": "b" * 64,
+                        },
+                    )
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        paste.assert_not_called()
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "OWNER_AUTH_REQUIRED")
+        self.assertFalse(packet["owner_authorized_for_live"])
+        self.assertFalse(packet["paste_attempted"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertNotIn("live paste draft", json.dumps(packet, ensure_ascii=False))
+
+    def test_custom_paste_bridge_live_authorized_calls_native_paste_once_and_redacts(self) -> None:
+        handler = build_handler(
+            runner=mock.Mock(),
+            owner_authorization_phrase=live_server.OWNER_STANDING_AUTHORIZATION_PHRASE,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        fake_paste_packet = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "custom_window_found": True,
+            "custom_window_identity": "custom_codex",
+            "custom_window_identity_proven": True,
+            "target_input_candidate": "single",
+            "target_input_unique": True,
+            "clipboard_backup_captured": True,
+            "clipboard_handoff_attempted": True,
+            "clipboard_write_attempted": True,
+            "clipboard_restore_attempted": True,
+            "clipboard_restored": True,
+            "paste_attempted": True,
+            "paste_ok": True,
+            "custom_mutation_scope": "paste_only",
+            "custom_window_mutation_attempted": True,
+            "input_text_insert_attempted": True,
+            "input_text_insert_succeeded": True,
+        }
+        try:
+            with mock.patch.object(
+                live_server,
+                "paste_custom_native_window_draft_packet",
+                return_value=fake_paste_packet,
+            ) as paste:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/wbp/custom-paste-bridge/live-paste",
+                        {
+                            "draft_text": "authorized live paste draft",
+                            "draft_length": 27,
+                            "draft_sha256": "c" * 64,
+                            "request_id": "server-live",
+                        },
+                    )
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        paste.assert_called_once_with(
+            draft_text="authorized live paste draft",
+            request_id="server-live",
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["owner_authorized_for_live"])
+        self.assertTrue(packet["paste_attempted"])
+        self.assertTrue(packet["clipboard_restored"])
+        self.assertEqual(packet["custom_mutation_scope"], "paste_only")
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["enter_key_pressed"])
+        self.assertFalse(packet["send_button_pressed"])
+        self.assertFalse(packet["api_called"])
+        self.assertFalse(packet["model_endpoint_called"])
+        self.assertNotIn("authorized live paste draft", json.dumps(packet, ensure_ascii=False))
 
     def test_registry_dynamic_prefixes_and_queryless_lookup(self) -> None:
         action = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(

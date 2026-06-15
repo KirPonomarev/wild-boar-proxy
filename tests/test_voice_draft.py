@@ -30,6 +30,17 @@ class VoiceDraftContractTests(unittest.TestCase):
         self.assertFalse(packet["clipboard_handoff_ok"])
         self.assertFalse(packet["clipboard_contains_transcript"])
         self.assertTrue(packet["empty_transcript_copy_blocked"])
+        self.assertTrue(packet["custom_paste_bridge_available"])
+        self.assertEqual(
+            packet["custom_paste_bridge_preflight_endpoint"],
+            "/api/wbp/custom-paste-bridge/preflight",
+        )
+        self.assertEqual(
+            packet["custom_paste_bridge_live_endpoint"],
+            "/api/wbp/custom-paste-bridge/live-paste",
+        )
+        self.assertTrue(packet["custom_paste_bridge_preflight_required"])
+        self.assertTrue(packet["custom_paste_bridge_live_requires_owner_authorization"])
 
     def test_voice_draft_contract_does_not_mutate_custom_or_persist_audio(self) -> None:
         packet = build_voice_draft_contract_packet()
@@ -41,6 +52,16 @@ class VoiceDraftContractTests(unittest.TestCase):
         self.assertTrue(packet["custom_codex_not_mutated"])
         self.assertFalse(packet["custom_window_mutation_attempted"])
         self.assertTrue(packet["prompt_not_submitted"])
+        self.assertFalse(packet["paste_attempted"])
+        self.assertFalse(packet["paste_ok"])
+        self.assertEqual(packet["custom_mutation_scope"], "none")
+        self.assertFalse(packet["submit_action_planned"])
+        self.assertFalse(packet["enter_key_pressed"])
+        self.assertFalse(packet["send_button_pressed"])
+        self.assertFalse(packet["api_called"])
+        self.assertFalse(packet["model_endpoint_called"])
+        self.assertFalse(packet["operator_run_called"])
+        self.assertFalse(packet["session_prompt_endpoint_called"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertEqual(packet["changed_files"], [])

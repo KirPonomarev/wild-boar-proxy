@@ -78,6 +78,7 @@ CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
     "no_token_attached",
 )
 CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
+CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
     {
         "cdp_renderer_input_surface_not_observed",
@@ -1182,6 +1183,631 @@ def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _custom_paste_packet_base(
+    *,
+    packet_kind: str,
+    request_id: str,
+    draft_text: str = "",
+    draft_length: int | None = None,
+    draft_sha256: str = "",
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    length = len(draft_text) if draft_length is None else max(int(draft_length), 0)
+    sha256 = draft_sha256 or (
+        hashlib.sha256(draft_text.encode("utf-8")).hexdigest() if draft_text else ""
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": packet_kind,
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": "PENDING",
+        "human_message": "",
+        "request_id": request_id,
+        "custom_process_pid": observed_pid,
+        "custom_window_found": False,
+        "custom_window_identity": "unknown",
+        "custom_window_identity_proven": False,
+        "target_input_candidate": "unknown",
+        "target_input_unique": False,
+        "target_input_focused": False,
+        "target_input_before_length": 0,
+        "target_input_after_length": 0,
+        "draft_sha256": sha256,
+        "draft_length": length,
+        "draft_text_recorded": False,
+        "draft_text_in_packet": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "clipboard_backup_captured": False,
+        "clipboard_handoff_attempted": False,
+        "clipboard_write_attempted": False,
+        "clipboard_restore_attempted": False,
+        "clipboard_restored": False,
+        "paste_attempted": False,
+        "paste_ok": False,
+        "custom_mutation_scope": "none",
+        "custom_window_mutation_attempted": False,
+        "input_text_insert_attempted": False,
+        "input_text_insert_succeeded": False,
+        "prompt_submitted": False,
+        "submit_action_planned": False,
+        "enter_key_planned": False,
+        "enter_key_pressed": False,
+        "send_button_planned": False,
+        "send_button_pressed": False,
+        "api_called": False,
+        "model_endpoint_called": False,
+        "operator_run_called": False,
+        "session_prompt_endpoint_called": False,
+        "secret_value_exposed": False,
+        "blocking_reasons": [],
+        "next_action": "stop_and_diagnose_custom_paste_bridge",
+    }
+
+
+def _custom_paste_blocked_packet(
+    *,
+    packet_kind: str,
+    machine_error_code: str,
+    human_message: str,
+    request_id: str,
+    draft_text: str = "",
+    draft_length: int | None = None,
+    draft_sha256: str = "",
+    blocking_reasons: list[str] | None = None,
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    cdp_result: str = "",
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    next_action: str = "stop_and_diagnose_custom_paste_bridge",
+) -> dict[str, Any]:
+    packet = _custom_paste_packet_base(
+        packet_kind=packet_kind,
+        request_id=request_id,
+        draft_text=draft_text,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        observed_pid=observed_pid,
+        cdp_port=cdp_port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    packet.update(
+        {
+            "status": "blocked",
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "blocking_reasons": blocking_reasons or [machine_error_code],
+            "cdp_result": cdp_result[:512],
+            "next_action": next_action,
+        }
+    )
+    return packet
+
+
+def _paste_target_probe_expression(*, focus: bool = False) -> str:
+    focus_line = "target.focus();" if focus else ""
+    return f"""
+(() => {{
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const editable = nodes.filter((node) =>
+    visible(node) &&
+    node.disabled !== true &&
+    node.readOnly !== true &&
+    node.getAttribute('aria-disabled') !== 'true'
+  );
+  const target = editable.length === 1 ? editable[0] : null;
+  if (target) {{
+    {focus_line}
+  }}
+  const value = target ? (('value' in target ? target.value : target.innerText) || '') : '';
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: editable.length,
+    targetInputUnique: editable.length === 1,
+    targetInputFocused: target ? document.activeElement === target : false,
+    targetInputLength: value.length,
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+
+
+def _cdp_probe_custom_paste_target(
+    observed_pid: int,
+    *,
+    request_id: str,
+    draft_length: int = 0,
+    draft_sha256: str = "",
+    focus: bool = False,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    if not port_owned:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Custom paste target check requires the Custom Codex renderer CDP port to be pid-bound.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code=page_error.upper(),
+            human_message="Custom paste target check could not find a Custom Codex app page target.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 3600 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": _paste_target_probe_expression(focus=focus),
+                        "returnByValue": True,
+                    },
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_paste_target_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = _cdp_result_value(cdp_result)
+        if value.get("url") != "app://-/index.html":
+            last_error = "cdp_target_url_mismatch"
+            continue
+        visible_count = int(value.get("visibleInputCandidateCount") or 0)
+        if visible_count != 1:
+            return _custom_paste_blocked_packet(
+                packet_kind="custom_codex_native_paste_target_preflight",
+                machine_error_code=(
+                    "TARGET_INPUT_NOT_FOUND" if visible_count <= 0 else "TARGET_INPUT_NOT_UNIQUE"
+                ),
+                human_message="Custom paste target must have exactly one visible editable input.",
+                request_id=request_id,
+                draft_length=draft_length,
+                draft_sha256=draft_sha256,
+                observed_pid=observed_pid,
+                cdp_port=port,
+                blocking_reasons=["target_input_not_unique"],
+                cdp_result=json.dumps(value, sort_keys=True),
+                allowed_owner_pids=allowed_owner_pids,
+            )
+        if focus and value.get("targetInputFocused") is not True:
+            return _custom_paste_blocked_packet(
+                packet_kind="custom_codex_native_paste_target_preflight",
+                machine_error_code="TARGET_INPUT_FOCUS_FAILED",
+                human_message="Custom paste target input could not be focused.",
+                request_id=request_id,
+                draft_length=draft_length,
+                draft_sha256=draft_sha256,
+                observed_pid=observed_pid,
+                cdp_port=port,
+                blocking_reasons=["target_input_focus_failed"],
+                cdp_result=json.dumps(value, sort_keys=True),
+                allowed_owner_pids=allowed_owner_pids,
+            )
+        packet = _custom_paste_packet_base(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet.update(
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "human_message": "Custom Codex paste target is unique and safe for paste-only handoff.",
+                "custom_window_found": True,
+                "custom_window_identity": "custom_codex",
+                "custom_window_identity_proven": True,
+                "target_input_candidate": "single",
+                "target_input_unique": True,
+                "target_input_focused": value.get("targetInputFocused") is True,
+                "target_input_before_length": int(value.get("targetInputLength") or 0),
+                "cdp_port_owner_pids": owner_result,
+                "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+                "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+                "cdp_page_target_count": len(pages),
+                "cdp_target_url": str(page.get("url") or ""),
+                "cdp_target_type": str(page.get("type") or ""),
+                "cdp_target_bound_to_custom_launch": True,
+                "cdp_ready_state": str(value.get("readyState") or ""),
+                "cdp_input_candidate_count": int(value.get("inputCandidateCount") or 0),
+                "cdp_visible_input_candidate_count": visible_count,
+                "next_action": "none",
+            }
+        )
+        return packet
+    return _custom_paste_blocked_packet(
+        packet_kind="custom_codex_native_paste_target_preflight",
+        machine_error_code="CUSTOM_NATIVE_PASTE_TARGET_CHECK_FAILED",
+        human_message="Custom paste target check could not evaluate the pid-bound renderer.",
+        request_id=request_id,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        blocking_reasons=[last_error or "cdp_paste_target_check_failed"],
+        cdp_result=last_error,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+
+
+def _read_macos_clipboard_text() -> tuple[bool, str, str]:
+    result = subprocess.run(
+        ["pbpaste"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, "", str(result.stderr.strip() or "pbpaste_failed")
+    return True, result.stdout, ""
+
+
+def _write_macos_clipboard_text(value: str) -> tuple[bool, str]:
+    result = subprocess.run(
+        ["pbcopy"],
+        input=value,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, str(result.stderr.strip() or "pbcopy_failed")
+    return True, ""
+
+
+def _cdp_paste_clipboard_into_custom_target(
+    observed_pid: int,
+    draft_text: str,
+    *,
+    request_id: str,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    if not draft_text:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="EMPTY_DRAFT",
+            human_message="Custom paste requires a non-empty draft.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            next_action="dictate_or_type_draft",
+        )
+    if len(draft_text) > CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CUSTOM_NATIVE_PASTE_DRAFT_TOO_LONG",
+            human_message="Custom paste refused an oversized draft.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["draft_too_long"],
+        )
+    target_packet = _cdp_probe_custom_paste_target(
+        observed_pid,
+        request_id=request_id,
+        draft_length=len(draft_text),
+        draft_sha256=hashlib.sha256(draft_text.encode("utf-8")).hexdigest(),
+        focus=True,
+        port=port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if target_packet.get("status") != "ok":
+        target_packet["packet_kind"] = "custom_codex_native_paste_only"
+        return target_packet
+    clipboard_ok, previous_clipboard, clipboard_error = _read_macos_clipboard_text()
+    if not clipboard_ok:
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CLIPBOARD_BACKUP_FAILED",
+            human_message="Custom paste could not backup the current clipboard.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["clipboard_backup_failed"],
+            cdp_result=clipboard_error,
+        )
+        packet["target_packet"] = target_packet
+        return packet
+    write_ok, write_error = _write_macos_clipboard_text(draft_text)
+    if not write_ok:
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CLIPBOARD_WRITE_FAILED",
+            human_message="Custom paste could not write the WBP draft to clipboard.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["clipboard_write_failed"],
+            cdp_result=write_error,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        restore_ok, _restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        return packet
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if not port_owned:
+        restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Custom paste requires the Custom Codex renderer CDP port to remain pid-bound.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        if not restore_ok:
+            packet["machine_error_code"] = "CLIPBOARD_RESTORE_FAILED"
+            packet["blocking_reasons"] = ["clipboard_restore_failed"]
+            packet["cdp_result"] = restore_error[:512]
+        return packet
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code=page_error.upper(),
+            human_message="Custom paste could not find a Custom Codex app page target.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        if not restore_ok:
+            packet["machine_error_code"] = "CLIPBOARD_RESTORE_FAILED"
+            packet["blocking_reasons"] = ["clipboard_restore_failed"]
+            packet["cdp_result"] = restore_error[:512]
+        return packet
+
+    verify_expression = f"""
+(() => {{
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const editable = nodes.filter((node) =>
+    visible(node) &&
+    node.disabled !== true &&
+    node.readOnly !== true &&
+    node.getAttribute('aria-disabled') !== 'true'
+  );
+  const target = editable.length === 1 ? editable[0] : null;
+  const text = target ? (('value' in target ? target.value : target.innerText) || '') : '';
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    visibleInputCandidateCount: editable.length,
+    targetInputUnique: editable.length === 1,
+    targetInputFocused: target ? document.activeElement === target : false,
+    afterLength: text.length,
+    expectedAfterLength: {int(target_packet.get("target_input_before_length") or 0) + len(draft_text)},
+    pasteLengthDeltaMatches: text.length === {int(target_packet.get("target_input_before_length") or 0) + len(draft_text)},
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+    paste_error = ""
+    paste_value: dict[str, Any] = {}
+    page_used: dict[str, Any] | None = None
+    for index, page in enumerate(pages, start=1):
+        try:
+            ws_url = str(page["webSocketDebuggerUrl"])
+            down = _cdp_command(
+                ws_url,
+                {
+                    "id": 3700 + index,
+                    "method": "Input.dispatchKeyEvent",
+                    "params": {
+                        "type": "rawKeyDown",
+                        "modifiers": 4,
+                        "key": "v",
+                        "code": "KeyV",
+                        "windowsVirtualKeyCode": 86,
+                        "commands": ["Paste"],
+                    },
+                },
+            )
+            up = _cdp_command(
+                ws_url,
+                {
+                    "id": 3800 + index,
+                    "method": "Input.dispatchKeyEvent",
+                    "params": {
+                        "type": "keyUp",
+                        "modifiers": 4,
+                        "key": "v",
+                        "code": "KeyV",
+                        "windowsVirtualKeyCode": 86,
+                    },
+                },
+            )
+            if down.get("status") == "blocked" or "error" in down or "error" in up:
+                paste_error = "cdp_paste_key_event_failed"
+                continue
+            verify_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3900 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": verify_expression, "returnByValue": True},
+                },
+            )
+            paste_value = _cdp_result_value(verify_packet)
+            if paste_value.get("pasteLengthDeltaMatches") is not True:
+                paste_error = "cdp_paste_verification_failed"
+                continue
+            page_used = page
+            break
+        except (OSError, json.JSONDecodeError) as exc:
+            paste_error = f"cdp_paste_failed:{type(exc).__name__}"
+            continue
+
+    restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+    base = _custom_paste_packet_base(
+        packet_kind="custom_codex_native_paste_only",
+        request_id=request_id,
+        draft_text=draft_text,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    base.update(
+        {
+            "target_packet": target_packet,
+            "custom_window_found": True,
+            "custom_window_identity": "custom_codex",
+            "custom_window_identity_proven": True,
+            "target_input_candidate": "single",
+            "target_input_unique": True,
+            "target_input_focused": paste_value.get("targetInputFocused") is True,
+            "target_input_before_length": int(target_packet.get("target_input_before_length") or 0),
+            "target_input_after_length": int(paste_value.get("afterLength") or 0),
+            "clipboard_backup_captured": True,
+            "clipboard_handoff_attempted": True,
+            "clipboard_write_attempted": True,
+            "clipboard_restore_attempted": True,
+            "clipboard_restored": restore_ok,
+            "paste_attempted": True,
+            "custom_mutation_scope": "paste_only",
+            "custom_window_mutation_attempted": True,
+            "input_text_insert_attempted": True,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_port_owner_bound_to_custom_profile": True,
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": str((page_used or {}).get("url") or ""),
+            "cdp_target_type": str((page_used or {}).get("type") or ""),
+            "cdp_target_bound_to_custom_launch": page_used is not None,
+        }
+    )
+    if page_used is None:
+        base.update(
+            {
+                "status": "blocked",
+                "machine_error_code": "PASTE_FAILED",
+                "human_message": "Custom Codex paste key event did not pass verification.",
+                "blocking_reasons": [paste_error or "paste_failed"],
+                "paste_ok": False,
+                "input_text_insert_succeeded": False,
+                "cdp_result": paste_error[:512],
+                "next_action": "stop_and_diagnose_custom_paste",
+            }
+        )
+        return base
+    if not restore_ok:
+        base.update(
+            {
+                "status": "blocked",
+                "machine_error_code": "CLIPBOARD_RESTORE_FAILED",
+                "human_message": "Custom Codex paste succeeded, but clipboard restore failed.",
+                "blocking_reasons": ["clipboard_restore_failed"],
+                "paste_ok": True,
+                "input_text_insert_succeeded": True,
+                "cdp_result": restore_error[:512],
+                "next_action": "stop_and_restore_clipboard_manually",
+            }
+        )
+        return base
+    base.update(
+        {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex draft was pasted into the input without submit.",
+            "paste_ok": True,
+            "input_text_insert_succeeded": True,
+            "blocking_reasons": [],
+            "next_action": "none",
+        }
+    )
+    return base
+
+
 def _native_voice_icon_blocked_packet(
     *,
     machine_error_code: str,
@@ -1877,6 +2503,136 @@ def submit_custom_native_window_prompt_packet(
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
     packet["native_app_usable"] = show_packet.get("native_app_usable") is True
     packet["show_window_packet"] = show_packet
+    return packet
+
+
+def inspect_custom_native_paste_target_packet(
+    *,
+    request_id: str = "",
+    draft_length: int = 0,
+    draft_sha256: str = "",
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    candidate_pids = (
+        show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None
+    )
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Custom paste target requires a visible, input-capable Custom Codex window.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=candidate_pids,
+        )
+        packet.update(
+            {
+                "custom_window_found": show_packet.get("custom_window_observed") is True,
+                "custom_window_identity": (
+                    "custom_codex" if show_packet.get("custom_process_observed") is True else "unknown"
+                ),
+                "custom_window_identity_proven": (
+                    show_packet.get("custom_process_observed") is True
+                    and show_packet.get("original_codex_touched") is not True
+                ),
+                "show_window_packet": show_packet,
+            }
+        )
+        return packet
+    packet = _cdp_probe_custom_paste_target(
+        int(observed_pid),
+        request_id=request_id,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        focus=False,
+        allowed_owner_pids=candidate_pids,
+    )
+    packet["show_window_packet"] = show_packet
+    packet["custom_window_found"] = show_packet.get("custom_window_observed") is True
+    packet["custom_window_identity"] = "custom_codex"
+    packet["custom_window_identity_proven"] = show_packet.get("original_codex_touched") is not True
+    return packet
+
+
+def paste_custom_native_window_draft_packet(
+    *,
+    draft_text: str,
+    request_id: str,
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    candidate_pids = (
+        show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None
+    )
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Custom paste requires a visible, input-capable Custom Codex window.",
+            request_id=request_id,
+            draft_text=draft_text,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=candidate_pids,
+        )
+        packet.update(
+            {
+                "custom_window_found": show_packet.get("custom_window_observed") is True,
+                "custom_window_identity": (
+                    "custom_codex" if show_packet.get("custom_process_observed") is True else "unknown"
+                ),
+                "custom_window_identity_proven": (
+                    show_packet.get("custom_process_observed") is True
+                    and show_packet.get("original_codex_touched") is not True
+                ),
+                "show_window_packet": show_packet,
+            }
+        )
+        return packet
+    packet = _cdp_paste_clipboard_into_custom_target(
+        int(observed_pid),
+        draft_text,
+        request_id=request_id,
+        allowed_owner_pids=candidate_pids,
+    )
+    packet["show_window_packet"] = show_packet
+    packet["custom_window_found"] = show_packet.get("custom_window_observed") is True
+    packet["custom_window_identity"] = "custom_codex"
+    packet["custom_window_identity_proven"] = show_packet.get("original_codex_touched") is not True
     return packet
 
 

@@ -69,6 +69,12 @@ from wild_boar_proxy.custom_agent_bindings import (
     resolve_alias_binding,
     write_agent_bindings_packet,
 )
+from wild_boar_proxy.custom_paste_bridge import (
+    build_custom_paste_bridge_live_packet,
+    build_custom_paste_bridge_preflight_packet,
+    custom_paste_bridge_live_payload_ready,
+    custom_paste_bridge_preflight_payload_ready,
+)
 from wild_boar_proxy.codex_model_registry import (
     API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT,
     API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT,
@@ -102,7 +108,9 @@ from wild_boar_proxy.model_availability import (
 from wild_boar_proxy.native_window_probe import (
     DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     OWNER_STANDING_AUTHORIZATION_PHRASE,
+    inspect_custom_native_paste_target_packet,
     launch_custom_native_app_packet,
+    paste_custom_native_window_draft_packet,
     show_custom_native_window_packet,
     submit_custom_native_window_prompt_packet,
 )
@@ -1275,6 +1283,16 @@ WEB_DESIGN_LIVE_ROUTES = (
         EFFECT_MUTATE,
         effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
         multiplexed_by="operator_prompt",
+    ),
+    _post_route(
+        "/api/wbp/custom-paste-bridge/preflight",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_JSON,
+    ),
+    _post_route(
+        "/api/wbp/custom-paste-bridge/live-paste",
+        EFFECT_MUTATE,
+        body_kind=BODY_KIND_JSON,
     ),
     _post_route(
         "/api/review-command",
@@ -16512,6 +16530,43 @@ def build_handler(
 
         def _handle_post_api_operator_run(self, actual_path: str) -> None:
             self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+            return
+
+        def _handle_post_api_wbp_custom_paste_bridge_preflight(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            native_target_packet = None
+            if custom_paste_bridge_preflight_payload_ready(payload):
+                native_target_packet = inspect_custom_native_paste_target_packet(
+                    request_id=str(payload.get("request_id") or ""),
+                    draft_length=int(payload.get("draft_length") or 0),
+                    draft_sha256=str(payload.get("draft_sha256") or ""),
+                )
+            self._send_json(
+                build_custom_paste_bridge_preflight_packet(
+                    payload,
+                    native_target_packet=native_target_packet,
+                )
+            )
+            return
+
+        def _handle_post_api_wbp_custom_paste_bridge_live_paste(self, actual_path: str) -> None:
+            payload = self._read_json_body()
+            paste_executor = None
+            if custom_paste_bridge_live_payload_ready(
+                payload,
+                owner_authorized=codex_custom_live_prompt_authorized,
+            ):
+                paste_executor = lambda draft_text, request_id: paste_custom_native_window_draft_packet(
+                    draft_text=draft_text,
+                    request_id=request_id,
+                )
+            self._send_json(
+                build_custom_paste_bridge_live_packet(
+                    payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    paste_executor=paste_executor,
+                )
+            )
             return
 
         def _handle_post_api_review_command(self, actual_path: str) -> None:
