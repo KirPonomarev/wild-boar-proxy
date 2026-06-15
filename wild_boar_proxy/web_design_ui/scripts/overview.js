@@ -89,6 +89,7 @@ const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
 const QUICK_START_SESSION_DUAL_LANE_LABEL = "Проверить GPT+API";
 const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_SESSION_DUAL_LANE_LABEL;
 let quickStartMixedModeProductBlocked = false;
+let quickStartRouteProofResultLockedUntil = 0;
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -3541,6 +3542,9 @@ function rememberQuickStartApiRouteCheckSnapshot(selectionPayload, actionOutcome
 }
 
 function replayQuickStartManualCheckSnapshot() {
+  if (quickStartRouteProofResultLocked()) {
+    return;
+  }
   if (!quickStartManualCheckSnapshotMatches(quickStartManualCheckSnapshot)) {
     return;
   }
@@ -3588,6 +3592,14 @@ function setQuickStartChip(id, visual, label) {
   } else {
     chip.textContent = label || "unknown";
   }
+}
+
+function lockQuickStartRouteProofResult(durationMs = 120000) {
+  quickStartRouteProofResultLockedUntil = Date.now() + durationMs;
+}
+
+function quickStartRouteProofResultLocked() {
+  return Date.now() < quickStartRouteProofResultLockedUntil;
 }
 
 function setQuickStartRouteResponse(packet) {
@@ -3653,6 +3665,42 @@ function setQuickStartRouteResponse(packet) {
         packet?.gpt_api_alias_command_loop_packet === true,
       command_loop_proven:
         packet?.command_loop_proven === true,
+      native_free_text_command_loop_packet:
+        packet?.native_free_text_command_loop_packet === true,
+      native_free_text_command_loop_proven:
+        packet?.native_free_text_command_loop_proven === true,
+      native_free_text_tool_bridge_proven:
+        packet?.native_free_text_tool_bridge_proven === true,
+      native_free_text_activation_proven:
+        packet?.native_free_text_activation_proven === true,
+      native_free_text_tool_bridge_source:
+        packet?.native_free_text_tool_bridge_source || "",
+      native_agent_proof_file_observed:
+        packet?.native_agent_proof_file_observed === true,
+      native_agent_proof_file_valid:
+        packet?.native_agent_proof_file_valid === true,
+      native_free_text_agent_context_sha_match:
+        packet?.native_free_text_agent_context_sha_match === true,
+      native_free_text_alias_routing_proven:
+        packet?.native_free_text_alias_routing_proven === true,
+      input_capable_ui_observed:
+        packet?.input_capable_ui_observed === true,
+      input_text_insert_attempted:
+        packet?.input_text_insert_attempted === true,
+      input_text_insert_succeeded:
+        packet?.input_text_insert_succeeded === true,
+      prompt_submitted:
+        packet?.prompt_submitted === true,
+      prompt_text_recorded:
+        packet?.prompt_text_recorded === true,
+      native_agent_provider_call_directly_observed:
+        packet?.native_agent_provider_call_directly_observed === true,
+      custom_codex_response_text_read_proven:
+        packet?.custom_codex_response_text_read_proven === true,
+      proof_file_path_redacted:
+        packet?.proof_file_path_redacted === true,
+      nested_packets_redacted:
+        packet?.nested_packets_redacted === true,
       runtime_context_file_proven:
         packet?.runtime_context_file_proven === true,
       custom_codex_agent_runtime_context_proven:
@@ -4462,7 +4510,13 @@ async function runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket) {
   }
 }
 
-async function refreshQuickStartRouteStatus() {
+async function refreshQuickStartRouteStatus(options = {}) {
+  if (options?.force === true) {
+    quickStartRouteProofResultLockedUntil = 0;
+  }
+  if (options?.force !== true && quickStartRouteProofResultLocked()) {
+    return;
+  }
   if (codexLaunchDryRunInFlight) {
     return;
   }
@@ -4478,6 +4532,9 @@ async function refreshQuickStartRouteStatus() {
   setQuickStartChip("quickStartNextActionState", "neutral", "refreshing");
   try {
     await refreshCodexCustomModelsPanel();
+    if (options?.force !== true && quickStartRouteProofResultLocked()) {
+      return;
+    }
     const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
     const refreshPacket = {
       ...payload,
@@ -4486,7 +4543,13 @@ async function refreshQuickStartRouteStatus() {
       machine_error_code: "QUICK_START_ROUTE_STATUS_REFRESH"
     };
     if (quickStartLaunchRequiresBridgeStability(refreshPacket)) {
+      if (options?.force !== true && quickStartRouteProofResultLocked()) {
+        return;
+      }
       await refreshQuickStartLiveBridgeStabilityTruth(refreshPacket);
+      if (options?.force !== true && quickStartRouteProofResultLocked()) {
+        return;
+      }
       await refreshQuickStartMixedCoderTraceTruth(refreshPacket);
       return;
     }
@@ -4582,6 +4645,7 @@ function renderQuickStartSessionDualLaneExecution(packet) {
 }
 
 function renderQuickStartGptApiAliasCommandLoopProof(packet) {
+  lockQuickStartRouteProofResult();
   const proven = Boolean(
     packet?.status === "ok"
     && packet?.machine_error_code === "OK"
@@ -4656,6 +4720,95 @@ function renderQuickStartGptApiAliasCommandLoopProof(packet) {
   });
 }
 
+function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
+  lockQuickStartRouteProofResult();
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.native_free_text_command_loop_proven === true
+    && packet?.native_free_text_tool_bridge_proven === true
+    && packet?.native_window_observed === true
+    && packet?.input_capable_ui_observed === true
+    && packet?.input_text_insert_succeeded === true
+    && packet?.prompt_submitted === true
+    && packet?.native_agent_proof_file_valid === true
+    && packet?.native_free_text_agent_context_sha_match === true
+    && packet?.native_free_text_alias_routing_proven === true
+    && packet?.runtime_context_file_proven === true
+    && packet?.command_loop_proven === true
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.prompt_text_recorded !== true
+    && packet?.secret_value_exposed !== true
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? "green" : "amber",
+    proven ? "native ok" : "native blocked"
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "green" : "amber",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "orchestrator" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "green" : "amber",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    proven ? "green" : "neutral",
+    proven ? "confirmed" : "preflight"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? "green" : "amber",
+    proven ? "native ok" : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "green" : "amber",
+    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "input ok" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.runtime_context_file_proven === true && packet?.native_free_text_agent_context_sha_match === true ? "green" : "amber",
+    packet?.runtime_context_file_proven === true && packet?.native_free_text_agent_context_sha_match === true
+      ? "context ok"
+      : (packet?.runtime_context_file_proven === true ? "native context not proven" : "context missing")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_binding?.model_id || packet?.primary_model_id || "",
+    api_model_id: packet?.coding_binding?.route_id || packet?.requested_model || "",
+    native_free_text_command_loop_packet: true,
+    gpt_api_alias_command_loop_packet: packet?.command_loop_proven === true,
+    session_probe_only: false,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    runtime_readiness_claimed: false,
+    browser_can_supply_route_authority: packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
 async function runQuickStartGptApiAliasCommandLoopProof() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -4666,6 +4819,7 @@ async function runQuickStartGptApiAliasCommandLoopProof() {
   codexLaunchDryRunInFlight = true;
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
   setQuickStartChip("quickStartRouteChip", "neutral", "command loop");
   setQuickStartChip("quickStartNextActionState", "neutral", "working");
   const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
@@ -4758,6 +4912,158 @@ async function runQuickStartGptApiAliasCommandLoopProof() {
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartNativeFreeTextCommandLoopProof() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    renderQuickStartNativeFreeTextCommandLoopProof({
+      status: "blocked",
+      machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_REQUIRES_CHATGPT_PLUS_API",
+      final_status: "CUSTOM_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+      execution_mode: payload?.execution_mode || "",
+      native_free_text_command_loop_proven: false,
+      native_free_text_tool_bridge_proven: false,
+      native_window_observed: false,
+      input_capable_ui_observed: false,
+      prompt_submitted: false,
+      native_agent_proof_file_valid: false,
+      runtime_context_file_proven: false,
+      command_loop_proven: false,
+      api_lane_exact_token_matched: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      next_action: "select_chatgpt_plus_api"
+    });
+    return;
+  }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("native_free_text_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "native proof");
+  setQuickStartChip("quickStartLaunchState", "neutral", "working");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    native_free_text_command_loop_packet: false,
+    native_free_text_command_loop_proven: false,
+    native_free_text_tool_bridge_proven: false,
+    native_free_text_activation_proven: false,
+    native_window_observed: false,
+    input_capable_ui_observed: false,
+    input_text_insert_attempted: false,
+    input_text_insert_succeeded: false,
+    prompt_submitted: false,
+    native_agent_proof_file_observed: false,
+    native_agent_proof_file_valid: false,
+    native_free_text_agent_context_sha_match: false,
+    native_free_text_alias_routing_proven: false,
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    reasoning_prerequisite_proven: false,
+    api_lane_exact_token_matched: false,
+    bridge_or_file_bridge_used: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    prompt_text_recorded: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_native_free_text_command_loop"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("native_free_text_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartNativeFreeTextCommandLoopProof({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+        native_free_text_command_loop_proven: false,
+        native_free_text_tool_bridge_proven: false,
+        native_window_observed: false,
+        input_capable_ui_observed: false,
+        prompt_submitted: false,
+        native_agent_proof_file_valid: false,
+        runtime_context_file_proven: false,
+        command_loop_proven: false,
+        primary_alias_bound_to_chatgpt_lane: false,
+        coding_alias_bound_to_api_lane: false,
+        reasoning_prerequisite_proven: false,
+        api_lane_exact_token_matched: false,
+        bridge_or_file_bridge_used: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        secret_value_exposed: false,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const expectedCodingResponse = "WBP_UI_NATIVE_FREE_TEXT_OK";
+    const response = await fetch("api/codex/custom/native-free-text-command-loop-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        expected_coding_response: expectedCodingResponse,
+        request_id: `ui-native-free-text-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`native free-text command loop proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartNativeFreeTextCommandLoopProof(packet);
+  } catch (error) {
+    renderQuickStartNativeFreeTextCommandLoopProof({
+      status: "failed",
+      machine_error_code: "QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      native_free_text_command_loop_proven: false,
+      native_free_text_tool_bridge_proven: false,
+      native_window_observed: false,
+      input_capable_ui_observed: false,
+      prompt_submitted: false,
+      native_agent_proof_file_valid: false,
+      runtime_context_file_proven: false,
+      command_loop_proven: false,
+      primary_alias_bound_to_chatgpt_lane: false,
+      coding_alias_bound_to_api_lane: false,
+      reasoning_prerequisite_proven: false,
+      api_lane_exact_token_matched: false,
+      bridge_or_file_bridge_used: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_native_free_text_command_loop"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
   }
 }
 
@@ -4775,6 +5081,7 @@ async function runQuickStartSessionDualLaneExecution() {
   codexLaunchDryRunInFlight = true;
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
   setQuickStartChip("quickStartRouteChip", "neutral", "session check");
   setQuickStartChip("quickStartNextActionState", "neutral", "working");
   try {
@@ -4864,6 +5171,7 @@ async function runQuickStartSessionDualLaneExecution() {
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
   }
 }
 
@@ -5390,7 +5698,11 @@ function renderCodexCustomModels(registry, compat) {
   codexCustomModelsSetText("codexCustomApiModelCount", String(apiEntries.length));
   codexCustomModelsSetText("codexCustomSeedModelCount", String(seedEntries.length));
   codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
-  if (!persistedSelectionInvalid && !persistedReasoningInvalid) {
+  if (
+    !persistedSelectionInvalid
+    && !persistedReasoningInvalid
+    && !quickStartRouteProofResultLocked()
+  ) {
     setQuickStartChip(
       "quickStartRouteChip",
       chatEntries.length || apiEntries.length ? "neutral" : "amber",
@@ -15427,6 +15739,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialSource = sourceFromLocation();
   const initialScreen = screenFromLocation();
   document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
+  document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof());
   await ensureActionMetadataLoaded();
   applyActionAvailability();
   setupCodexCustomAgentAliases();
@@ -15517,7 +15830,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));
   document.getElementById("quickStartExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartExecutionModeSelect"));
-  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus());
+  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus({ force: true }));
   document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runQuickStartConfigAdmission("quickStartExecutionModeDryRunAction"));
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());

@@ -101,6 +101,7 @@ from wild_boar_proxy.native_window_probe import (
     OWNER_STANDING_AUTHORIZATION_PHRASE,
     launch_custom_native_app_packet,
     show_custom_native_window_packet,
+    submit_custom_native_window_prompt_packet,
 )
 from wild_boar_proxy.native_filesystem_probe import (
     AGENT_RUNTIME_CONTEXT_FILENAME,
@@ -1296,6 +1297,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     ),
     _post_route(
         "/api/codex/custom/gpt-api-alias-command-loop-proof",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/native-free-text-command-loop-proof",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -4779,6 +4785,726 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
         "acceptance_packet": acceptance_packet,
         "blocking_reasons": [] if command_loop_proven else ["command_loop_not_proven"],
         "next_action": "none" if command_loop_proven else "stop_and_diagnose_gpt_api_alias_command_loop",
+    }
+
+
+NATIVE_FREE_TEXT_COMMAND_LOOP_ALLOWED_FIELDS: set[str] = {
+    "expected_text",
+    "expected_coding_response",
+    "request_id",
+    "timeout_seconds",
+}
+NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT = "WBP_NATIVE_FREE_TEXT_OK"
+NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_TIMEOUT_SECONDS = 45.0
+NATIVE_FREE_TEXT_COMMAND_LOOP_MAX_TIMEOUT_SECONDS = 120.0
+NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS = {
+    "api_key",
+    "auth",
+    "backend",
+    "base_url",
+    "endpoint",
+    "provider_base_url",
+    "raw_backend",
+    "secret",
+    "secret_ref",
+    "token",
+}
+NATIVE_FREE_TEXT_PUBLIC_PACKET_REDACTED_KEYS = NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS | {
+    "downstream_endpoint",
+    "input",
+    "path",
+    "prompt",
+    "proof_path",
+    "raw_prompt",
+    "request_file",
+    "request_path",
+    "response_file",
+    "response_path",
+    "shell_command_template",
+}
+
+
+def _native_free_text_proof_root() -> Path:
+    return ROOT / ".tmp" / "native-free-text-proof"
+
+
+def _native_free_text_safe_request_id(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return f"wbp-native-free-text-{uuid.uuid4().hex}"
+    return text
+
+
+def _native_free_text_forbidden_key_paths(value: Any, *, prefix: str = "") -> list[str]:
+    paths: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_text = str(key)
+            current = f"{prefix}.{key_text}" if prefix else key_text
+            if key_text.lower() in NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS:
+                paths.append(current)
+            paths.extend(_native_free_text_forbidden_key_paths(nested, prefix=current))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            current = f"{prefix}[{index}]" if prefix else f"[{index}]"
+            paths.extend(_native_free_text_forbidden_key_paths(nested, prefix=current))
+    return paths
+
+
+def _native_free_text_public_nested_packet(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, nested in value.items():
+            key_text = str(key)
+            key_lower = key_text.lower()
+            is_raw_path = key_lower.endswith("_path") and not key_lower.endswith(
+                "_path_redacted"
+            )
+            if key_lower in NATIVE_FREE_TEXT_PUBLIC_PACKET_REDACTED_KEYS or is_raw_path:
+                continue
+            redacted[key_text] = _native_free_text_public_nested_packet(nested)
+        return redacted
+    if isinstance(value, list):
+        return [_native_free_text_public_nested_packet(item) for item in value]
+    return value
+
+
+def _custom_native_free_text_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    expected_text: str = "",
+    request_id: str = "",
+    prompt: str = "",
+    context_metadata: dict[str, Any] | None = None,
+    primary_aliases: list[str] | None = None,
+    coding_aliases: list[str] | None = None,
+    allowed_api_route_ids: list[str] | None = None,
+    blocking_reasons: list[str] | None = None,
+    native_submit_packet: dict[str, Any] | None = None,
+    native_agent_proof_packet: dict[str, Any] | None = None,
+    command_loop_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    submit = native_submit_packet if isinstance(native_submit_packet, dict) else {}
+    agent_proof = (
+        native_agent_proof_packet if isinstance(native_agent_proof_packet, dict) else {}
+    )
+    command_loop = command_loop_packet if isinstance(command_loop_packet, dict) else {}
+    primary = [str(alias) for alias in (primary_aliases or []) if str(alias)]
+    coding = [str(alias) for alias in (coding_aliases or []) if str(alias)]
+    route_ids = [
+        str(route_id)
+        for route_id in (allowed_api_route_ids or [])
+        if str(route_id)
+    ]
+    context_file_proven = _custom_native_context_file_read_proven(context_metadata)
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_free_text_command_loop_proof",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "final_status": "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if prompt
+        else "",
+        "prompt_length": len(prompt),
+        "prompt_text_recorded": False,
+        "context_metadata": context_metadata or {},
+        **_custom_native_context_readout_fields(context_metadata),
+        "primary_alias": primary[0] if primary else "",
+        "coding_alias": coding[0] if coding else "",
+        "primary_aliases": primary,
+        "coding_aliases": coding,
+        "allowed_api_route_ids": route_ids,
+        "blocking_reasons": blocking_reasons or [machine_error_code],
+        "native_window_observed": submit.get("native_window_observed") is True,
+        "input_capable_ui_observed": submit.get("input_capable_ui_observed") is True,
+        "input_text_insert_attempted": submit.get("input_text_insert_attempted") is True,
+        "input_text_insert_succeeded": submit.get("input_text_insert_succeeded") is True,
+        "prompt_submitted": submit.get("prompt_submitted") is True,
+        "native_free_text_activation_proven": False,
+        "native_agent_proof_file_observed": agent_proof.get("proof_file_observed") is True,
+        "native_agent_proof_file_valid": False,
+        "native_free_text_agent_context_sha_match": False,
+        "native_free_text_alias_routing_proven": False,
+        "native_free_text_command_loop_proven": False,
+        "native_free_text_tool_bridge_proven": False,
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": False,
+        "runtime_context_file_proven": context_file_proven,
+        "custom_codex_agent_runtime_context_proven": context_file_proven,
+        "command_loop_proven": command_loop.get("command_loop_proven") is True,
+        "reasoning_prerequisite_proven": command_loop.get("reasoning_prerequisite_proven") is True,
+        "api_lane_exact_token_matched": command_loop.get("api_lane_exact_token_matched") is True,
+        "file_bridge_acceptance_proven": command_loop.get("file_bridge_acceptance_proven") is True,
+        "agent_alias_route_acceptance_proven": command_loop.get("agent_alias_route_acceptance_proven") is True,
+        "allowed_api_route_ids_enforced": command_loop.get("allowed_api_route_ids_enforced") is True,
+        "forbidden_stale_route_ids_enforced": command_loop.get("forbidden_stale_route_ids_enforced") is True,
+        "bridge_or_file_bridge_used": command_loop.get("bridge_or_file_bridge_used") is True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "raw_backend_details_exposed": False,
+        "raw_prompt_recorded": False,
+        "proof_file_path_redacted": True,
+        "secret_value_exposed": False,
+        "not_intelligence_proof": True,
+        "intelligence_measured": False,
+        "nested_packets_redacted": True,
+        "native_submit_packet": _native_free_text_public_nested_packet(submit),
+        "native_agent_proof_packet": _native_free_text_public_nested_packet(
+            agent_proof
+        ),
+        "command_loop_packet": _native_free_text_public_nested_packet(command_loop),
+        "next_action": "stop_and_diagnose_native_free_text_command_loop",
+    }
+
+
+def _custom_native_free_text_prompt(
+    *,
+    context: dict[str, Any],
+    proof_path: Path,
+    request_id: str,
+    expected_text: str,
+    primary_alias: str,
+    coding_alias: str,
+) -> str:
+    return "\n".join(
+        [
+            f"{primary_alias}: ты оркестратор. Проведи строго машинный native proof без свободного отчета.",
+            f"{coding_alias}: ты кодовый агент. Выполни только локальное создание proof JSON.",
+            "Прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
+            "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
+            f"Создай UTF-8 JSON файл ровно по этому пути: {proof_path}",
+            "Запиши один JSON object со следующими полями:",
+            "schema_version=1",
+            "packet_kind='custom_codex_native_free_text_agent_proof'",
+            f"request_id='{request_id}'",
+            "machine_error_code='OK'",
+            "alias_context_read=true",
+            "context_sha256=<посчитанный sha256 context-файла>",
+            "primary_aliases=<context.primary_aliases>",
+            "coding_aliases=<context.coding_aliases>",
+            "allowed_api_route_ids=<context.allowed_api_route_ids>",
+            f"expected_token='{expected_text}'",
+            f"native_free_text_agent_ack='{expected_text}'",
+            "no_secret_exposed=true",
+            "secret_value_exposed=false",
+            "Не записывай base_url, endpoint, token, secret, secret_ref, auth или backend.",
+            "Если context отсутствует, создай тот же файл с machine_error_code='FAIL_ALIAS_CONTEXT_MISSING'.",
+            "Не меняй исходники и не создавай другие файлы.",
+        ]
+    )
+
+
+def _validate_native_free_text_agent_proof(
+    *,
+    proof_path: Path,
+    request_id: str,
+    expected_text: str,
+    context: dict[str, Any],
+    context_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    if not proof_path.is_file():
+        return {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_MISSING",
+            "proof_file_observed": False,
+            "proof_file_valid": False,
+            "blocking_reasons": ["proof_file_missing"],
+            "proof_file_path_redacted": True,
+            "secret_value_exposed": False,
+        }
+    try:
+        raw_text = proof_path.read_text(encoding="utf-8")
+        packet = json.loads(raw_text)
+    except OSError:
+        return {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_UNREADABLE",
+            "proof_file_observed": True,
+            "proof_file_valid": False,
+            "blocking_reasons": ["proof_file_unreadable"],
+            "proof_file_path_redacted": True,
+            "secret_value_exposed": False,
+        }
+    except json.JSONDecodeError:
+        return {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_INVALID_JSON",
+            "proof_file_observed": True,
+            "proof_file_valid": False,
+            "blocking_reasons": ["proof_file_invalid_json"],
+            "proof_file_path_redacted": True,
+            "secret_value_exposed": False,
+        }
+    if not isinstance(packet, dict):
+        return {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_NOT_OBJECT",
+            "proof_file_observed": True,
+            "proof_file_valid": False,
+            "blocking_reasons": ["proof_file_not_object"],
+            "proof_file_path_redacted": True,
+            "secret_value_exposed": False,
+        }
+    primary_aliases = [
+        str(alias) for alias in context.get("primary_aliases", []) if str(alias)
+    ]
+    coding_aliases = [
+        str(alias) for alias in context.get("coding_aliases", []) if str(alias)
+    ]
+    allowed_api_route_ids = [
+        str(route_id)
+        for route_id in context.get("allowed_api_route_ids", [])
+        if str(route_id)
+    ]
+    blocking_reasons: list[str] = []
+    forbidden_paths = _native_free_text_forbidden_key_paths(packet)
+    if packet.get("packet_kind") != "custom_codex_native_free_text_agent_proof":
+        blocking_reasons.append("proof_packet_kind_mismatch")
+    if str(packet.get("request_id") or "") != request_id:
+        blocking_reasons.append("request_id_mismatch")
+    if packet.get("machine_error_code") != "OK":
+        blocking_reasons.append("proof_machine_error_code_not_ok")
+    if packet.get("alias_context_read") is not True:
+        blocking_reasons.append("alias_context_not_read")
+    if str(packet.get("context_sha256") or "") != str(
+        context_metadata.get("context_sha256") or ""
+    ):
+        blocking_reasons.append("context_sha256_mismatch")
+    if packet.get("primary_aliases") != primary_aliases:
+        blocking_reasons.append("primary_aliases_mismatch")
+    if packet.get("coding_aliases") != coding_aliases:
+        blocking_reasons.append("coding_aliases_mismatch")
+    if packet.get("allowed_api_route_ids") != allowed_api_route_ids:
+        blocking_reasons.append("allowed_api_route_ids_mismatch")
+    if str(packet.get("expected_token") or "") != expected_text:
+        blocking_reasons.append("expected_token_mismatch")
+    if str(packet.get("native_free_text_agent_ack") or "") != expected_text:
+        blocking_reasons.append("native_free_text_agent_ack_mismatch")
+    if packet.get("no_secret_exposed") is not True:
+        blocking_reasons.append("no_secret_exposed_not_true")
+    if packet.get("secret_value_exposed") is True:
+        blocking_reasons.append("secret_value_exposed")
+    if forbidden_paths:
+        blocking_reasons.append("forbidden_secret_or_backend_field_exposed")
+    ok = not blocking_reasons
+    return {
+        "status": "ok" if ok else "blocked",
+        "machine_error_code": "OK"
+        if ok
+        else "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_CONTRACT_MISMATCH",
+        "proof_file_observed": True,
+        "proof_file_valid": ok,
+        "proof_file_path_redacted": True,
+        "proof_file_sha256_present": bool(raw_text),
+        "proof_file_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+        if raw_text
+        else "",
+        "context_sha256_match": (
+            str(packet.get("context_sha256") or "")
+            == str(context_metadata.get("context_sha256") or "")
+        ),
+        "alias_context_read": packet.get("alias_context_read") is True,
+        "primary_aliases_match": packet.get("primary_aliases") == primary_aliases,
+        "coding_aliases_match": packet.get("coding_aliases") == coding_aliases,
+        "allowed_api_route_ids_match": (
+            packet.get("allowed_api_route_ids") == allowed_api_route_ids
+        ),
+        "exact_token_matched": str(packet.get("native_free_text_agent_ack") or "")
+        == expected_text,
+        "forbidden_field_paths_redacted": bool(forbidden_paths),
+        "forbidden_field_count": len(forbidden_paths),
+        "blocking_reasons": blocking_reasons,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": packet.get("secret_value_exposed") is True,
+    }
+
+
+def _custom_native_free_text_command_loop_proof_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    context_metadata: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    proof_root: Path | None = None,
+    native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
+    reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(set(payload) - NATIVE_FREE_TEXT_COMMAND_LOOP_ALLOWED_FIELDS)
+    expected_text_payload = str(payload.get("expected_text") or "").strip()
+    expected_coding_response_payload = str(
+        payload.get("expected_coding_response") or ""
+    ).strip()
+    expected_text = (
+        expected_coding_response_payload
+        or expected_text_payload
+        or NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT
+    )
+    request_id = _native_free_text_safe_request_id(str(payload.get("request_id") or ""))
+    if forbidden_fields:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_FORBIDDEN_FIELD",
+            human_message="Native free-text proof accepts only expected_text, expected_coding_response, request_id and timeout_seconds.",
+            expected_text=expected_text,
+            request_id=request_id,
+            blocking_reasons=forbidden_fields,
+        )
+    if (
+        expected_text_payload
+        and expected_coding_response_payload
+        and expected_text_payload != expected_coding_response_payload
+    ):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_EXPECTED_TEXT_CONFLICT",
+            human_message="expected_text and expected_coding_response must match when both are supplied.",
+            expected_text=expected_text,
+            request_id=request_id,
+            blocking_reasons=["expected_text_conflict"],
+        )
+    if not expected_text:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_EXPECTED_TEXT_REQUIRED",
+            human_message="Native free-text proof expected text must be non-empty.",
+            request_id=request_id,
+            blocking_reasons=["expected_text_required"],
+        )
+    if not request_id or any(
+        not (character.isalnum() or character in {"-", "_"})
+        for character in request_id
+    ):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_REQUEST_ID_INVALID",
+            human_message="Native free-text proof request_id must contain only letters, numbers, '-' or '_'.",
+            expected_text=expected_text,
+            request_id=request_id,
+            blocking_reasons=["request_id_invalid"],
+        )
+    try:
+        timeout_seconds = float(
+            payload.get("timeout_seconds")
+            if "timeout_seconds" in payload
+            else NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_TIMEOUT_SECONDS
+        )
+    except (TypeError, ValueError):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_TIMEOUT_INVALID",
+            human_message="Native free-text proof timeout_seconds must be numeric.",
+            expected_text=expected_text,
+            request_id=request_id,
+            blocking_reasons=["timeout_invalid"],
+        )
+    timeout_seconds = max(0.0, min(timeout_seconds, NATIVE_FREE_TEXT_COMMAND_LOOP_MAX_TIMEOUT_SECONDS))
+
+    resolved_context_metadata: dict[str, Any] = (
+        dict(context_metadata)
+        if isinstance(context_metadata, dict)
+        else _custom_native_injected_runtime_context_metadata()
+    )
+    context = agent_runtime_context if isinstance(agent_runtime_context, dict) else None
+    if context is None:
+        context, resolved_context_metadata = _load_custom_native_agent_runtime_context(
+            last_launch_packet
+        )
+    if not context:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code=str(
+                resolved_context_metadata.get("machine_error_code")
+                or "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_MISSING"
+            ),
+            human_message="Custom Codex agent runtime context is missing or unreadable.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["agent_runtime_context_missing"],
+        )
+    runtime_context_file_proven = _custom_native_context_file_read_proven(
+        resolved_context_metadata
+    )
+    if not runtime_context_file_proven:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_CONTEXT_NOT_READ",
+            human_message="Native free-text proof requires the server-issued runtime context file.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["native_alias_context_not_read"],
+        )
+    primary_aliases = _custom_native_aliases_for_lane(
+        context,
+        context_key="primary_aliases",
+        lane=PRIMARY_CHATGPT_LANE,
+    )
+    coding_aliases = _custom_native_aliases_for_lane(
+        context,
+        context_key="coding_aliases",
+        lane=API_ROUTE_LANE,
+    )
+    primary_keys = {
+        _custom_native_alias_key(alias) for alias in primary_aliases if _custom_native_alias_key(alias)
+    }
+    coding_keys = {
+        _custom_native_alias_key(alias) for alias in coding_aliases if _custom_native_alias_key(alias)
+    }
+    if not primary_aliases or not coding_aliases:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_ALIASES_EMPTY",
+            human_message="Native free-text proof requires primary and coding aliases from runtime context.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["primary_or_coding_aliases_empty"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=[
+                str(route_id)
+                for route_id in context.get("allowed_api_route_ids", [])
+                if str(route_id)
+            ],
+        )
+    if primary_keys & coding_keys:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_AMBIGUOUS_ALIASES",
+            human_message="Primary and coding aliases overlap after normalization.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["ambiguous_aliases"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=[
+                str(route_id)
+                for route_id in context.get("allowed_api_route_ids", [])
+                if str(route_id)
+            ],
+        )
+    allowed_api_route_ids = [
+        str(route_id)
+        for route_id in context.get("allowed_api_route_ids", [])
+        if str(route_id)
+    ]
+    root = proof_root or _native_free_text_proof_root()
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_PROOF_DIR_UNAVAILABLE",
+            human_message="Native free-text proof directory could not be created.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["proof_dir_unavailable"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    proof_path = root / f"{request_id}.json"
+    if proof_path.exists():
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_ALREADY_EXISTS",
+            human_message="Native free-text proof refuses to reuse an existing proof file.",
+            expected_text=expected_text,
+            request_id=request_id,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["proof_file_already_exists"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    prompt = _custom_native_free_text_prompt(
+        context=context,
+        proof_path=proof_path,
+        request_id=request_id,
+        expected_text=expected_text,
+        primary_alias=primary_aliases[0],
+        coding_alias=coding_aliases[0],
+    )
+    submitter = native_prompt_submitter or submit_custom_native_window_prompt_packet
+    native_submit_packet = submitter(prompt=prompt, request_id=request_id)
+    if native_submit_packet.get("status") != "ok":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code=str(
+                native_submit_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_FREE_TEXT_PROMPT_SUBMIT_BLOCKED"
+            ),
+            human_message="Native free-text prompt submit did not prove input and submit.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["native_prompt_submit_not_proven"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+            native_submit_packet=native_submit_packet,
+        )
+    deadline = time.monotonic() + timeout_seconds
+    while not proof_path.is_file() and time.monotonic() <= deadline:
+        time.sleep(0.1)
+    native_agent_proof_packet = _validate_native_free_text_agent_proof(
+        proof_path=proof_path,
+        request_id=request_id,
+        expected_text=expected_text,
+        context=context,
+        context_metadata=resolved_context_metadata,
+    )
+    if native_agent_proof_packet.get("status") != "ok":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code=str(
+                native_agent_proof_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_FREE_TEXT_AGENT_PROOF_NOT_PROVEN"
+            ),
+            human_message="Native free-text agent proof file did not satisfy the runtime context contract.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=list(native_agent_proof_packet.get("blocking_reasons") or []),
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+            native_submit_packet=native_submit_packet,
+            native_agent_proof_packet=native_agent_proof_packet,
+        )
+    command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
+        payload={
+            "prompt": prompt,
+            "expected_text": expected_text,
+            "request_id": f"{request_id}-api",
+        },
+        file_bridge_worker=file_bridge_worker,
+        agent_runtime_context=context,
+        context_metadata=resolved_context_metadata,
+        last_launch_packet=last_launch_packet,
+        bridge_endpoint=bridge_endpoint,
+        reasoning_matrix_builder=reasoning_matrix_builder,
+    )
+    if command_loop_packet.get("status") != "ok":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+            human_message="Native free-text proof file passed, but GPT+API command-loop proof did not pass.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["command_loop_not_proven"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+            native_submit_packet=native_submit_packet,
+            native_agent_proof_packet=native_agent_proof_packet,
+            command_loop_packet=command_loop_packet,
+        )
+    native_free_text_command_loop_proven = bool(
+        native_submit_packet.get("native_window_observed") is True
+        and native_submit_packet.get("input_capable_ui_observed") is True
+        and native_submit_packet.get("input_text_insert_succeeded") is True
+        and native_submit_packet.get("prompt_submitted") is True
+        and native_agent_proof_packet.get("proof_file_valid") is True
+        and native_agent_proof_packet.get("context_sha256_match") is True
+        and command_loop_packet.get("command_loop_proven") is True
+        and command_loop_packet.get("api_lane_exact_token_matched") is True
+        and command_loop_packet.get("fallback_used") is False
+        and command_loop_packet.get("local_imitation_used") is False
+        and command_loop_packet.get("secret_value_exposed") is False
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_free_text_command_loop_proof",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if native_free_text_command_loop_proven else "blocked",
+        "machine_error_code": "OK"
+        if native_free_text_command_loop_proven
+        else "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+        "human_message": "Custom Codex native free-text prompt, agent proof file, and GPT+API alias command-loop proof passed.",
+        "final_status": (
+            "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PROVEN_WITH_LIMITS"
+            if native_free_text_command_loop_proven
+            else "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN"
+        ),
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+        "prompt_length": len(prompt),
+        "prompt_text_recorded": False,
+        "context_metadata": resolved_context_metadata,
+        **_custom_native_context_readout_fields(resolved_context_metadata),
+        "primary_alias": primary_aliases[0],
+        "coding_alias": coding_aliases[0],
+        "primary_aliases": primary_aliases,
+        "coding_aliases": coding_aliases,
+        "allowed_api_route_ids": [
+            str(route_id)
+            for route_id in context.get("allowed_api_route_ids", [])
+            if str(route_id)
+        ],
+        "native_window_observed": native_submit_packet.get("native_window_observed") is True,
+        "input_capable_ui_observed": native_submit_packet.get("input_capable_ui_observed") is True,
+        "input_text_insert_attempted": native_submit_packet.get("input_text_insert_attempted") is True,
+        "input_text_insert_succeeded": native_submit_packet.get("input_text_insert_succeeded") is True,
+        "prompt_submitted": native_submit_packet.get("prompt_submitted") is True,
+        "native_free_text_activation_proven": native_submit_packet.get("prompt_submitted") is True,
+        "native_agent_proof_file_observed": native_agent_proof_packet.get("proof_file_observed") is True,
+        "native_agent_proof_file_valid": native_agent_proof_packet.get("proof_file_valid") is True,
+        "native_free_text_agent_context_sha_match": native_agent_proof_packet.get("context_sha256_match") is True,
+        "native_free_text_alias_routing_proven": bool(
+            native_agent_proof_packet.get("primary_aliases_match") is True
+            and native_agent_proof_packet.get("coding_aliases_match") is True
+            and native_agent_proof_packet.get("allowed_api_route_ids_match") is True
+        ),
+        "native_free_text_command_loop_proven": native_free_text_command_loop_proven,
+        "native_free_text_tool_bridge_proven": native_free_text_command_loop_proven,
+        "native_free_text_tool_bridge_source": "native_agent_proof_file_plus_server_gpt_api_command_loop",
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": False,
+        "runtime_context_file_proven": command_loop_packet.get("runtime_context_file_proven") is True,
+        "custom_codex_agent_runtime_context_proven": command_loop_packet.get("custom_codex_agent_runtime_context_proven") is True,
+        "command_loop_proven": command_loop_packet.get("command_loop_proven") is True,
+        "primary_alias_resolved_from_context": command_loop_packet.get("primary_alias_resolved_from_context") is True,
+        "coding_alias_resolved_from_context": command_loop_packet.get("coding_alias_resolved_from_context") is True,
+        "primary_alias_bound_to_chatgpt_lane": command_loop_packet.get("primary_alias_bound_to_chatgpt_lane") is True,
+        "coding_alias_bound_to_api_lane": command_loop_packet.get("coding_alias_bound_to_api_lane") is True,
+        "primary_alias_precedes_coding_alias": command_loop_packet.get("primary_alias_precedes_coding_alias") is True,
+        "reasoning_prerequisite_proven": command_loop_packet.get("reasoning_prerequisite_proven") is True,
+        "api_lane_exact_token_matched": command_loop_packet.get("api_lane_exact_token_matched") is True,
+        "file_bridge_acceptance_proven": command_loop_packet.get("file_bridge_acceptance_proven") is True,
+        "agent_alias_route_acceptance_proven": command_loop_packet.get("agent_alias_route_acceptance_proven") is True,
+        "allowed_api_route_ids_enforced": command_loop_packet.get("allowed_api_route_ids_enforced") is True,
+        "forbidden_stale_route_ids_enforced": command_loop_packet.get("forbidden_stale_route_ids_enforced") is True,
+        "bridge_or_file_bridge_used": command_loop_packet.get("bridge_or_file_bridge_used") is True,
+        "reasoning_provider_call_count": int(command_loop_packet.get("reasoning_provider_call_count") or 0),
+        "command_loop_provider_call_count": int(command_loop_packet.get("command_loop_provider_call_count") or 0),
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "raw_backend_details_exposed": False,
+        "raw_prompt_recorded": False,
+        "proof_file_path_redacted": True,
+        "secret_value_exposed": False,
+        "not_intelligence_proof": True,
+        "intelligence_measured": False,
+        "nested_packets_redacted": True,
+        "native_submit_packet": _native_free_text_public_nested_packet(
+            native_submit_packet
+        ),
+        "native_agent_proof_packet": _native_free_text_public_nested_packet(
+            native_agent_proof_packet
+        ),
+        "command_loop_packet": _native_free_text_public_nested_packet(
+            command_loop_packet
+        ),
+        "blocking_reasons": [] if native_free_text_command_loop_proven else ["native_free_text_command_loop_not_proven"],
+        "next_action": "none" if native_free_text_command_loop_proven else "stop_and_diagnose_native_free_text_command_loop",
     }
 
 
@@ -14877,6 +15603,40 @@ def build_handler(
             )
             self._send_json(
                 _custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload=payload,
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_native_free_text_command_loop_proof(self, actual_path: str) -> None:
+            def reasoning_matrix_builder() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                return _custom_reasoning_dispatch_matrix_live_packet(
+                    payload={},
+                    action_runner=action_runner,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+
+            payload = self._read_optional_json_body()
+            agent_runtime_context, context_metadata = (
+                _refresh_custom_agent_runtime_context_for_command_loop()
+            )
+            self._send_json(
+                _custom_native_free_text_command_loop_proof_packet(
                     payload=payload,
                     file_bridge_worker=custom_native_file_bridge_worker,
                     agent_runtime_context=agent_runtime_context,

@@ -1582,6 +1582,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("Проверить DeepSeek-правку", section)
         self.assertIn('id="quickStartCustomLaunchAction"', section)
         self.assertIn("Проверить GPT+API", section)
+        self.assertIn('id="quickStartNativeFreeTextProofAction"', section)
+        self.assertIn("Проверить native GPT+API", section)
         self.assertIn('id="quickStartLaunchPreflightAction"', section)
         self.assertIn("Предзапусковая проверка", section)
         self.assertIn('id="quickStartChatSlotState"', section)
@@ -1595,7 +1597,17 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
             'document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction())',
             js,
         )
+        self.assertIn(
+            'document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof())',
+            js,
+        )
+        self.assertIn(
+            'document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus({ force: true }))',
+            js,
+        )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
+        self.assertIn("async function runQuickStartNativeFreeTextCommandLoopProof()", js)
+        self.assertIn('fetch("api/codex/custom/native-free-text-command-loop-proof"', js)
         self.assertIn("async function runQuickStartSessionDualLaneExecution()", js)
         self.assertIn('metadataFor("launch_custom_client_native")', js)
         self.assertIn("await runCodexCustomLaunch()", js)
@@ -2629,6 +2641,10 @@ const sandbox = {
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         self.assertIn("const QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS", js)
         self.assertIn("function replayQuickStartManualCheckSnapshot()", js)
+        self.assertIn(
+            "function replayQuickStartManualCheckSnapshot() {\n  if (quickStartRouteProofResultLocked()) {\n    return;\n  }",
+            js,
+        )
         self.assertIn("function rememberQuickStartConfigAdmissionSnapshot", js)
         self.assertIn("function rememberQuickStartApiRouteCheckSnapshot", js)
         self.assertIn(
@@ -5839,6 +5855,902 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   console.error(error);
   process.exit(1);
 });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_native_free_text_action_runs_native_proof_endpoint(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.src = "";
+    this.alt = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState"
+]) {
+  node(id);
+}
+node("quickStartRouteResponse");
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "normal";
+node("quickStartPrimaryAgentAliasInput").value = "Planner";
+node("quickStartCodingAgentAliasInput").value = "Builder";
+node("quickStartAgentOneAliasInput").value = "Lead";
+node("quickStartAgentTwoAliasInput").value = "Worker";
+
+const urls = [];
+const packets = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  Date,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options?.body || "{}");
+    packets.push(body);
+    if (url === "/api/codex/custom/agent-bindings") {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          alias_scope: "server_agent_bindings",
+          agent_bindings: body.agent_bindings,
+          alias_to_agent_id: { Planner: "codex", Builder: "dip" },
+          agent_id_to_route: { dip: "wbp-deepseek-chat" },
+          allowed_api_route_ids: ["wbp-deepseek-chat"],
+          next_action: "none"
+        })
+      });
+    }
+    if (url === "api/codex/custom/native-free-text-command-loop-proof") {
+      if (Object.prototype.hasOwnProperty.call(body, "prompt")) {
+        throw new Error(`native free-text endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
+      }
+      if (body.expected_coding_response !== "WBP_UI_NATIVE_FREE_TEXT_OK") {
+        throw new Error(`native free-text expected token mismatch: ${JSON.stringify(body)}`);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          status: "ok",
+          machine_error_code: "OK",
+          final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PROVEN_WITH_LIMITS",
+          primary_alias: "Planner",
+          coding_alias: "Builder",
+          primary_binding: { lane: "primary_chatgpt", role: "orchestrator", model_id: "gpt-5.5" },
+          coding_binding: { lane: "api_route", role: "coding_agent", route_id: "wbp-deepseek-chat" },
+          native_window_observed: true,
+          input_capable_ui_observed: true,
+          input_text_insert_attempted: true,
+          input_text_insert_succeeded: true,
+          prompt_submitted: true,
+          native_agent_proof_file_observed: true,
+          native_agent_proof_file_valid: true,
+          native_free_text_agent_context_sha_match: true,
+          native_free_text_alias_routing_proven: true,
+          native_free_text_command_loop_proven: true,
+          native_free_text_tool_bridge_proven: true,
+          native_free_text_activation_proven: true,
+          native_free_text_tool_bridge_source: "native_agent_proof_file_plus_server_gpt_api_command_loop",
+          native_agent_provider_call_directly_observed: false,
+          custom_codex_response_text_read_proven: false,
+          command_loop_proven: true,
+          runtime_context_file_proven: true,
+          custom_codex_agent_runtime_context_proven: true,
+          primary_alias_bound_to_chatgpt_lane: true,
+          coding_alias_bound_to_api_lane: true,
+          primary_alias_precedes_coding_alias: true,
+          reasoning_prerequisite_proven: true,
+          api_lane_exact_token_matched: true,
+          bridge_or_file_bridge_used: true,
+          fallback_used: false,
+          local_imitation_used: false,
+          prompt_text_recorded: false,
+          secret_value_exposed: false,
+          proof_file_path_redacted: true,
+          nested_packets_redacted: true,
+          browser_can_supply_route_authority: false,
+          browser_can_supply_reasoning_authority: false,
+          next_action: "none"
+        })
+      });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext("actionMetadataLoaded = true;", sandbox);
+sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
+  const expected = [
+    "/api/codex/custom/agent-bindings",
+    "api/codex/custom/native-free-text-command-loop-proof"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected native free-text fetches ${JSON.stringify(urls)}`);
+  }
+  if (packets.length !== 2) {
+    throw new Error(`native free-text path did not write bindings and proof exactly once: ${JSON.stringify(packets)}`);
+  }
+  if (packets[0].agent_bindings[0].display_name !== "Planner" || packets[0].agent_bindings[1].display_name !== "Builder") {
+    throw new Error(`agent binding payload did not carry aliases: ${JSON.stringify(packets[0])}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(packets[1], "prompt")) {
+    throw new Error(`native free-text body leaked browser prompt: ${JSON.stringify(packets[1])}`);
+  }
+  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "native ok") {
+    throw new Error(`native route label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "native ok") {
+    throw new Error(`native launch label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "input ok") {
+    throw new Error(`native window proof not rendered: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (
+    rendered.machine_error_code !== "OK" ||
+    rendered.execution_mode !== "chatgpt_plus_api" ||
+    rendered.chatgpt_model_id !== "gpt-5.5" ||
+    rendered.api_model_id !== "wbp-deepseek-chat" ||
+    rendered.native_free_text_command_loop_packet !== true ||
+    rendered.gpt_api_alias_command_loop_packet !== true
+  ) {
+    throw new Error(`native free-text identity not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  if (
+    rendered.native_free_text_command_loop_proven !== true ||
+    rendered.native_free_text_tool_bridge_proven !== true ||
+    rendered.native_window_observed !== true ||
+    rendered.input_capable_ui_observed !== true ||
+    rendered.input_text_insert_succeeded !== true ||
+    rendered.prompt_submitted !== true ||
+    rendered.native_agent_proof_file_valid !== true ||
+    rendered.native_free_text_agent_context_sha_match !== true ||
+    rendered.native_free_text_alias_routing_proven !== true ||
+    rendered.command_loop_proven !== true ||
+    rendered.runtime_context_file_proven !== true ||
+    rendered.api_lane_exact_token_matched !== true ||
+    rendered.launch_attempted !== false ||
+    rendered.native_launch_attempted !== false ||
+    rendered.runtime_readiness_claimed !== false ||
+    rendered.native_agent_provider_call_directly_observed !== false ||
+    rendered.custom_codex_response_text_read_proven !== false ||
+    rendered.prompt_text_recorded !== false ||
+    rendered.nested_packets_redacted !== true ||
+    rendered.secret_value_exposed !== false
+  ) {
+    throw new Error(`native free-text proof flags missing: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_native_free_text_renderer_blocks_missing_agent_proof(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState"
+]) {
+  node(id);
+}
+node("quickStartRouteResponse");
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartNativeFreeTextCommandLoopProof({
+  status: "blocked",
+  machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_MISSING",
+  final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+  primary_alias: "Planner",
+  coding_alias: "Builder",
+  native_window_observed: true,
+  input_capable_ui_observed: true,
+  input_text_insert_attempted: true,
+  input_text_insert_succeeded: true,
+  prompt_submitted: true,
+  native_agent_proof_file_observed: false,
+  native_agent_proof_file_valid: false,
+  native_free_text_agent_context_sha_match: false,
+  native_free_text_alias_routing_proven: false,
+  native_free_text_command_loop_proven: false,
+  native_free_text_tool_bridge_proven: false,
+  command_loop_proven: false,
+  runtime_context_file_proven: false,
+  api_lane_exact_token_matched: false,
+  bridge_or_file_bridge_used: false,
+  fallback_used: false,
+  local_imitation_used: false,
+  prompt_text_recorded: false,
+  secret_value_exposed: false,
+  nested_packets_redacted: true,
+  next_action: "stop_and_diagnose_native_free_text_command_loop"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").className.includes("green")) {
+  throw new Error(`missing native proof must not render green route chip: ${node("quickStartRouteChip").className}`);
+}
+if (node("quickStartLaunchState").className.includes("green")) {
+  throw new Error(`missing native proof must not render green launch chip: ${node("quickStartLaunchState").className}`);
+}
+if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+  throw new Error(`native blocked label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.native_free_text_command_loop_packet !== true ||
+  rendered.native_free_text_command_loop_proven !== false ||
+  rendered.native_free_text_tool_bridge_proven !== false ||
+  rendered.native_agent_proof_file_valid !== false ||
+  rendered.command_loop_proven !== false ||
+  rendered.runtime_context_file_proven !== false ||
+  rendered.prompt_submitted !== true ||
+  rendered.prompt_text_recorded !== false ||
+  rendered.nested_packets_redacted !== true ||
+  rendered.secret_value_exposed !== false
+) {
+  throw new Error(`missing native proof flags not preserved: ${node("quickStartRouteResponse").textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_native_free_text_result_blocks_background_route_refresh(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.disabled = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+Node.prototype.setAttribute = function(name, value) {
+  this[name] = value;
+  if (name === "disabled") {
+    this.disabled = true;
+  }
+};
+Node.prototype.removeAttribute = function(name) {
+  delete this[name];
+  if (name === "disabled") {
+    this.disabled = false;
+  }
+};
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState"
+]) {
+  node(id);
+}
+node("quickStartRouteResponse");
+node("quickStartRouteRefreshAction");
+node("refreshFixture");
+
+const sandbox = {
+  console,
+  Date,
+  document: {
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected while proof result is locked"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+refreshCodexCustomModelsPanel = async () => {
+  throw new Error("background refresh must not run while proof result is locked");
+};
+renderQuickStartNativeFreeTextCommandLoopProof({
+  status: "blocked",
+  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+  primary_alias: "Теркистратор",
+  coding_alias: "Агент Шмель",
+  native_window_observed: false,
+  input_capable_ui_observed: false,
+  prompt_submitted: false,
+  native_agent_proof_file_valid: false,
+  native_free_text_command_loop_proven: false,
+  native_free_text_tool_bridge_proven: false,
+  command_loop_proven: false,
+  runtime_context_file_proven: true,
+  api_lane_exact_token_matched: false,
+  fallback_used: false,
+  local_imitation_used: false,
+  prompt_text_recorded: false,
+  secret_value_exposed: false,
+  nested_packets_redacted: true,
+  next_action: "stop_and_diagnose_native_free_text_command_loop"
+});
+`, sandbox);
+
+sandbox.refreshQuickStartRouteStatus().then(() => {
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+    throw new Error(`background refresh overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+  if (
+    rendered.native_free_text_command_loop_packet !== true ||
+    rendered.native_free_text_command_loop_proven !== false ||
+    rendered.runtime_context_file_proven !== true ||
+    rendered.primary_alias !== "Теркистратор" ||
+    rendered.coding_alias !== "Агент Шмель" ||
+    rendered.nested_packets_redacted !== true
+  ) {
+    throw new Error(`native proof route response was not preserved: ${node("quickStartRouteResponse").textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_native_free_text_result_blocks_manual_snapshot_replay(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.disabled = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+  this.value = "";
+}
+Node.prototype.setAttribute = function(name, value) {
+  this[name] = value;
+  if (name === "disabled") {
+    this.disabled = true;
+  }
+};
+Node.prototype.removeAttribute = function(name) {
+  delete this[name];
+  if (name === "disabled") {
+    this.disabled = false;
+  }
+};
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse",
+  "quickStartExecutionModeSelect",
+  "quickStartChatModelSelect",
+  "quickStartApiModelSelect",
+  "quickStartApiReasoningOptionSelect"
+]) {
+  node(id);
+}
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "provider_declared_disabled";
+
+const sandbox = {
+  console,
+  Date,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "live", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected while replay guard is tested"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartApiRouteCheckResult(
+  {
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: "gpt-5.5",
+    api_model_id: "wbp-deepseek-chat",
+    api_reasoning_option_id: "provider_declared_disabled"
+  },
+  {
+    payload: {
+      status: "ok",
+      machine_error_code: "OK",
+      ui_action: "api_route_check",
+      route_id: "wbp-deepseek-chat",
+      result: {
+        status: "ok",
+        machine_error_code: "OK",
+        changed_files: []
+      }
+    },
+    refreshState: "complete"
+  },
+  { remember: true }
+);
+renderQuickStartNativeFreeTextCommandLoopProof({
+  status: "blocked",
+  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+  primary_alias: "Теркистратор",
+  coding_alias: "Агент Шмель",
+  native_window_observed: false,
+  input_capable_ui_observed: false,
+  prompt_submitted: false,
+  native_agent_proof_file_valid: false,
+  native_free_text_command_loop_proven: false,
+  native_free_text_tool_bridge_proven: false,
+  command_loop_proven: false,
+  runtime_context_file_proven: true,
+  api_lane_exact_token_matched: false,
+  fallback_used: false,
+  local_imitation_used: false,
+  prompt_text_recorded: false,
+  secret_value_exposed: false,
+  nested_packets_redacted: true,
+  next_action: "stop_and_diagnose_native_free_text_command_loop"
+});
+replayQuickStartManualCheckSnapshot();
+`, sandbox);
+
+if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+  throw new Error(`manual snapshot replay overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.native_free_text_command_loop_packet !== true ||
+  rendered.runtime_context_file_proven !== true ||
+  rendered.primary_alias !== "Теркистратор" ||
+  rendered.coding_alias !== "Агент Шмель" ||
+  rendered.nested_packets_redacted !== true ||
+  rendered.manual_check_replay_active === true
+) {
+  throw new Error(`native proof response was not preserved over manual replay: ${node("quickStartRouteResponse").textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_native_free_text_result_survives_model_catalog_render(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this._value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  get value() { return this._value; }
+  set value(next) {
+    this._value = String(next ?? "");
+    for (const option of this.options || []) {
+      option.selected = option.value === this._value;
+    }
+  }
+  get options() {
+    return this.children.filter((item) => item.tag === "option");
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState",
+  "quickStartRouteResponse",
+  "quickStartExecutionModeSelect",
+  "quickStartChatModelSelect",
+  "quickStartApiModelSelect",
+  "quickStartApiReasoningOptionSelect",
+  "codexCustomExecutionModeSelect",
+  "codexCustomModelSelect",
+  "codexCustomApiModelSelect",
+  "codexCustomApiReasoningOptionSelect",
+  "codexCustomChatLaneCatalog",
+  "codexCustomApiLaneCatalog",
+  "codexCustomSeedLaneCatalog",
+  "codexCustomChatLaneChip",
+  "codexCustomApiLaneChip",
+  "codexCustomSeedLaneChip",
+  "codexCustomModelsSummary",
+  "codexCustomRecommendedModel",
+  "codexCustomRecommendedApiModel",
+  "codexCustomExecutionBoundary",
+  "codexCustomApiCompat",
+  "codexCustomModelsClaimGate",
+  "codexCustomChatModelCount",
+  "codexCustomApiModelCount",
+  "codexCustomSeedModelCount",
+  "codexCustomModelTokenBurn"
+]) {
+  node(id);
+}
+
+const desktop = new Node("desktop");
+desktop.dataset = { screen: "quick-start", source: "live", fixtureState: "healthy" };
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "provider_declared_disabled";
+
+const storage = new Map();
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector(selector) { return selector === ".desktop" ? desktop : null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} },
+    localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+      setItem(key, value) { storage.set(key, String(value)); }
+    }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch() {
+    throw new Error("model catalog render proof-lock test must not fetch");
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartNativeFreeTextCommandLoopProof({
+  status: "blocked",
+  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+  primary_alias: "Теркистратор",
+  coding_alias: "Агент Шмель",
+  native_window_observed: false,
+  input_capable_ui_observed: false,
+  prompt_submitted: false,
+  native_agent_proof_file_valid: false,
+  native_free_text_command_loop_proven: false,
+  native_free_text_tool_bridge_proven: false,
+  command_loop_proven: false,
+  runtime_context_file_proven: true,
+  api_lane_exact_token_matched: false,
+  fallback_used: false,
+  local_imitation_used: false,
+  prompt_text_recorded: false,
+  secret_value_exposed: false,
+  nested_packets_redacted: true,
+  next_action: "stop_and_diagnose_native_free_text_command_loop"
+});
+`, sandbox);
+
+sandbox.renderCodexCustomModels({
+  status: "ok",
+  chatgpt_lane: {
+    default_model_id: "gpt-5.5",
+    models: [
+      { model_id: "gpt-5.5", display_name: "gpt-5.5", selection_enabled: true }
+    ]
+  },
+  api_lane: {
+    default_model_id: "wbp-deepseek-chat",
+    models: [
+      {
+        model_id: "wbp-deepseek-chat",
+        display_name: "WBP DeepSeek Chat",
+        selection_enabled: true,
+        thinking: { type: "disabled" }
+      }
+    ]
+  },
+  seed_only_reference: { models: [] }
+}, {
+  claim_gate_status: "clear",
+  openai_compatible_shape_declared: true,
+  configured_wire_api: "openai",
+  live_api_checked: false
+});
+
+if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+  throw new Error(`model catalog render overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.native_free_text_command_loop_packet !== true ||
+  rendered.runtime_context_file_proven !== true ||
+  rendered.primary_alias !== "Теркистратор" ||
+  rendered.coding_alias !== "Агент Шмель" ||
+  rendered.nested_packets_redacted !== true
+) {
+  throw new Error(`native proof response changed after model catalog render: ${node("quickStartRouteResponse").textContent}`);
+}
 """
         result = subprocess.run(
             ["node", "-e", script],

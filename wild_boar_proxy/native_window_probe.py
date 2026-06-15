@@ -10,6 +10,7 @@ builders, and bounded cleanup model.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -76,6 +77,7 @@ CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
     "hadToken=false",
     "no_token_attached",
 )
+CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
     {
         "cdp_renderer_input_surface_not_observed",
@@ -835,6 +837,373 @@ def _cdp_input_capable(
     if blocked_result is not None:
         return False, json.dumps(blocked_result, sort_keys=True)
     return False, last_error or "cdp_runtime_evaluate_missing_value"
+
+
+def _cdp_prompt_submit_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    prompt: str,
+    request_id: str = "",
+    blocking_reasons: list[str] | None = None,
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    cdp_result: str = "",
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_prompt_submit",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "request_id": request_id,
+        "blocking_reasons": blocking_reasons or [machine_error_code],
+        "custom_process_pid": observed_pid,
+        "cdp_port": cdp_port,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if prompt
+        else "",
+        "prompt_length": len(prompt),
+        "prompt_text_recorded": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "input_text_insert_attempted": False,
+        "input_text_insert_succeeded": False,
+        "prompt_submitted": False,
+        "submit_mechanism": "none",
+        "cdp_result": cdp_result[:512],
+        "secret_value_exposed": False,
+        "next_action": "stop_and_diagnose_native_input_blocked",
+    }
+
+
+def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
+    value = (packet.get("result") or {}).get("result", {}).get("value", {})
+    return value if isinstance(value, dict) else {}
+
+
+def _cdp_submit_prompt_to_app_page(
+    observed_pid: int,
+    prompt: str,
+    *,
+    request_id: str,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> dict[str, Any]:
+    if not prompt:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_PROMPT_EMPTY",
+            human_message="Native prompt submit requires a non-empty prompt.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["prompt_empty"],
+        )
+    if len(prompt) > CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_PROMPT_TOO_LONG",
+            human_message="Native prompt submit refused an oversized prompt.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["prompt_too_long"],
+        )
+    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    if not port_owned:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Native prompt submit requires the Custom Codex renderer CDP port to be pid-bound.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code=page_error.upper(),
+            human_message="Native prompt submit could not find a Custom Codex app page target.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+        )
+
+    focus_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const node = nodes.find((candidate) => visible(candidate) && candidate.disabled !== true);
+  if (!node) {
+    return {
+      focused: false,
+      readyState: document.readyState,
+      url: location.href,
+      inputCandidateCount: nodes.length,
+      visibleInputCandidateCount: nodes.filter((candidate) => visible(candidate)).length,
+      textValueCaptured: false
+    };
+  }
+  node.focus();
+  if ('value' in node) {
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(node), 'value');
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(node, '');
+    } else {
+      node.value = '';
+    }
+  } else {
+    node.textContent = '';
+  }
+  node.dispatchEvent(new InputEvent('input', {inputType: 'deleteContentBackward', bubbles: true, composed: true}));
+  return {
+    focused: document.activeElement === node,
+    readyState: document.readyState,
+    url: location.href,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: nodes.filter((candidate) => visible(candidate)).length,
+    textValueCaptured: false
+  };
+})()
+""".strip()
+    verify_expression = f"""
+(() => {{
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const node = document.activeElement && visible(document.activeElement)
+    ? document.activeElement
+    : nodes.find((candidate) => visible(candidate) && candidate.disabled !== true);
+  const text = node ? (('value' in node ? node.value : node.innerText) || '') : '';
+  return {{
+    inputFocused: !!node,
+    insertedLengthMatches: text.length === {len(prompt)},
+    insertedLength: text.length,
+    expectedLength: {len(prompt)},
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+    submit_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const textNode = document.activeElement || document.querySelector(selector);
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const submitButton = buttons.find((button) => {
+    if (!visible(button) || button.disabled) return false;
+    const label = [
+      button.getAttribute('aria-label') || '',
+      button.getAttribute('title') || '',
+      button.innerText || '',
+      button.textContent || ''
+    ].join(' ').toLowerCase();
+    return button.type === 'submit' ||
+      label.includes('send') ||
+      label.includes('submit') ||
+      label.includes('отправ') ||
+      label.includes('arrow');
+  });
+  if (submitButton) {
+    submitButton.click();
+    return {
+      submitted: true,
+      submitButtonObserved: true,
+      submitMechanism: 'cdp_button_click',
+      textValueCaptured: false
+    };
+  }
+  if (textNode) {
+    textNode.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+    textNode.dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+    return {
+      submitted: true,
+      submitButtonObserved: false,
+      submitMechanism: 'cdp_keyboard_event_enter',
+      textValueCaptured: false
+    };
+  }
+  return {
+    submitted: false,
+    submitButtonObserved: false,
+    submitMechanism: 'none',
+    textValueCaptured: false
+  };
+})()
+""".strip()
+
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        ws_url = str(page["webSocketDebuggerUrl"])
+        try:
+            focus_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3000 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": focus_expression, "returnByValue": True},
+                },
+            )
+            focus_value = _cdp_result_value(focus_packet)
+            if focus_value.get("url") != "app://-/index.html":
+                last_error = "cdp_target_url_mismatch"
+                continue
+            if focus_value.get("focused") is not True:
+                last_error = "cdp_editable_focus_failed"
+                continue
+            insert_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3100 + index,
+                    "method": "Input.insertText",
+                    "params": {"text": prompt},
+                },
+            )
+            if insert_packet.get("status") == "blocked" or "error" in insert_packet:
+                last_error = "cdp_insert_text_failed"
+                continue
+            verify_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3200 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": verify_expression, "returnByValue": True},
+                },
+            )
+            verify_value = _cdp_result_value(verify_packet)
+            if verify_value.get("insertedLengthMatches") is not True:
+                last_error = "cdp_insert_text_verification_failed"
+                continue
+            submit_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3300 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": submit_expression, "returnByValue": True},
+                },
+            )
+            submit_value = _cdp_result_value(submit_packet)
+            if submit_value.get("submitted") is not True:
+                last_error = "cdp_submit_event_failed"
+                continue
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_prompt_submit_failed:{type(exc).__name__}"
+            continue
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_native_prompt_submit",
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex native prompt text was inserted into the input-capable renderer and submitted.",
+            "request_id": request_id,
+            "custom_process_pid": observed_pid,
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": str(page.get("url") or ""),
+            "cdp_target_type": str(page.get("type") or ""),
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "prompt_length": len(prompt),
+            "prompt_text_recorded": False,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+            "input_text_insert_attempted": True,
+            "input_text_insert_succeeded": True,
+            "prompt_submitted": True,
+            "submit_button_observed": submit_value.get("submitButtonObserved") is True,
+            "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
+            "secret_value_exposed": False,
+            "next_action": "none",
+        }
+    return _cdp_prompt_submit_blocked_packet(
+        machine_error_code="CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED",
+        human_message="Custom Codex native prompt submit could not prove insert and submit through the pid-bound renderer.",
+        prompt=prompt,
+        request_id=request_id,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        blocking_reasons=[last_error or "cdp_prompt_submit_failed"],
+        cdp_result=last_error,
+    )
+
+
+def submit_custom_native_window_prompt_packet(
+    *,
+    prompt: str,
+    request_id: str,
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Native prompt submit requires a visible, input-capable Custom Codex window.",
+            prompt=prompt,
+            request_id=request_id,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+        ) | {
+            "native_window_observed": show_packet.get("custom_window_observed") is True,
+            "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
+            "show_window_packet": show_packet,
+        }
+    packet = _cdp_submit_prompt_to_app_page(
+        int(observed_pid),
+        prompt,
+        request_id=request_id,
+    )
+    packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
+    packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
+    packet["native_app_usable"] = show_packet.get("native_app_usable") is True
+    packet["show_window_packet"] = show_packet
+    return packet
 
 
 def _renderer_recovery_packet(

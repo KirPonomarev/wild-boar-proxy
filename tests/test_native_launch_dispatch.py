@@ -884,6 +884,113 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(bounded["cdp_prompt_attempted"])
         self.assertFalse(bounded["cdp_route_trace_bound"])
 
+    def test_cdp_prompt_submit_inserts_and_submits_without_raw_prompt_readback(self) -> None:
+        cdp_packets = [
+            {
+                "id": 3001,
+                "result": {
+                    "result": {
+                        "value": {
+                            "focused": True,
+                            "readyState": "complete",
+                            "url": "app://-/index.html",
+                            "inputCandidateCount": 1,
+                            "visibleInputCandidateCount": 1,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {"id": 3101, "result": {}},
+            {
+                "id": 3201,
+                "result": {
+                    "result": {
+                        "value": {
+                            "inputFocused": True,
+                            "insertedLengthMatches": True,
+                            "insertedLength": 11,
+                            "expectedLength": 11,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3301,
+                "result": {
+                    "result": {
+                        "value": {
+                            "submitted": True,
+                            "submitButtonObserved": True,
+                            "submitMechanism": "cdp_button_click",
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ]
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=cdp_packets,
+            ) as cdp_command,
+        ):
+            packet = native_probe._cdp_submit_prompt_to_app_page(
+                222,
+                "hello world",
+                request_id="native-submit-ok",
+                port=9223,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["input_text_insert_attempted"])
+        self.assertTrue(packet["input_text_insert_succeeded"])
+        self.assertTrue(packet["prompt_submitted"])
+        self.assertEqual(packet["submit_mechanism"], "cdp_button_click")
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(cdp_command.call_count, 4)
+
+    def test_submit_custom_native_window_prompt_blocks_without_input_capable_window(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe.show_custom_native_window_packet",
+            return_value={
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN",
+                "custom_window_observed": True,
+                "input_capable_ui_observed": False,
+                "native_app_usable": False,
+                "native_app_usability_blocked_reason_class": "input_capable_window_not_proven_for_pid",
+            },
+        ):
+            packet = native_probe.submit_custom_native_window_prompt_packet(
+                prompt="Planner: do it",
+                request_id="native-submit-blocked",
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN")
+        self.assertTrue(packet["native_window_observed"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+
     def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
         response = mock.MagicMock()
         response.__enter__ = mock.Mock(return_value=response)
