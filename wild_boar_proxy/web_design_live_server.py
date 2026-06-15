@@ -4900,6 +4900,95 @@ def _custom_native_free_text_activation_ready(packet: dict[str, Any]) -> bool:
     )
 
 
+def _custom_native_keychain_or_permission_prompt_observed(packet: dict[str, Any]) -> bool:
+    status = str(packet.get("keychain_preflight_status") or "").lower()
+    reason = str(packet.get("keychain_preflight_reason_code") or "").lower()
+    prompt_scope = str(packet.get("prompt_avoidance_claim_scope") or "").lower()
+    auth_error = str(packet.get("codex_desktop_auth_error_class") or "").lower()
+    usability_reason = " ".join(
+        str(value or "").lower()
+        for value in [
+            packet.get("native_app_usability_blocked_reason_class"),
+            packet.get("renderer_surface_blocked_reason_class"),
+        ]
+    )
+    return bool(
+        status in {"blocked", "failed", "prompt", "permission_required"}
+        or "permission" in reason
+        or "permission" in auth_error
+        or "permission" in usability_reason
+        or "permission" in prompt_scope
+        or "prompt" in reason
+        or "prompt" in auth_error
+        or "prompt" in usability_reason
+    )
+
+
+def _custom_native_renderer_no_input_surface_observed(packet: dict[str, Any]) -> bool:
+    reason = str(
+        packet.get("renderer_surface_blocked_reason_class")
+        or packet.get("native_app_usability_blocked_reason_class")
+        or ""
+    )
+    return bool(
+        _custom_native_free_text_window_observed(packet)
+        and packet.get("renderer_mounted") is True
+        and _custom_native_free_text_input_observed(packet) is False
+        and reason in {
+            "",
+            "cdp_renderer_input_surface_not_observed",
+            "cdp_renderer_target_without_editable_surface",
+            "input_capable_window_not_proven_for_pid",
+            "input_capable_ui_not_proven_for_pid_window_present",
+        }
+    )
+
+
+def _custom_native_auth_usability_state_code(packet: dict[str, Any]) -> str:
+    machine_code = str(packet.get("machine_error_code") or "").strip()
+    if _custom_native_free_text_activation_ready(packet):
+        if (
+            packet.get("reused_existing_window") is True
+            or packet.get("existing_custom_window_reused") is True
+            or packet.get("packet_kind") == "custom_codex_show_window"
+        ):
+            return "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY"
+        return "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY"
+    if _custom_native_keychain_or_permission_prompt_observed(packet):
+        return "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT"
+    if (
+        packet.get("codex_desktop_auth_blocker_observed") is True
+        or machine_code == "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED"
+    ):
+        return "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
+    if _custom_native_renderer_no_input_surface_observed(packet):
+        return "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE"
+    return ""
+
+
+def _custom_native_auth_usability_fields(packet: dict[str, Any]) -> dict[str, Any]:
+    activation = packet if isinstance(packet, dict) else {}
+    state_code = _custom_native_auth_usability_state_code(activation)
+    ready = _custom_native_free_text_activation_ready(activation)
+    return {
+        "native_auth_usability_state_code": state_code,
+        "native_auth_usability_machine_error_code": "" if ready else state_code,
+        "native_auth_wall_observed": state_code == "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+        "native_keychain_or_permission_prompt_observed": (
+            state_code == "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT"
+        ),
+        "native_renderer_no_input_surface_observed": (
+            state_code == "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE"
+        ),
+        "native_auth_passed_input_ready": (
+            state_code == "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY"
+        ),
+        "native_resume_after_auth_ready": (
+            state_code == "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY"
+        ),
+    }
+
+
 def _custom_native_free_text_submit_proven(packet: dict[str, Any]) -> bool:
     return bool(
         packet.get("status") == "ok"
@@ -4918,6 +5007,13 @@ def _custom_native_free_text_activation_machine_error(packet: dict[str, Any]) ->
         return "OK"
     if machine_code == "OWNER_AUTHORIZATION_REQUIRED":
         return machine_code
+    auth_usability_code = _custom_native_auth_usability_state_code(packet)
+    if auth_usability_code in {
+        "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+        "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT",
+        "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE",
+    }:
+        return auth_usability_code
     if machine_code == "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED":
         return machine_code
     if machine_code == "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND":
@@ -5069,6 +5165,10 @@ def _custom_native_free_text_blocked_packet(
             else ""
         ),
         "native_activation_status": str(activation.get("status") or ""),
+        "native_free_text_activation_source": str(
+            activation.get("native_free_text_activation_source") or ""
+        ),
+        **_custom_native_auth_usability_fields(activation),
         "custom_process_observed": (
             activation.get("custom_process_observed") is True
             or activation.get("process_started") is True
@@ -5699,6 +5799,10 @@ def _custom_native_free_text_command_loop_proof_packet(
             else ""
         ),
         "native_activation_status": str(native_activation_packet.get("status") or ""),
+        "native_free_text_activation_source": str(
+            native_activation_packet.get("native_free_text_activation_source") or ""
+        ),
+        **_custom_native_auth_usability_fields(native_activation_packet),
         "custom_process_observed": (
             native_activation_packet.get("custom_process_observed") is True
             or native_activation_packet.get("process_started") is True
@@ -15944,6 +16048,19 @@ def build_handler(
                 api_snapshot = None
                 external_routes_packet = None
                 if codex_custom_live_prompt_authorized:
+                    resume_packet = show_custom_native_window_packet()
+                    resume_packet["native_free_text_activation_attempted"] = True
+                    resume_packet["native_free_text_activation_source"] = (
+                        "existing_window_resume_preflight"
+                    )
+                    resume_packet.update(
+                        _custom_native_auth_usability_fields(resume_packet)
+                    )
+                    if (
+                        resume_packet.get("machine_error_code")
+                        != "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+                    ):
+                        return resume_packet
                     operator_status, _operator_status_timeout = (
                         _bounded_operator_status_payload(operator_surface_session)
                     )
@@ -15968,6 +16085,7 @@ def build_handler(
                 packet["native_free_text_activation_source"] = (
                     "server_runtime_context"
                 )
+                packet.update(_custom_native_auth_usability_fields(packet))
                 record_custom_native_launch_packet(packet)
                 return packet
 

@@ -2051,17 +2051,379 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+            "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
         )
         self.assertTrue(packet["native_activation_attempted"])
         self.assertEqual(
             packet["native_activation_machine_error_code"],
-            "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+            "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
         )
+        self.assertTrue(packet["native_auth_wall_observed"])
         self.assertFalse(packet["native_activation_proven"])
         self.assertFalse(packet["prompt_submitted"])
         self.assertTrue(packet["runtime_context_file_proven"])
         submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_classifies_auth_wall(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-auth-wall",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": False,
+                    "input_capable_ui_observed": False,
+                    "native_free_text_activation_source": "existing_window_resume_preflight",
+                    "codex_desktop_auth_blocker_observed": True,
+                    "codex_desktop_auth_blocked_reason_class": (
+                        "codex_desktop_sign_in_required_for_renderer_surface"
+                    ),
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_AUTH_WALL_OBSERVED")
+        self.assertEqual(packet["native_auth_usability_state_code"], "CUSTOM_NATIVE_AUTH_WALL_OBSERVED")
+        self.assertEqual(
+            packet["native_free_text_activation_source"],
+            "existing_window_resume_preflight",
+        )
+        self.assertTrue(packet["native_auth_wall_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_auth_wall_wins_over_benign_keychain_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-auth-wall-keychain-benign",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": False,
+                    "input_capable_ui_observed": False,
+                    "codex_desktop_auth_blocker_observed": True,
+                    "codex_desktop_auth_blocked_reason_class": (
+                        "codex_desktop_sign_in_required_for_renderer_surface"
+                    ),
+                    "keychain_preflight_status": "ok",
+                    "keychain_preflight_reason_code": "KEYCHAIN_PRECHECK_OK",
+                    "prompt_avoidance_claim_scope": "keychain_preflight_only",
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_AUTH_WALL_OBSERVED")
+        self.assertEqual(packet["native_auth_usability_state_code"], "CUSTOM_NATIVE_AUTH_WALL_OBSERVED")
+        self.assertTrue(packet["native_auth_wall_observed"])
+        self.assertFalse(packet["native_keychain_or_permission_prompt_observed"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_classifies_keychain_permission_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-keychain-permission",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": True,
+                    "custom_window_visible": True,
+                    "input_capable_ui_observed": False,
+                    "keychain_preflight_status": "failed",
+                    "keychain_preflight_reason_code": "KEYCHAIN_PERMISSION_PROMPT",
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT",
+        )
+        self.assertTrue(packet["native_keychain_or_permission_prompt_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_classifies_renderer_no_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-renderer-no-input",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": True,
+                    "custom_window_visible": True,
+                    "renderer_mounted": True,
+                    "renderer_surface_blocked_reason_class": (
+                        "cdp_renderer_input_surface_not_observed"
+                    ),
+                    "input_capable_ui_observed": False,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE")
+        self.assertTrue(packet["native_renderer_no_input_surface_observed"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertFalse(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_marks_input_ready_before_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-input-ready-submit-missing-proof",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=lambda **_: {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "secret_value_exposed": False,
+                },
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
+        )
+        self.assertEqual(
+            packet["native_auth_usability_state_code"],
+            "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY",
+        )
+        self.assertTrue(packet["native_auth_passed_input_ready"])
+        self.assertFalse(packet["native_resume_after_auth_ready"])
+
+    def test_custom_native_free_text_activation_marks_resume_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-resume-ready-submit-missing-proof",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "ok",
+                    "packet_kind": "custom_codex_show_window",
+                    "machine_error_code": "OK",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=lambda **_: {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "secret_value_exposed": False,
+                },
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
+        )
+        self.assertEqual(
+            packet["native_auth_usability_state_code"],
+            "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY",
+        )
+        self.assertTrue(packet["native_resume_after_auth_ready"])
+        self.assertFalse(packet["native_auth_wall_observed"])
 
     def test_custom_native_free_text_activation_maps_process_missing_after_launch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

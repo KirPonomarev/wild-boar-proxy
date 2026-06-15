@@ -6206,6 +6206,21 @@ if (quickStartNativeFreeTextWindowLabel({
 if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED" }) !== "activation missing") {
   throw new Error("activation missing blocker label missing");
 }
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_AUTH_WALL_OBSERVED" }) !== "auth wall") {
+  throw new Error("auth wall blocker label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT" }) !== "permission prompt") {
+  throw new Error("permission prompt blocker label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE" }) !== "input missing") {
+  throw new Error("renderer no input blocker label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY" }) !== "input ready") {
+  throw new Error("input ready blocker label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY" }) !== "resume ready") {
+  throw new Error("resume ready blocker label missing");
+}
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
   machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
@@ -6363,6 +6378,14 @@ renderQuickStartNativeFreeTextCommandLoopProof({
   native_activation_proven: false,
   native_activation_machine_error_code: "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
   native_activation_status: "blocked",
+  native_free_text_activation_source: "existing_window_resume_preflight",
+  native_auth_usability_state_code: "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+  native_auth_usability_machine_error_code: "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+  native_auth_wall_observed: true,
+  native_keychain_or_permission_prompt_observed: false,
+  native_renderer_no_input_surface_observed: false,
+  native_auth_passed_input_ready: false,
+  native_resume_after_auth_ready: false,
   native_activation_packet: {
     status: "blocked",
     machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
@@ -6401,6 +6424,14 @@ sandbox.refreshQuickStartRouteStatus().then(() => {
     rendered.native_activation_proven !== false ||
     rendered.native_activation_machine_error_code !== "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH" ||
     rendered.native_activation_status !== "blocked" ||
+    rendered.native_free_text_activation_source !== "existing_window_resume_preflight" ||
+    rendered.native_auth_usability_state_code !== "CUSTOM_NATIVE_AUTH_WALL_OBSERVED" ||
+    rendered.native_auth_usability_machine_error_code !== "CUSTOM_NATIVE_AUTH_WALL_OBSERVED" ||
+    rendered.native_auth_wall_observed !== true ||
+    rendered.native_keychain_or_permission_prompt_observed !== false ||
+    rendered.native_renderer_no_input_surface_observed !== false ||
+    rendered.native_auth_passed_input_ready !== false ||
+    rendered.native_resume_after_auth_ready !== false ||
     rendered.native_activation_packet.machine_error_code !== "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND" ||
     rendered.native_submit_machine_error_code !== "CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED" ||
     rendered.native_submit_normalized_machine_error_code !== "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED" ||

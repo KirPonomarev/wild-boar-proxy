@@ -2295,6 +2295,21 @@ function quickStartNativeFreeTextBlockerLabel(packet) {
   if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
     return "auth required";
   }
+  if (machineCode === "CUSTOM_NATIVE_AUTH_WALL_OBSERVED") {
+    return "auth wall";
+  }
+  if (machineCode === "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT") {
+    return "permission prompt";
+  }
+  if (machineCode === "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE") {
+    return "input missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY") {
+    return "input ready";
+  }
+  if (machineCode === "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY") {
+    return "resume ready";
+  }
   if (
     machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
     || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
@@ -2331,6 +2346,12 @@ function quickStartNativeFreeTextWindowLabel(packet) {
     if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
       return "auth required";
     }
+    if (machineCode === "CUSTOM_NATIVE_AUTH_WALL_OBSERVED") {
+      return "auth wall";
+    }
+    if (machineCode === "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT") {
+      return "permission prompt";
+    }
     if (
       machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
       || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
@@ -2340,6 +2361,9 @@ function quickStartNativeFreeTextWindowLabel(packet) {
     return "window missing";
   }
   if (packet?.input_capable_ui_observed !== true) {
+    if (machineCode === "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE") {
+      return "input missing";
+    }
     return "input missing";
   }
   if (packet?.prompt_submitted !== true) {
@@ -3745,6 +3769,22 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_activation_machine_error_code || "",
       native_activation_status:
         packet?.native_activation_status || "",
+      native_free_text_activation_source:
+        packet?.native_free_text_activation_source || "",
+      native_auth_usability_state_code:
+        packet?.native_auth_usability_state_code || "",
+      native_auth_usability_machine_error_code:
+        packet?.native_auth_usability_machine_error_code || "",
+      native_auth_wall_observed:
+        packet?.native_auth_wall_observed === true,
+      native_keychain_or_permission_prompt_observed:
+        packet?.native_keychain_or_permission_prompt_observed === true,
+      native_renderer_no_input_surface_observed:
+        packet?.native_renderer_no_input_surface_observed === true,
+      native_auth_passed_input_ready:
+        packet?.native_auth_passed_input_ready === true,
+      native_resume_after_auth_ready:
+        packet?.native_resume_after_auth_ready === true,
       native_activation_packet:
         packet?.native_activation_packet || {},
       native_submit_packet:
