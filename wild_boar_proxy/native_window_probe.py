@@ -1641,8 +1641,11 @@ def _cdp_paste_clipboard_into_custom_target(
             packet["cdp_result"] = restore_error[:512]
         return packet
 
+    target_input_before_length = int(target_packet.get("target_input_before_length") or 0)
+    draft_text_literal = json.dumps(draft_text, ensure_ascii=False)
     verify_expression = f"""
 (() => {{
+  const expectedDraftText = {draft_text_literal};
   const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
   const visible = (node, minWidth = 80, minHeight = 20) => {{
     const rect = node.getBoundingClientRect();
@@ -1660,6 +1663,8 @@ def _cdp_paste_clipboard_into_custom_target(
   );
   const target = editable.length === 1 ? editable[0] : null;
   const text = target ? (('value' in target ? target.value : target.innerText) || '') : '';
+  const expectedAppendLength = {target_input_before_length + len(draft_text)};
+  const expectedReplaceLength = {len(draft_text)};
   return {{
     readyState: document.readyState,
     url: location.href,
@@ -1667,8 +1672,11 @@ def _cdp_paste_clipboard_into_custom_target(
     targetInputUnique: editable.length === 1,
     targetInputFocused: target ? document.activeElement === target : false,
     afterLength: text.length,
-    expectedAfterLength: {int(target_packet.get("target_input_before_length") or 0) + len(draft_text)},
-    pasteLengthDeltaMatches: text.length === {int(target_packet.get("target_input_before_length") or 0) + len(draft_text)},
+    expectedAppendLength,
+    expectedReplaceLength,
+    draftTextPresent: expectedDraftText.length > 0 && text.includes(expectedDraftText),
+    pasteLengthDeltaMatches: text.length === expectedAppendLength,
+    pasteReplaceLengthMatches: text.length === expectedReplaceLength,
     textValueCaptured: false
   }};
 }})()
@@ -1720,7 +1728,11 @@ def _cdp_paste_clipboard_into_custom_target(
                 },
             )
             paste_value = _cdp_result_value(verify_packet)
-            if paste_value.get("pasteLengthDeltaMatches") is not True:
+            paste_length_matches = (
+                paste_value.get("pasteLengthDeltaMatches") is True
+                or paste_value.get("pasteReplaceLengthMatches") is True
+            )
+            if paste_value.get("draftTextPresent") is not True or not paste_length_matches:
                 paste_error = "cdp_paste_verification_failed"
                 continue
             page_used = page
@@ -1747,8 +1759,11 @@ def _cdp_paste_clipboard_into_custom_target(
             "target_input_candidate": "single",
             "target_input_unique": True,
             "target_input_focused": paste_value.get("targetInputFocused") is True,
-            "target_input_before_length": int(target_packet.get("target_input_before_length") or 0),
+            "target_input_before_length": target_input_before_length,
             "target_input_after_length": int(paste_value.get("afterLength") or 0),
+            "draft_text_present_after_paste": paste_value.get("draftTextPresent") is True,
+            "paste_length_delta_matches": paste_value.get("pasteLengthDeltaMatches") is True,
+            "paste_replace_length_matches": paste_value.get("pasteReplaceLengthMatches") is True,
             "clipboard_backup_captured": True,
             "clipboard_handoff_attempted": True,
             "clipboard_write_attempted": True,

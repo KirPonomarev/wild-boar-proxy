@@ -1860,8 +1860,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn(".quick-start-voice-draft", css)
         self.assertIn('window.SpeechRecognition || window.webkitSpeechRecognition', voice_js)
         self.assertIn('fetch("api/wbp/voice-draft"', voice_js)
-        self.assertIn('fetch("api/wbp/custom-paste-bridge/preflight"', voice_js)
-        self.assertIn('fetch("api/wbp/custom-paste-bridge/live-paste"', voice_js)
+        self.assertIn('fetch("/api/wbp/custom-paste-bridge/preflight"', voice_js)
+        self.assertIn('fetch("/api/wbp/custom-paste-bridge/live-paste"', voice_js)
         self.assertIn("navigator.clipboard.writeText(transcript)", voice_js)
         self.assertIn("clipboard_handoff_available: true", voice_js)
         self.assertIn("clipboard_handoff_attempted: overrides.clipboard_handoff_attempted === true", voice_js)
@@ -2134,7 +2134,7 @@ const sandbox = {
   fetch: async (url, options = {}) => {
     const body = options.body ? JSON.parse(options.body) : {};
     requests.push({ url, body });
-    if (url === "api/wbp/custom-paste-bridge/preflight") {
+    if (url === "/api/wbp/custom-paste-bridge/preflight") {
       return response({
         schema_version: 1,
         packet_kind: "wbp_custom_paste_bridge",
@@ -2160,7 +2160,7 @@ const sandbox = {
         model_endpoint_called: false
       });
     }
-    if (url === "api/wbp/custom-paste-bridge/live-paste") {
+    if (url === "/api/wbp/custom-paste-bridge/live-paste") {
       return response({
         schema_version: 1,
         packet_kind: "wbp_custom_paste_bridge",
@@ -2209,7 +2209,7 @@ const sandbox = {
     throw new Error("preflight button must enable when transcript exists");
   }
   await runQuickStartVoicePastePreflight();
-  if (globalThis.requests[0].url !== "api/wbp/custom-paste-bridge/preflight") {
+  if (globalThis.requests[0].url !== "/api/wbp/custom-paste-bridge/preflight") {
     throw new Error("preflight endpoint mismatch");
   }
   if ("draft_text" in globalThis.requests[0].body) {
@@ -2219,7 +2219,7 @@ const sandbox = {
     throw new Error("live paste button must enable after fresh preflight");
   }
   await runQuickStartVoicePasteCustom();
-  if (globalThis.requests[1].url !== "api/wbp/custom-paste-bridge/live-paste") {
+  if (globalThis.requests[1].url !== "/api/wbp/custom-paste-bridge/live-paste") {
     throw new Error("live endpoint mismatch");
   }
   if (globalThis.requests[1].body.draft_text !== transcript) {

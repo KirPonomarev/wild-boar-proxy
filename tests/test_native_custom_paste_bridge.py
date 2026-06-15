@@ -40,7 +40,9 @@ class NativeCustomPasteBridgeTests(unittest.TestCase):
                         "targetInputFocused": True,
                         "afterLength": len(draft),
                         "expectedAfterLength": len(draft),
+                        "draftTextPresent": True,
                         "pasteLengthDeltaMatches": True,
+                        "pasteReplaceLengthMatches": True,
                         "textValueCaptured": False,
                     }
                 return {"id": message["id"], "result": {"result": {"value": value}}}
@@ -116,8 +118,11 @@ class NativeCustomPasteBridgeTests(unittest.TestCase):
                     "targetInputFocused": True,
                     "targetInputLength": 0,
                     "afterLength": len(draft),
-                    "expectedAfterLength": len(draft),
+                    "expectedAppendLength": len(draft),
+                    "expectedReplaceLength": len(draft),
+                    "draftTextPresent": True,
                     "pasteLengthDeltaMatches": True,
+                    "pasteReplaceLengthMatches": True,
                     "textValueCaptured": False,
                 }
                 return {"id": message["id"], "result": {"result": {"value": value}}}
@@ -159,6 +164,77 @@ class NativeCustomPasteBridgeTests(unittest.TestCase):
         self.assertTrue(packet["paste_ok"])
         self.assertTrue(packet["input_text_insert_succeeded"])
         self.assertFalse(packet["clipboard_restored"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertNotIn(draft, json.dumps(packet, ensure_ascii=False))
+
+    def test_cdp_clipboard_paste_accepts_replace_selection_without_raw_text(self) -> None:
+        draft = "replace selected placeholder"
+
+        def fake_cdp(_ws_url: str, message: dict[str, object], **_kwargs: object) -> dict[str, object]:
+            if message["method"] == "Runtime.evaluate":
+                if int(message["id"]) < 3900:
+                    value = {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "targetInputUnique": True,
+                        "targetInputFocused": True,
+                        "targetInputLength": 1,
+                        "textValueCaptured": False,
+                    }
+                else:
+                    value = {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "visibleInputCandidateCount": 1,
+                        "targetInputUnique": True,
+                        "targetInputFocused": True,
+                        "afterLength": len(draft),
+                        "expectedAppendLength": len(draft) + 1,
+                        "expectedReplaceLength": len(draft),
+                        "draftTextPresent": True,
+                        "pasteLengthDeltaMatches": False,
+                        "pasteReplaceLengthMatches": True,
+                        "textValueCaptured": False,
+                    }
+                return {"id": message["id"], "result": {"result": {"value": value}}}
+            if message["method"] == "Input.dispatchKeyEvent":
+                return {"id": message["id"], "result": {}}
+            raise AssertionError(f"unexpected CDP method {message['method']}")
+
+        with (
+            mock.patch.object(native_probe, "_devtools_port_owned_by_pid", return_value=(True, "111")),
+            mock.patch.object(
+                native_probe,
+                "_cdp_app_page_targets",
+                return_value=([
+                    {
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/1",
+                        "url": "app://-/index.html",
+                        "type": "page",
+                    }
+                ], ""),
+            ),
+            mock.patch.object(native_probe, "_cdp_command", side_effect=fake_cdp),
+            mock.patch.object(native_probe, "_read_macos_clipboard_text", return_value=(True, "old", "")),
+            mock.patch.object(native_probe, "_write_macos_clipboard_text", return_value=(True, "")),
+        ):
+            packet = native_probe._cdp_paste_clipboard_into_custom_target(
+                111,
+                draft,
+                request_id="replace-test",
+                allowed_owner_pids=[111],
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["paste_ok"])
+        self.assertTrue(packet["input_text_insert_succeeded"])
+        self.assertTrue(packet["draft_text_present_after_paste"])
+        self.assertFalse(packet["paste_length_delta_matches"])
+        self.assertTrue(packet["paste_replace_length_matches"])
+        self.assertEqual(packet["target_input_before_length"], 1)
+        self.assertEqual(packet["target_input_after_length"], len(draft))
         self.assertFalse(packet["prompt_submitted"])
         self.assertNotIn(draft, json.dumps(packet, ensure_ascii=False))
 

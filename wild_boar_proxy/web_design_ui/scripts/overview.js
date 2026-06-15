@@ -4166,7 +4166,7 @@ async function runQuickStartVoicePastePreflight() {
   renderQuickStartVoiceDraft();
   try {
     const metadata = await quickStartVoiceDraftMetadata();
-    const response = await fetch("api/wbp/custom-paste-bridge/preflight", {
+    const response = await fetch("/api/wbp/custom-paste-bridge/preflight", {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
@@ -4217,7 +4217,7 @@ async function runQuickStartVoicePasteCustom() {
   renderQuickStartVoiceDraft();
   try {
     const metadata = await quickStartVoiceDraftMetadata();
-    const response = await fetch("api/wbp/custom-paste-bridge/live-paste", {
+    const response = await fetch("/api/wbp/custom-paste-bridge/live-paste", {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
