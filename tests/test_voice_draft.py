@@ -25,6 +25,11 @@ class VoiceDraftContractTests(unittest.TestCase):
         self.assertEqual(packet["voice_capture_scope"], "wbp_browser_local_draft")
         self.assertTrue(packet["voice_input_ui_present"])
         self.assertTrue(packet["transcription_adapter_fail_closed"])
+        self.assertTrue(packet["clipboard_handoff_available"])
+        self.assertFalse(packet["clipboard_handoff_attempted"])
+        self.assertFalse(packet["clipboard_handoff_ok"])
+        self.assertFalse(packet["clipboard_contains_transcript"])
+        self.assertTrue(packet["empty_transcript_copy_blocked"])
 
     def test_voice_draft_contract_does_not_mutate_custom_or_persist_audio(self) -> None:
         packet = build_voice_draft_contract_packet()

@@ -3769,6 +3769,11 @@ function quickStartVoiceClientPacket(overrides = {}) {
     custom_codex_not_mutated: true,
     custom_window_mutation_attempted: false,
     prompt_not_submitted: true,
+    clipboard_handoff_available: true,
+    clipboard_handoff_attempted: overrides.clipboard_handoff_attempted === true,
+    clipboard_handoff_ok: overrides.clipboard_handoff_ok === true,
+    clipboard_contains_transcript: overrides.clipboard_contains_transcript === true,
+    empty_transcript_copy_blocked: overrides.empty_transcript_copy_blocked === true,
     clipboard_copy_only: true,
     no_secret_exposed: true,
     secret_value_exposed: false,
@@ -3985,7 +3990,11 @@ async function copyQuickStartVoiceDraft() {
     renderQuickStartVoiceDraft(
       quickStartVoiceClientPacket({
         status: "blocked",
-        machine_error_code: "EMPTY_TRANSCRIPT"
+        machine_error_code: "EMPTY_TRANSCRIPT",
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: false,
+        clipboard_contains_transcript: false,
+        empty_transcript_copy_blocked: true
       })
     );
     return;
@@ -3998,7 +4007,11 @@ async function copyQuickStartVoiceDraft() {
     renderQuickStartVoiceDraft(
       quickStartVoiceClientPacket({
         status: "ok",
-        machine_error_code: "VOICE_DRAFT_COPY_OK"
+        machine_error_code: "VOICE_DRAFT_COPY_OK",
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: true,
+        clipboard_contains_transcript: true,
+        empty_transcript_copy_blocked: false
       })
     );
   } catch (error) {
@@ -4007,7 +4020,11 @@ async function copyQuickStartVoiceDraft() {
       quickStartVoiceClientPacket({
         status: "failed",
         machine_error_code: "CLIPBOARD_WRITE_FAILED",
-        human_message: error.message
+        human_message: error.message,
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: false,
+        clipboard_contains_transcript: false,
+        empty_transcript_copy_blocked: false
       })
     );
   }

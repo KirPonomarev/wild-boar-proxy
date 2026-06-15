@@ -1859,6 +1859,11 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('window.SpeechRecognition || window.webkitSpeechRecognition', voice_js)
         self.assertIn('fetch("api/wbp/voice-draft"', voice_js)
         self.assertIn("navigator.clipboard.writeText(transcript)", voice_js)
+        self.assertIn("clipboard_handoff_available: true", voice_js)
+        self.assertIn("clipboard_handoff_attempted: overrides.clipboard_handoff_attempted === true", voice_js)
+        self.assertIn("clipboard_handoff_ok: overrides.clipboard_handoff_ok === true", voice_js)
+        self.assertIn("clipboard_contains_transcript: overrides.clipboard_contains_transcript === true", voice_js)
+        self.assertIn("empty_transcript_copy_blocked: overrides.empty_transcript_copy_blocked === true", voice_js)
         self.assertIn("transcript_text_included_in_packet: false", voice_js)
         self.assertIn("server_audio_ingress_enabled: false", voice_js)
         self.assertIn("raw_audio_recorded_by_server: false", voice_js)
@@ -1884,6 +1889,160 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
             'document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft())',
             js,
         )
+
+    def test_quick_start_voice_draft_copy_packets_are_executable_and_redacted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.className = "";
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.id = "";
+    this.lastElementChild = { textContent: "" };
+    this.readOnly = false;
+    this.textContent = "";
+    this.value = "";
+  }
+  addEventListener() {}
+  append(...nodes) {
+    for (const item of nodes) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  removeAttribute(name) { delete this[name]; }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  setAttribute(name, value) { this[name] = value; }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+function packet() {
+  return JSON.parse(node("quickStartVoiceDraftPacket").textContent);
+}
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const sandbox = {
+  console,
+  document: {
+    documentElement: { lang: "ru" },
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  navigator: {
+    language: "ru-RU",
+    clipboard: {
+      async writeText(text) {
+        if (sandbox.__clipboardFailure) {
+          throw sandbox.__clipboardFailure;
+        }
+        sandbox.__clipboardText = text;
+      }
+    }
+  },
+  window: {
+    SpeechRecognition: class {},
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout
+};
+sandbox.__clipboardText = "";
+sandbox.__clipboardFailure = null;
+
+(async () => {
+  vm.createContext(sandbox);
+  const source = fs.readFileSync("scripts/overview.js", "utf8");
+  await vm.runInContext(`${source}
+(async () => {
+  renderQuickStartVoiceDraft();
+  await copyQuickStartVoiceDraft();
+  let emptyPacket = JSON.parse(document.getElementById("quickStartVoiceDraftPacket").textContent);
+  if (emptyPacket.machine_error_code !== "EMPTY_TRANSCRIPT") {
+    throw new Error("empty copy code mismatch: " + emptyPacket.machine_error_code);
+  }
+  if (emptyPacket.clipboard_handoff_attempted !== true || emptyPacket.clipboard_handoff_ok !== false) {
+    throw new Error("empty copy handoff booleans mismatch: " + JSON.stringify(emptyPacket));
+  }
+  if (emptyPacket.clipboard_contains_transcript !== false || emptyPacket.empty_transcript_copy_blocked !== true) {
+    throw new Error("empty copy guard mismatch: " + JSON.stringify(emptyPacket));
+  }
+
+  const transcript = "WBP voice clipboard handoff text";
+  quickStartVoiceDraftState.transcript = transcript;
+  renderQuickStartVoiceDraft();
+  if (document.getElementById("quickStartVoiceCopyAction").disabled !== false) {
+    throw new Error("copy button must enable when transcript exists");
+  }
+  await copyQuickStartVoiceDraft();
+  let copiedPacket = JSON.parse(document.getElementById("quickStartVoiceDraftPacket").textContent);
+  if (copiedPacket.machine_error_code !== "VOICE_DRAFT_COPY_OK") {
+    throw new Error("copy code mismatch: " + copiedPacket.machine_error_code);
+  }
+  if (copiedPacket.clipboard_handoff_attempted !== true || copiedPacket.clipboard_handoff_ok !== true) {
+    throw new Error("copy handoff booleans mismatch: " + JSON.stringify(copiedPacket));
+  }
+  if (copiedPacket.clipboard_contains_transcript !== true || copiedPacket.transcript_length !== transcript.length) {
+    throw new Error("copy transcript metadata mismatch: " + JSON.stringify(copiedPacket));
+  }
+  if (JSON.stringify(copiedPacket).includes(transcript)) {
+    throw new Error("packet must not include raw transcript text");
+  }
+  if (globalThis.__clipboardText !== transcript) {
+    throw new Error("clipboard text mismatch: " + globalThis.__clipboardText);
+  }
+
+  globalThis.__clipboardFailure = new Error("blocked clipboard");
+  await copyQuickStartVoiceDraft();
+  let failedPacket = JSON.parse(document.getElementById("quickStartVoiceDraftPacket").textContent);
+  if (failedPacket.machine_error_code !== "CLIPBOARD_WRITE_FAILED") {
+    throw new Error("failure code mismatch: " + failedPacket.machine_error_code);
+  }
+  if (failedPacket.clipboard_handoff_attempted !== true || failedPacket.clipboard_handoff_ok !== false) {
+    throw new Error("failure handoff booleans mismatch: " + JSON.stringify(failedPacket));
+  }
+  if (failedPacket.clipboard_contains_transcript !== false) {
+    throw new Error("failure packet must not claim clipboard transcript: " + JSON.stringify(failedPacket));
+  }
+})()`, sandbox);
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_quick_start_api_selector_uses_available_api_routes_when_api_lane_is_absent(self) -> None:
         script = r"""
