@@ -11137,6 +11137,34 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
             if route.method == "POST":
                 self.assertTrue(route.auth_required, route.path)
 
+    def test_voice_draft_get_route_returns_fail_closed_wbp_contract(self) -> None:
+        route = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("GET", "/api/wbp/voice-draft")
+        self.assertIsNotNone(route)
+        assert route is not None
+        self.assertEqual(route.effect, EFFECT_READ)
+        self.assertFalse(route.auth_required)
+
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            packet = json.loads(fetch(f"{base}/api/wbp/voice-draft"))
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "wbp_voice_draft_contract")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "TRANSCRIPTION_ENGINE_NOT_CONFIGURED")
+        self.assertEqual(packet["voice_capture_scope"], "wbp_browser_local_draft")
+        self.assertFalse(packet["server_audio_ingress_enabled"])
+        self.assertFalse(packet["raw_audio_recorded_by_server"])
+        self.assertTrue(packet["custom_codex_not_mutated"])
+        self.assertTrue(packet["prompt_not_submitted"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_registry_dynamic_prefixes_and_queryless_lookup(self) -> None:
         action = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
             "POST",

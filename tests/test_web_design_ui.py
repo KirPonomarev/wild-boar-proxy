@@ -1804,7 +1804,6 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
 
         for forbidden in (
             "<canvas",
-            "<textarea",
             "<pre",
             'type="file"',
             "raw JSON",
@@ -1830,6 +1829,61 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("missing_secret_ref", js)
         self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
         self.assertIn('const primary = source === "live"', js)
+
+    def test_quick_start_voice_draft_is_wbp_local_and_never_autosubmits_custom(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        section = self._section_html(html, "quickStartScreen")
+        voice_card_match = re.search(
+            r'<section class="card quick-start-card quick-start-voice-card"[\s\S]*?</section>',
+            section,
+        )
+        self.assertIsNotNone(voice_card_match)
+        assert voice_card_match is not None
+        voice_card = voice_card_match.group(0)
+        voice_js = js[
+            js.index("function quickStartVoiceRecognitionConstructor"):
+            js.index("function lockQuickStartRouteProofResult")
+        ]
+
+        self.assertIn('id="quickStartVoiceRecordAction"', voice_card)
+        self.assertIn('id="quickStartVoiceClearAction"', voice_card)
+        self.assertIn('id="quickStartVoiceCopyAction"', voice_card)
+        self.assertIn('id="quickStartVoiceDraftText"', voice_card)
+        self.assertIn('id="quickStartVoiceDraftPacket"', voice_card)
+        self.assertNotIn("data-ui-action", voice_card)
+        self.assertNotIn("href=", voice_card)
+        self.assertIn(".quick-start-voice-card", css)
+        self.assertIn(".quick-start-voice-draft", css)
+        self.assertIn('window.SpeechRecognition || window.webkitSpeechRecognition', voice_js)
+        self.assertIn('fetch("api/wbp/voice-draft"', voice_js)
+        self.assertIn("navigator.clipboard.writeText(transcript)", voice_js)
+        self.assertIn("transcript_text_included_in_packet: false", voice_js)
+        self.assertIn("server_audio_ingress_enabled: false", voice_js)
+        self.assertIn("raw_audio_recorded_by_server: false", voice_js)
+        self.assertIn("custom_codex_not_mutated: true", voice_js)
+        self.assertIn("custom_window_mutation_attempted: false", voice_js)
+        self.assertIn("prompt_not_submitted: true", voice_js)
+        self.assertIn("secret_value_exposed: false", voice_js)
+        self.assertIn("raw_backend_details_exposed: false", voice_js)
+        self.assertIn("TRANSCRIPTION_ENGINE_NOT_CONFIGURED", voice_js)
+        self.assertNotIn("MediaRecorder", voice_js)
+        self.assertNotIn("api/action", voice_js)
+        self.assertNotIn("api/operator/run", voice_js)
+        self.assertNotIn("api/codex/custom", voice_js)
+        self.assertIn(
+            'document.getElementById("quickStartVoiceRecordAction")?.addEventListener("click", () => startQuickStartVoiceDraft())',
+            js,
+        )
+        self.assertIn(
+            'document.getElementById("quickStartVoiceClearAction")?.addEventListener("click", () => clearQuickStartVoiceDraft())',
+            js,
+        )
+        self.assertIn(
+            'document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft())',
+            js,
+        )
 
     def test_quick_start_api_selector_uses_available_api_routes_when_api_lane_is_absent(self) -> None:
         script = r"""

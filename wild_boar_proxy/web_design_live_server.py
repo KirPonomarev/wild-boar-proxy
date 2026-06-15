@@ -168,6 +168,7 @@ from wild_boar_proxy.web_ingress import (
     unsafe_bind_requested,
     web_ingress_rejection_packet,
 )
+from wild_boar_proxy.voice_draft import build_voice_draft_contract_packet
 from wild_boar_proxy.web_rate_limit import (
     DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
     WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
@@ -1217,6 +1218,7 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/operator/transcript"),
     _get_route("/api/review-surface"),
     _get_route("/api/review-commands"),
+    _get_route("/api/wbp/voice-draft"),
     _get_route("/api/codex/launch-modes"),
     _get_route("/api/codex/original/status"),
     _get_route("/api/codex/custom/status"),
@@ -15814,6 +15816,11 @@ def build_handler(
                     "commands": review_allowlist_metadata(),
                 }
             )
+            return
+
+        def _handle_get_api_wbp_voice_draft(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_voice_draft_contract_packet())
             return
 
         def _handle_get_api_codex_launch_modes(self, request_path: str) -> None:

@@ -554,6 +554,13 @@ let codexCustomAgentAliases = { ...CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS };
 let codexCustomAgentAliasBindingPacket = null;
 let codexCustomAgentAliasBindingSessionId = "";
 let codexCustomAgentRuntimeBindingPacket = null;
+let quickStartVoiceDraftState = {
+  serverPacket: null,
+  transcript: "",
+  recognition: null,
+  listening: false,
+  lastErrorCode: ""
+};
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -3699,6 +3706,310 @@ function setQuickStartChip(id, visual, label) {
     chip.lastElementChild.textContent = label || "unknown";
   } else {
     chip.textContent = label || "unknown";
+  }
+}
+
+function quickStartVoiceRecognitionConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function quickStartVoiceAdapterAvailable() {
+  return Boolean(quickStartVoiceRecognitionConstructor());
+}
+
+function quickStartVoiceStatusVisual(packet) {
+  const status = packet?.status || "";
+  const code = packet?.machine_error_code || "";
+  if (status === "ok" || code === "VOICE_DRAFT_COPY_OK") {
+    return "green";
+  }
+  if (status === "recording") {
+    return "blue";
+  }
+  if (code === "MICROPHONE_PERMISSION_DENIED" || status === "failed") {
+    return "red";
+  }
+  if (status === "blocked" || status === "integration_failure") {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartVoiceClientPacket(overrides = {}) {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  const adapterAvailable = quickStartVoiceAdapterAvailable();
+  const defaultStatus = transcript ? "ok" : (adapterAvailable ? "ready" : "blocked");
+  const defaultCode = transcript
+    ? "OK"
+    : (adapterAvailable ? "VOICE_DRAFT_READY" : "TRANSCRIPTION_ENGINE_NOT_CONFIGURED");
+  return {
+    schema_version: 1,
+    packet_kind: "wbp_voice_draft_client_packet",
+    endpoint: "/api/wbp/voice-draft",
+    status: overrides.status || defaultStatus,
+    machine_error_code: overrides.machine_error_code || defaultCode,
+    human_message: overrides.human_message || "",
+    voice_input_ui_present: true,
+    voice_capture_scope: "wbp_browser_local_draft",
+    browser_speech_api_available: adapterAvailable,
+    transcription_adapter: adapterAvailable ? "browser_speech_recognition" : "none",
+    transcription_adapter_fail_closed: true,
+    audio_recording_explicit_user_action: true,
+    transcript_preview_required: true,
+    transcript_present: transcript.length > 0,
+    transcript_length: transcript.length,
+    transcript_text_included_in_packet: false,
+    server_audio_ingress_enabled: false,
+    raw_audio_recorded_by_server: false,
+    raw_audio_persisted_by_default: false,
+    transcript_persisted_by_server: false,
+    custom_codex_not_mutated: true,
+    custom_window_mutation_attempted: false,
+    prompt_not_submitted: true,
+    clipboard_copy_only: true,
+    no_secret_exposed: true,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    changed_files: [],
+    server_contract_machine_error_code:
+      quickStartVoiceDraftState.serverPacket?.machine_error_code || "",
+    last_error_code: quickStartVoiceDraftState.lastErrorCode || "",
+    next_action: transcript ? "copy_draft_manually" : "dictate_or_type_draft"
+  };
+}
+
+function renderQuickStartVoiceDraft(packet = quickStartVoiceClientPacket()) {
+  const draft = document.getElementById("quickStartVoiceDraftText");
+  if (draft) {
+    draft.value = quickStartVoiceDraftState.transcript || "";
+  }
+  const hasTranscript = Boolean(quickStartVoiceDraftState.transcript);
+  const recordButton = document.getElementById("quickStartVoiceRecordAction");
+  const clearButton = document.getElementById("quickStartVoiceClearAction");
+  const copyButton = document.getElementById("quickStartVoiceCopyAction");
+  if (recordButton?.lastElementChild) {
+    recordButton.lastElementChild.textContent = quickStartVoiceDraftState.listening
+      ? "Слушаю"
+      : "Надиктовать";
+  }
+  if (clearButton) {
+    clearButton.disabled = !hasTranscript && !quickStartVoiceDraftState.lastErrorCode;
+  }
+  if (copyButton) {
+    copyButton.disabled = !hasTranscript;
+  }
+  const adapterAvailable = quickStartVoiceAdapterAvailable();
+  setQuickStartChip("quickStartVoiceDraftChip", quickStartVoiceStatusVisual(packet), packet.machine_error_code || "pending");
+  setQuickStartChip(
+    "quickStartVoiceEngineState",
+    adapterAvailable ? "green" : "amber",
+    adapterAvailable ? "browser" : "нет engine"
+  );
+  setQuickStartChip("quickStartVoiceScopeState", "green", "WBP draft");
+  setQuickStartChip(
+    "quickStartVoiceCustomState",
+    packet.custom_codex_not_mutated ? "green" : "red",
+    packet.custom_codex_not_mutated ? "не тронут" : "mutation"
+  );
+  setQuickStartChip(
+    "quickStartVoiceAudioState",
+    packet.raw_audio_recorded_by_server === false && packet.raw_audio_persisted_by_default === false
+      ? "green"
+      : "red",
+    "не хранится"
+  );
+  const packetNode = document.getElementById("quickStartVoiceDraftPacket");
+  if (packetNode) {
+    packetNode.textContent = JSON.stringify(packet, null, 2);
+  }
+}
+
+async function refreshQuickStartVoiceDraftContract() {
+  try {
+    const response = await fetch("api/wbp/voice-draft", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`voice draft contract http ${response.status}`);
+    }
+    quickStartVoiceDraftState.serverPacket = await response.json();
+    renderQuickStartVoiceDraft();
+  } catch (error) {
+    quickStartVoiceDraftState.serverPacket = {
+      schema_version: 1,
+      packet_kind: "wbp_voice_draft_contract",
+      endpoint: "/api/wbp/voice-draft",
+      status: "integration_failure",
+      machine_error_code: "VOICE_DRAFT_CONTRACT_FETCH_FAILED",
+      human_message: error.message,
+      server_audio_ingress_enabled: false,
+      raw_audio_recorded_by_server: false,
+      raw_audio_persisted_by_default: false,
+      transcript_persisted_by_server: false,
+      custom_codex_not_mutated: true,
+      custom_window_mutation_attempted: false,
+      prompt_not_submitted: true,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      no_secret_exposed: true
+    };
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: quickStartVoiceAdapterAvailable() ? "ready" : "blocked",
+        machine_error_code: quickStartVoiceAdapterAvailable()
+          ? "VOICE_DRAFT_READY"
+          : "TRANSCRIPTION_ENGINE_NOT_CONFIGURED",
+        human_message: error.message
+      })
+    );
+  }
+}
+
+function quickStartVoiceRecognitionLanguage() {
+  const htmlLang = document.documentElement?.lang || "";
+  if (htmlLang.toLowerCase().startsWith("ru")) {
+    return "ru-RU";
+  }
+  if (typeof navigator !== "undefined" && navigator.language) {
+    return navigator.language;
+  }
+  return "ru-RU";
+}
+
+function startQuickStartVoiceDraft() {
+  if (quickStartVoiceDraftState.listening) {
+    try {
+      quickStartVoiceDraftState.recognition?.stop();
+    } catch (error) {
+      quickStartVoiceDraftState.lastErrorCode = "BROWSER_SPEECH_STOP_FAILED";
+    }
+    return;
+  }
+  const Recognition = quickStartVoiceRecognitionConstructor();
+  if (!Recognition) {
+    quickStartVoiceDraftState.lastErrorCode = "TRANSCRIPTION_ENGINE_NOT_CONFIGURED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "blocked",
+        machine_error_code: "TRANSCRIPTION_ENGINE_NOT_CONFIGURED",
+        human_message: "Browser SpeechRecognition is unavailable in this Custom Codex surface."
+      })
+    );
+    return;
+  }
+  let finalTranscript = "";
+  const recognition = new Recognition();
+  recognition.lang = quickStartVoiceRecognitionLanguage();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  quickStartVoiceDraftState.recognition = recognition;
+  quickStartVoiceDraftState.listening = true;
+  quickStartVoiceDraftState.lastErrorCode = "";
+  recognition.onresult = (event) => {
+    let interimTranscript = "";
+    for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
+      const phrase = String(event.results[index]?.[0]?.transcript || "");
+      if (event.results[index]?.isFinal) {
+        finalTranscript = `${finalTranscript} ${phrase}`.trim();
+      } else {
+        interimTranscript = `${interimTranscript} ${phrase}`.trim();
+      }
+    }
+    quickStartVoiceDraftState.transcript = `${finalTranscript} ${interimTranscript}`.trim();
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "recording",
+        machine_error_code: quickStartVoiceDraftState.transcript ? "VOICE_DRAFT_PARTIAL" : "VOICE_DRAFT_RECORDING"
+      })
+    );
+  };
+  recognition.onerror = (event) => {
+    const errorCode = event?.error === "not-allowed"
+      ? "MICROPHONE_PERMISSION_DENIED"
+      : "BROWSER_SPEECH_RECOGNITION_ERROR";
+    quickStartVoiceDraftState.listening = false;
+    quickStartVoiceDraftState.lastErrorCode = errorCode;
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: errorCode,
+        human_message: String(event?.message || event?.error || "Speech recognition failed.")
+      })
+    );
+  };
+  recognition.onend = () => {
+    quickStartVoiceDraftState.listening = false;
+    if (quickStartVoiceDraftState.lastErrorCode) {
+      return;
+    }
+    const hasTranscript = Boolean(quickStartVoiceDraftState.transcript);
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: hasTranscript ? "ok" : "blocked",
+        machine_error_code: hasTranscript ? "OK" : "EMPTY_TRANSCRIPT"
+      })
+    );
+  };
+  try {
+    recognition.start();
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "recording",
+        machine_error_code: "VOICE_DRAFT_RECORDING"
+      })
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.listening = false;
+    quickStartVoiceDraftState.lastErrorCode = "BROWSER_SPEECH_START_FAILED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: "BROWSER_SPEECH_START_FAILED",
+        human_message: error.message
+      })
+    );
+  }
+}
+
+function clearQuickStartVoiceDraft() {
+  quickStartVoiceDraftState.transcript = "";
+  quickStartVoiceDraftState.lastErrorCode = "";
+  renderQuickStartVoiceDraft();
+}
+
+async function copyQuickStartVoiceDraft() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  if (!transcript) {
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "blocked",
+        machine_error_code: "EMPTY_TRANSCRIPT"
+      })
+    );
+    return;
+  }
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      throw new Error("Clipboard API is unavailable.");
+    }
+    await navigator.clipboard.writeText(transcript);
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "ok",
+        machine_error_code: "VOICE_DRAFT_COPY_OK"
+      })
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.lastErrorCode = "CLIPBOARD_WRITE_FAILED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: "CLIPBOARD_WRITE_FAILED",
+        human_message: error.message
+      })
+    );
   }
 }
 
@@ -16475,10 +16786,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
   document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof());
   document.getElementById("quickStartModelReasoningMatrixAction")?.addEventListener("click", () => runQuickStartModelReasoningAvailabilityMatrix());
+  document.getElementById("quickStartVoiceRecordAction")?.addEventListener("click", () => startQuickStartVoiceDraft());
+  document.getElementById("quickStartVoiceClearAction")?.addEventListener("click", () => clearQuickStartVoiceDraft());
+  document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft());
   await ensureActionMetadataLoaded();
   applyActionAvailability();
   setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
+  renderQuickStartVoiceDraft();
+  refreshQuickStartVoiceDraftContract();
   applyCodexRouteSelection(readStoredCodexRouteSelection());
   sourcePicker.value = initialSource;
   picker.value = initialState;
