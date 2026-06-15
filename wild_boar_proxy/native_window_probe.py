@@ -2289,8 +2289,10 @@ def _cdp_submit_prompt_to_app_page(
   };
 })()
 """.strip()
+    expected_prompt_literal = json.dumps(prompt, ensure_ascii=False)
     verify_expression = f"""
 (() => {{
+  const expectedPrompt = {expected_prompt_literal};
   const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
   const visible = (node, minWidth = 80, minHeight = 20) => {{
     const rect = node.getBoundingClientRect();
@@ -2304,11 +2306,18 @@ def _cdp_submit_prompt_to_app_page(
     ? document.activeElement
     : nodes.find((candidate) => visible(candidate) && candidate.disabled !== true);
   const text = node ? (('value' in node ? node.value : node.innerText) || '') : '';
+  const expectedLength = expectedPrompt.length;
+  const normalizedText = text.replace(/\\r\\n/g, "\\n").replace(/\\n\\n/g, "\\n");
   return {{
     inputFocused: !!node,
-    insertedLengthMatches: text.length === {len(prompt)},
+    insertedLengthMatches: text === expectedPrompt || normalizedText === expectedPrompt,
     insertedLength: text.length,
-    expectedLength: {len(prompt)},
+    expectedLength,
+    insertedTextPresent: (
+      expectedPrompt.length > 0 &&
+      (text.includes(expectedPrompt) || normalizedText === expectedPrompt)
+    ),
+    insertedNormalizedLengthMatches: normalizedText.length === expectedLength,
     textValueCaptured: false
   }};
 }})()
@@ -2370,6 +2379,12 @@ def _cdp_submit_prompt_to_app_page(
     last_error = ""
     for index, page in enumerate(pages, start=1):
         ws_url = str(page["webSocketDebuggerUrl"])
+        insert_method = ""
+        clipboard_backup_captured = False
+        clipboard_handoff_attempted = False
+        clipboard_write_attempted = False
+        clipboard_restore_attempted = False
+        clipboard_restored = False
         try:
             focus_packet = _cdp_command(
                 ws_url,
@@ -2386,6 +2401,7 @@ def _cdp_submit_prompt_to_app_page(
             if focus_value.get("focused") is not True:
                 last_error = "cdp_editable_focus_failed"
                 continue
+            insert_succeeded = False
             insert_packet = _cdp_command(
                 ws_url,
                 {
@@ -2396,19 +2412,109 @@ def _cdp_submit_prompt_to_app_page(
             )
             if insert_packet.get("status") == "blocked" or "error" in insert_packet:
                 last_error = "cdp_insert_text_failed"
-                continue
-            verify_packet = _cdp_command(
-                ws_url,
-                {
-                    "id": 3200 + index,
-                    "method": "Runtime.evaluate",
-                    "params": {"expression": verify_expression, "returnByValue": True},
-                },
-            )
-            verify_value = _cdp_result_value(verify_packet)
-            if verify_value.get("insertedLengthMatches") is not True:
-                last_error = "cdp_insert_text_verification_failed"
-                continue
+            else:
+                verify_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3200 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": verify_expression, "returnByValue": True},
+                    },
+                )
+                verify_value = _cdp_result_value(verify_packet)
+                if verify_value.get("insertedLengthMatches") is True:
+                    insert_succeeded = True
+                    insert_method = "cdp_insert_text"
+                else:
+                    last_error = "cdp_insert_text_verification_failed"
+            if not insert_succeeded:
+                clipboard_ok, previous_clipboard, clipboard_error = _read_macos_clipboard_text()
+                clipboard_backup_captured = clipboard_ok
+                if not clipboard_ok:
+                    last_error = f"clipboard_backup_failed:{clipboard_error[:120]}"
+                    continue
+                clipboard_handoff_attempted = True
+                write_ok, write_error = _write_macos_clipboard_text(prompt)
+                clipboard_write_attempted = True
+                if not write_ok:
+                    restore_ok, _restore_error = _write_macos_clipboard_text(previous_clipboard)
+                    clipboard_restore_attempted = True
+                    clipboard_restored = restore_ok
+                    last_error = f"clipboard_write_failed:{write_error[:120]}"
+                    continue
+                refocus_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3350 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": focus_expression, "returnByValue": True},
+                    },
+                )
+                refocus_value = _cdp_result_value(refocus_packet)
+                if refocus_value.get("focused") is not True:
+                    restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+                    clipboard_restore_attempted = True
+                    clipboard_restored = restore_ok
+                    last_error = "cdp_clipboard_paste_refocus_failed"
+                    if not restore_ok:
+                        last_error = f"clipboard_restore_failed:{restore_error[:120]}"
+                    continue
+                paste_down = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3400 + index,
+                        "method": "Input.dispatchKeyEvent",
+                        "params": {
+                            "type": "rawKeyDown",
+                            "modifiers": 4,
+                            "key": "v",
+                            "code": "KeyV",
+                            "windowsVirtualKeyCode": 86,
+                            "commands": ["Paste"],
+                        },
+                    },
+                )
+                paste_up = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3500 + index,
+                        "method": "Input.dispatchKeyEvent",
+                        "params": {
+                            "type": "keyUp",
+                            "modifiers": 4,
+                            "key": "v",
+                            "code": "KeyV",
+                            "windowsVirtualKeyCode": 86,
+                        },
+                    },
+                )
+                verify_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3600 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": verify_expression, "returnByValue": True},
+                    },
+                )
+                verify_value = _cdp_result_value(verify_packet)
+                restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+                clipboard_restore_attempted = True
+                clipboard_restored = restore_ok
+                if not restore_ok:
+                    last_error = f"clipboard_restore_failed:{restore_error[:120]}"
+                    continue
+                if (
+                    paste_down.get("status") == "blocked"
+                    or "error" in paste_down
+                    or "error" in paste_up
+                ):
+                    last_error = "cdp_clipboard_paste_key_event_failed"
+                    continue
+                if verify_value.get("insertedLengthMatches") is not True:
+                    last_error = "cdp_clipboard_paste_verification_failed"
+                    continue
+                insert_succeeded = True
+                insert_method = "cdp_clipboard_paste"
             submit_packet = _cdp_command(
                 ws_url,
                 {
@@ -2451,6 +2557,12 @@ def _cdp_submit_prompt_to_app_page(
             "browser_cdp_authority_widened": False,
             "input_text_insert_attempted": True,
             "input_text_insert_succeeded": True,
+            "input_text_insert_method": insert_method,
+            "clipboard_backup_captured": clipboard_backup_captured,
+            "clipboard_handoff_attempted": clipboard_handoff_attempted,
+            "clipboard_write_attempted": clipboard_write_attempted,
+            "clipboard_restore_attempted": clipboard_restore_attempted,
+            "clipboard_restored": clipboard_restored,
             "prompt_submitted": True,
             "submit_button_observed": submit_value.get("submitButtonObserved") is True,
             "submit_mechanism": str(submit_value.get("submitMechanism") or ""),

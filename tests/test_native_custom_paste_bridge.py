@@ -11,6 +11,95 @@ import wild_boar_proxy.native_window_probe as native_probe
 
 
 class NativeCustomPasteBridgeTests(unittest.TestCase):
+    def test_native_prompt_submit_verifier_escapes_contenteditable_newline_normalizer(self) -> None:
+        prompt = "line one\nline two"
+        cdp_messages: list[dict[str, object]] = []
+
+        def fake_cdp(_ws_url: str, message: dict[str, object], **_kwargs: object) -> dict[str, object]:
+            cdp_messages.append(message)
+            method = message["method"]
+            if method == "Runtime.evaluate":
+                expression = str(message["params"]["expression"])  # type: ignore[index]
+                message_id = int(message["id"])
+                if message_id == 3001:
+                    return {
+                        "id": message["id"],
+                        "result": {
+                            "result": {
+                                "value": {
+                                    "url": "app://-/index.html",
+                                    "focused": True,
+                                    "textValueCaptured": False,
+                                }
+                            }
+                        },
+                    }
+                if message_id == 3201:
+                    self.assertIn('replace(/\\r\\n/g, "\\n")', expression)
+                    self.assertIn('replace(/\\n\\n/g, "\\n")', expression)
+                    return {
+                        "id": message["id"],
+                        "result": {
+                            "result": {
+                                "value": {
+                                    "insertedLengthMatches": True,
+                                    "insertedTextPresent": True,
+                                    "textValueCaptured": False,
+                                }
+                            }
+                        },
+                    }
+                if message_id == 3301:
+                    return {
+                        "id": message["id"],
+                        "result": {
+                            "result": {
+                                "value": {
+                                    "submitted": True,
+                                    "submitButtonObserved": False,
+                                    "submitMechanism": "cdp_keyboard_event_enter",
+                                    "textValueCaptured": False,
+                                }
+                            }
+                        },
+                    }
+            if method == "Input.insertText":
+                return {"id": message["id"], "result": {}}
+            raise AssertionError(f"unexpected CDP message {message}")
+
+        with (
+            mock.patch.object(native_probe, "_devtools_port_owned_by_pid", return_value=(True, "111")),
+            mock.patch.object(
+                native_probe,
+                "_cdp_app_page_targets",
+                return_value=([
+                    {
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/1",
+                        "url": "app://-/index.html",
+                        "type": "page",
+                    }
+                ], ""),
+            ),
+            mock.patch.object(native_probe, "_cdp_command", side_effect=fake_cdp),
+            mock.patch.object(native_probe, "_read_macos_clipboard_text") as read_clipboard,
+        ):
+            packet = native_probe._cdp_submit_prompt_to_app_page(
+                111,
+                prompt,
+                request_id="submit-newline-normalizer-test",
+                allowed_owner_pids=[111],
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["input_text_insert_method"], "cdp_insert_text")
+        self.assertTrue(packet["prompt_submitted"])
+        read_clipboard.assert_not_called()
+        self.assertEqual(
+            [message["method"] for message in cdp_messages],
+            ["Runtime.evaluate", "Input.insertText", "Runtime.evaluate", "Runtime.evaluate"],
+        )
+
     def test_cdp_clipboard_paste_only_never_dispatches_enter_or_submit(self) -> None:
         draft = "WBP paste bridge draft"
         cdp_messages: list[dict[str, object]] = []

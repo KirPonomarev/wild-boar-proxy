@@ -1706,6 +1706,241 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(packet["command_loop_provider_call_count"], 1)
             self.assertEqual(urlopen.call_count, 1)
 
+    def test_custom_native_gpt_api_alias_command_loop_refresh_restores_v4_binding_after_server_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            managed_dir.mkdir(parents=True)
+            profile_dir.mkdir(parents=True)
+            route_id = "wbp-deepseek-v4-pro-max"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="codex-auto-review",
+                api_route_id=route_id,
+            )
+            payloads = live_payloads_with_reasoning_variants()
+            routes_packet = routes_list_packet_with_reasoning_variants()
+            route_records = routes_packet["data"]["routes"]  # type: ignore[index]
+            live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": bindings},
+                primary_model_ids=[],
+                route_records=route_records,  # type: ignore[arg-type]
+                require_api_route_binding=True,
+            )
+            stale_context_path = profile_dir / live_server.AGENT_RUNTIME_CONTEXT_FILENAME
+            stale_context_path.write_text(
+                json.dumps(
+                    {
+                        "packet_kind": "codex_custom_native_agent_runtime_context",
+                        "execution_mode": "chatgpt_plus_api",
+                        "agent_bindings_status": "rejected",
+                        "agent_bindings_machine_error_code": "CUSTOM_AGENT_BINDINGS_INVALID",
+                        "primary_model_id": "gpt-5.5",
+                        "api_model_id": "wbp-deepseek-chat",
+                        "allowed_api_route_ids": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            max_thinking = dict(REASONING_VARIANT_SPECS["max"]["thinking"])  # type: ignore[arg-type]
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id=route_id,
+                        output_text="WBP_ENDPOINT_LOOP_V4_MAX_OK",
+                        thinking=max_thinking,
+                        api_parameter_sent=True,
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
+                            {
+                                "execution_mode": "chatgpt_plus_api",
+                                "chatgpt_model_id": "codex-auto-review",
+                                "api_model_id": route_id,
+                                "api_reasoning_option_id": "provider_declared_max",
+                                "prompt": (
+                                    "Codex: inspect and orchestrate. "
+                                    "DIP: answer exactly one line."
+                                ),
+                                "expected_text": "WBP_ENDPOINT_LOOP_V4_MAX_OK",
+                                "request_id": "endpoint-command-loop-v4-max-restart",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+            context = json.loads(stale_context_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertEqual(context["primary_model_id"], "codex-auto-review")
+        self.assertEqual(context["api_model_id"], route_id)
+        self.assertEqual(context["allowed_api_route_ids"], [route_id])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertEqual(packet["primary_alias"], "Codex")
+        self.assertEqual(packet["coding_alias"], "DIP")
+        self.assertEqual(packet["requested_model"], route_id)
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
+        self.assertTrue(packet["api_reasoning_parameter_sent"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_gpt_api_alias_command_loop_refresh_preserves_existing_context_when_bindings_state_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            managed_dir.mkdir(parents=True)
+            profile_dir.mkdir(parents=True)
+            route_id = "wbp-deepseek-v4-pro-max"
+            payloads = live_payloads_with_reasoning_variants()
+            stale_context_path = profile_dir / live_server.AGENT_RUNTIME_CONTEXT_FILENAME
+            stale_context_path.write_text(
+                json.dumps(
+                    {
+                        "packet_kind": "codex_custom_native_agent_runtime_context",
+                        "execution_mode": "chatgpt_plus_api",
+                        "agent_bindings_status": "ok",
+                        "primary_model_id": "codex-auto-review",
+                        "api_model_id": route_id,
+                        "api_reasoning_option_id": "provider_declared_max",
+                        "allowed_api_route_ids": [route_id],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            max_thinking = dict(REASONING_VARIANT_SPECS["max"]["thinking"])  # type: ignore[arg-type]
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id=route_id,
+                        output_text="WBP_ENDPOINT_LOOP_V4_MAX_CONTEXT_OK",
+                        thinking=max_thinking,
+                        api_parameter_sent=True,
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
+                            {
+                                "prompt": (
+                                    "Codex: inspect and orchestrate. "
+                                    "DIP: answer exactly one line."
+                                ),
+                                "expected_text": "WBP_ENDPOINT_LOOP_V4_MAX_CONTEXT_OK",
+                                "request_id": "endpoint-command-loop-v4-max-context-only",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+            context = json.loads(stale_context_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertEqual(context["primary_model_id"], "codex-auto-review")
+        self.assertEqual(context["api_model_id"], route_id)
+        self.assertEqual(context["allowed_api_route_ids"], [route_id])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertEqual(packet["requested_model"], route_id)
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_max")
+        self.assertTrue(packet["api_reasoning_parameter_sent"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertEqual(urlopen.call_count, 1)
+
     def test_custom_native_free_text_endpoint_blocks_invalid_context_before_native_submit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -3704,7 +3939,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
                     payload={
                         "route_id": "browser-route",
-                        "api_reasoning_option_id": "browser-reasoning",
+                        "api_key": "browser-secret",
                     },
                     file_bridge_worker=worker,
                     reasoning_matrix_builder=reasoning_builder,
@@ -3716,7 +3951,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
         )
         self.assertIn("route_id", packet["blocking_reasons"])
-        self.assertIn("api_reasoning_option_id", packet["blocking_reasons"])
+        self.assertIn("api_key", packet["blocking_reasons"])
         self.assertFalse(called)
         self.assertEqual(packet["reasoning_provider_call_count"], 0)
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
@@ -19950,6 +20185,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         payloads = live_payloads()
         payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(route_id)
         inventory_calls = {"count": 0}
+        temp_root_handle = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_root_handle.cleanup)
+        temp_root = Path(temp_root_handle.name)
+        env = {
+            "WBP_MANAGED_DIR": str(temp_root / "managed"),
+            "WBP_PROFILE_DIR": str(temp_root / "profile"),
+        }
 
         def fake_inventory(*_: object, **__: object) -> dict[str, object]:
             inventory_calls["count"] += 1
@@ -20016,6 +20258,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             }
 
         with (
+            mock.patch.dict(os.environ, env, clear=False),
             mock.patch.object(live_server, "collect_codex_process_inventory", side_effect=fake_inventory),
             mock.patch.object(
                 live_server,

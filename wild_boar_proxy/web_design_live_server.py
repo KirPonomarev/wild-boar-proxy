@@ -4190,6 +4190,10 @@ def _custom_reasoning_dispatch_matrix_live_packet(
 
 
 GPT_API_ALIAS_COMMAND_LOOP_ALLOWED_FIELDS: set[str] = {
+    "execution_mode",
+    "chatgpt_model_id",
+    "api_model_id",
+    "api_reasoning_option_id",
     "prompt",
     "expected_text",
     "expected_coding_response",
@@ -4402,7 +4406,10 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
     if forbidden_fields:
         return _custom_native_gpt_api_command_loop_blocked_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
-            human_message="Command-loop proof accepts only prompt, expected_text, expected_coding_response and request_id.",
+            human_message=(
+                "Command-loop proof accepts only safe selection fields, prompt, "
+                "expected_text, expected_coding_response and request_id."
+            ),
             expected_text=expected_text,
             prompt=prompt_payload,
             request_id=request_id,
@@ -15269,29 +15276,67 @@ def build_handler(
             require_api_route_binding=context["require_api_route_binding"],
         )
 
-    def _refresh_custom_agent_runtime_context_for_command_loop() -> tuple[dict[str, Any], dict[str, Any]]:
-        external_routes_packet = _external_routes_packet()
-        route_records = _enabled_external_route_records(external_routes_packet)
-        api_route_id = _custom_agent_default_api_route_id(route_records)
-        route_record = next(
-            (
-                route
-                for route in route_records
-                if str(route.get("route_id") or "").strip() == api_route_id
-            ),
-            {},
-        )
+    def _custom_agent_runtime_execution_packet_from_selection(
+        *,
+        execution_mode: str,
+        chatgpt_model_id: str,
+        api_route_id: str,
+        route_record: dict[str, Any],
+        api_reasoning_option_id: str = "",
+        source_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        source = source_context if isinstance(source_context, dict) else {}
         provider = str(route_record.get("provider") or "deepseek").strip() or "deepseek"
-        execution_packet = {
+        thinking = (
+            dict(route_record.get("thinking"))
+            if isinstance(route_record.get("thinking"), dict)
+            else {}
+        )
+        operator_level, route_reasoning_option_id = _reasoning_dispatch_option_for_row(
+            route_record
+        )
+        resolved_reasoning_option_id = (
+            api_reasoning_option_id
+            or str(source.get("api_reasoning_option_id") or "").strip()
+            or route_reasoning_option_id
+            or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        )
+        resolved_operator_level = (
+            str(source.get("api_reasoning_operator_level") or "").strip()
+            or operator_level
+            or "catalog_default"
+        )
+        provider_option = {
+            "thinking": thinking if thinking else {"type": "unconfigured"},
+            "api_parameter_sent": bool(thinking),
+        }
+        return {
             "status": "ok",
-            "execution_mode": "chatgpt_plus_api",
-            "chatgpt_model_id": "gpt-5.5",
+            "execution_mode": execution_mode,
+            "chatgpt_model_id": chatgpt_model_id,
             "api_model_id": api_route_id,
-            "api_reasoning_option_id": CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+            "api_reasoning_option_id": resolved_reasoning_option_id,
+            "api_reasoning_operator_level": resolved_operator_level,
+            "api_reasoning_supported_operator_levels": ["fast", "high", "max"],
+            "api_reasoning_option_packet": {
+                "status": "ok",
+                "option_id": resolved_reasoning_option_id,
+                "selected_model_option_id": (
+                    route_reasoning_option_id
+                    or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                ),
+                "selected_model_operator_level": resolved_operator_level,
+                "source": "server_route_record",
+                "proof_level": "provider_declared" if route_reasoning_option_id else "unproven",
+                "provider_option": provider_option,
+                "runtime_mutation_claimed": False,
+                "intelligence_measured": False,
+                "codex_intelligence_parity_claimed": False,
+            },
             "primary_model_slot": {
                 "status": "bound",
                 "lane": CODEX_ACCOUNT_MODEL_LANE,
-                "model_id": "gpt-5.5",
+                "model_id": chatgpt_model_id,
                 "server_issued": True,
             },
             "coding_agent_model_slot": {
@@ -15307,11 +15352,257 @@ def build_handler(
             "chatgpt_only_calls_api": False,
             "server_issued_catalog_used": True,
         }
+
+    def _custom_agent_binding_selection_packet(
+        route_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        api_route_id = _custom_agent_default_api_route_id(route_records)
+        return read_agent_bindings_packet(
+            agent_bindings_state_path(owner_paths.managed_dir),
+            default_bindings=default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=api_route_id,
+            ),
+            primary_model_ids=[],
+            route_records=route_records,
+            require_api_route_binding=True,
+        )
+
+    def _execution_packet_from_agent_bindings(
+        *,
+        bindings_packet: dict[str, Any],
+        route_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if bindings_packet.get("status") != "ok":
+            return {}
+        if (
+            bindings_packet.get("source") != "persisted_state"
+            or bindings_packet.get("state_file_present") is not True
+        ):
+            return {}
+        primary_model_id = ""
+        api_route_id = ""
+        for binding in bindings_packet.get("agent_bindings", []):
+            if not isinstance(binding, dict) or binding.get("enabled") is not True:
+                continue
+            if binding.get("lane") == PRIMARY_CHATGPT_LANE and not primary_model_id:
+                primary_model_id = str(binding.get("model_id") or "").strip()
+            if binding.get("lane") == API_ROUTE_LANE and not api_route_id:
+                api_route_id = str(binding.get("route_id") or "").strip()
+        if not primary_model_id or not api_route_id:
+            return {}
+        route_record = next(
+            (
+                route
+                for route in route_records
+                if str(route.get("route_id") or "").strip() == api_route_id
+            ),
+            {},
+        )
+        if not route_record:
+            return {}
+        return _custom_agent_runtime_execution_packet_from_selection(
+            execution_mode="chatgpt_plus_api",
+            chatgpt_model_id=primary_model_id,
+            api_route_id=api_route_id,
+            route_record=route_record,
+        )
+
+    def _execution_packet_from_runtime_context(
+        *,
+        context: dict[str, Any],
+        route_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
+            return {}
+        if context.get("execution_mode") != "chatgpt_plus_api":
+            return {}
+        if context.get("agent_bindings_status") not in {None, "", "ok"}:
+            return {}
+        primary_model_id = str(context.get("primary_model_id") or "").strip()
+        api_route_id = str(context.get("api_model_id") or "").strip()
+        if not primary_model_id or not api_route_id:
+            return {}
+        route_record = next(
+            (
+                route
+                for route in route_records
+                if str(route.get("route_id") or "").strip() == api_route_id
+            ),
+            {},
+        )
+        if not route_record:
+            return {}
+        return _custom_agent_runtime_execution_packet_from_selection(
+            execution_mode="chatgpt_plus_api",
+            chatgpt_model_id=primary_model_id,
+            api_route_id=api_route_id,
+            route_record=route_record,
+            source_context=context,
+        )
+
+    def _execution_packet_from_browser_selection(
+        *,
+        payload: dict[str, Any] | None,
+        operator_status: dict[str, Any] | None,
+        api_snapshot: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        payload = payload if isinstance(payload, dict) else {}
+        selection_payload = {
+            key: payload.get(key)
+            for key in (
+                "execution_mode",
+                "chatgpt_model_id",
+                "api_model_id",
+                "api_reasoning_option_id",
+            )
+            if key in payload
+        }
+        if not selection_payload:
+            return {}
+        packet = _custom_native_launch_mode_selection_packet(
+            selection_payload,
+            operator_status,
+            api_snapshot,
+        )
+        if packet.get("status") != "ok":
+            return {}
+        if packet.get("execution_mode") != "chatgpt_plus_api":
+            return {}
+        return packet
+
+    def _ensure_custom_agent_runtime_bridge_for_route(
+        *,
+        api_route_id: str,
+        external_routes_packet: dict[str, Any] | None,
+        operator_status: dict[str, Any] | None,
+        api_snapshot: dict[str, Any] | None,
+    ) -> str:
+        api_route_id = str(api_route_id or "").strip()
+        if not api_route_id:
+            return custom_native_bridge_lease.stable_endpoint
+        route_records = _enabled_external_route_records(external_routes_packet)
+        if not any(
+            str(route.get("route_id") or "").strip() == api_route_id
+            for route in route_records
+        ):
+            return custom_native_bridge_lease.stable_endpoint
+        bridge_operator_status = (
+            operator_status
+            if isinstance(operator_status, dict)
+            else operator_surface_session.status_payload()
+        )
+        bridge_api_snapshot = (
+            api_snapshot
+            if isinstance(api_snapshot, dict)
+            else build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+        )
+        registry = build_custom_model_registry_packet(
+            bridge_operator_status,
+            api_snapshot=bridge_api_snapshot,
+        )
+        downstream_endpoint = str(registry.get("endpoint") or DEFAULT_ENDPOINT)
+        hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
+        try:
+            bridge_endpoint = custom_native_bridge_lease.ensure(
+                downstream_endpoint=downstream_endpoint,
+                routes_packet=external_routes_packet,
+                hidden_native_model_ids=hidden_native_model_ids,
+                dual_lane_route_model_id=api_route_id,
+            )
+        except OSError:
+            return custom_native_bridge_lease.stable_endpoint
+        custom_native_file_bridge_worker.ensure_started(bridge_endpoint=bridge_endpoint)
+        return bridge_endpoint
+
+    def _refresh_custom_agent_runtime_context_for_command_loop(
+        *,
+        payload: dict[str, Any] | None = None,
+        operator_status: dict[str, Any] | None = None,
+        api_snapshot: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        external_routes_packet = _external_routes_packet()
+        route_records = _enabled_external_route_records(external_routes_packet)
+        route_record_by_id = {
+            str(route.get("route_id") or "").strip(): route
+            for route in route_records
+            if str(route.get("route_id") or "").strip()
+        }
+        launch_packet = (
+            custom_native_launch_state["last_packet"]
+            if isinstance(custom_native_launch_state["last_packet"], dict)
+            else {}
+        )
+        launch_execution_packet = (
+            launch_packet.get("execution_mode_packet")
+            if isinstance(launch_packet.get("execution_mode_packet"), dict)
+            else {}
+        )
+        if (
+            launch_execution_packet.get("status") != "ok"
+            or launch_execution_packet.get("execution_mode") != "chatgpt_plus_api"
+            or str(launch_execution_packet.get("api_model_id") or "").strip()
+            not in route_record_by_id
+        ):
+            launch_execution_packet = {}
+        bindings_packet = _custom_agent_binding_selection_packet(route_records)
+        bindings_execution_packet = _execution_packet_from_agent_bindings(
+            bindings_packet=bindings_packet,
+            route_records=route_records,
+        )
+        existing_context, _existing_context_metadata = (
+            _load_custom_native_agent_runtime_context(custom_native_launch_state["last_packet"])
+        )
+        existing_execution_packet = _execution_packet_from_runtime_context(
+            context=existing_context,
+            route_records=route_records,
+        )
+        browser_execution_packet = _execution_packet_from_browser_selection(
+            payload=payload,
+            operator_status=operator_status,
+            api_snapshot=api_snapshot,
+        )
+        execution_packet = (
+            launch_execution_packet
+            or browser_execution_packet
+            or bindings_execution_packet
+            or existing_execution_packet
+        )
+        if execution_packet:
+            api_route_id = str(execution_packet.get("api_model_id") or "").strip()
+            chatgpt_model_id = str(
+                execution_packet.get("chatgpt_model_id") or "gpt-5.5"
+            ).strip()
+        else:
+            api_route_id = _custom_agent_default_api_route_id(route_records)
+            chatgpt_model_id = "gpt-5.5"
+        route_record = next(
+            (
+                route
+                for route in route_records
+                if str(route.get("route_id") or "").strip() == api_route_id
+            ),
+            {},
+        )
+        if not execution_packet:
+            execution_packet = _custom_agent_runtime_execution_packet_from_selection(
+                execution_mode="chatgpt_plus_api",
+                chatgpt_model_id=chatgpt_model_id,
+                api_route_id=api_route_id,
+                route_record=route_record,
+                api_reasoning_option_id=CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+            )
+        bridge_endpoint = _ensure_custom_agent_runtime_bridge_for_route(
+            api_route_id=api_route_id,
+            external_routes_packet=external_routes_packet,
+            operator_status=operator_status,
+            api_snapshot=api_snapshot,
+        )
         context = _custom_native_agent_runtime_context(
             execution_packet=execution_packet,
-            launch_model_id="gpt-5.5",
+            launch_model_id=chatgpt_model_id,
             route_model_id=api_route_id,
-            bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+            bridge_endpoint=bridge_endpoint,
         )
         context["context_truth_source"] = "server_current_agent_bindings_state"
         context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"
@@ -17287,7 +17578,11 @@ def build_handler(
 
             payload = self._read_optional_json_body()
             agent_runtime_context, context_metadata = (
-                _refresh_custom_agent_runtime_context_for_command_loop()
+                _refresh_custom_agent_runtime_context_for_command_loop(
+                    payload=payload,
+                    operator_status=None,
+                    api_snapshot=None,
+                )
             )
             self._send_json(
                 _custom_native_gpt_api_alias_command_loop_proof_packet(
@@ -17391,7 +17686,11 @@ def build_handler(
 
             payload = self._read_optional_json_body()
             agent_runtime_context, context_metadata = (
-                _refresh_custom_agent_runtime_context_for_command_loop()
+                _refresh_custom_agent_runtime_context_for_command_loop(
+                    payload=payload,
+                    operator_status=None,
+                    api_snapshot=None,
+                )
             )
             self._send_json(
                 _custom_native_free_text_command_loop_proof_packet(
@@ -17715,7 +18014,11 @@ def build_handler(
                     str(payload.get("request_id") or f"wbp-model-reasoning-{uuid.uuid4().hex}")
                 )
                 agent_runtime_context, context_metadata = (
-                    _refresh_custom_agent_runtime_context_for_command_loop()
+                    _refresh_custom_agent_runtime_context_for_command_loop(
+                        payload=payload,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                    )
                 )
 
                 def reasoning_matrix_builder() -> dict[str, Any]:
