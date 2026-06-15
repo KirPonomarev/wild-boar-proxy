@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from queue import Empty, Queue
 import shlex
+import signal
 import socket
 import sqlite3
 import subprocess
@@ -1242,6 +1243,7 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/codex/custom/window-input-route-trace"),
     _get_route("/api/codex/custom/bridge-failure-recovery-truth"),
     _get_route("/api/codex/custom/stable-bridge-preflight"),
+    _get_route("/api/codex/custom/stable-bridge-recovery/preflight"),
     _get_route("/api/codex/custom/live-bridge-stability"),
     _get_route("/api/codex/custom/chatgpt-plus-api-coder-trace"),
     _get_route("/api/codex/custom/quick-start/chatgpt-plus-deepseek-file-edit-proof"),
@@ -1310,6 +1312,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     _post_route(
         "/api/codex/custom/reasoning-dispatch-matrix",
         EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/stable-bridge-recovery/apply",
+        EFFECT_REPAIR,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
     _post_route(
@@ -9448,6 +9455,577 @@ def _custom_native_bridge_attach_ownership_fields(
     return enriched
 
 
+STABLE_BRIDGE_RECOVERY_APPLY_ALLOWED_FIELDS = frozenset(
+    {
+        "expected_bridge_port",
+        "expected_listener_pid",
+        "expected_bridge_ownership_status",
+        "bind_after_release",
+    }
+)
+
+
+def _custom_native_stable_bridge_recovery_forbidden_fields(
+    payload: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    return sorted(
+        str(key)
+        for key in payload
+        if str(key) not in STABLE_BRIDGE_RECOVERY_APPLY_ALLOWED_FIELDS
+    )
+
+
+def _custom_native_int_field(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _custom_native_stable_bridge_recovery_admissibility(
+    *,
+    ownership_packet: dict[str, Any],
+    owner_authorized: bool,
+) -> tuple[bool, str, list[str], str]:
+    ownership_status = str(ownership_packet.get("bridge_ownership_status") or "")
+    target_pid = int(ownership_packet.get("listener_pid") or 0)
+    target_is_current = target_pid == os.getpid()
+    target_is_wbp = ownership_packet.get("listener_command_matches_wbp") is True
+    reasons: list[str] = []
+    if ownership_status == "current_process_owned":
+        return False, "STABLE_BRIDGE_RECOVERY_NOT_REQUIRED", reasons, "none"
+    if ownership_status in {"free", "not_required"}:
+        return (
+            False,
+            "STABLE_BRIDGE_RECOVERY_NOT_REQUIRED",
+            reasons,
+            "bind_stable_bridge_in_current_process"
+            if ownership_status == "free"
+            else "none",
+        )
+    if ownership_status != "wbp_stale_or_other_instance":
+        reasons.append("bridge_owner_not_stale_wbp")
+    if target_pid <= 0:
+        reasons.append("listener_pid_missing")
+    if target_is_current:
+        reasons.append("listener_pid_is_current_process")
+    if not target_is_wbp:
+        reasons.append("listener_wbp_identity_not_proven")
+    if not owner_authorized:
+        reasons.append("owner_authorization_required")
+    admissible = not reasons
+    return (
+        admissible,
+        "OK" if admissible else "STABLE_BRIDGE_RECOVERY_NOT_ADMISSIBLE",
+        sorted(dict.fromkeys(reasons)),
+        "post_stable_bridge_recovery_apply_with_expected_pid"
+        if admissible
+        else "stop_and_diagnose_stable_bridge_recovery",
+    )
+
+
+def _custom_native_stable_bridge_recovery_preflight_packet(
+    *,
+    native_bridge_lease: _CustomNativeBridgeLease | None,
+    bridge_port: int,
+    owner_authorized: bool,
+    route_selected: bool = True,
+    listener_probe: Callable[[int], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    ownership_packet = _custom_native_bridge_ownership_packet(
+        native_bridge_lease=native_bridge_lease,
+        bridge_port=bridge_port,
+        route_selected=route_selected,
+        listener_probe=listener_probe,
+    )
+    admissible, machine_error_code, blocking_reasons, next_action = (
+        _custom_native_stable_bridge_recovery_admissibility(
+            ownership_packet=ownership_packet,
+            owner_authorized=owner_authorized,
+        )
+    )
+    ownership_status = str(ownership_packet.get("bridge_ownership_status") or "")
+    not_required = ownership_status in {
+        "current_process_owned",
+        "free",
+        "not_required",
+    }
+    target_pid = int(ownership_packet.get("listener_pid") or 0)
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_stable_bridge_recovery_preflight",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if admissible or not_required else "blocked",
+        "machine_error_code": machine_error_code,
+        "owner_authorization_phrase_present": owner_authorized,
+        "bridge_port": int(bridge_port or 0),
+        **_custom_native_bridge_ownership_public_fields(ownership_packet),
+        "recovery_preflight_checked": True,
+        "recovery_apply_admissible": admissible,
+        "recovery_not_required": not_required,
+        "target_pid": target_pid,
+        "target_pid_known": target_pid > 0,
+        "target_pid_is_current_process": target_pid == os.getpid(),
+        "target_process_wbp_proven": (
+            ownership_packet.get("listener_command_matches_wbp") is True
+        ),
+        "pid_race_guard_required": admissible,
+        "expected_listener_pid_required_for_apply": admissible,
+        "expected_bridge_ownership_status_required_for_apply": admissible,
+        "recovery_apply_attempted": False,
+        "bridge_cleanup_attempted": False,
+        "bridge_process_kill_attempted": False,
+        "port_released": False,
+        "current_process_bound_after_recovery": False,
+        "blocking_reasons": blocking_reasons,
+        "raw_process_command_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": next_action,
+    }
+
+
+def _custom_native_stable_bridge_sigterm_packet(pid: int) -> dict[str, Any]:
+    target_pid = int(pid or 0)
+    if target_pid <= 0:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_process_stop",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_TARGET_PID_MISSING",
+            "target_pid": target_pid,
+            "process_kill_attempted": False,
+            "signal_name": "",
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    try:
+        os.kill(target_pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_process_stop",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_TARGET_PROCESS_MISSING",
+            "target_pid": target_pid,
+            "process_kill_attempted": True,
+            "signal_name": "SIGTERM",
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    except PermissionError:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_process_stop",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_TARGET_PERMISSION_DENIED",
+            "target_pid": target_pid,
+            "process_kill_attempted": True,
+            "signal_name": "SIGTERM",
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    except OSError as exc:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_process_stop",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_TARGET_STOP_FAILED",
+            "target_pid": target_pid,
+            "stop_exception_class": type(exc).__name__,
+            "process_kill_attempted": True,
+            "signal_name": "SIGTERM",
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_stable_bridge_process_stop",
+        "captured_at_utc": utc_now(),
+        "status": "ok",
+        "machine_error_code": "OK",
+        "target_pid": target_pid,
+        "process_kill_attempted": True,
+        "signal_name": "SIGTERM",
+        "sigkill_attempted": False,
+        "raw_process_command_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+
+
+def _custom_native_stable_bridge_port_release_packet(
+    *,
+    bridge_port: int,
+    target_pid: int,
+    timeout_seconds: float = 6.0,
+    poll_interval_seconds: float = 0.15,
+    listener_probe: Callable[[int], dict[str, Any]] | None = None,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    last_ownership: dict[str, Any] = {}
+    owner_changed = False
+    while True:
+        last_ownership = _custom_native_bridge_ownership_packet(
+            native_bridge_lease=None,
+            bridge_port=bridge_port,
+            route_selected=True,
+            listener_probe=listener_probe,
+        )
+        ownership_status = str(last_ownership.get("bridge_ownership_status") or "")
+        listener_pid = int(last_ownership.get("listener_pid") or 0)
+        if ownership_status == "free":
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_stable_bridge_port_release",
+                "captured_at_utc": utc_now(),
+                "status": "ok",
+                "machine_error_code": "OK",
+                "bridge_port": int(bridge_port or 0),
+                "target_pid": int(target_pid or 0),
+                "port_released": True,
+                "owner_changed": False,
+                "last_ownership_packet": last_ownership,
+                "raw_process_command_recorded": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            }
+        if listener_pid and listener_pid != int(target_pid or 0):
+            owner_changed = True
+            break
+        if time.monotonic() >= deadline:
+            break
+        sleep_fn(max(0.01, poll_interval_seconds))
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_stable_bridge_port_release",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": (
+            "STABLE_BRIDGE_RECOVERY_OWNER_CHANGED"
+            if owner_changed
+            else "STABLE_BRIDGE_RECOVERY_PORT_NOT_RELEASED"
+        ),
+        "bridge_port": int(bridge_port or 0),
+        "target_pid": int(target_pid or 0),
+        "port_released": False,
+        "owner_changed": owner_changed,
+        "last_ownership_packet": last_ownership,
+        "raw_process_command_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+
+
+def _custom_native_stable_bridge_recovery_apply_packet(
+    *,
+    native_bridge_lease: _CustomNativeBridgeLease | None,
+    bridge_port: int,
+    owner_authorized: bool,
+    payload: dict[str, Any] | None,
+    route_selected: bool = True,
+    listener_probe: Callable[[int], dict[str, Any]] | None = None,
+    terminate_pid: Callable[[int], dict[str, Any]] | None = None,
+    wait_for_release: Callable[[int, int], dict[str, Any]] | None = None,
+    bind_current_bridge: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    body = payload if isinstance(payload, dict) else {}
+    forbidden = _custom_native_stable_bridge_recovery_forbidden_fields(body)
+    if forbidden:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_recovery_apply",
+            "captured_at_utc": utc_now(),
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "forbidden_fields": forbidden,
+            "recovery_apply_attempted": False,
+            "bridge_cleanup_attempted": False,
+            "bridge_process_kill_attempted": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "remove_forbidden_browser_fields",
+        }
+    preflight = _custom_native_stable_bridge_recovery_preflight_packet(
+        native_bridge_lease=native_bridge_lease,
+        bridge_port=bridge_port,
+        owner_authorized=owner_authorized,
+        route_selected=route_selected,
+        listener_probe=listener_probe,
+    )
+    expected_port = _custom_native_int_field(body.get("expected_bridge_port"))
+    expected_pid = _custom_native_int_field(body.get("expected_listener_pid"))
+    expected_status = str(body.get("expected_bridge_ownership_status") or "").strip()
+    actual_pid = int(preflight.get("target_pid") or 0)
+    actual_status = str(preflight.get("bridge_ownership_status") or "")
+    blocking_reasons = [
+        str(reason)
+        for reason in preflight.get("blocking_reasons", [])
+        if str(reason)
+    ]
+    if expected_port and expected_port != int(bridge_port or 0):
+        blocking_reasons.append("expected_bridge_port_mismatch")
+    if expected_pid <= 0:
+        blocking_reasons.append("expected_listener_pid_missing")
+    elif expected_pid != actual_pid:
+        blocking_reasons.append("expected_listener_pid_mismatch")
+    if not expected_status:
+        blocking_reasons.append("expected_bridge_ownership_status_missing")
+    elif expected_status != actual_status:
+        blocking_reasons.append("expected_bridge_ownership_status_mismatch")
+    if preflight.get("recovery_apply_admissible") is not True:
+        blocking_reasons.append("recovery_preflight_not_admissible")
+    if blocking_reasons:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_recovery_apply",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_APPLY_BLOCKED",
+            "owner_authorization_phrase_present": owner_authorized,
+            "bridge_port": int(bridge_port or 0),
+            **_custom_native_bridge_ownership_public_fields(
+                preflight.get("bridge_ownership_packet")
+                if isinstance(preflight.get("bridge_ownership_packet"), dict)
+                else None
+            ),
+            "preflight_packet": preflight,
+            "expected_listener_pid": expected_pid,
+            "actual_listener_pid": actual_pid,
+            "pid_still_matches": bool(expected_pid > 0 and expected_pid == actual_pid),
+            "recovery_apply_attempted": False,
+            "bridge_cleanup_attempted": False,
+            "bridge_process_kill_attempted": False,
+            "port_released": False,
+            "current_process_bound_after_recovery": False,
+            "blocking_reasons": sorted(dict.fromkeys(blocking_reasons)),
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "stop_and_diagnose_stable_bridge_recovery",
+        }
+    signal_guard = _custom_native_stable_bridge_recovery_preflight_packet(
+        native_bridge_lease=native_bridge_lease,
+        bridge_port=bridge_port,
+        owner_authorized=owner_authorized,
+        route_selected=route_selected,
+        listener_probe=listener_probe,
+    )
+    signal_guard_pid = int(signal_guard.get("target_pid") or 0)
+    signal_guard_status = str(signal_guard.get("bridge_ownership_status") or "")
+    signal_guard_reasons: list[str] = []
+    if signal_guard.get("recovery_apply_admissible") is not True:
+        signal_guard_reasons.append("signal_guard_preflight_not_admissible")
+    if signal_guard_pid != expected_pid:
+        signal_guard_reasons.append("signal_guard_listener_pid_mismatch")
+    if signal_guard_status != expected_status:
+        signal_guard_reasons.append("signal_guard_ownership_status_mismatch")
+    if signal_guard.get("target_pid_is_current_process") is True:
+        signal_guard_reasons.append("signal_guard_listener_pid_is_current_process")
+    if signal_guard.get("target_process_wbp_proven") is not True:
+        signal_guard_reasons.append("signal_guard_wbp_identity_not_proven")
+    if signal_guard_reasons:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_recovery_apply",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_SIGNAL_GUARD_BLOCKED",
+            "owner_authorization_phrase_present": owner_authorized,
+            "bridge_port": int(bridge_port or 0),
+            **_custom_native_bridge_ownership_public_fields(
+                signal_guard.get("bridge_ownership_packet")
+                if isinstance(signal_guard.get("bridge_ownership_packet"), dict)
+                else None
+            ),
+            "preflight_packet": preflight,
+            "signal_guard_packet": signal_guard,
+            "signal_guard_checked": True,
+            "expected_listener_pid": expected_pid,
+            "actual_listener_pid": actual_pid,
+            "signal_guard_listener_pid": signal_guard_pid,
+            "signal_guard_ownership_status": signal_guard_status,
+            "pid_still_matches": bool(expected_pid > 0 and expected_pid == signal_guard_pid),
+            "recovery_apply_attempted": False,
+            "bridge_cleanup_attempted": False,
+            "bridge_process_kill_attempted": False,
+            "port_released": False,
+            "current_process_bound_after_recovery": False,
+            "blocking_reasons": sorted(dict.fromkeys(signal_guard_reasons)),
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "stop_and_diagnose_stable_bridge_recovery",
+        }
+    stopper = terminate_pid or _custom_native_stable_bridge_sigterm_packet
+    actual_pid = signal_guard_pid
+    termination_packet = stopper(actual_pid)
+    process_kill_attempted = termination_packet.get("process_kill_attempted") is True
+    if termination_packet.get("status") != "ok":
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_recovery_apply",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": str(
+                termination_packet.get("machine_error_code")
+                or "STABLE_BRIDGE_RECOVERY_TARGET_STOP_FAILED"
+            ),
+            "owner_authorization_phrase_present": owner_authorized,
+            "bridge_port": int(bridge_port or 0),
+            **_custom_native_bridge_ownership_public_fields(
+                preflight.get("bridge_ownership_packet")
+                if isinstance(preflight.get("bridge_ownership_packet"), dict)
+                else None
+            ),
+            "preflight_packet": preflight,
+            "signal_guard_packet": signal_guard,
+            "signal_guard_checked": True,
+            "termination_packet": termination_packet,
+            "expected_listener_pid": expected_pid,
+            "actual_listener_pid": actual_pid,
+            "signal_guard_listener_pid": signal_guard_pid,
+            "signal_guard_ownership_status": signal_guard_status,
+            "pid_still_matches": True,
+            "recovery_apply_attempted": True,
+            "bridge_cleanup_attempted": process_kill_attempted,
+            "bridge_process_kill_attempted": process_kill_attempted,
+            "port_released": False,
+            "current_process_bound_after_recovery": False,
+            "blocking_reasons": ["target_process_stop_failed"],
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "stop_and_diagnose_stable_bridge_recovery",
+        }
+    release_packet = (
+        wait_for_release(int(bridge_port or 0), actual_pid)
+        if wait_for_release is not None
+        else _custom_native_stable_bridge_port_release_packet(
+            bridge_port=int(bridge_port or 0),
+            target_pid=actual_pid,
+            listener_probe=listener_probe,
+        )
+    )
+    if release_packet.get("status") != "ok" or release_packet.get("port_released") is not True:
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_recovery_apply",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": str(
+                release_packet.get("machine_error_code")
+                or "STABLE_BRIDGE_RECOVERY_PORT_NOT_RELEASED"
+            ),
+            "owner_authorization_phrase_present": owner_authorized,
+            "bridge_port": int(bridge_port or 0),
+            **_custom_native_bridge_ownership_public_fields(
+                preflight.get("bridge_ownership_packet")
+                if isinstance(preflight.get("bridge_ownership_packet"), dict)
+                else None
+            ),
+            "preflight_packet": preflight,
+            "signal_guard_packet": signal_guard,
+            "signal_guard_checked": True,
+            "termination_packet": termination_packet,
+            "port_release_packet": release_packet,
+            "expected_listener_pid": expected_pid,
+            "actual_listener_pid": actual_pid,
+            "signal_guard_listener_pid": signal_guard_pid,
+            "signal_guard_ownership_status": signal_guard_status,
+            "pid_still_matches": True,
+            "recovery_apply_attempted": True,
+            "bridge_cleanup_attempted": process_kill_attempted,
+            "bridge_process_kill_attempted": process_kill_attempted,
+            "port_released": False,
+            "current_process_bound_after_recovery": False,
+            "blocking_reasons": ["port_not_released_after_stop"],
+            "raw_process_command_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "stop_and_diagnose_stable_bridge_recovery",
+        }
+    bind_requested = body.get("bind_after_release") is not False
+    bind_packet = (
+        bind_current_bridge()
+        if bind_requested and bind_current_bridge is not None
+        else {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_bind_after_recovery",
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "machine_error_code": "STABLE_BRIDGE_RECOVERY_BIND_NOT_AVAILABLE",
+            "current_process_bound_after_recovery": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+    )
+    post_ownership = _custom_native_bridge_ownership_packet(
+        native_bridge_lease=native_bridge_lease,
+        bridge_port=bridge_port,
+        route_selected=route_selected,
+        listener_probe=listener_probe,
+    )
+    bound_current = post_ownership.get("bridge_owner_current_process_proven") is True
+    success = (
+        release_packet.get("port_released") is True
+        and bind_packet.get("status") == "ok"
+        and bound_current
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_stable_bridge_recovery_apply",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if success else "blocked",
+        "machine_error_code": "OK"
+        if success
+        else "STABLE_BRIDGE_RECOVERY_CURRENT_BIND_NOT_PROVEN",
+        "owner_authorization_phrase_present": owner_authorized,
+        "bridge_port": int(bridge_port or 0),
+        **_custom_native_bridge_ownership_public_fields(post_ownership),
+        "preflight_packet": preflight,
+        "signal_guard_packet": signal_guard,
+        "signal_guard_checked": True,
+        "termination_packet": termination_packet,
+        "port_release_packet": release_packet,
+        "bind_packet": bind_packet,
+        "post_recovery_ownership_packet": post_ownership,
+        "expected_listener_pid": expected_pid,
+        "actual_listener_pid": actual_pid,
+        "signal_guard_listener_pid": signal_guard_pid,
+        "signal_guard_ownership_status": signal_guard_status,
+        "pid_still_matches": True,
+        "recovery_apply_attempted": True,
+        "bridge_cleanup_attempted": process_kill_attempted,
+        "bridge_process_kill_attempted": process_kill_attempted,
+        "port_released": release_packet.get("port_released") is True,
+        "current_process_bound_after_recovery": bound_current,
+        "blocking_reasons": []
+        if success
+        else ["current_process_bridge_bind_not_proven"],
+        "final_status": "STABLE_BRIDGE_RECOVERY_APPLIED_CURRENT_PROCESS_OWNS_BRIDGE"
+        if success
+        else "STOP_AND_DIAGNOSE_STABLE_BRIDGE_RECOVERY_NOT_PROVEN",
+        "raw_process_command_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "next_action": "none"
+        if success
+        else "stop_and_diagnose_stable_bridge_recovery",
+    }
+
+
 def _custom_native_bridge_truth_fields(
     *,
     native_bridge_lease: _CustomNativeBridgeLease | None,
@@ -14944,6 +15522,94 @@ def build_handler(
             admitted_session_actions_packet=admitted,
         )
 
+    def build_stable_bridge_bind_after_recovery_packet() -> dict[str, Any]:
+        if not codex_custom_live_prompt_authorized:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_stable_bridge_bind_after_recovery",
+                "captured_at_utc": utc_now(),
+                "status": "blocked",
+                "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+                "owner_authorization_phrase_present": False,
+                "current_process_bound_after_recovery": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "next_action": "provide_exact_owner_authorization_phrase",
+            }
+        operator_status, _operator_status_timeout = _bounded_operator_status_payload(
+            operator_surface_session
+        )
+        api_snapshot = build_api_connections_readonly_snapshot(
+            api_connections_readonly_runner
+        )
+        external_routes_packet = _external_routes_packet()
+        route_records = _enabled_external_route_records(external_routes_packet)
+        if not route_records:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_stable_bridge_bind_after_recovery",
+                "captured_at_utc": utc_now(),
+                "status": "blocked",
+                "machine_error_code": "STABLE_BRIDGE_RECOVERY_NO_EXTERNAL_ROUTES",
+                "owner_authorization_phrase_present": True,
+                "current_process_bound_after_recovery": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "next_action": "repair_external_api_routes",
+            }
+        registry = build_custom_model_registry_packet(
+            operator_status,
+            api_snapshot=api_snapshot,
+        )
+        downstream_endpoint = str(registry.get("endpoint") or DEFAULT_ENDPOINT)
+        hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
+        try:
+            bridge_endpoint = custom_native_bridge_lease.ensure(
+                downstream_endpoint=downstream_endpoint,
+                routes_packet=external_routes_packet,
+                hidden_native_model_ids=hidden_native_model_ids,
+            )
+        except OSError as exc:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_stable_bridge_bind_after_recovery",
+                "captured_at_utc": utc_now(),
+                "status": "blocked",
+                "machine_error_code": "STABLE_BRIDGE_RECOVERY_BIND_FAILED",
+                "owner_authorization_phrase_present": True,
+                "bridge_exception_class": type(exc).__name__,
+                "bridge_exception_message_bounded": str(exc)[:240],
+                "current_process_bound_after_recovery": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "next_action": "stop_and_diagnose_stable_bridge_recovery",
+            }
+        ownership_packet = _custom_native_bridge_ownership_packet(
+            native_bridge_lease=custom_native_bridge_lease,
+            bridge_port=custom_native_bridge_lease.bridge_port,
+            route_selected=True,
+        )
+        bound_current = ownership_packet.get("bridge_owner_current_process_proven") is True
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_bind_after_recovery",
+            "captured_at_utc": utc_now(),
+            "status": "ok" if bound_current else "blocked",
+            "machine_error_code": "OK"
+            if bound_current
+            else "STABLE_BRIDGE_RECOVERY_CURRENT_BIND_NOT_PROVEN",
+            "owner_authorization_phrase_present": True,
+            "bridge_endpoint": bridge_endpoint,
+            "stable_endpoint": custom_native_bridge_lease.stable_endpoint,
+            "current_process_bound_after_recovery": bound_current,
+            **_custom_native_bridge_ownership_public_fields(ownership_packet),
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "next_action": "none"
+            if bound_current
+            else "stop_and_diagnose_stable_bridge_recovery",
+        }
+
     def build_operator_ready_packet() -> dict[str, Any]:
         original_status = build_original_status_packet()
         custom_status = build_custom_status_packet(operator_surface_session.status_payload())
@@ -15560,6 +16226,39 @@ def build_handler(
             )
             return
 
+        def _handle_get_api_codex_custom_stable_bridge_recovery_preflight(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            if parsed.query:
+                self._send_json(
+                    {
+                        "schema_version": 1,
+                        "packet_kind": "custom_native_stable_bridge_recovery_preflight",
+                        "captured_at_utc": utc_now(),
+                        "status": "rejected",
+                        "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+                        "forbidden_fields": sorted(
+                            parse_qs(parsed.query, keep_blank_values=True).keys()
+                        ),
+                        "recovery_apply_admissible": False,
+                        "recovery_apply_attempted": False,
+                        "bridge_cleanup_attempted": False,
+                        "bridge_process_kill_attempted": False,
+                        "raw_backend_details_exposed": False,
+                        "secret_value_exposed": False,
+                        "next_action": "remove_forbidden_browser_fields",
+                    }
+                )
+                return
+            self._send_json(
+                _custom_native_stable_bridge_recovery_preflight_packet(
+                    native_bridge_lease=custom_native_bridge_lease,
+                    bridge_port=custom_native_bridge_lease.bridge_port,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    route_selected=True,
+                )
+            )
+            return
+
         def _handle_get_api_codex_custom_live_bridge_stability(self, request_path: str) -> None:
             parsed = urlparse(request_path)
             last_launch_packet = custom_native_launch_state["last_packet"]
@@ -15904,6 +16603,19 @@ def build_handler(
                     native_bridge_lease=custom_native_bridge_lease,
                     last_launch_packet=custom_native_launch_state["last_packet"],
                     runtime_health_result=runtime_health_result,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_stable_bridge_recovery_apply(self, actual_path: str) -> None:
+            self._send_json(
+                _custom_native_stable_bridge_recovery_apply_packet(
+                    native_bridge_lease=custom_native_bridge_lease,
+                    bridge_port=custom_native_bridge_lease.bridge_port,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    payload=self._read_json_body(),
+                    route_selected=True,
+                    bind_current_bridge=build_stable_bridge_bind_after_recovery_packet,
                 )
             )
             return
