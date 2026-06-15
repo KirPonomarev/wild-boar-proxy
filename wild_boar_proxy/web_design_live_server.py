@@ -79,6 +79,7 @@ from wild_boar_proxy.codex_model_registry import (
     CUSTOM_CODEX_API_REASONING_OPTION_MAX,
     CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
     CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+    MODEL_REASONING_AVAILABILITY_MATRIX_ALLOWED_FIELDS,
     build_api_only_deepseek_live_route_format_packet,
     build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
@@ -89,6 +90,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_dual_lane_selection_intent_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
+    build_model_reasoning_availability_matrix_truth_packet,
     build_server_model_selection_and_reasoning_truth_packet,
     model_lane_classification_from_registry,
 )
@@ -1307,6 +1309,11 @@ WEB_DESIGN_LIVE_ROUTES = (
     ),
     _post_route(
         "/api/codex/custom/reasoning-dispatch-matrix",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
+        "/api/codex/custom/model-reasoning-availability-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
@@ -3350,7 +3357,13 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         "schema_version": 1,
         "request_id": request_id,
         "model": expected_route_id,
-        "input": f"Answer exactly one line: {expected_text}",
+        "input": (
+            "Machine protocol check. The entire response must be exactly one "
+            "line and must contain only the token below.\n"
+            f"{expected_text}\n"
+            "Do not add quotes, markdown, punctuation, explanation, prefix, "
+            "suffix, translation, or any other characters."
+        ),
         "stream": False,
         "max_output_tokens": 32,
         "temperature": 0,
@@ -4958,6 +4971,8 @@ def _custom_native_auth_usability_state_code(packet: dict[str, Any]) -> str:
         return "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT"
     if (
         packet.get("codex_desktop_auth_blocker_observed") is True
+        or packet.get("native_auth_wall_observed") is True
+        or machine_code == "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
         or machine_code == "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED"
     ):
         return "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
@@ -16384,6 +16399,165 @@ def build_handler(
                     api_snapshot=api_snapshot,
                     availability_lattice_packet=availability_lattice_packet,
                     owner_authorized=codex_custom_live_prompt_authorized,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_model_reasoning_availability_matrix(self, actual_path: str) -> None:
+            payload = self._read_optional_json_body()
+            api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+            operator_status = operator_surface_session.status_payload()
+            availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                operator_status,
+                api_snapshot=api_snapshot,
+            )
+            forbidden_fields = sorted(
+                set(payload) - MODEL_REASONING_AVAILABILITY_MATRIX_ALLOWED_FIELDS
+            )
+            reasoning_packet: dict[str, Any] = {}
+            command_loop_packet: dict[str, Any] = {}
+            native_packet: dict[str, Any] = {}
+            if not forbidden_fields:
+                reasoning_packet = _custom_reasoning_dispatch_matrix_live_packet(
+                    payload={},
+                    action_runner=action_runner,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+                request_id = _native_free_text_safe_request_id(
+                    str(payload.get("request_id") or f"wbp-model-reasoning-{uuid.uuid4().hex}")
+                )
+                agent_runtime_context, context_metadata = (
+                    _refresh_custom_agent_runtime_context_for_command_loop()
+                )
+
+                def reasoning_matrix_builder() -> dict[str, Any]:
+                    return reasoning_packet
+
+                command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={
+                        "expected_text": "WBP_MODEL_REASONING_MATRIX_API_OK",
+                        "request_id": f"{request_id}-api",
+                    },
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+
+                def native_free_text_activator(
+                    *,
+                    context: dict[str, Any],
+                    context_metadata: dict[str, Any],
+                    request_id: str,
+                    expected_text: str,
+                ) -> dict[str, Any]:
+                    api_model_id = str(context.get("api_model_id") or "").strip()
+                    if not api_model_id:
+                        packet = {
+                            "schema_version": 1,
+                            "packet_kind": "custom_native_free_text_activation",
+                            "status": "blocked",
+                            "machine_error_code": "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+                            "human_message": "Native matrix activation requires api_model_id from the server runtime context.",
+                            "request_id": request_id,
+                            "expected_text": expected_text,
+                            "context_metadata": context_metadata,
+                            **_custom_native_context_readout_fields(context_metadata),
+                            "native_free_text_activation_attempted": True,
+                            "native_free_text_activation_source": "server_runtime_context",
+                            "browser_can_supply_route_authority": False,
+                            "browser_can_supply_reasoning_authority": False,
+                            "fallback_used": False,
+                            "local_imitation_used": False,
+                            "secret_value_exposed": False,
+                            "raw_backend_details_exposed": False,
+                            "blocking_reasons": ["api_model_id_missing"],
+                        }
+                        packet.update(_custom_native_auth_usability_fields(packet))
+                        return packet
+                    launch_payload = {
+                        "execution_mode": "chatgpt_plus_api",
+                        "chatgpt_model_id": str(
+                            context.get("primary_model_id") or "gpt-5.5"
+                        ).strip(),
+                        "api_model_id": api_model_id,
+                        "api_reasoning_option_id": str(
+                            context.get("api_reasoning_option_id")
+                            or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                        ).strip(),
+                    }
+                    operator_status_for_launch = None
+                    api_snapshot_for_launch = None
+                    external_routes_packet = None
+                    if codex_custom_live_prompt_authorized:
+                        resume_packet = show_custom_native_window_packet()
+                        resume_packet["native_free_text_activation_attempted"] = True
+                        resume_packet["native_free_text_activation_source"] = (
+                            "existing_window_resume_preflight"
+                        )
+                        resume_packet.update(
+                            _custom_native_auth_usability_fields(resume_packet)
+                        )
+                        if (
+                            resume_packet.get("machine_error_code")
+                            != "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+                        ):
+                            return resume_packet
+                        operator_status_for_launch, _operator_status_timeout = (
+                            _bounded_operator_status_payload(operator_surface_session)
+                        )
+                        api_snapshot_for_launch = build_api_connections_readonly_snapshot(
+                            api_connections_readonly_runner
+                        )
+                        external_routes_packet = _external_routes_packet()
+                    packet = _launch_custom_native_codex_packet(
+                        launch_payload,
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        commands={},
+                        operator_status=operator_status_for_launch,
+                        api_snapshot=api_snapshot_for_launch,
+                        external_routes_packet=external_routes_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
+                        launch_trace_packet={
+                            "trace_source": "model_reasoning_matrix_native_activation",
+                            "launch_trace_server_issued": False,
+                        },
+                    )
+                    packet["native_free_text_activation_attempted"] = True
+                    packet["native_free_text_activation_source"] = (
+                        "server_runtime_context"
+                    )
+                    packet.update(_custom_native_auth_usability_fields(packet))
+                    record_custom_native_launch_packet(packet)
+                    return packet
+
+                native_packet = _custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": "WBP_MODEL_REASONING_MATRIX_NATIVE_OK",
+                        "request_id": f"{request_id}-native",
+                    },
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    native_activator=native_free_text_activator,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            self._send_json(
+                build_model_reasoning_availability_matrix_truth_packet(
+                    payload,
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    reasoning_dispatch_packet=reasoning_packet,
+                    command_loop_packet=command_loop_packet,
+                    native_execution_packet=native_packet,
                 )
             )
             return

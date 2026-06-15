@@ -56,6 +56,31 @@ CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER = (
 )
 API_ONLY_EXECUTOR_TRUTH_FINAL_STATUS = "API_ONLY_EXECUTOR_TRUTH_PROVEN_WITH_LIMITS"
 API_ONLY_EXECUTOR_TRUTH_BLOCKER = "STOP_AND_DIAGNOSE_API_ONLY_EXECUTOR_TRUTH_NOT_PROVEN"
+MODEL_REASONING_AVAILABILITY_MATRIX_ALLOWED_FIELDS = {
+    "execution_mode",
+    "chatgpt_model_id",
+    "api_model_id",
+    "api_reasoning_option_id",
+    "request_id",
+}
+MODEL_REASONING_AVAILABILITY_MATRIX_FINAL_STATUS = (
+    "MODEL_REASONING_AVAILABILITY_MATRIX_PROVEN_WITH_LIMITS"
+)
+MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER = (
+    "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN"
+)
+MODEL_LISTED_ONLY = "MODEL_LISTED_ONLY"
+MODEL_BOUND_TO_LANE = "MODEL_BOUND_TO_LANE"
+PROVIDER_DECLARED_REASONING = "PROVIDER_DECLARED_REASONING"
+REASONING_OPTION_SERVER_VALIDATED = "REASONING_OPTION_SERVER_VALIDATED"
+LIVE_API_FORMAT_PROVEN = "LIVE_API_FORMAT_PROVEN"
+REASONING_PAYLOAD_MISMATCH = "REASONING_PAYLOAD_MISMATCH"
+BROWSER_ROUTE_AUTHORITY_REJECTED = "BROWSER_ROUTE_AUTHORITY_REJECTED"
+CUSTOM_NATIVE_AUTH_WALL_OBSERVED = "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
+NATIVE_EXECUTION_PROVEN = "NATIVE_EXECUTION_PROVEN"
+COMBINED_MODE_PARTIAL_API_ONLY = "COMBINED_MODE_PARTIAL_API_ONLY"
+COMBINED_MODE_PROVEN = "COMBINED_MODE_PROVEN"
+COMBINED_MODE_BLOCKED_NATIVE_AUTH = "COMBINED_MODE_BLOCKED_NATIVE_AUTH"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {
     "execution_mode",
     "api_model_id",
@@ -2790,6 +2815,497 @@ def build_api_only_executor_truth_packet(
         "server_truth_packet": server_truth_packet,
         "selector_packet": server_truth_packet.get("selector_packet", {}),
         "next_action": "none" if executor_truth_proven else "stop_and_diagnose",
+    }
+
+
+def _matrix_public_nested_packet(packet: Any) -> dict[str, Any]:
+    if not isinstance(packet, dict):
+        return {}
+    return {
+        key: value
+        for key, value in packet.items()
+        if key
+        not in {
+            "prompt",
+            "native_activation_packet",
+            "native_submit_packet",
+            "native_agent_proof_packet",
+            "acceptance_packet",
+            "reasoning_packet",
+            "server_truth_packet",
+            "selector_packet",
+        }
+    }
+
+
+def _matrix_reasoning_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    level_results = packet.get("level_results")
+    if not isinstance(level_results, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for result in level_results:
+        if not isinstance(result, dict):
+            continue
+        live_proven = result.get("reasoning_level_dispatch_proven") is True
+        mismatch = "api_reasoning_thinking_mismatch" in set(
+            str(reason) for reason in result.get("blocking_reasons") or []
+        )
+        rows.append(
+            {
+                "operator_level": str(result.get("operator_level") or ""),
+                "reasoning_option_id": str(
+                    result.get("api_reasoning_option_id") or ""
+                ),
+                "model_id": str(result.get("api_model_id") or ""),
+                "status": "ok" if live_proven else "blocked",
+                "proof_level": LIVE_API_FORMAT_PROVEN
+                if live_proven
+                else REASONING_PAYLOAD_MISMATCH
+                if mismatch
+                else PROVIDER_DECLARED_REASONING,
+                "machine_error_code": "OK" if live_proven else REASONING_PAYLOAD_MISMATCH
+                if mismatch
+                else "REASONING_LEVEL_NOT_PROVEN",
+                "api_reasoning_dispatch_proven": result.get(
+                    "api_reasoning_dispatch_proven"
+                )
+                is True,
+                "api_provider_acknowledged": result.get("api_provider_acknowledged")
+                is True,
+                "provider_called": result.get("provider_called") is True,
+                "request_count": int(result.get("request_count") or 0),
+                "fallback_used": result.get("fallback_used") is True,
+                "local_imitation_used": result.get("local_imitation_used") is True,
+                "secret_value_exposed": result.get("secret_value_exposed") is True,
+                "intelligence_measured": result.get("intelligence_measured") is True,
+                "not_intelligence_proof": result.get("not_intelligence_proof") is True,
+                "blocking_reasons": [
+                    str(reason) for reason in result.get("blocking_reasons") or []
+                ],
+            }
+        )
+    return rows
+
+
+def build_model_reasoning_availability_matrix_truth_packet(
+    payload: Any,
+    operator_status: dict[str, Any] | None,
+    *,
+    endpoint: str = DEFAULT_ENDPOINT,
+    recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
+    availability_lattice_packet: dict[str, Any] | None = None,
+    reasoning_dispatch_packet: dict[str, Any] | None = None,
+    command_loop_packet: dict[str, Any] | None = None,
+    native_execution_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = sorted(
+        set(payload) - MODEL_REASONING_AVAILABILITY_MATRIX_ALLOWED_FIELDS
+    )
+    selection_payload = {
+        key: payload[key]
+        for key in CUSTOM_CODEX_EXECUTION_MODE_ALLOWED_FIELDS
+        if key in payload
+    }
+    chatgpt_payload = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+    }
+    if str(selection_payload.get("chatgpt_model_id") or "").strip():
+        chatgpt_payload["chatgpt_model_id"] = str(
+            selection_payload.get("chatgpt_model_id") or ""
+        )
+    api_payload = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+    }
+    if str(selection_payload.get("api_model_id") or "").strip():
+        api_payload["api_model_id"] = str(selection_payload.get("api_model_id") or "")
+    if str(selection_payload.get("api_reasoning_option_id") or "").strip():
+        api_payload["api_reasoning_option_id"] = str(
+            selection_payload.get("api_reasoning_option_id") or ""
+        )
+    combined_payload = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+    }
+    for key in ("chatgpt_model_id", "api_model_id", "api_reasoning_option_id"):
+        if str(selection_payload.get(key) or "").strip():
+            combined_payload[key] = str(selection_payload.get(key) or "")
+
+    chatgpt_truth = build_server_model_selection_and_reasoning_truth_packet(
+        chatgpt_payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    api_truth = build_api_only_executor_truth_packet(
+        api_payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+    combined_truth = build_chatgpt_plus_api_slot_truth_packet(
+        combined_payload,
+        operator_status,
+        endpoint=endpoint,
+        recommended_default_model=recommended_default_model,
+        api_snapshot=api_snapshot,
+        availability_lattice_packet=availability_lattice_packet,
+    )
+
+    reasoning = reasoning_dispatch_packet if isinstance(reasoning_dispatch_packet, dict) else {}
+    command_loop = command_loop_packet if isinstance(command_loop_packet, dict) else {}
+    native = native_execution_packet if isinstance(native_execution_packet, dict) else {}
+
+    native_execution_proven = bool(
+        native.get("status") == "ok"
+        and native.get("machine_error_code") == "OK"
+        and native.get("native_free_text_command_loop_proven") is True
+        and native.get("native_free_text_tool_bridge_proven") is True
+        and native.get("native_free_text_alias_routing_proven") is True
+        and native.get("secret_value_exposed") is not True
+        and native.get("raw_backend_details_exposed") is not True
+    )
+    native_auth_wall = bool(
+        native.get("machine_error_code") == CUSTOM_NATIVE_AUTH_WALL_OBSERVED
+        or native.get("native_auth_wall_observed") is True
+        or native.get("native_auth_usability_state_code") == CUSTOM_NATIVE_AUTH_WALL_OBSERVED
+    )
+    native_execution_machine_error_code = str(
+        native.get("machine_error_code") or "NATIVE_EXECUTION_PACKET_MISSING"
+    )
+    command_loop_route_authority_proven = bool(
+        command_loop.get("file_bridge_acceptance_proven") is True
+        and command_loop.get("agent_alias_route_acceptance_proven") is True
+        and command_loop.get("allowed_api_route_ids_enforced") is True
+        and command_loop.get("forbidden_stale_route_ids_enforced") is True
+        and command_loop.get("bridge_or_file_bridge_used") is True
+    )
+    command_loop_api_blocking_reasons: list[str] = []
+    if command_loop.get("status") != "ok" or command_loop.get("machine_error_code") != "OK":
+        command_loop_api_blocking_reasons.append("command_loop_not_ok")
+    if command_loop.get("command_loop_proven") is not True:
+        command_loop_api_blocking_reasons.append("command_loop_not_proven")
+    if command_loop.get("api_lane_exact_token_matched") is not True:
+        command_loop_api_blocking_reasons.append("api_exact_token_not_matched")
+    if not command_loop_route_authority_proven:
+        command_loop_api_blocking_reasons.append("api_route_authority_not_enforced")
+    if command_loop.get("fallback_used") is True:
+        command_loop_api_blocking_reasons.append("fallback_used")
+    if command_loop.get("local_imitation_used") is True:
+        command_loop_api_blocking_reasons.append("local_imitation_used")
+    if command_loop.get("raw_backend_details_exposed") is True:
+        command_loop_api_blocking_reasons.append("raw_backend_details_exposed")
+    if command_loop.get("secret_value_exposed") is True:
+        command_loop_api_blocking_reasons.append("secret_value_exposed")
+    command_loop_api_proven = bool(
+        command_loop.get("status") == "ok"
+        and command_loop.get("machine_error_code") == "OK"
+        and command_loop.get("command_loop_proven") is True
+        and command_loop.get("api_lane_exact_token_matched") is True
+        and command_loop_route_authority_proven
+        and command_loop.get("fallback_used") is not True
+        and command_loop.get("local_imitation_used") is not True
+        and command_loop.get("raw_backend_details_exposed") is not True
+        and command_loop.get("secret_value_exposed") is not True
+    )
+    reasoning_matrix_proven = bool(
+        reasoning.get("packet_kind") == "custom_codex_reasoning_dispatch_matrix"
+        and reasoning.get("status") == "ok"
+        and reasoning.get("machine_error_code") == "OK"
+        and reasoning.get("reasoning_dispatch_matrix_proven") is True
+        and reasoning.get("intelligence_measured") is False
+        and reasoning.get("secret_value_exposed") is not True
+    )
+    alias_binding_proven = bool(
+        command_loop.get("primary_alias_bound_to_chatgpt_lane") is True
+        and command_loop.get("coding_alias_bound_to_api_lane") is True
+        and command_loop.get("primary_alias_precedes_coding_alias") is True
+    )
+    combined_slot_binding_proven = bool(
+        (
+            combined_truth.get("slot_truth_proven") is True
+            or (
+                combined_truth.get("chatgpt_primary_slot_proven") is True
+                and combined_truth.get("api_coding_slot_proven") is True
+                and combined_truth.get("coding_slot_provider_is_deepseek") is True
+                and combined_truth.get("dual_lane_slots_preserved") is True
+                and combined_truth.get("slots_coherent") is True
+                and combined_truth.get("slots_collapsed") is not True
+                and combined_truth.get("api_reasoning_option_server_validated") is True
+            )
+        )
+        and combined_truth.get("raw_backend_details_exposed") is not True
+        and combined_truth.get("secret_value_exposed") is not True
+    )
+    api_lane_proven = bool(command_loop_api_proven and reasoning_matrix_proven)
+    chatgpt_lane_proven = native_execution_proven
+    no_secret_exposed = not any(
+        packet.get("secret_value_exposed") is True
+        for packet in (chatgpt_truth, api_truth, combined_truth, reasoning, command_loop, native)
+        if isinstance(packet, dict)
+    )
+    no_raw_backend_exposed = not any(
+        packet.get("raw_backend_details_exposed") is True
+        for packet in (chatgpt_truth, api_truth, combined_truth, command_loop, native)
+        if isinstance(packet, dict)
+    )
+    combined_full_proven = bool(
+        chatgpt_lane_proven
+        and api_lane_proven
+        and alias_binding_proven
+        and combined_slot_binding_proven
+        and no_secret_exposed
+        and no_raw_backend_exposed
+        and not forbidden_fields
+    )
+
+    chatgpt_row = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+        "lane": "primary_chatgpt",
+        "model_id": str(chatgpt_truth.get("selected_chatgpt_model") or ""),
+        "reasoning_option_id": "",
+        "operator_level": "",
+        "status": "ok"
+        if chatgpt_lane_proven or chatgpt_truth.get("model_selection_truth_proven") is True
+        else "blocked",
+        "proof_level": NATIVE_EXECUTION_PROVEN
+        if native_execution_proven
+        else CUSTOM_NATIVE_AUTH_WALL_OBSERVED
+        if native_auth_wall
+        else MODEL_LISTED_ONLY
+        if chatgpt_truth.get("model_selection_truth_proven") is True
+        else "MODEL_NOT_PROVEN",
+        "machine_error_code": "OK"
+        if native_execution_proven or chatgpt_truth.get("model_selection_truth_proven") is True
+        else str(chatgpt_truth.get("machine_error_code") or "CHATGPT_LANE_NOT_PROVEN"),
+        "model_bound_to_lane": chatgpt_truth.get("model_selection_truth_proven") is True,
+        "native_execution_proven": native_execution_proven,
+        "native_auth_wall_observed": native_auth_wall,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "blocking_reasons": [CUSTOM_NATIVE_AUTH_WALL_OBSERVED]
+        if native_auth_wall and not native_execution_proven
+        else [],
+    }
+    api_row = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+        "lane": "api_route",
+        "model_id": str(api_truth.get("selected_api_model") or ""),
+        "reasoning_option_id": str(api_truth.get("api_reasoning_option_id") or ""),
+        "operator_level": str(api_truth.get("api_reasoning_operator_level") or ""),
+        "status": "ok"
+        if api_lane_proven or api_truth.get("executor_truth_proven") is True
+        else "blocked",
+        "proof_level": LIVE_API_FORMAT_PROVEN
+        if api_lane_proven
+        else REASONING_OPTION_SERVER_VALIDATED
+        if api_truth.get("api_reasoning_option_server_validated") is True
+        else PROVIDER_DECLARED_REASONING,
+        "machine_error_code": "OK"
+        if api_lane_proven or api_truth.get("executor_truth_proven") is True
+        else str(api_truth.get("machine_error_code") or "API_LANE_NOT_PROVEN"),
+        "model_bound_to_lane": api_truth.get("api_primary_slot_proven") is True,
+        "api_lane_exact_token_matched": command_loop.get("api_lane_exact_token_matched") is True,
+        "file_bridge_acceptance_proven": command_loop.get("file_bridge_acceptance_proven") is True,
+        "agent_alias_route_acceptance_proven": command_loop.get("agent_alias_route_acceptance_proven") is True,
+        "allowed_api_route_ids_enforced": command_loop.get("allowed_api_route_ids_enforced") is True,
+        "forbidden_stale_route_ids_enforced": command_loop.get("forbidden_stale_route_ids_enforced") is True,
+        "bridge_or_file_bridge_used": command_loop.get("bridge_or_file_bridge_used") is True,
+        "command_loop_route_authority_proven": command_loop_route_authority_proven,
+        "reasoning_dispatch_matrix_proven": reasoning_matrix_proven,
+        "provider_called": reasoning.get("provider_call_count", 0) != 0,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "blocking_reasons": []
+        if api_lane_proven
+        else command_loop_api_blocking_reasons
+        + [str(reason) for reason in reasoning.get("blocking_reasons") or []],
+    }
+    combined_row = {
+        "execution_mode": CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+        "lane": "combined",
+        "model_id": str(combined_truth.get("selected_chatgpt_model") or ""),
+        "api_model_id": str(combined_truth.get("selected_api_model") or ""),
+        "reasoning_option_id": str(combined_truth.get("api_reasoning_option_id") or ""),
+        "operator_level": str(combined_truth.get("api_reasoning_operator_level") or ""),
+        "status": "ok" if combined_full_proven else "blocked",
+        "proof_level": COMBINED_MODE_PROVEN
+        if combined_full_proven
+        else COMBINED_MODE_BLOCKED_NATIVE_AUTH
+        if native_auth_wall
+        else COMBINED_MODE_PARTIAL_API_ONLY
+        if api_lane_proven
+        else "COMBINED_MODE_NOT_PROVEN",
+        "machine_error_code": "OK"
+        if combined_full_proven
+        else COMBINED_MODE_BLOCKED_NATIVE_AUTH
+        if native_auth_wall
+        else COMBINED_MODE_PARTIAL_API_ONLY
+        if api_lane_proven
+        else "COMBINED_MODE_NOT_PROVEN"
+        if combined_slot_binding_proven
+        else str(combined_truth.get("machine_error_code") or "COMBINED_MODE_NOT_PROVEN"),
+        "slot_truth_proven": combined_truth.get("slot_truth_proven") is True,
+        "combined_slot_binding_proven": combined_slot_binding_proven,
+        "alias_binding_proven": alias_binding_proven,
+        "chatgpt_lane_proven": chatgpt_lane_proven,
+        "api_lane_proven": api_lane_proven,
+        "partial_api_lane_proven": api_lane_proven and not chatgpt_lane_proven,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "blocking_reasons": []
+        if combined_full_proven
+        else [CUSTOM_NATIVE_AUTH_WALL_OBSERVED]
+        if native_auth_wall
+        else ["chatgpt_lane_not_native_proven"]
+        if api_lane_proven
+        else ["combined_mode_not_proven"],
+    }
+
+    blocking_reasons: list[str] = []
+    if forbidden_fields:
+        blocking_reasons.append("browser_route_authority_rejected")
+    if native_auth_wall and not native_execution_proven:
+        blocking_reasons.append(CUSTOM_NATIVE_AUTH_WALL_OBSERVED)
+    if api_lane_proven and not chatgpt_lane_proven:
+        blocking_reasons.append("partial_api_lane_only")
+    if not chatgpt_lane_proven:
+        blocking_reasons.append(native_execution_machine_error_code)
+    if not api_lane_proven:
+        blocking_reasons.append("api_lane_not_live_proven")
+    if command_loop.get("command_loop_proven") is True and not command_loop_route_authority_proven:
+        blocking_reasons.append("api_route_authority_not_enforced")
+    if not alias_binding_proven:
+        blocking_reasons.append("alias_binding_not_proven")
+    if not combined_slot_binding_proven:
+        blocking_reasons.append("combined_slot_binding_not_proven")
+    if not no_secret_exposed:
+        blocking_reasons.append("secret_value_exposed")
+    if not no_raw_backend_exposed:
+        blocking_reasons.append("raw_backend_details_exposed")
+
+    if forbidden_fields:
+        machine_error_code = BROWSER_ROUTE_AUTHORITY_REJECTED
+    elif combined_full_proven:
+        machine_error_code = "OK"
+    elif native_auth_wall and api_lane_proven:
+        machine_error_code = COMBINED_MODE_BLOCKED_NATIVE_AUTH
+    elif api_lane_proven:
+        machine_error_code = COMBINED_MODE_PARTIAL_API_ONLY
+    else:
+        machine_error_code = MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER
+    status = "ok" if combined_full_proven else "blocked"
+    return {
+        "schema_version": 1,
+        "packet_kind": "model_reasoning_availability_matrix_truth",
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "final_status": MODEL_REASONING_AVAILABILITY_MATRIX_FINAL_STATUS
+        if combined_full_proven
+        else MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER,
+        "request_id": str(payload.get("request_id") or ""),
+        "allowed_browser_fields": sorted(
+            MODEL_REASONING_AVAILABILITY_MATRIX_ALLOWED_FIELDS
+        ),
+        "forbidden_fields": [],
+        "forbidden_fields_redacted": True,
+        "forbidden_field_count": len(forbidden_fields),
+        "forbidden_field_categories": ["browser_raw_backend_authority"]
+        if forbidden_fields
+        else [],
+        "execution_modes_tested": [
+            CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
+            CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
+            CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
+        ],
+        "matrix_rows": [chatgpt_row, api_row, combined_row],
+        "reasoning_level_rows": _matrix_reasoning_rows(reasoning),
+        "chatgpt_lane_proven": chatgpt_lane_proven,
+        "api_lane_proven": api_lane_proven,
+        "alias_binding_proven": alias_binding_proven,
+        "combined_slot_binding_proven": combined_slot_binding_proven,
+        "combined_full_proven": combined_full_proven,
+        "partial_api_lane_proven": api_lane_proven and not chatgpt_lane_proven,
+        "combined_status_counts_as_full_success": combined_full_proven,
+        "api_success_counts_as_combined_success": False,
+        "native_auth_wall_observed": native_auth_wall,
+        "native_execution_proven": native_execution_proven,
+        "native_execution_machine_error_code": native_execution_machine_error_code,
+        "reasoning_dispatch_matrix_proven": reasoning_matrix_proven,
+        "command_loop_proven": command_loop.get("command_loop_proven") is True,
+        "runtime_context_file_proven": command_loop.get("runtime_context_file_proven")
+        is True
+        or native.get("runtime_context_file_proven") is True,
+        "primary_alias": str(command_loop.get("primary_alias") or native.get("primary_alias") or ""),
+        "coding_alias": str(command_loop.get("coding_alias") or native.get("coding_alias") or ""),
+        "primary_alias_bound_to_chatgpt_lane": command_loop.get(
+            "primary_alias_bound_to_chatgpt_lane"
+        )
+        is True,
+        "coding_alias_bound_to_api_lane": command_loop.get(
+            "coding_alias_bound_to_api_lane"
+        )
+        is True,
+        "api_lane_exact_token_matched": command_loop.get("api_lane_exact_token_matched")
+        is True,
+        "file_bridge_acceptance_proven": command_loop.get("file_bridge_acceptance_proven")
+        is True,
+        "agent_alias_route_acceptance_proven": command_loop.get(
+            "agent_alias_route_acceptance_proven"
+        )
+        is True,
+        "allowed_api_route_ids_enforced": command_loop.get(
+            "allowed_api_route_ids_enforced"
+        )
+        is True,
+        "forbidden_stale_route_ids_enforced": command_loop.get(
+            "forbidden_stale_route_ids_enforced"
+        )
+        is True,
+        "bridge_or_file_bridge_used": command_loop.get("bridge_or_file_bridge_used")
+        is True,
+        "command_loop_route_authority_proven": command_loop_route_authority_proven,
+        "command_loop_provider_call_count": int(
+            command_loop.get("command_loop_provider_call_count") or 0
+        ),
+        "reasoning_provider_call_count": int(
+            reasoning.get("provider_call_count")
+            or command_loop.get("reasoning_provider_call_count")
+            or 0
+        ),
+        "api_reasoning_option_id": str(api_row.get("reasoning_option_id") or ""),
+        "api_reasoning_operator_level": str(api_row.get("operator_level") or ""),
+        "api_reasoning_intelligence_measured": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "browser_model_authority": False,
+        "raw_backend_details_exposed": not no_raw_backend_exposed,
+        "secret_value_exposed": not no_secret_exposed,
+        "fallback_used": any(
+            packet.get("fallback_used") is True
+            for packet in (reasoning, command_loop, native)
+            if isinstance(packet, dict)
+        ),
+        "local_imitation_used": any(
+            packet.get("local_imitation_used") is True
+            for packet in (reasoning, command_loop, native)
+            if isinstance(packet, dict)
+        ),
+        "blocking_reasons": blocking_reasons,
+        "chatgpt_truth_packet": _matrix_public_nested_packet(chatgpt_truth),
+        "api_truth_packet": _matrix_public_nested_packet(api_truth),
+        "combined_truth_packet": _matrix_public_nested_packet(combined_truth),
+        "reasoning_dispatch_packet": _matrix_public_nested_packet(reasoning),
+        "command_loop_packet": _matrix_public_nested_packet(command_loop),
+        "native_execution_packet": _matrix_public_nested_packet(native),
+        "next_action": "none" if combined_full_proven else "stop_and_diagnose_model_reasoning_matrix",
     }
 
 

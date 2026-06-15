@@ -2284,6 +2284,9 @@ function quickStartNextActionLabel(nextAction) {
   if (action === "confirm_runtime_can_dispatch_coding_agent_model_slot") {
     return "dispatch proof";
   }
+  if (action === "stop_and_diagnose_model_reasoning_matrix") {
+    return "matrix blocked";
+  }
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
 
@@ -2373,6 +2376,23 @@ function quickStartNativeFreeTextWindowLabel(packet) {
     return machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID" ? "proof invalid" : "proof missing";
   }
   return "input ok";
+}
+
+function quickStartModelReasoningMatrixLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (machineCode === "COMBINED_MODE_BLOCKED_NATIVE_AUTH") {
+    return "auth wall";
+  }
+  if (machineCode === "COMBINED_MODE_PARTIAL_API_ONLY") {
+    return "API partial";
+  }
+  if (machineCode === "BROWSER_ROUTE_AUTHORITY_REJECTED") {
+    return "route rejected";
+  }
+  if (machineCode === "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN") {
+    return "matrix blocked";
+  }
+  return machineCode ? quickStartNextActionLabel(machineCode) : "matrix blocked";
 }
 
 function quickStartChatgptRuntimeProofPending(packet) {
@@ -3699,6 +3719,21 @@ function setQuickStartRouteResponse(packet) {
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || packet?.final_status || "UNKNOWN",
       final_status: packet?.final_status || "",
+      packet_kind: packet?.packet_kind || "",
+      captured_at_utc: packet?.captured_at_utc || "",
+      request_id: packet?.request_id || "",
+      allowed_browser_fields:
+        Array.isArray(packet?.allowed_browser_fields) ? packet.allowed_browser_fields : [],
+      forbidden_fields:
+        Array.isArray(packet?.forbidden_fields) ? packet.forbidden_fields : [],
+      forbidden_fields_redacted:
+        packet?.forbidden_fields_redacted === true,
+      forbidden_field_count:
+        Number(packet?.forbidden_field_count || 0),
+      forbidden_field_categories:
+        Array.isArray(packet?.forbidden_field_categories)
+          ? packet.forbidden_field_categories
+          : [],
       mixed_mode_product_decision:
         packet?.mixed_mode_product_decision || "",
       mixed_mode_launch_action:
@@ -3753,6 +3788,40 @@ function setQuickStartRouteResponse(packet) {
         packet?.gpt_api_alias_command_loop_packet === true,
       command_loop_proven:
         packet?.command_loop_proven === true,
+      model_reasoning_availability_matrix_packet:
+        packet?.model_reasoning_availability_matrix_packet === true,
+      matrix_rows:
+        Array.isArray(packet?.matrix_rows) ? packet.matrix_rows : [],
+      matrix_row_count:
+        Array.isArray(packet?.matrix_rows) ? packet.matrix_rows.length : 0,
+      reasoning_level_rows:
+        Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows : [],
+      reasoning_level_row_count:
+        Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows.length : 0,
+      chatgpt_lane_proven:
+        packet?.chatgpt_lane_proven === true,
+      api_lane_proven:
+        packet?.api_lane_proven === true,
+      alias_binding_proven:
+        packet?.alias_binding_proven === true,
+      combined_slot_binding_proven:
+        packet?.combined_slot_binding_proven === true,
+      combined_full_proven:
+        packet?.combined_full_proven === true,
+      partial_api_lane_proven:
+        packet?.partial_api_lane_proven === true,
+      combined_status_counts_as_full_success:
+        packet?.combined_status_counts_as_full_success === true,
+      api_success_counts_as_combined_success:
+        packet?.api_success_counts_as_combined_success === true,
+      native_execution_proven:
+        packet?.native_execution_proven === true,
+      native_execution_machine_error_code:
+        packet?.native_execution_machine_error_code || "",
+      native_execution_packet:
+        packet?.native_execution_packet || {},
+      reasoning_dispatch_matrix_proven:
+        packet?.reasoning_dispatch_matrix_proven === true,
       native_free_text_command_loop_packet:
         packet?.native_free_text_command_loop_packet === true,
       native_free_text_command_loop_proven:
@@ -3879,6 +3948,8 @@ function setQuickStartRouteResponse(packet) {
         packet?.forbidden_stale_route_ids_enforced === true,
       bridge_or_file_bridge_used:
         packet?.bridge_or_file_bridge_used === true,
+      command_loop_route_authority_proven:
+        packet?.command_loop_route_authority_proven === true,
       command_loop_provider_call_count:
         Number(packet?.command_loop_provider_call_count || 0),
       reasoning_provider_call_count:
@@ -3896,6 +3967,9 @@ function setQuickStartRouteResponse(packet) {
       launch_model_id: packet?.launch_model_id || "",
       route_model_id: packet?.route_model_id || "",
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_operator_level: packet?.api_reasoning_operator_level || "",
+      api_reasoning_intelligence_measured:
+        packet?.api_reasoning_intelligence_measured === true,
       api_reasoning_status: packet?.api_reasoning_status || "",
       api_route_status: packet?.api_route_status || "",
       api_route_reference: packet?.api_route_reference || "",
@@ -3910,6 +3984,12 @@ function setQuickStartRouteResponse(packet) {
       api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
       chatgpt_only_calls_api: packet?.chatgpt_only_calls_api === true,
       server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      browser_can_supply_route_authority:
+        packet?.browser_can_supply_route_authority === true,
+      browser_can_supply_reasoning_authority:
+        packet?.browser_can_supply_reasoning_authority === true,
+      browser_model_authority:
+        packet?.browser_model_authority === true,
       ui_action: packet?.ui_action || "",
       route_id: packet?.route_id || "",
       action_status: packet?.action_status || "",
@@ -4943,6 +5023,144 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   });
 }
 
+function renderQuickStartModelReasoningAvailabilityMatrix(packet) {
+  lockQuickStartRouteProofResult();
+  const matrixLabel = quickStartModelReasoningMatrixLabel(packet);
+  const combinedProven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.combined_full_proven === true
+    && packet?.chatgpt_lane_proven === true
+    && packet?.api_lane_proven === true
+    && packet?.alias_binding_proven === true
+    && packet?.combined_status_counts_as_full_success === true
+    && packet?.api_success_counts_as_combined_success !== true
+    && packet?.native_execution_proven === true
+    && packet?.reasoning_dispatch_matrix_proven === true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.secret_value_exposed !== true
+    && packet?.raw_backend_details_exposed !== true
+    && packet?.intelligence_measured !== true
+  );
+  const partialApiOnly = packet?.partial_api_lane_proven === true
+    || packet?.machine_error_code === "COMBINED_MODE_PARTIAL_API_ONLY";
+  const nativeAuthWall = packet?.native_auth_wall_observed === true
+    || packet?.machine_error_code === "COMBINED_MODE_BLOCKED_NATIVE_AUTH";
+  const matrixExecutionMode = packet?.execution_mode || "chatgpt_plus_api";
+  const matrixModeOk = matrixExecutionMode === "chatgpt_plus_api";
+  setQuickStartChip(
+    "quickStartRouteChip",
+    combinedProven ? "green" : "amber",
+    combinedProven ? "matrix ok" : matrixLabel
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    matrixModeOk ? "green" : "amber",
+    matrixModeOk ? "ChatGPT + API" : "select GPT+API"
+  );
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.chatgpt_lane_proven === true ? "green" : "amber",
+    packet?.chatgpt_lane_proven === true ? "native proven" : (nativeAuthWall ? "auth wall" : "listed only")
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    nativeAuthWall ? "amber" : (combinedProven ? "green" : "neutral"),
+    nativeAuthWall ? "auth wall" : (combinedProven ? "confirmed" : "preflight")
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    combinedProven ? "green" : "amber",
+    combinedProven ? "combined ok" : (partialApiOnly ? "API partial" : matrixLabel)
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_execution_proven === true ? "green" : "amber",
+    packet?.native_execution_proven === true ? "native ok" : (nativeAuthWall ? "auth wall" : "not proven")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.alias_binding_proven === true && packet?.runtime_context_file_proven === true ? "green" : "amber",
+    packet?.alias_binding_proven === true && packet?.runtime_context_file_proven === true ? "context ok" : "binding blocked"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    combinedProven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    combinedProven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    model_reasoning_availability_matrix_packet: true,
+    execution_mode: "chatgpt_plus_api",
+    matrix_rows: Array.isArray(packet?.matrix_rows) ? packet.matrix_rows : [],
+    reasoning_level_rows: Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows : [],
+    chatgpt_lane_proven: packet?.chatgpt_lane_proven === true,
+    api_lane_proven: packet?.api_lane_proven === true,
+    alias_binding_proven: packet?.alias_binding_proven === true,
+    combined_slot_binding_proven: packet?.combined_slot_binding_proven === true,
+    combined_full_proven: packet?.combined_full_proven === true,
+    partial_api_lane_proven: packet?.partial_api_lane_proven === true,
+    combined_status_counts_as_full_success:
+      packet?.combined_status_counts_as_full_success === true,
+    api_success_counts_as_combined_success:
+      packet?.api_success_counts_as_combined_success === true,
+    native_auth_wall_observed: nativeAuthWall,
+    native_execution_proven: packet?.native_execution_proven === true,
+    native_execution_machine_error_code: packet?.native_execution_machine_error_code || "",
+    native_execution_packet: packet?.native_execution_packet || {},
+    reasoning_dispatch_matrix_proven:
+      packet?.reasoning_dispatch_matrix_proven === true,
+    command_loop_proven: packet?.command_loop_proven === true,
+    runtime_context_file_proven: packet?.runtime_context_file_proven === true,
+    primary_alias_bound_to_chatgpt_lane:
+      packet?.primary_alias_bound_to_chatgpt_lane === true,
+    coding_alias_bound_to_api_lane:
+      packet?.coding_alias_bound_to_api_lane === true,
+    api_lane_exact_token_matched:
+      packet?.api_lane_exact_token_matched === true,
+    file_bridge_acceptance_proven:
+      packet?.file_bridge_acceptance_proven === true,
+    agent_alias_route_acceptance_proven:
+      packet?.agent_alias_route_acceptance_proven === true,
+    allowed_api_route_ids_enforced:
+      packet?.allowed_api_route_ids_enforced === true,
+    forbidden_stale_route_ids_enforced:
+      packet?.forbidden_stale_route_ids_enforced === true,
+    bridge_or_file_bridge_used:
+      packet?.bridge_or_file_bridge_used === true,
+    command_loop_route_authority_proven:
+      packet?.command_loop_route_authority_proven === true,
+    command_loop_provider_call_count:
+      Number(packet?.command_loop_provider_call_count || 0),
+    reasoning_provider_call_count:
+      Number(packet?.reasoning_provider_call_count || 0),
+    browser_can_supply_route_authority:
+      packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    browser_model_authority:
+      packet?.browser_model_authority === true,
+    api_reasoning_operator_level: packet?.api_reasoning_operator_level || "",
+    api_reasoning_intelligence_measured:
+      packet?.api_reasoning_intelligence_measured === true,
+    intelligence_measured: packet?.intelligence_measured === true,
+    not_intelligence_proof: packet?.not_intelligence_proof === true,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
 async function runQuickStartGptApiAliasCommandLoopProof() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -4954,6 +5172,7 @@ async function runQuickStartGptApiAliasCommandLoopProof() {
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
   setQuickStartChip("quickStartRouteChip", "neutral", "command loop");
   setQuickStartChip("quickStartNextActionState", "neutral", "working");
   const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
@@ -5047,6 +5266,7 @@ async function runQuickStartGptApiAliasCommandLoopProof() {
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
   }
 }
 
@@ -5083,6 +5303,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
   document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
   setQuickStartChip("quickStartRouteChip", "neutral", "native proof");
   setQuickStartChip("quickStartLaunchState", "neutral", "working");
   setQuickStartChip("quickStartNextActionState", "neutral", "working");
@@ -5198,6 +5419,177 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartModelReasoningAvailabilityMatrix() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    renderQuickStartModelReasoningAvailabilityMatrix({
+      status: "blocked",
+      machine_error_code: "MODEL_REASONING_MATRIX_REQUIRES_CHATGPT_PLUS_API",
+      final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+      execution_mode: payload?.execution_mode || "",
+      chatgpt_lane_proven: false,
+      api_lane_proven: false,
+      alias_binding_proven: false,
+      combined_slot_binding_proven: false,
+      combined_full_proven: false,
+      partial_api_lane_proven: false,
+      combined_status_counts_as_full_success: false,
+      api_success_counts_as_combined_success: false,
+      native_auth_wall_observed: false,
+      native_execution_proven: false,
+      reasoning_dispatch_matrix_proven: false,
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      intelligence_measured: false,
+      not_intelligence_proof: true,
+      next_action: "select_chatgpt_plus_api"
+    });
+    return;
+  }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("model_reasoning_matrix_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "matrix");
+  setQuickStartChip("quickStartLaunchState", "neutral", "working");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_MODEL_REASONING_MATRIX_IN_PROGRESS",
+    final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    api_reasoning_option_id: payload.api_reasoning_option_id || "",
+    model_reasoning_availability_matrix_packet: false,
+    matrix_rows: [],
+    reasoning_level_rows: [],
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    chatgpt_lane_proven: false,
+    api_lane_proven: false,
+    alias_binding_proven: false,
+    combined_slot_binding_proven: false,
+    combined_full_proven: false,
+    partial_api_lane_proven: false,
+    combined_status_counts_as_full_success: false,
+    api_success_counts_as_combined_success: false,
+    native_auth_wall_observed: false,
+    native_execution_proven: false,
+    reasoning_dispatch_matrix_proven: false,
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    api_lane_exact_token_matched: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    intelligence_measured: false,
+    not_intelligence_proof: true,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_model_reasoning_matrix"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("model_reasoning_matrix_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartModelReasoningAvailabilityMatrix({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+        chatgpt_lane_proven: false,
+        api_lane_proven: false,
+        alias_binding_proven: false,
+        combined_slot_binding_proven: false,
+        combined_full_proven: false,
+        partial_api_lane_proven: false,
+        combined_status_counts_as_full_success: false,
+        api_success_counts_as_combined_success: false,
+        native_execution_proven: false,
+        reasoning_dispatch_matrix_proven: false,
+        command_loop_proven: false,
+        runtime_context_file_proven: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        secret_value_exposed: false,
+        raw_backend_details_exposed: false,
+        intelligence_measured: false,
+        not_intelligence_proof: true,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const response = await fetch("api/codex/custom/model-reasoning-availability-matrix", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        execution_mode: "chatgpt_plus_api",
+        chatgpt_model_id: payload.chatgpt_model_id || "",
+        api_model_id: payload.api_model_id || "",
+        api_reasoning_option_id: payload.api_reasoning_option_id || "",
+        request_id: `ui-model-reasoning-matrix-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`model reasoning availability matrix http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartModelReasoningAvailabilityMatrix(packet);
+  } catch (error) {
+    renderQuickStartModelReasoningAvailabilityMatrix({
+      status: "failed",
+      machine_error_code: "QUICK_START_MODEL_REASONING_MATRIX_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_MODEL_REASONING_MATRIX_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      api_reasoning_option_id: payload.api_reasoning_option_id || "",
+      chatgpt_lane_proven: false,
+      api_lane_proven: false,
+      alias_binding_proven: false,
+      combined_slot_binding_proven: false,
+      combined_full_proven: false,
+      partial_api_lane_proven: false,
+      combined_status_counts_as_full_success: false,
+      api_success_counts_as_combined_success: false,
+      native_auth_wall_observed: false,
+      native_execution_proven: false,
+      reasoning_dispatch_matrix_proven: false,
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      intelligence_measured: false,
+      not_intelligence_proof: true,
+      next_action: "stop_and_diagnose_model_reasoning_matrix"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
   }
 }
 
@@ -5306,6 +5698,7 @@ async function runQuickStartSessionDualLaneExecution() {
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
   }
 }
 
@@ -15874,6 +16267,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialScreen = screenFromLocation();
   document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
   document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof());
+  document.getElementById("quickStartModelReasoningMatrixAction")?.addEventListener("click", () => runQuickStartModelReasoningAvailabilityMatrix());
   await ensureActionMetadataLoaded();
   applyActionAvailability();
   setupCodexCustomAgentAliases();

@@ -1490,7 +1490,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(captured["body"]["model"], "wbp-deepseek-chat")
         self.assertEqual(
             captured["body"]["input"],
-            "Answer exactly one line: WBP_COMMAND_LOOP_OK",
+            (
+                "Machine protocol check. The entire response must be exactly one "
+                "line and must contain only the token below.\n"
+                "WBP_COMMAND_LOOP_OK\n"
+                "Do not add quotes, markdown, punctuation, explanation, prefix, "
+                "suffix, translation, or any other characters."
+            ),
         )
 
     def test_custom_native_gpt_api_alias_command_loop_endpoint_dispatches_and_proves_loop(self) -> None:
@@ -1699,6 +1705,238 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(packet["reasoning_provider_call_count"], 3)
             self.assertEqual(packet["command_loop_provider_call_count"], 1)
             self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_model_reasoning_availability_matrix_endpoint_blocks_combined_on_native_auth_wall(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id="wbp-deepseek-chat",
+            )
+            bindings[0]["display_name"] = "Planner"
+            bindings[0]["aliases"] = ["Planner", "Lead", "Codex", "Agent 1", "1"]
+            bindings[1]["display_name"] = "Builder"
+            bindings[1]["aliases"] = ["Builder", "Worker", "DIP", "Agent 2", "2"]
+            payloads = live_payloads_with_reasoning_variants()
+            routes_packet = routes_list_packet_with_reasoning_variants()
+            routes_packet["data"]["routes"].append(
+                {
+                    "schema_version": 1,
+                    "route_id": "wbp-deepseek-chat",
+                    "display_name": "WBP DeepSeek Chat",
+                    "provider": "deepseek",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                    "secret_ref": "DEEPSEEK_API_KEY",
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": True,
+                }
+            )
+            routes_packet["data"]["count"] = len(routes_packet["data"]["routes"])
+            payloads[("external-models", "routes", "list", "--json")] = routes_packet
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            auth_wall_packet = {
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+                "custom_process_observed": True,
+                "native_window_observed": True,
+                "input_capable_ui_observed": False,
+                "native_auth_wall_observed": True,
+                "native_auth_usability_state_code": "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+                "secret_value_exposed": False,
+                "raw_backend_details_exposed": False,
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "show_custom_native_window_packet",
+                    return_value=dict(auth_wall_packet),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text="WBP_MODEL_REASONING_MATRIX_API_OK",
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    written = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/agent-bindings",
+                            {"agent_bindings": bindings},
+                        )
+                    )
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/model-reasoning-availability-matrix",
+                            {
+                                "execution_mode": "chatgpt_plus_api",
+                                "chatgpt_model_id": "gpt-5.5",
+                                "api_model_id": "wbp-deepseek-v4-pro-max",
+                                "api_reasoning_option_id": "provider_declared_max",
+                                "request_id": "endpoint-model-reasoning-matrix",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+            context_path = profile_dir / "wbp-agent-runtime-context.json"
+            context_exists = context_path.exists()
+            context = json.loads(context_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(written["status"], "ok")
+        self.assertTrue(context_exists)
+        self.assertEqual(context["primary_aliases"][0], "Planner")
+        self.assertEqual(context["coding_aliases"][0], "Builder")
+        self.assertEqual(packet["packet_kind"], "model_reasoning_availability_matrix_truth")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "COMBINED_MODE_BLOCKED_NATIVE_AUTH")
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertTrue(packet["partial_api_lane_proven"])
+        self.assertFalse(packet["chatgpt_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["combined_status_counts_as_full_success"])
+        self.assertFalse(packet["api_success_counts_as_combined_success"])
+        self.assertTrue(packet["alias_binding_proven"])
+        self.assertTrue(packet["reasoning_dispatch_matrix_proven"])
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertTrue(packet["native_auth_wall_observed"])
+        self.assertFalse(packet["native_execution_proven"])
+        self.assertEqual(packet["primary_alias"], "Planner")
+        self.assertEqual(packet["coding_alias"], "Builder")
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(len(packet["reasoning_level_rows"]), 3)
+        self.assertEqual(
+            sum(
+                1
+                for call in runner.calls
+                if call[:2] == ("external-models", "live-format-check")
+            ),
+            3,
+        )
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_model_reasoning_availability_matrix_endpoint_rejects_browser_route_authority(
+        self,
+    ) -> None:
+        runner = MappingRunner(live_payloads_with_reasoning_variants())
+        with (
+            mock.patch.object(
+                live_server,
+                "OperatorSurfaceSession",
+                return_value=FakeOperatorSurfaceSession(),
+            ),
+            mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=runner,
+                    owner_authorization_phrase=(
+                        "разрешаю тебе любые законные действия в рамках разработки проекта"
+                    ),
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/model-reasoning-availability-matrix",
+                        {
+                            "execution_mode": "chatgpt_plus_api",
+                            "chatgpt_model_id": "gpt-5.5",
+                            "api_model_id": "wbp-deepseek-v4-pro-max",
+                            "api_reasoning_option_id": "provider_declared_max",
+                            "base_url": "https://browser.invalid/v1",
+                            "secret_ref": "BROWSER_SECRET_REF",
+                            "request_id": "endpoint-model-reasoning-forbidden",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "BROWSER_ROUTE_AUTHORITY_REJECTED")
+        self.assertEqual(packet["forbidden_fields"], [])
+        self.assertEqual(packet["forbidden_field_count"], 2)
+        self.assertTrue(packet["forbidden_fields_redacted"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["chatgpt_lane_proven"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertEqual(
+            sum(
+                1
+                for call in runner.calls
+                if call[:2] == ("external-models", "live-format-check")
+            ),
+            0,
+        )
+        self.assertEqual(urlopen.call_count, 0)
+        packet_text = json.dumps(packet, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", packet_text)
+        self.assertNotIn("BROWSER_SECRET_REF", packet_text)
 
     def test_custom_native_gpt_api_alias_command_loop_accepts_name_variants(self) -> None:
         variants = [

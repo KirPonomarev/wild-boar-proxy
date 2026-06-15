@@ -1584,6 +1584,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("Проверить GPT+API", section)
         self.assertIn('id="quickStartNativeFreeTextProofAction"', section)
         self.assertIn("Проверить native GPT+API", section)
+        self.assertIn('id="quickStartModelReasoningMatrixAction"', section)
+        self.assertIn("Проверить matrix", section)
         self.assertIn('id="quickStartLaunchPreflightAction"', section)
         self.assertIn("Предзапусковая проверка", section)
         self.assertIn('id="quickStartChatSlotState"', section)
@@ -1602,12 +1604,19 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
             js,
         )
         self.assertIn(
+            'document.getElementById("quickStartModelReasoningMatrixAction")?.addEventListener("click", () => runQuickStartModelReasoningAvailabilityMatrix())',
+            js,
+        )
+        self.assertIn(
             'document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus({ force: true }))',
             js,
         )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
         self.assertIn("async function runQuickStartNativeFreeTextCommandLoopProof()", js)
         self.assertIn('fetch("api/codex/custom/native-free-text-command-loop-proof"', js)
+        self.assertIn("async function runQuickStartModelReasoningAvailabilityMatrix()", js)
+        self.assertIn('fetch("api/codex/custom/model-reasoning-availability-matrix"', js)
+        self.assertIn("renderQuickStartModelReasoningAvailabilityMatrix", js)
         self.assertIn("async function runQuickStartSessionDualLaneExecution()", js)
         self.assertIn('metadataFor("launch_custom_client_native")', js)
         self.assertIn("await runCodexCustomLaunch()", js)
@@ -6275,6 +6284,215 @@ if (
 ) {
   throw new Error(`missing native proof flags not preserved: ${node("quickStartRouteResponse").textContent}`);
 }
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_model_reasoning_matrix_blocks_partial_api_as_combined_success(
+        self,
+    ) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = { textContent: "" };
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState"
+]) {
+  node(id);
+}
+node("quickStartRouteResponse");
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartModelReasoningAvailabilityMatrix({
+  packet_kind: "model_reasoning_availability_matrix_truth",
+  captured_at_utc: "2026-01-01T00:00:00Z",
+  request_id: "ui-matrix-test",
+  status: "blocked",
+  machine_error_code: "COMBINED_MODE_BLOCKED_NATIVE_AUTH",
+  final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+  execution_mode: "chatgpt_plus_api",
+  allowed_browser_fields: ["api_model_id", "api_reasoning_option_id", "chatgpt_model_id", "execution_mode", "request_id"],
+  forbidden_fields: [],
+  forbidden_fields_redacted: true,
+  forbidden_field_count: 0,
+  forbidden_field_categories: [],
+  matrix_rows: [
+    { execution_mode: "chatgpt_only", intelligence_measured: false, not_intelligence_proof: true },
+    { execution_mode: "api_only", intelligence_measured: false, not_intelligence_proof: true },
+    { execution_mode: "chatgpt_plus_api", intelligence_measured: false, not_intelligence_proof: true }
+  ],
+  reasoning_level_rows: [
+    { operator_level: "fast", intelligence_measured: false, not_intelligence_proof: true },
+    { operator_level: "high", intelligence_measured: false, not_intelligence_proof: true },
+    { operator_level: "max", intelligence_measured: false, not_intelligence_proof: true }
+  ],
+  chatgpt_lane_proven: false,
+  api_lane_proven: true,
+  alias_binding_proven: true,
+  combined_full_proven: false,
+  partial_api_lane_proven: true,
+  combined_status_counts_as_full_success: false,
+  api_success_counts_as_combined_success: false,
+  native_auth_wall_observed: true,
+  native_execution_proven: false,
+  reasoning_dispatch_matrix_proven: true,
+  command_loop_proven: true,
+  runtime_context_file_proven: true,
+  primary_alias_bound_to_chatgpt_lane: true,
+  coding_alias_bound_to_api_lane: true,
+  api_lane_exact_token_matched: true,
+  file_bridge_acceptance_proven: true,
+  agent_alias_route_acceptance_proven: true,
+  allowed_api_route_ids_enforced: true,
+  forbidden_stale_route_ids_enforced: true,
+  bridge_or_file_bridge_used: true,
+  command_loop_route_authority_proven: true,
+  command_loop_provider_call_count: 1,
+  reasoning_provider_call_count: 3,
+  browser_can_supply_route_authority: false,
+  browser_can_supply_reasoning_authority: false,
+  browser_model_authority: false,
+  api_reasoning_operator_level: "max",
+  fallback_used: false,
+  local_imitation_used: false,
+  secret_value_exposed: false,
+  raw_backend_details_exposed: false,
+  intelligence_measured: false,
+  not_intelligence_proof: true,
+  next_action: "stop_and_diagnose_model_reasoning_matrix"
+});
+`, sandbox);
+
+if (node("quickStartRouteChip").className.includes("green")) {
+  throw new Error(`partial API matrix must not render green route chip: ${node("quickStartRouteChip").className}`);
+}
+if (node("quickStartLaunchState").className.includes("green")) {
+  throw new Error(`partial API matrix must not render green launch chip: ${node("quickStartLaunchState").className}`);
+}
+if (!node("quickStartApiSlotState").className.includes("green")) {
+  throw new Error(`API lane proof should remain visible: ${node("quickStartApiSlotState").className}`);
+}
+if (node("quickStartChatSlotState").className.includes("green")) {
+  throw new Error(`auth wall ChatGPT lane must not render green: ${node("quickStartChatSlotState").className}`);
+}
+if (node("quickStartRouteChip").lastElementChild.textContent !== "auth wall") {
+  throw new Error(`matrix auth wall label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
+if (
+  rendered.model_reasoning_availability_matrix_packet !== true ||
+  rendered.api_lane_proven !== true ||
+  rendered.chatgpt_lane_proven !== false ||
+  rendered.combined_full_proven !== false ||
+  rendered.partial_api_lane_proven !== true ||
+  rendered.combined_status_counts_as_full_success !== false ||
+  rendered.api_success_counts_as_combined_success !== false ||
+  rendered.native_auth_wall_observed !== true ||
+  rendered.native_execution_proven !== false ||
+  rendered.reasoning_dispatch_matrix_proven !== true ||
+  rendered.runtime_readiness_claimed !== false ||
+  rendered.file_bridge_acceptance_proven !== true ||
+  rendered.agent_alias_route_acceptance_proven !== true ||
+  rendered.allowed_api_route_ids_enforced !== true ||
+  rendered.forbidden_stale_route_ids_enforced !== true ||
+  rendered.bridge_or_file_bridge_used !== true ||
+  rendered.command_loop_route_authority_proven !== true ||
+  rendered.command_loop_provider_call_count !== 1 ||
+  rendered.reasoning_provider_call_count !== 3 ||
+  rendered.browser_can_supply_route_authority !== false ||
+  rendered.browser_can_supply_reasoning_authority !== false ||
+  rendered.browser_model_authority !== false ||
+  rendered.intelligence_measured !== false ||
+  rendered.secret_value_exposed !== false ||
+  rendered.raw_backend_details_exposed !== false ||
+  rendered.packet_kind !== "model_reasoning_availability_matrix_truth" ||
+  rendered.captured_at_utc !== "2026-01-01T00:00:00Z" ||
+  rendered.request_id !== "ui-matrix-test" ||
+  rendered.allowed_browser_fields.length !== 5 ||
+  rendered.forbidden_fields.length !== 0 ||
+  rendered.forbidden_fields_redacted !== true ||
+  rendered.forbidden_field_count !== 0 ||
+  rendered.forbidden_field_categories.length !== 0 ||
+  rendered.matrix_row_count !== 3 ||
+  rendered.reasoning_level_rows.length !== 3 ||
+  rendered.reasoning_level_row_count !== 3
+) {
+  throw new Error(`matrix flags not preserved: ${node("quickStartRouteResponse").textContent}`);
+}
+vm.runInContext(`
+renderQuickStartModelReasoningAvailabilityMatrix({
+  status: "blocked",
+  machine_error_code: "MODEL_REASONING_MATRIX_REQUIRES_CHATGPT_PLUS_API",
+  final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+  execution_mode: "api_only",
+  chatgpt_lane_proven: false,
+  api_lane_proven: false,
+  alias_binding_proven: false,
+  combined_full_proven: false,
+  intelligence_measured: false,
+  not_intelligence_proof: true,
+  next_action: "select_chatgpt_plus_api"
+});
+if (document.getElementById("quickStartExecutionModeState").className.includes("green")) {
+  throw new Error("wrong mode must not render green execution chip");
+}
+if (document.getElementById("quickStartExecutionModeState").lastElementChild.textContent !== "select GPT+API") {
+  throw new Error("wrong mode label missing");
+}
+`, sandbox);
 """
         result = subprocess.run(
             ["node", "-e", script],
