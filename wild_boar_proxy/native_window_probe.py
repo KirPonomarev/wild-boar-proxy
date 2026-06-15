@@ -84,6 +84,35 @@ CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
         "input_capable_window_not_proven_for_pid",
     }
 )
+NATIVE_VOICE_ICON_HINTS = (
+    "voice",
+    "dictation",
+    "microphone",
+    "mic",
+    "audio",
+    "record",
+    "speech",
+    "голос",
+    "микрофон",
+    "диктов",
+    "запис",
+)
+NATIVE_VOICE_ICON_FORBIDDEN_HINTS = (
+    "settings",
+    "preferences",
+    "permission",
+    "permissions",
+    "privacy",
+    "help",
+    "device",
+    "devices",
+    "learn",
+    "tooltip",
+    "настрой",
+    "разреш",
+    "помощ",
+    "устрой",
+)
 
 
 def owner_authorization_phrase_present(value: str | None) -> bool:
@@ -502,6 +531,12 @@ def show_custom_native_window_packet(
     profile_pids = _custom_profile_process_pids(inventory)
     candidate_pids = _custom_window_candidate_pids(inventory)
     if not candidate_pids:
+        voice_packet = _native_voice_icon_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+            human_message="Native voice icon observation requires a running Custom Codex process.",
+            observed_pid=None,
+            allowed_owner_pids=candidate_pids,
+        )
         return {
             "schema_version": 1,
             "captured_at_utc": utc_now(),
@@ -521,6 +556,17 @@ def show_custom_native_window_packet(
             "custom_window_observed": False,
             "custom_window_visible": False,
             "custom_window_frontmost": False,
+            "native_voice_icon_observed": False,
+            "native_voice_shortcut_available": False,
+            "native_voice_shortcut_tested": False,
+            "voice_blocked_reason_code": str(voice_packet.get("voice_blocked_reason_code") or ""),
+            "voice_shortcut_blocked_reason_code": str(
+                voice_packet.get("voice_shortcut_blocked_reason_code") or ""
+            ),
+            "microphone_permission_check_required": False,
+            "native_voice_observation_packet": voice_packet,
+            "does_not_patch_codex_ui": True,
+            "voice_is_not_locally_imitated": True,
             "window_focus_action_attempted": False,
             "window_focus_action_succeeded": False,
             "original_codex_touched": False,
@@ -581,6 +627,18 @@ def show_custom_native_window_packet(
     renderer_startup_loader_stuck = (
         renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
     )
+    if native_app_usable:
+        voice_packet = _cdp_voice_icon_observation(
+            after_observed_pid,
+            allowed_owner_pids=after_candidate_pids,
+        )
+    else:
+        voice_packet = _native_voice_icon_blocked_packet(
+            machine_error_code="NATIVE_VOICE_ICON_NOT_TESTED_WINDOW_UNUSABLE",
+            human_message="Native voice icon observation requires a visible, input-capable Custom Codex window.",
+            observed_pid=after_observed_pid,
+            allowed_owner_pids=after_candidate_pids,
+        )
     return {
         "schema_version": 1,
         "captured_at_utc": utc_now(),
@@ -632,6 +690,23 @@ def show_custom_native_window_packet(
         "native_app_usable": native_app_usable,
         "input_capable_ui_observed": usability_packet.get("input_capable_ui_observed") is True,
         "native_app_usability_source": native_app_usability_source,
+        "native_voice_icon_observed": voice_packet.get("native_voice_icon_observed") is True,
+        "native_voice_shortcut_available": (
+            voice_packet.get("native_voice_shortcut_available") is True
+        ),
+        "native_voice_shortcut_tested": (
+            voice_packet.get("native_voice_shortcut_tested") is True
+        ),
+        "voice_blocked_reason_code": str(voice_packet.get("voice_blocked_reason_code") or ""),
+        "voice_shortcut_blocked_reason_code": str(
+            voice_packet.get("voice_shortcut_blocked_reason_code") or ""
+        ),
+        "microphone_permission_check_required": (
+            voice_packet.get("microphone_permission_check_required") is True
+        ),
+        "native_voice_observation_packet": voice_packet,
+        "does_not_patch_codex_ui": True,
+        "voice_is_not_locally_imitated": True,
         "native_app_usability_blocked_reason_class": str(
             "" if native_app_usable else usability_packet.get("blocked_reason_class") or ""
         ),
@@ -1105,6 +1180,364 @@ def _cdp_prompt_submit_blocked_packet(
 def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
     value = (packet.get("result") or {}).get("result", {}).get("value", {})
     return value if isinstance(value, dict) else {}
+
+
+def _native_voice_icon_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    observed_pid: int | None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    cdp_result: str = "",
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_voice_icon_observation",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "custom_process_pid": observed_pid,
+        "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "native_voice_icon_observed": False,
+        "native_voice_shortcut_available": False,
+        "native_voice_shortcut_tested": False,
+        "voice_blocked_reason_code": machine_error_code,
+        "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_ICON_NOT_PROVEN",
+        "microphone_permission_check_required": False,
+        "native_voice_candidate_count": 0,
+        "visible_native_voice_candidate_count": 0,
+        "button_candidate_count": 0,
+        "visible_button_candidate_count": 0,
+        "voice_detector_hint_count": len(NATIVE_VOICE_ICON_HINTS),
+        "input_candidate_count": 0,
+        "visible_input_candidate_count": 0,
+        "semantic_voice_candidate_count": 0,
+        "dedicated_voice_candidate_count": 0,
+        "composer_bound_voice_candidate_count": 0,
+        "forbidden_voice_candidate_count": 0,
+        "local_forbidden_voice_context_count": 0,
+        "semantic_attribute_scan_performed": False,
+        "dom_text_content_scanned": False,
+        "text_value_captured": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "raw_label_recorded": False,
+        "raw_backend_details_exposed": False,
+        "no_secret_exposed": True,
+        "secret_value_exposed": False,
+        "prompt_attempted": False,
+        "prompt_submitted": False,
+        "does_not_patch_codex_ui": True,
+        "voice_is_not_locally_imitated": True,
+        "browser_cdp_authority_widened": False,
+        "cdp_result": cdp_result[:512],
+        "next_action": "stop_and_diagnose_native_voice_icon",
+    }
+
+
+def _cdp_voice_icon_observation(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    try:
+        port_owned, owner_result = _devtools_port_owned_by_pid(
+            observed_pid,
+            port,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    except OSError as exc:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_PROBE_FAILED",
+            human_message="Native voice icon observation could not prove the Custom Codex renderer CDP port owner.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=f"cdp_port_owner_probe_failed:{type(exc).__name__}",
+        )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    if not port_owned:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Native voice icon observation requires the Custom Codex renderer CDP port to be pid-bound.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=owner_result,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code=page_error.upper(),
+            human_message="Native voice icon observation could not find a Custom Codex app page target.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=page_error,
+        )
+
+    hints_json = json.dumps(list(NATIVE_VOICE_ICON_HINTS), ensure_ascii=False)
+    forbidden_hints_json = json.dumps(list(NATIVE_VOICE_ICON_FORBIDDEN_HINTS), ensure_ascii=False)
+    expression = f"""
+(() => {{
+  const hints = {hints_json};
+  const forbiddenHints = {forbidden_hints_json};
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').toLowerCase();
+  const semanticText = (node) => {{
+    const attrs = [
+      'aria-label',
+      'title',
+      'data-testid',
+      'data-test-id',
+      'data-cy',
+      'data-icon',
+      'data-lucide',
+      'id',
+      'class',
+      'name',
+      'role'
+    ];
+    const values = attrs.map((attr) => node.getAttribute(attr) || '');
+    for (const child of Array.from(node.querySelectorAll('svg,[aria-label],[title],[data-icon],[data-lucide]'))) {{
+      values.push(child.getAttribute('aria-label') || '');
+      values.push(child.getAttribute('title') || '');
+      values.push(child.getAttribute('data-icon') || '');
+      values.push(child.getAttribute('data-lucide') || '');
+      values.push(child.getAttribute('class') || '');
+    }}
+    return normalize(values.join(' '));
+  }};
+  const hasVoiceHint = (node) => {{
+    const text = semanticText(node);
+    return hints.some((hint) => text.includes(hint));
+  }};
+  const hasForbiddenVoiceContext = (node) => {{
+    const text = semanticText(node);
+    return forbiddenHints.some((hint) => text.includes(hint));
+  }};
+  const inputSelector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const inputNodes = Array.from(document.querySelectorAll(inputSelector));
+  const visibleInputs = inputNodes.filter((node) => visible(node, 80, 20) && node.disabled !== true);
+  const submitButtonHint = (button) => {{
+    const text = semanticText(button);
+    return button.type === 'submit' ||
+      text.includes('send') ||
+      text.includes('submit') ||
+      text.includes('arrow-up') ||
+      text.includes('arrow up') ||
+      text.includes('отправ');
+  }};
+  const buttonLooksIconSized = (button) => {{
+    const rect = button.getBoundingClientRect();
+    return rect.width >= 16 && rect.height >= 16 && rect.width <= 96 && rect.height <= 96;
+  }};
+  const buttonHasIconSurface = (button) => (
+    !!button.querySelector('svg,[data-icon],[data-lucide]') ||
+    !!button.getAttribute('data-icon') ||
+    !!button.getAttribute('data-lucide')
+  );
+  const ancestorChain = (node) => {{
+    const chain = [];
+    let current = node;
+    for (let depth = 0; current && depth < 8; depth += 1) {{
+      chain.push(current);
+      current = current.parentElement;
+    }}
+    return chain;
+  }};
+  const buttonHasForbiddenLocalContext = (button) => (
+    ancestorChain(button).slice(0, 4).some((node) => hasForbiddenVoiceContext(node))
+  );
+  const composerContainers = [];
+  for (const input of visibleInputs) {{
+    for (const container of ancestorChain(input)) {{
+      const buttons = Array.from(container.querySelectorAll('button,[role="button"]'))
+        .filter((node) => visible(node) && node.disabled !== true);
+      const hasSubmit = buttons.some((button) => submitButtonHint(button));
+      if (hasSubmit) {{
+        composerContainers.push(container);
+        break;
+      }}
+    }}
+  }}
+  const buttonIsInComposerContainer = (button) => (
+    composerContainers.some((container) => container.contains(button))
+  );
+  const nodes = Array.from(document.querySelectorAll('button,[role="button"]'));
+  const visibleButtons = nodes.filter((node) => visible(node) && node.disabled !== true);
+  const semanticCandidates = visibleButtons.filter((node) => hasVoiceHint(node));
+  const forbiddenCandidates = semanticCandidates.filter((node) => hasForbiddenVoiceContext(node));
+  const localForbiddenCandidates = semanticCandidates.filter((node) => (
+    buttonHasForbiddenLocalContext(node)
+  ));
+  const composerBoundCandidates = semanticCandidates.filter((node) => (
+    buttonIsInComposerContainer(node) && !buttonHasForbiddenLocalContext(node)
+  ));
+  const dedicatedCandidates = semanticCandidates.filter((node) => (
+    buttonIsInComposerContainer(node) &&
+    !buttonHasForbiddenLocalContext(node) &&
+    buttonLooksIconSized(node) &&
+    buttonHasIconSurface(node)
+  ));
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    title: document.title,
+    inputCandidateCount: inputNodes.length,
+    visibleInputCandidateCount: visibleInputs.length,
+    composerContainerCandidateCount: composerContainers.length,
+    buttonCandidateCount: nodes.length,
+    visibleButtonCandidateCount: visibleButtons.length,
+    semanticVoiceCandidateCount: semanticCandidates.length,
+    composerBoundVoiceCandidateCount: composerBoundCandidates.length,
+    forbiddenVoiceCandidateCount: forbiddenCandidates.length,
+    localForbiddenVoiceContextCount: localForbiddenCandidates.length,
+    dedicatedVoiceCandidateCount: dedicatedCandidates.length,
+    nativeVoiceCandidateCount: dedicatedCandidates.length,
+    visibleNativeVoiceCandidateCount: dedicatedCandidates.length,
+    voiceDetectorHintCount: hints.length,
+    semanticAttributeScanPerformed: true,
+    domTextContentScanned: false,
+    textValueCaptured: false,
+    rawLabelCaptured: false
+  }};
+}})()
+""".strip()
+    blocked_result: dict[str, Any] | None = None
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 5000 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_voice_icon_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = _cdp_result_value(cdp_result)
+        if not value:
+            last_error = "cdp_voice_icon_evaluate_missing_value"
+            continue
+        icon_observed = (
+            value.get("url") == "app://-/index.html"
+            and value.get("readyState") in {"interactive", "complete"}
+            and int(value.get("visibleInputCandidateCount") or 0) > 0
+            and int(value.get("visibleNativeVoiceCandidateCount") or 0) > 0
+            and value.get("textValueCaptured") is False
+            and value.get("rawLabelCaptured") is False
+            and value.get("domTextContentScanned") is False
+        )
+        bounded = {
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": page.get("url"),
+            "cdp_target_type": page.get("type"),
+            "cdp_ready_state": value.get("readyState"),
+            "input_candidate_count": value.get("inputCandidateCount"),
+            "visible_input_candidate_count": value.get("visibleInputCandidateCount"),
+            "composer_container_candidate_count": value.get("composerContainerCandidateCount"),
+            "button_candidate_count": value.get("buttonCandidateCount"),
+            "visible_button_candidate_count": value.get("visibleButtonCandidateCount"),
+            "semantic_voice_candidate_count": value.get("semanticVoiceCandidateCount"),
+            "composer_bound_voice_candidate_count": value.get("composerBoundVoiceCandidateCount"),
+            "forbidden_voice_candidate_count": value.get("forbiddenVoiceCandidateCount"),
+            "local_forbidden_voice_context_count": value.get("localForbiddenVoiceContextCount"),
+            "dedicated_voice_candidate_count": value.get("dedicatedVoiceCandidateCount"),
+            "native_voice_candidate_count": value.get("nativeVoiceCandidateCount"),
+            "visible_native_voice_candidate_count": value.get("visibleNativeVoiceCandidateCount"),
+            "voice_detector_hint_count": value.get("voiceDetectorHintCount"),
+            "semantic_attribute_scan_performed": (
+                value.get("semanticAttributeScanPerformed") is True
+            ),
+            "dom_text_content_scanned": value.get("domTextContentScanned") is True,
+            "text_value_captured": value.get("textValueCaptured") is True,
+            "raw_label_recorded": value.get("rawLabelCaptured") is True,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "raw_backend_details_exposed": False,
+            "no_secret_exposed": True,
+            "secret_value_exposed": False,
+            "prompt_attempted": False,
+            "prompt_submitted": False,
+            "browser_cdp_authority_widened": False,
+        }
+        if icon_observed:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_voice_icon_observation",
+                "captured_at_utc": utc_now(),
+                "status": "ok",
+                "machine_error_code": "OK",
+                "human_message": "Custom Codex native voice icon was observed in the pid-bound renderer.",
+                "custom_process_pid": observed_pid,
+                "cdp_localhost_only": True,
+                "cdp_endpoint_redacted": True,
+                "cdp_target_bound_to_custom_launch": True,
+                "native_voice_icon_observed": True,
+                "native_voice_shortcut_available": False,
+                "native_voice_shortcut_tested": False,
+                "voice_blocked_reason_code": "",
+                "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                "microphone_permission_check_required": True,
+                "does_not_patch_codex_ui": True,
+                "voice_is_not_locally_imitated": True,
+                "next_action": "native_microphone_permission_check"
+                if not value.get("microphonePermissionChecked")
+                else "none",
+                **bounded,
+            }
+        if blocked_result is None or value.get("url") == "app://-/index.html":
+            blocked_result = bounded
+    if blocked_result is not None:
+        try:
+            semantic_voice_count = int(blocked_result.get("semantic_voice_candidate_count") or 0)
+        except (TypeError, ValueError):
+            semantic_voice_count = 0
+        machine_error_code = (
+            "NATIVE_VOICE_ICON_DEDICATED_CONTROL_NOT_OBSERVED"
+            if semantic_voice_count > 0
+            else "NATIVE_VOICE_ICON_NOT_OBSERVED"
+        )
+        return _native_voice_icon_blocked_packet(
+            machine_error_code=machine_error_code,
+            human_message="Custom Codex native voice icon was not observed in the pid-bound renderer.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=json.dumps(blocked_result, sort_keys=True),
+        ) | blocked_result
+    return _native_voice_icon_blocked_packet(
+        machine_error_code="NATIVE_VOICE_ICON_CDP_EVALUATION_FAILED",
+        human_message="Custom Codex native voice icon observation could not evaluate the pid-bound renderer.",
+        observed_pid=observed_pid,
+        cdp_port=port,
+        allowed_owner_pids=allowed_owner_pids,
+        cdp_result=last_error or "cdp_voice_icon_evaluate_failed",
+    )
 
 
 def _cdp_submit_prompt_to_app_page(

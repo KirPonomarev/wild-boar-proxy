@@ -18499,6 +18499,18 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "native_app_usable": True,
                 "input_capable_ui_observed": True,
                 "native_app_usability_source": "input_capable_ui",
+                "native_voice_icon_observed": True,
+                "native_voice_shortcut_tested": False,
+                "native_voice_shortcut_available": False,
+                "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                "native_voice_observation_packet": {
+                    "packet_kind": "custom_codex_native_voice_icon_observation",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_voice_icon_observed": True,
+                    "raw_dom_exposed": False,
+                    "voice_is_not_locally_imitated": True,
+                },
                 "original_codex_touched": False,
                 "asar_touched": False,
             },
@@ -18530,6 +18542,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(accepted["result"]["machine_error_code"], "OK")
         self.assertTrue(accepted["result"]["data"]["custom_window_visible"])
         self.assertTrue(accepted["result"]["data"]["native_app_usable"])
+        self.assertTrue(accepted["result"]["data"]["native_voice_icon_observed"])
+        self.assertEqual(
+            accepted["result"]["data"]["native_voice_observation_packet"]["packet_kind"],
+            "custom_codex_native_voice_icon_observation",
+        )
+        self.assertFalse(accepted["result"]["data"]["native_voice_observation_packet"]["raw_dom_exposed"])
         self.assertFalse(accepted["result"]["data"]["original_codex_touched"])
         self.assertFalse(accepted["result"]["data"]["asar_touched"])
         show_window.assert_called_once()
@@ -18549,6 +18567,18 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "native_app_usable": True,
                 "input_capable_ui_observed": True,
                 "native_app_usability_source": "input_capable_ui",
+                "native_voice_icon_observed": True,
+                "native_voice_shortcut_tested": False,
+                "native_voice_shortcut_available": False,
+                "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                "native_voice_observation_packet": {
+                    "packet_kind": "custom_codex_native_voice_icon_observation",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_voice_icon_observed": True,
+                    "raw_dom_exposed": False,
+                    "voice_is_not_locally_imitated": True,
+                },
                 "original_codex_touched": False,
                 "asar_touched": False,
             },
@@ -18577,6 +18607,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertTrue(packet["custom_window_visible"])
         self.assertTrue(packet["native_app_usable"])
+        self.assertTrue(packet["native_voice_icon_observed"])
+        self.assertEqual(
+            packet["native_voice_observation_packet"]["packet_kind"],
+            "custom_codex_native_voice_icon_observation",
+        )
+        self.assertFalse(packet["native_voice_observation_packet"]["raw_dom_exposed"])
         self.assertFalse(packet["original_codex_touched"])
         self.assertFalse(packet["asar_touched"])
         show_window.assert_called_once()

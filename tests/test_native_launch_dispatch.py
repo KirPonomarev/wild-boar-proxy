@@ -1013,6 +1013,330 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(bounded["cdp_port_owner_bound_to_custom_profile"])
         self.assertFalse(bounded["browser_cdp_authority_widened"])
 
+    def test_cdp_voice_icon_observation_accepts_native_mic_affordance_without_raw_dom(self) -> None:
+        cdp_packet = {
+            "id": 5001,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "composerContainerCandidateCount": 1,
+                        "buttonCandidateCount": 4,
+                        "visibleButtonCandidateCount": 3,
+                        "semanticVoiceCandidateCount": 1,
+                        "composerBoundVoiceCandidateCount": 1,
+                        "forbiddenVoiceCandidateCount": 0,
+                        "localForbiddenVoiceContextCount": 0,
+                        "dedicatedVoiceCandidateCount": 1,
+                        "nativeVoiceCandidateCount": 1,
+                        "visibleNativeVoiceCandidateCount": 1,
+                        "voiceDetectorHintCount": 11,
+                        "semanticAttributeScanPerformed": True,
+                        "domTextContentScanned": False,
+                        "textValueCaptured": False,
+                        "rawLabelCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "333"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                return_value=cdp_packet,
+            ) as cdp_command,
+        ):
+            packet = native_probe._cdp_voice_icon_observation(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["native_voice_icon_observed"])
+        self.assertTrue(packet["microphone_permission_check_required"])
+        self.assertFalse(packet["native_voice_shortcut_tested"])
+        self.assertFalse(packet["native_voice_shortcut_available"])
+        self.assertEqual(packet["voice_shortcut_blocked_reason_code"], "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION")
+        self.assertEqual(packet["cdp_allowed_owner_pids"], [222, 333])
+        self.assertTrue(packet["cdp_port_owner_bound_to_custom_profile"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_ax_tree_exposed"])
+        self.assertFalse(packet["raw_label_recorded"])
+        self.assertTrue(packet["semantic_attribute_scan_performed"])
+        self.assertFalse(packet["dom_text_content_scanned"])
+        self.assertEqual(packet["visible_input_candidate_count"], 1)
+        self.assertEqual(packet["composer_container_candidate_count"], 1)
+        self.assertEqual(packet["semantic_voice_candidate_count"], 1)
+        self.assertEqual(packet["composer_bound_voice_candidate_count"], 1)
+        self.assertEqual(packet["forbidden_voice_candidate_count"], 0)
+        self.assertEqual(packet["local_forbidden_voice_context_count"], 0)
+        self.assertEqual(packet["dedicated_voice_candidate_count"], 1)
+        self.assertTrue(packet["no_secret_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["prompt_attempted"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertTrue(packet["does_not_patch_codex_ui"])
+        self.assertTrue(packet["voice_is_not_locally_imitated"])
+        expression = cdp_command.call_args.args[1]["params"]["expression"]
+        self.assertIn("microphone", expression)
+        self.assertIn("composerContainers", expression)
+        self.assertIn("buttonIsInComposerContainer", expression)
+        self.assertIn("buttonLooksIconSized", expression)
+        self.assertIn("hasForbiddenVoiceContext", expression)
+        self.assertIn("buttonHasForbiddenLocalContext", expression)
+        self.assertNotIn("innerText", expression)
+        self.assertNotIn("textContent", expression)
+        self.assertNotIn("OPENAI_API_KEY", expression)
+
+    def test_cdp_voice_icon_observation_blocks_without_native_mic_affordance(self) -> None:
+        cdp_packet = {
+            "id": 5001,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "composerContainerCandidateCount": 1,
+                        "buttonCandidateCount": 4,
+                        "visibleButtonCandidateCount": 3,
+                        "semanticVoiceCandidateCount": 0,
+                        "composerBoundVoiceCandidateCount": 0,
+                        "forbiddenVoiceCandidateCount": 0,
+                        "localForbiddenVoiceContextCount": 0,
+                        "dedicatedVoiceCandidateCount": 0,
+                        "nativeVoiceCandidateCount": 0,
+                        "visibleNativeVoiceCandidateCount": 0,
+                        "voiceDetectorHintCount": 11,
+                        "semanticAttributeScanPerformed": True,
+                        "domTextContentScanned": False,
+                        "textValueCaptured": False,
+                        "rawLabelCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "333"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                return_value=cdp_packet,
+            ),
+        ):
+            packet = native_probe._cdp_voice_icon_observation(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "NATIVE_VOICE_ICON_NOT_OBSERVED")
+        self.assertFalse(packet["native_voice_icon_observed"])
+        self.assertEqual(packet["visible_native_voice_candidate_count"], 0)
+        self.assertEqual(packet["voice_blocked_reason_code"], "NATIVE_VOICE_ICON_NOT_OBSERVED")
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_label_recorded"])
+        self.assertTrue(packet["no_secret_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertTrue(packet["semantic_attribute_scan_performed"])
+        self.assertFalse(packet["dom_text_content_scanned"])
+
+    def test_cdp_voice_icon_observation_blocks_semantic_voice_button_not_dedicated_to_composer(self) -> None:
+        cdp_packet = {
+            "id": 5001,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "composerContainerCandidateCount": 1,
+                        "buttonCandidateCount": 4,
+                        "visibleButtonCandidateCount": 3,
+                        "semanticVoiceCandidateCount": 1,
+                        "composerBoundVoiceCandidateCount": 0,
+                        "forbiddenVoiceCandidateCount": 1,
+                        "localForbiddenVoiceContextCount": 1,
+                        "dedicatedVoiceCandidateCount": 0,
+                        "nativeVoiceCandidateCount": 0,
+                        "visibleNativeVoiceCandidateCount": 0,
+                        "voiceDetectorHintCount": 11,
+                        "semanticAttributeScanPerformed": True,
+                        "domTextContentScanned": False,
+                        "textValueCaptured": False,
+                        "rawLabelCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "333"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                return_value=cdp_packet,
+            ),
+        ):
+            packet = native_probe._cdp_voice_icon_observation(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "NATIVE_VOICE_ICON_DEDICATED_CONTROL_NOT_OBSERVED",
+        )
+        self.assertFalse(packet["native_voice_icon_observed"])
+        self.assertEqual(packet["semantic_voice_candidate_count"], 1)
+        self.assertEqual(packet["composer_bound_voice_candidate_count"], 0)
+        self.assertEqual(packet["forbidden_voice_candidate_count"], 1)
+        self.assertEqual(packet["local_forbidden_voice_context_count"], 1)
+        self.assertEqual(packet["dedicated_voice_candidate_count"], 0)
+        self.assertEqual(packet["visible_native_voice_candidate_count"], 0)
+        self.assertEqual(
+            packet["voice_blocked_reason_code"],
+            "NATIVE_VOICE_ICON_DEDICATED_CONTROL_NOT_OBSERVED",
+        )
+
+    def test_cdp_voice_icon_observation_blocks_voice_button_with_forbidden_local_context(self) -> None:
+        cdp_packet = {
+            "id": 5001,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "composerContainerCandidateCount": 1,
+                        "buttonCandidateCount": 5,
+                        "visibleButtonCandidateCount": 4,
+                        "semanticVoiceCandidateCount": 1,
+                        "composerBoundVoiceCandidateCount": 0,
+                        "forbiddenVoiceCandidateCount": 0,
+                        "localForbiddenVoiceContextCount": 1,
+                        "dedicatedVoiceCandidateCount": 0,
+                        "nativeVoiceCandidateCount": 0,
+                        "visibleNativeVoiceCandidateCount": 0,
+                        "voiceDetectorHintCount": 11,
+                        "semanticAttributeScanPerformed": True,
+                        "domTextContentScanned": False,
+                        "textValueCaptured": False,
+                        "rawLabelCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "333"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                return_value=cdp_packet,
+            ),
+        ):
+            packet = native_probe._cdp_voice_icon_observation(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "NATIVE_VOICE_ICON_DEDICATED_CONTROL_NOT_OBSERVED",
+        )
+        self.assertFalse(packet["native_voice_icon_observed"])
+        self.assertEqual(packet["semantic_voice_candidate_count"], 1)
+        self.assertEqual(packet["composer_bound_voice_candidate_count"], 0)
+        self.assertEqual(packet["forbidden_voice_candidate_count"], 0)
+        self.assertEqual(packet["local_forbidden_voice_context_count"], 1)
+        self.assertEqual(packet["dedicated_voice_candidate_count"], 0)
+
+    def test_cdp_voice_icon_observation_blocks_when_debug_port_not_bound_to_custom_pid(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+            return_value=(False, "999"),
+        ):
+            packet = native_probe._cdp_voice_icon_observation(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CDP_PORT_OWNER_MISMATCH_OR_ABSENT")
+        self.assertFalse(packet["native_voice_icon_observed"])
+        self.assertFalse(packet["cdp_port_owner_bound_to_custom_profile"])
+        self.assertTrue(packet["cdp_localhost_only"])
+        self.assertTrue(packet["cdp_endpoint_redacted"])
+        self.assertFalse(packet["browser_cdp_authority_widened"])
+
     def test_cdp_prompt_submit_inserts_and_submits_without_raw_prompt_readback(self) -> None:
         cdp_packets = [
             {
@@ -1281,6 +1605,22 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                         "blocked_reason_class": "",
                     },
                 ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_voice_icon_observation",
+                    return_value={
+                        "packet_kind": "custom_codex_native_voice_icon_observation",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "native_voice_icon_observed": True,
+                        "native_voice_shortcut_available": False,
+                        "native_voice_shortcut_tested": False,
+                        "voice_blocked_reason_code": "",
+                        "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                        "microphone_permission_check_required": True,
+                        "does_not_patch_codex_ui": True,
+                        "voice_is_not_locally_imitated": True,
+                    },
+                ) as voice_observation,
             ):
                 packet = native_probe.show_custom_native_window_packet(
                     persistent_profile_base_dir=profile_base,
@@ -1293,10 +1633,19 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["custom_window_frontmost"])
         self.assertTrue(packet["native_app_usable"])
         self.assertTrue(packet["input_capable_ui_observed"])
+        self.assertTrue(packet["native_voice_icon_observed"])
+        self.assertTrue(packet["microphone_permission_check_required"])
+        self.assertEqual(
+            packet["voice_shortcut_blocked_reason_code"],
+            "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+        )
+        self.assertTrue(packet["does_not_patch_codex_ui"])
+        self.assertTrue(packet["voice_is_not_locally_imitated"])
         self.assertEqual(packet["custom_window_bounds"]["x"], 120)
         self.assertFalse(packet["original_codex_touched"])
         self.assertFalse(packet["asar_touched"])
         focus.assert_called_once_with(222)
+        voice_observation.assert_called_once_with(222, allowed_owner_pids=[222])
 
     def test_show_custom_native_window_accepts_helper_only_same_profile_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
