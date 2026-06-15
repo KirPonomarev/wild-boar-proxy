@@ -6191,9 +6191,24 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 vm.runInContext(`
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_INVALID" }) !== "proof invalid") {
+  throw new Error("proof invalid blocker label missing");
+}
+if (quickStartNativeFreeTextWindowLabel({
+  machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
+  native_window_observed: true,
+  input_capable_ui_observed: true,
+  prompt_submitted: true,
+  native_agent_proof_file_valid: false
+}) !== "proof invalid") {
+  throw new Error("proof invalid window label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED" }) !== "activation missing") {
+  throw new Error("activation missing blocker label missing");
+}
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
-  machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_MISSING",
+  machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
   final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
   primary_alias: "Planner",
   coding_alias: "Builder",
@@ -6227,8 +6242,8 @@ if (node("quickStartRouteChip").className.includes("green")) {
 if (node("quickStartLaunchState").className.includes("green")) {
   throw new Error(`missing native proof must not render green launch chip: ${node("quickStartLaunchState").className}`);
 }
-if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
-  throw new Error(`native blocked label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+if (node("quickStartRouteChip").lastElementChild.textContent !== "proof missing") {
+  throw new Error(`proof missing label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (
@@ -6336,13 +6351,27 @@ refreshCodexCustomModelsPanel = async () => {
 };
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
-  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  machine_error_code: "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
   final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
   primary_alias: "Теркистратор",
   coding_alias: "Агент Шмель",
   native_window_observed: false,
   input_capable_ui_observed: false,
   prompt_submitted: false,
+  native_launch_attempted: true,
+  native_activation_attempted: true,
+  native_activation_proven: false,
+  native_activation_machine_error_code: "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
+  native_activation_status: "blocked",
+  native_activation_packet: {
+    status: "blocked",
+    machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+  },
+  native_submit_machine_error_code: "CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED",
+  native_submit_normalized_machine_error_code: "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED",
+  native_agent_proof_machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
+  native_agent_proof_blocking_reasons: ["proof_machine_error_code_not_ok"],
+  blocking_reasons: ["CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"],
   native_agent_proof_file_valid: false,
   native_free_text_command_loop_proven: false,
   native_free_text_tool_bridge_proven: false,
@@ -6359,7 +6388,7 @@ renderQuickStartNativeFreeTextCommandLoopProof({
 `, sandbox);
 
 sandbox.refreshQuickStartRouteStatus().then(() => {
-  if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "process missing") {
     throw new Error(`background refresh overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
   }
   const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
@@ -6367,6 +6396,17 @@ sandbox.refreshQuickStartRouteStatus().then(() => {
     rendered.native_free_text_command_loop_packet !== true ||
     rendered.native_free_text_command_loop_proven !== false ||
     rendered.runtime_context_file_proven !== true ||
+    rendered.native_launch_attempted !== true ||
+    rendered.native_activation_attempted !== true ||
+    rendered.native_activation_proven !== false ||
+    rendered.native_activation_machine_error_code !== "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH" ||
+    rendered.native_activation_status !== "blocked" ||
+    rendered.native_activation_packet.machine_error_code !== "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND" ||
+    rendered.native_submit_machine_error_code !== "CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED" ||
+    rendered.native_submit_normalized_machine_error_code !== "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED" ||
+    rendered.native_agent_proof_machine_error_code !== "CUSTOM_NATIVE_AGENT_PROOF_INVALID" ||
+    rendered.native_agent_proof_blocking_reasons[0] !== "proof_machine_error_code_not_ok" ||
+    rendered.blocking_reasons[0] !== "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH" ||
     rendered.primary_alias !== "Теркистратор" ||
     rendered.coding_alias !== "Агент Шмель" ||
     rendered.nested_packets_redacted !== true
@@ -6495,7 +6535,7 @@ renderQuickStartApiRouteCheckResult(
 );
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
-  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  machine_error_code: "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
   final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
   primary_alias: "Теркистратор",
   coding_alias: "Агент Шмель",
@@ -6518,7 +6558,7 @@ renderQuickStartNativeFreeTextCommandLoopProof({
 replayQuickStartManualCheckSnapshot();
 `, sandbox);
 
-if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+if (node("quickStartRouteChip").lastElementChild.textContent !== "process missing") {
   throw new Error(`manual snapshot replay overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
@@ -6689,7 +6729,7 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 vm.runInContext(`
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
-  machine_error_code: "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+  machine_error_code: "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
   final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
   primary_alias: "Теркистратор",
   coding_alias: "Агент Шмель",
@@ -6738,7 +6778,7 @@ sandbox.renderCodexCustomModels({
   live_api_checked: false
 });
 
-if (node("quickStartRouteChip").lastElementChild.textContent !== "native blocked") {
+if (node("quickStartRouteChip").lastElementChild.textContent !== "process missing") {
   throw new Error(`model catalog render overwrote native proof result: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);

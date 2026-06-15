@@ -2287,6 +2287,70 @@ function quickStartNextActionLabel(nextAction) {
   return action.length > 18 ? `${action.slice(0, 18)}...` : action;
 }
 
+function quickStartNativeFreeTextBlockerLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (machineCode === "OWNER_AUTHORIZATION_REQUIRED") {
+    return "owner auth";
+  }
+  if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
+    return "auth required";
+  }
+  if (
+    machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+  ) {
+    return "process missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED") {
+    return "activation missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED") {
+    return "window missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_INPUT_SURFACE_NOT_FOUND") {
+    return "input missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED") {
+    return "submit failed";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING") {
+    return "proof missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID") {
+    return "proof invalid";
+  }
+  return machineCode ? quickStartNextActionLabel(machineCode) : "native blocked";
+}
+
+function quickStartNativeFreeTextWindowLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (packet?.native_window_observed !== true) {
+    if (machineCode === "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED") {
+      return "activation missing";
+    }
+    if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
+      return "auth required";
+    }
+    if (
+      machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+      || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+    ) {
+      return "process missing";
+    }
+    return "window missing";
+  }
+  if (packet?.input_capable_ui_observed !== true) {
+    return "input missing";
+  }
+  if (packet?.prompt_submitted !== true) {
+    return "submit failed";
+  }
+  if (packet?.native_agent_proof_file_valid !== true) {
+    return machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID" ? "proof invalid" : "proof missing";
+  }
+  return "input ok";
+}
+
 function quickStartChatgptRuntimeProofPending(packet) {
   return Boolean(
     packet?.runtime_health_required_for_chatgpt_lane === true
@@ -3673,6 +3737,32 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_free_text_tool_bridge_proven === true,
       native_free_text_activation_proven:
         packet?.native_free_text_activation_proven === true,
+      native_activation_attempted:
+        packet?.native_activation_attempted === true,
+      native_activation_proven:
+        packet?.native_activation_proven === true,
+      native_activation_machine_error_code:
+        packet?.native_activation_machine_error_code || "",
+      native_activation_status:
+        packet?.native_activation_status || "",
+      native_activation_packet:
+        packet?.native_activation_packet || {},
+      native_submit_packet:
+        packet?.native_submit_packet || {},
+      native_submit_machine_error_code:
+        packet?.native_submit_machine_error_code || "",
+      native_submit_normalized_machine_error_code:
+        packet?.native_submit_normalized_machine_error_code || "",
+      native_agent_proof_packet:
+        packet?.native_agent_proof_packet || {},
+      native_agent_proof_machine_error_code:
+        packet?.native_agent_proof_machine_error_code || "",
+      native_agent_proof_blocking_reasons:
+        Array.isArray(packet?.native_agent_proof_blocking_reasons)
+          ? packet.native_agent_proof_blocking_reasons
+          : [],
+      command_loop_packet:
+        packet?.command_loop_packet || {},
       native_free_text_tool_bridge_source:
         packet?.native_free_text_tool_bridge_source || "",
       native_agent_proof_file_observed:
@@ -3942,6 +4032,8 @@ function setQuickStartRouteResponse(packet) {
         Array.isArray(packet?.slot_binding_blocking_reasons)
           ? packet.slot_binding_blocking_reasons
           : [],
+      blocking_reasons:
+        Array.isArray(packet?.blocking_reasons) ? packet.blocking_reasons : [],
       custom_codex_launch_attempted:
         packet?.custom_codex_launch_attempted === true,
       new_launch_started: packet?.new_launch_started === true,
@@ -4722,6 +4814,8 @@ function renderQuickStartGptApiAliasCommandLoopProof(packet) {
 
 function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   lockQuickStartRouteProofResult();
+  const blockedLabel = quickStartNativeFreeTextBlockerLabel(packet);
+  const windowLabel = quickStartNativeFreeTextWindowLabel(packet);
   const proven = Boolean(
     packet?.status === "ok"
     && packet?.machine_error_code === "OK"
@@ -4745,7 +4839,7 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   setQuickStartChip(
     "quickStartRouteChip",
     proven ? "green" : "amber",
-    proven ? "native ok" : "native blocked"
+    proven ? "native ok" : blockedLabel
   );
   setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
   setQuickStartChip(
@@ -4760,13 +4854,13 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   );
   setQuickStartChip(
     "quickStartOwnerAuthState",
-    proven ? "green" : "neutral",
-    proven ? "confirmed" : "preflight"
+    proven ? "green" : (packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED" ? "amber" : "neutral"),
+    proven ? "confirmed" : (packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED" ? "owner auth" : "preflight")
   );
   setQuickStartChip(
     "quickStartLaunchState",
     proven ? "green" : "amber",
-    proven ? "native ok" : "blocked"
+    proven ? "native ok" : blockedLabel
   );
   setQuickStartChip(
     "quickStartBridgeState",
@@ -4776,7 +4870,7 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   setQuickStartChip(
     "quickStartWindowState",
     packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "green" : "amber",
-    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "input ok" : "not proven"
+    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "input ok" : windowLabel
   );
   setQuickStartChip(
     "quickStartConfigState",
@@ -4798,9 +4892,9 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     native_free_text_command_loop_packet: true,
     gpt_api_alias_command_loop_packet: packet?.command_loop_proven === true,
     session_probe_only: false,
-    launch_attempted: false,
-    native_launch_attempted: false,
-    window_launch_attempted: false,
+    launch_attempted: packet?.launch_attempted === true,
+    native_launch_attempted: packet?.native_launch_attempted === true,
+    window_launch_attempted: packet?.window_launch_attempted === true,
     runtime_readiness_claimed: false,
     browser_can_supply_route_authority: packet?.browser_can_supply_route_authority === true,
     browser_can_supply_reasoning_authority:

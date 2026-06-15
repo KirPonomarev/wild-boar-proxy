@@ -4824,6 +4824,146 @@ NATIVE_FREE_TEXT_PUBLIC_PACKET_REDACTED_KEYS = NATIVE_FREE_TEXT_PROOF_FORBIDDEN_
 }
 
 
+def _native_free_text_forbidden_key(key_text: str) -> bool:
+    key_lower = str(key_text or "").lower()
+    if key_lower in NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS:
+        return True
+    if key_lower in {
+        "access_token",
+        "authorization",
+        "bridge_url",
+        "configured_bridge_endpoint",
+        "downstream_wbp_url",
+        "id_token",
+        "refresh_token",
+        "url",
+        "urls",
+        "url_candidates",
+    }:
+        return True
+    if key_lower.endswith("_endpoint") or key_lower.endswith("_base_url"):
+        return True
+    if key_lower.endswith("_api_key") or key_lower.endswith("_secret"):
+        return True
+    if key_lower.endswith("_secret_ref") or key_lower.endswith("_auth"):
+        return True
+    return False
+
+
+def _native_free_text_public_key_redacted(key_text: str) -> bool:
+    key_lower = str(key_text or "").lower()
+    if key_lower in NATIVE_FREE_TEXT_PUBLIC_PACKET_REDACTED_KEYS:
+        return True
+    if _native_free_text_forbidden_key(key_lower):
+        return True
+    if key_lower.endswith("_path") and not key_lower.endswith("_path_redacted"):
+        return True
+    if "path" in key_lower and "redacted" not in key_lower:
+        return True
+    if key_lower.endswith("_dir") and not key_lower.endswith("_dir_redacted"):
+        return True
+    if key_lower.endswith("_root") and not key_lower.endswith("_root_redacted"):
+        return True
+    if key_lower.endswith("_home") and not key_lower.endswith("_home_redacted"):
+        return True
+    if key_lower.endswith("_url") and not key_lower.endswith("_url_redacted"):
+        return True
+    if key_lower.endswith("_urls") and not key_lower.endswith("_urls_redacted"):
+        return True
+    if "_url_" in key_lower and not key_lower.endswith("_url_redacted"):
+        return True
+    return False
+
+
+def _custom_native_free_text_window_observed(packet: dict[str, Any]) -> bool:
+    return bool(
+        packet.get("native_window_observed") is True
+        or packet.get("custom_window_observed") is True
+        or packet.get("custom_window_visible") is True
+    )
+
+
+def _custom_native_free_text_input_observed(packet: dict[str, Any]) -> bool:
+    return bool(
+        packet.get("input_capable_ui_observed") is True
+        or packet.get("native_app_usable") is True
+    )
+
+
+def _custom_native_free_text_activation_ready(packet: dict[str, Any]) -> bool:
+    return bool(
+        packet.get("status") == "ok"
+        and _custom_native_free_text_window_observed(packet)
+        and _custom_native_free_text_input_observed(packet)
+        and packet.get("secret_value_exposed") is not True
+        and packet.get("raw_backend_details_exposed") is not True
+    )
+
+
+def _custom_native_free_text_submit_proven(packet: dict[str, Any]) -> bool:
+    return bool(
+        packet.get("status") == "ok"
+        and packet.get("native_window_observed") is True
+        and packet.get("input_capable_ui_observed") is True
+        and packet.get("input_text_insert_succeeded") is True
+        and packet.get("prompt_submitted") is True
+        and packet.get("prompt_text_recorded") is not True
+        and packet.get("secret_value_exposed") is not True
+    )
+
+
+def _custom_native_free_text_activation_machine_error(packet: dict[str, Any]) -> str:
+    machine_code = str(packet.get("machine_error_code") or "").strip()
+    if machine_code == "OK" and _custom_native_free_text_activation_ready(packet):
+        return "OK"
+    if machine_code == "OWNER_AUTHORIZATION_REQUIRED":
+        return machine_code
+    if machine_code == "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED":
+        return machine_code
+    if machine_code == "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND":
+        return "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    if machine_code in {
+        "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START",
+        "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO",
+    }:
+        return "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    if not _custom_native_free_text_window_observed(packet):
+        return "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED"
+    if not _custom_native_free_text_input_observed(packet):
+        return "CUSTOM_NATIVE_INPUT_SURFACE_NOT_FOUND"
+    return machine_code or "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED"
+
+
+def _custom_native_free_text_submit_machine_error(
+    packet: dict[str, Any],
+    *,
+    activation_packet: dict[str, Any] | None = None,
+) -> str:
+    machine_code = str(packet.get("machine_error_code") or "").strip()
+    activation = activation_packet if isinstance(activation_packet, dict) else {}
+    if machine_code == "OK" and _custom_native_free_text_submit_proven(packet):
+        return "OK"
+    if machine_code == "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND":
+        return "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    if machine_code == "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED":
+        return machine_code
+    if machine_code == "CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED":
+        return "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED"
+    if not (
+        packet.get("native_window_observed") is True
+        or _custom_native_free_text_window_observed(activation)
+    ):
+        return "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED"
+    if not (
+        packet.get("input_capable_ui_observed") is True
+        or _custom_native_free_text_input_observed(activation)
+    ):
+        return "CUSTOM_NATIVE_INPUT_SURFACE_NOT_FOUND"
+    if packet.get("prompt_submitted") is not True:
+        return "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED"
+    return machine_code or "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED"
+
+
 def _native_free_text_proof_root() -> Path:
     return ROOT / ".tmp" / "native-free-text-proof"
 
@@ -4841,7 +4981,7 @@ def _native_free_text_forbidden_key_paths(value: Any, *, prefix: str = "") -> li
         for key, nested in value.items():
             key_text = str(key)
             current = f"{prefix}.{key_text}" if prefix else key_text
-            if key_text.lower() in NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS:
+            if _native_free_text_forbidden_key(key_text):
                 paths.append(current)
             paths.extend(_native_free_text_forbidden_key_paths(nested, prefix=current))
     elif isinstance(value, list):
@@ -4856,11 +4996,7 @@ def _native_free_text_public_nested_packet(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for key, nested in value.items():
             key_text = str(key)
-            key_lower = key_text.lower()
-            is_raw_path = key_lower.endswith("_path") and not key_lower.endswith(
-                "_path_redacted"
-            )
-            if key_lower in NATIVE_FREE_TEXT_PUBLIC_PACKET_REDACTED_KEYS or is_raw_path:
+            if _native_free_text_public_key_redacted(key_text):
                 continue
             redacted[key_text] = _native_free_text_public_nested_packet(nested)
         return redacted
@@ -4881,10 +5017,14 @@ def _custom_native_free_text_blocked_packet(
     coding_aliases: list[str] | None = None,
     allowed_api_route_ids: list[str] | None = None,
     blocking_reasons: list[str] | None = None,
+    native_activation_packet: dict[str, Any] | None = None,
     native_submit_packet: dict[str, Any] | None = None,
     native_agent_proof_packet: dict[str, Any] | None = None,
     command_loop_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    activation = (
+        native_activation_packet if isinstance(native_activation_packet, dict) else {}
+    )
     submit = native_submit_packet if isinstance(native_submit_packet, dict) else {}
     agent_proof = (
         native_agent_proof_packet if isinstance(native_agent_proof_packet, dict) else {}
@@ -4921,12 +5061,53 @@ def _custom_native_free_text_blocked_packet(
         "coding_aliases": coding,
         "allowed_api_route_ids": route_ids,
         "blocking_reasons": blocking_reasons or [machine_error_code],
-        "native_window_observed": submit.get("native_window_observed") is True,
-        "input_capable_ui_observed": submit.get("input_capable_ui_observed") is True,
+        "native_activation_attempted": bool(activation),
+        "native_activation_proven": _custom_native_free_text_activation_ready(activation),
+        "native_activation_machine_error_code": (
+            _custom_native_free_text_activation_machine_error(activation)
+            if activation
+            else ""
+        ),
+        "native_activation_status": str(activation.get("status") or ""),
+        "custom_process_observed": (
+            activation.get("custom_process_observed") is True
+            or activation.get("process_started") is True
+        ),
+        "process_started": activation.get("process_started") is True,
+        "native_launch_attempted": (
+            activation.get("new_launch_started") is True
+            or activation.get("fresh_launch_started") is True
+        ),
+        "new_launch_started": activation.get("new_launch_started") is True,
+        "native_window_observed": (
+            submit.get("native_window_observed") is True
+            or _custom_native_free_text_window_observed(activation)
+        ),
+        "input_capable_ui_observed": (
+            submit.get("input_capable_ui_observed") is True
+            or _custom_native_free_text_input_observed(activation)
+        ),
         "input_text_insert_attempted": submit.get("input_text_insert_attempted") is True,
         "input_text_insert_succeeded": submit.get("input_text_insert_succeeded") is True,
         "prompt_submitted": submit.get("prompt_submitted") is True,
-        "native_free_text_activation_proven": False,
+        "native_submit_machine_error_code": str(submit.get("machine_error_code") or ""),
+        "native_submit_normalized_machine_error_code": (
+            _custom_native_free_text_submit_machine_error(
+                submit,
+                activation_packet=activation,
+            )
+            if submit
+            else ""
+        ),
+        "native_agent_proof_machine_error_code": str(
+            agent_proof.get("machine_error_code") or ""
+        ),
+        "native_agent_proof_blocking_reasons": (
+            list(agent_proof.get("blocking_reasons") or []) if agent_proof else []
+        ),
+        "native_free_text_activation_proven": _custom_native_free_text_activation_ready(
+            activation
+        ),
         "native_agent_proof_file_observed": agent_proof.get("proof_file_observed") is True,
         "native_agent_proof_file_valid": False,
         "native_free_text_agent_context_sha_match": False,
@@ -4956,6 +5137,7 @@ def _custom_native_free_text_blocked_packet(
         "not_intelligence_proof": True,
         "intelligence_measured": False,
         "nested_packets_redacted": True,
+        "native_activation_packet": _native_free_text_public_nested_packet(activation),
         "native_submit_packet": _native_free_text_public_nested_packet(submit),
         "native_agent_proof_packet": _native_free_text_public_nested_packet(
             agent_proof
@@ -5013,7 +5195,7 @@ def _validate_native_free_text_agent_proof(
     if not proof_path.is_file():
         return {
             "status": "blocked",
-            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_MISSING",
+            "machine_error_code": "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
             "proof_file_observed": False,
             "proof_file_valid": False,
             "blocking_reasons": ["proof_file_missing"],
@@ -5026,7 +5208,7 @@ def _validate_native_free_text_agent_proof(
     except OSError:
         return {
             "status": "blocked",
-            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_UNREADABLE",
+            "machine_error_code": "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
             "proof_file_observed": True,
             "proof_file_valid": False,
             "blocking_reasons": ["proof_file_unreadable"],
@@ -5036,7 +5218,7 @@ def _validate_native_free_text_agent_proof(
     except json.JSONDecodeError:
         return {
             "status": "blocked",
-            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_INVALID_JSON",
+            "machine_error_code": "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
             "proof_file_observed": True,
             "proof_file_valid": False,
             "blocking_reasons": ["proof_file_invalid_json"],
@@ -5046,7 +5228,7 @@ def _validate_native_free_text_agent_proof(
     if not isinstance(packet, dict):
         return {
             "status": "blocked",
-            "machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_NOT_OBJECT",
+            "machine_error_code": "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
             "proof_file_observed": True,
             "proof_file_valid": False,
             "blocking_reasons": ["proof_file_not_object"],
@@ -5099,7 +5281,7 @@ def _validate_native_free_text_agent_proof(
         "status": "ok" if ok else "blocked",
         "machine_error_code": "OK"
         if ok
-        else "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_CONTRACT_MISMATCH",
+        else "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
         "proof_file_observed": True,
         "proof_file_valid": ok,
         "proof_file_path_redacted": True,
@@ -5137,6 +5319,7 @@ def _custom_native_free_text_command_loop_proof_packet(
     bridge_endpoint: str = "",
     proof_root: Path | None = None,
     native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
+    native_activator: Callable[..., dict[str, Any]] | None = None,
     reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
@@ -5328,14 +5511,68 @@ def _custom_native_free_text_command_loop_proof_packet(
         primary_alias=primary_aliases[0],
         coding_alias=coding_aliases[0],
     )
+    native_activation_packet: dict[str, Any] = {}
+    if not callable(native_activator):
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED",
+            human_message="Native free-text proof requires a server-owned Custom Codex activation step before prompt submit.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["native_activation_not_configured"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+        )
+    try:
+        activation_result = native_activator(
+            context=context,
+            context_metadata=resolved_context_metadata,
+            request_id=request_id,
+            expected_text=expected_text,
+        )
+        native_activation_packet = (
+            activation_result if isinstance(activation_result, dict) else {}
+        )
+    except Exception as exc:
+        native_activation_packet = {
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_ACTIVATION_EXCEPTION",
+            "human_message": f"Native activation failed before prompt submit: {type(exc).__name__}.",
+            "exception_class": type(exc).__name__,
+            "secret_value_exposed": False,
+            "raw_backend_details_exposed": False,
+        }
+    if not _custom_native_free_text_activation_ready(native_activation_packet):
+        activation_machine_error = _custom_native_free_text_activation_machine_error(
+            native_activation_packet
+        )
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code=activation_machine_error,
+            human_message="Native free-text activation did not prove a usable Custom Codex input window.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=[
+                activation_machine_error,
+                *list(native_activation_packet.get("blocking_reasons") or []),
+            ],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+            native_activation_packet=native_activation_packet,
+        )
     submitter = native_prompt_submitter or submit_custom_native_window_prompt_packet
     native_submit_packet = submitter(prompt=prompt, request_id=request_id)
-    if native_submit_packet.get("status") != "ok":
+    if not _custom_native_free_text_submit_proven(native_submit_packet):
+        submit_machine_error = _custom_native_free_text_submit_machine_error(
+            native_submit_packet,
+            activation_packet=native_activation_packet,
+        )
         return _custom_native_free_text_blocked_packet(
-            machine_error_code=str(
-                native_submit_packet.get("machine_error_code")
-                or "CUSTOM_NATIVE_FREE_TEXT_PROMPT_SUBMIT_BLOCKED"
-            ),
+            machine_error_code=submit_machine_error,
             human_message="Native free-text prompt submit did not prove input and submit.",
             expected_text=expected_text,
             request_id=request_id,
@@ -5345,6 +5582,7 @@ def _custom_native_free_text_command_loop_proof_packet(
             primary_aliases=primary_aliases,
             coding_aliases=coding_aliases,
             allowed_api_route_ids=allowed_api_route_ids,
+            native_activation_packet=native_activation_packet,
             native_submit_packet=native_submit_packet,
         )
     deadline = time.monotonic() + timeout_seconds
@@ -5372,6 +5610,7 @@ def _custom_native_free_text_command_loop_proof_packet(
             primary_aliases=primary_aliases,
             coding_aliases=coding_aliases,
             allowed_api_route_ids=allowed_api_route_ids,
+            native_activation_packet=native_activation_packet,
             native_submit_packet=native_submit_packet,
             native_agent_proof_packet=native_agent_proof_packet,
         )
@@ -5400,6 +5639,7 @@ def _custom_native_free_text_command_loop_proof_packet(
             primary_aliases=primary_aliases,
             coding_aliases=coding_aliases,
             allowed_api_route_ids=allowed_api_route_ids,
+            native_activation_packet=native_activation_packet,
             native_submit_packet=native_submit_packet,
             native_agent_proof_packet=native_agent_proof_packet,
             command_loop_packet=command_loop_packet,
@@ -5447,12 +5687,51 @@ def _custom_native_free_text_command_loop_proof_packet(
             for route_id in context.get("allowed_api_route_ids", [])
             if str(route_id)
         ],
+        "native_activation_attempted": bool(native_activation_packet),
+        "native_activation_proven": (
+            _custom_native_free_text_activation_ready(native_activation_packet)
+            if native_activation_packet
+            else True
+        ),
+        "native_activation_machine_error_code": (
+            _custom_native_free_text_activation_machine_error(native_activation_packet)
+            if native_activation_packet
+            else ""
+        ),
+        "native_activation_status": str(native_activation_packet.get("status") or ""),
+        "custom_process_observed": (
+            native_activation_packet.get("custom_process_observed") is True
+            or native_activation_packet.get("process_started") is True
+        ),
+        "process_started": native_activation_packet.get("process_started") is True,
+        "native_launch_attempted": (
+            native_activation_packet.get("new_launch_started") is True
+            or native_activation_packet.get("fresh_launch_started") is True
+        ),
+        "new_launch_started": native_activation_packet.get("new_launch_started") is True,
         "native_window_observed": native_submit_packet.get("native_window_observed") is True,
         "input_capable_ui_observed": native_submit_packet.get("input_capable_ui_observed") is True,
         "input_text_insert_attempted": native_submit_packet.get("input_text_insert_attempted") is True,
         "input_text_insert_succeeded": native_submit_packet.get("input_text_insert_succeeded") is True,
         "prompt_submitted": native_submit_packet.get("prompt_submitted") is True,
-        "native_free_text_activation_proven": native_submit_packet.get("prompt_submitted") is True,
+        "native_submit_machine_error_code": str(
+            native_submit_packet.get("machine_error_code") or ""
+        ),
+        "native_submit_normalized_machine_error_code": _custom_native_free_text_submit_machine_error(
+            native_submit_packet,
+            activation_packet=native_activation_packet,
+        ),
+        "native_agent_proof_machine_error_code": str(
+            native_agent_proof_packet.get("machine_error_code") or ""
+        ),
+        "native_agent_proof_blocking_reasons": list(
+            native_agent_proof_packet.get("blocking_reasons") or []
+        ),
+        "native_free_text_activation_proven": (
+            _custom_native_free_text_activation_ready(native_activation_packet)
+            if native_activation_packet
+            else native_submit_packet.get("prompt_submitted") is True
+        ),
         "native_agent_proof_file_observed": native_agent_proof_packet.get("proof_file_observed") is True,
         "native_agent_proof_file_valid": native_agent_proof_packet.get("proof_file_valid") is True,
         "native_free_text_agent_context_sha_match": native_agent_proof_packet.get("context_sha256_match") is True,
@@ -5494,6 +5773,9 @@ def _custom_native_free_text_command_loop_proof_packet(
         "not_intelligence_proof": True,
         "intelligence_measured": False,
         "nested_packets_redacted": True,
+        "native_activation_packet": _native_free_text_public_nested_packet(
+            native_activation_packet
+        ),
         "native_submit_packet": _native_free_text_public_nested_packet(
             native_submit_packet
         ),
@@ -15631,6 +15913,64 @@ def build_handler(
                     owner_authorized=codex_custom_live_prompt_authorized,
                 )
 
+            def native_free_text_activator(
+                *,
+                context: dict[str, Any],
+                context_metadata: dict[str, Any],
+                request_id: str,
+                expected_text: str,
+            ) -> dict[str, Any]:
+                del context_metadata, request_id, expected_text
+                api_model_id = str(context.get("api_model_id") or "").strip()
+                if not api_model_id:
+                    allowed_route_ids = [
+                        str(route_id)
+                        for route_id in context.get("allowed_api_route_ids", [])
+                        if str(route_id)
+                    ]
+                    api_model_id = allowed_route_ids[0] if allowed_route_ids else ""
+                launch_payload = {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": str(
+                        context.get("primary_model_id") or "gpt-5.5"
+                    ).strip(),
+                    "api_model_id": api_model_id,
+                    "api_reasoning_option_id": str(
+                        context.get("api_reasoning_option_id")
+                        or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                    ).strip(),
+                }
+                operator_status = None
+                api_snapshot = None
+                external_routes_packet = None
+                if codex_custom_live_prompt_authorized:
+                    operator_status, _operator_status_timeout = (
+                        _bounded_operator_status_payload(operator_surface_session)
+                    )
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    external_routes_packet = _external_routes_packet()
+                packet = _launch_custom_native_codex_packet(
+                    launch_payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    commands={},
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    external_routes_packet=external_routes_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                    launch_trace_packet={
+                        "trace_source": "native_free_text_activation",
+                        "launch_trace_server_issued": False,
+                    },
+                )
+                packet["native_free_text_activation_attempted"] = True
+                packet["native_free_text_activation_source"] = (
+                    "server_runtime_context"
+                )
+                record_custom_native_launch_packet(packet)
+                return packet
+
             payload = self._read_optional_json_body()
             agent_runtime_context, context_metadata = (
                 _refresh_custom_agent_runtime_context_for_command_loop()
@@ -15643,6 +15983,7 @@ def build_handler(
                     context_metadata=context_metadata,
                     last_launch_packet=custom_native_launch_state["last_packet"],
                     bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    native_activator=native_free_text_activator,
                     reasoning_matrix_builder=reasoning_matrix_builder,
                 )
             )

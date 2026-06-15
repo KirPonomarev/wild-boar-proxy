@@ -1841,6 +1841,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     context_metadata=metadata,
                     bridge_endpoint="http://127.0.0.1:50555/v1",
                     proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
                     native_prompt_submitter=submitter,
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
@@ -1864,6 +1875,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
+        self.assertTrue(packet["native_activation_attempted"])
+        self.assertTrue(packet["native_activation_proven"])
+        self.assertEqual(packet["native_activation_machine_error_code"], "OK")
+        self.assertEqual(packet["native_submit_machine_error_code"], "OK")
+        self.assertEqual(packet["native_submit_normalized_machine_error_code"], "OK")
+        self.assertEqual(packet["native_agent_proof_machine_error_code"], "OK")
         self.assertEqual(packet["primary_alias"], "Planner")
         self.assertEqual(packet["coding_alias"], "Builder")
         self.assertTrue(packet["nested_packets_redacted"])
@@ -1915,6 +1932,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     agent_runtime_context=context,
                     context_metadata=metadata,
                     proof_root=root / "native-proof",
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
                     native_prompt_submitter=submitter,
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
@@ -1922,7 +1950,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_MISSING",
+            "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
         )
         self.assertTrue(packet["prompt_submitted"])
         self.assertFalse(packet["native_agent_proof_file_valid"])
@@ -1931,8 +1959,262 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["primary_alias"], "Planner")
         self.assertEqual(packet["coding_alias"], "Builder")
         self.assertEqual(packet["allowed_api_route_ids"], ["wbp-deepseek-chat"])
+        self.assertEqual(packet["native_agent_proof_machine_error_code"], "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING")
         self.assertFalse(packet["command_loop_proven"])
         urlopen.assert_not_called()
+
+    def test_custom_native_free_text_blocks_when_native_activator_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-activation-not-configured",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED")
+        self.assertFalse(packet["native_activation_attempted"])
+        self.assertFalse(packet["native_activation_proven"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertIn("native_activation_not_configured", packet["blocking_reasons"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_blocks_before_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-activation-auth",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+                    "native_window_observed": False,
+                    "input_capable_ui_observed": False,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+        )
+        self.assertTrue(packet["native_activation_attempted"])
+        self.assertEqual(
+            packet["native_activation_machine_error_code"],
+            "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED",
+        )
+        self.assertFalse(packet["native_activation_proven"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_activation_maps_process_missing_after_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            submitter = mock.Mock()
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-process-missing",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+                    "configured_bridge_endpoint": "http://127.0.0.1:50555/v1",
+                    "bridge_url": "http://127.0.0.1:50555/v1",
+                    "downstream_wbp_url": "https://api.example.invalid/v1",
+                    "url_candidates": ["http://127.0.0.1:50555/v1"],
+                    "persistent_profile_root": str(root / "profile-root"),
+                    "persistent_user_data_dir": str(root / "user-data"),
+                    "persistent_codex_home": str(root / "codex-home"),
+                    "runtime_ready_stdout_paths_checked": [
+                        str(root / "launcher.stdout.log")
+                    ],
+                    "request_path": str(root / "request.json"),
+                    "nested": {
+                        "provider_base_url": "https://api.example.invalid/v1",
+                        "response_file": str(root / "response.json"),
+                    },
+                    "custom_process_observed": False,
+                    "process_started": False,
+                    "native_window_observed": False,
+                    "input_capable_ui_observed": False,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=submitter,
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
+        )
+        self.assertTrue(packet["native_activation_attempted"])
+        self.assertEqual(
+            packet["native_activation_machine_error_code"],
+            "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH",
+        )
+        self.assertFalse(packet["custom_process_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        activation_text = json.dumps(
+            packet["native_activation_packet"],
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        self.assertNotIn("configured_bridge_endpoint", activation_text)
+        self.assertNotIn("bridge_url", activation_text)
+        self.assertNotIn("downstream_wbp_url", activation_text)
+        self.assertNotIn("url_candidates", activation_text)
+        self.assertNotIn("persistent_profile_root", activation_text)
+        self.assertNotIn("persistent_user_data_dir", activation_text)
+        self.assertNotIn("persistent_codex_home", activation_text)
+        self.assertNotIn("runtime_ready_stdout_paths_checked", activation_text)
+        self.assertNotIn("request_path", activation_text)
+        self.assertNotIn("provider_base_url", activation_text)
+        self.assertNotIn("response_file", activation_text)
+        self.assertNotIn("127.0.0.1:50555", activation_text)
+        self.assertNotIn(str(root), activation_text)
+        submitter.assert_not_called()
+
+    def test_custom_native_free_text_submit_failure_maps_precise_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                payload={
+                    "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                    "request_id": "native-submit-failed",
+                    "timeout_seconds": 0,
+                },
+                file_bridge_worker=worker,
+                agent_runtime_context=context,
+                context_metadata=metadata,
+                proof_root=root / "native-proof",
+                native_activator=lambda **_: {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "custom_process_observed": True,
+                    "process_started": True,
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                    "secret_value_exposed": False,
+                    "raw_backend_details_exposed": False,
+                },
+                native_prompt_submitter=lambda **_: {
+                    "status": "blocked",
+                    "machine_error_code": "CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": False,
+                    "prompt_submitted": False,
+                    "secret_value_exposed": False,
+                },
+                reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED")
+        self.assertTrue(packet["native_activation_proven"])
+        self.assertEqual(packet["native_activation_machine_error_code"], "OK")
+        self.assertTrue(packet["native_window_observed"])
+        self.assertTrue(packet["input_capable_ui_observed"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
 
     def test_custom_native_free_text_refuses_existing_proof_file_before_submit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2049,6 +2331,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "no_secret_exposed": True,
                             "secret_value_exposed": False,
                             "backend": "must-not-be-exposed",
+                            "configured_bridge_endpoint": "http://127.0.0.1:50555/v1",
                         },
                         ensure_ascii=False,
                         sort_keys=True,
@@ -2078,6 +2361,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     agent_runtime_context=context,
                     context_metadata=metadata,
                     proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
                     native_prompt_submitter=submitter,
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
@@ -2085,7 +2379,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CUSTOM_NATIVE_FREE_TEXT_PROOF_FILE_CONTRACT_MISMATCH",
+            "CUSTOM_NATIVE_AGENT_PROOF_INVALID",
         )
         self.assertIn(
             "forbidden_secret_or_backend_field_exposed",
@@ -2094,8 +2388,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["prompt_submitted"])
         self.assertFalse(packet["native_agent_proof_file_valid"])
         self.assertFalse(packet["native_free_text_command_loop_proven"])
-        self.assertEqual(packet["native_agent_proof_packet"]["forbidden_field_count"], 1)
+        self.assertEqual(packet["native_agent_proof_packet"]["forbidden_field_count"], 2)
         self.assertTrue(packet["native_agent_proof_packet"]["forbidden_field_paths_redacted"])
+        self.assertEqual(packet["native_agent_proof_machine_error_code"], "CUSTOM_NATIVE_AGENT_PROOF_INVALID")
+        self.assertIn(
+            "forbidden_secret_or_backend_field_exposed",
+            packet["native_agent_proof_blocking_reasons"],
+        )
         self.assertFalse(packet["secret_value_exposed"])
         urlopen.assert_not_called()
 
