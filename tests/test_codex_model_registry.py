@@ -1296,6 +1296,16 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(packet["bridge_or_file_bridge_used"])
         self.assertEqual(packet["command_loop_provider_call_count"], 1)
         self.assertEqual(packet["reasoning_provider_call_count"], 3)
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_and_live_call")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["benchmark_required_for_provider_level_proof"])
+        self.assertEqual(
+            packet["quality_benchmark_status"],
+            "not_required_for_provider_level_proof",
+        )
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["intelligence_measured"])
@@ -1307,6 +1317,31 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["proof_mode_row_count"], 3)
         self.assertEqual(packet["proof_reasoning_row_count"], 3)
         self.assertEqual(packet["proof_agent_row_count"], 2)
+        self.assertTrue(
+            all(
+                row["provider_declared_reasoning_level_proven"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["provider_reasoning_proof_level"]
+                == "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN"
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_provider_level_proof"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_independent_quality_benchmark"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
         self.assertTrue(packet["display_aliases_are_runtime_aliases"])
         self.assertFalse(packet["display_aliases_are_separate_agents"])
         self.assertEqual(packet["primary_alias"], "Planner")
@@ -1365,6 +1400,9 @@ class CodexModelRegistryTests(unittest.TestCase):
             "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
         )
         self.assertFalse(packet["api_lane_proven"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
         self.assertFalse(packet["partial_api_lane_proven"])
         self.assertFalse(packet["combined_full_proven"])
         self.assertFalse(packet["command_loop_route_authority_proven"])
@@ -1412,6 +1450,16 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["native_auth_wall_observed"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_and_live_call")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["benchmark_required_for_provider_level_proof"])
+        self.assertEqual(
+            packet["quality_benchmark_status"],
+            "not_required_for_provider_level_proof",
+        )
         self.assertFalse(packet["intelligence_measured"])
         self.assertTrue(packet["not_intelligence_proof"])
         self.assertEqual(packet["proof_rank"], "full_native_mixed")
@@ -1437,7 +1485,25 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(len(packet["reasoning_level_rows"]), 3)
         self.assertTrue(
             all(
+                row["provider_declared_reasoning_level_proven"] is True
+                for row in packet["reasoning_level_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
                 row["counts_as_intelligence_proof"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_provider_level_proof"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_independent_quality_benchmark"] is False
                 for row in packet["proof_reasoning_rows"]
             )
         )
@@ -1482,8 +1548,131 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(combined_row["api_model_id"], "wbp-deepseek-chat")
         self.assertFalse(packet["api_success_counts_as_combined_success"])
         self.assertFalse(packet["secret_value_exposed"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
         self.assertFalse(packet["intelligence_measured"])
         self.assertEqual(packet["proof_rank"], "full_native_mixed")
+
+    def test_model_reasoning_availability_matrix_rejects_api_lane_without_level_rows(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        reasoning_packet["level_results"] = []
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-empty-reasoning-levels",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+        )
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 0)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 0)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertIn("api_lane_not_live_proven", packet["blocking_reasons"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
+
+    def test_model_reasoning_availability_matrix_marks_provider_level_mismatch(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        level_results = reasoning_packet["level_results"]
+        assert isinstance(level_results, list)
+        level_results[0]["reasoning_level_dispatch_proven"] = False
+        level_results[0]["api_reasoning_dispatch_proven"] = False
+        level_results[0]["blocking_reasons"] = ["api_reasoning_thinking_mismatch"]
+        reasoning_packet["reasoning_dispatch_matrix_proven"] = False
+        reasoning_packet["status"] = "blocked"
+        reasoning_packet["machine_error_code"] = "REASONING_LEVEL_DISPATCH_FAILED"
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-reasoning-mismatch",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_mismatch")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 2)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        rows = {row["operator_level"]: row for row in packet["proof_reasoning_rows"]}
+        self.assertEqual(rows["fast"]["proof_level"], "REASONING_PAYLOAD_MISMATCH")
+        self.assertEqual(
+            rows["fast"]["provider_reasoning_proof_level"],
+            "REASONING_PAYLOAD_MISMATCH",
+        )
+        self.assertFalse(rows["fast"]["counts_as_provider_level_proof"])
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+
+    def test_model_reasoning_availability_matrix_rejects_provider_level_fallback(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        reasoning_packet["fallback_used"] = True
+        level_results = reasoning_packet["level_results"]
+        assert isinstance(level_results, list)
+        level_results[0]["fallback_used"] = True
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.3-codex",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-reasoning-fallback",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 2)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertTrue(packet["fallback_used"])
+        rows = {row["operator_level"]: row for row in packet["proof_reasoning_rows"]}
+        self.assertFalse(rows["fast"]["provider_declared_reasoning_level_proven"])
+        self.assertFalse(rows["fast"]["counts_as_provider_level_proof"])
+        self.assertIn("fallback_used", rows["fast"]["blocking_reasons"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
 
     def test_model_reasoning_availability_matrix_rejects_browser_route_authority(
         self,

@@ -6379,9 +6379,9 @@ renderQuickStartModelReasoningAvailabilityMatrix({
     { execution_mode: "chatgpt_plus_api", intelligence_measured: false, not_intelligence_proof: true }
   ],
   reasoning_level_rows: [
-    { operator_level: "fast", intelligence_measured: false, not_intelligence_proof: true },
-    { operator_level: "high", intelligence_measured: false, not_intelligence_proof: true },
-    { operator_level: "max", intelligence_measured: false, not_intelligence_proof: true }
+    { operator_level: "fast", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true },
+    { operator_level: "high", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true },
+    { operator_level: "max", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true }
   ],
   proof_rank: "api_reasoning_live_only",
   proof_rank_score: 70,
@@ -6395,9 +6395,9 @@ renderQuickStartModelReasoningAvailabilityMatrix({
     { proof_axis: "execution_mode", execution_mode: "chatgpt_plus_api", display_name: "ChatGPT + API", status: "blocked", proof_level: "COMBINED_MODE_BLOCKED_NATIVE_AUTH", counts_as_full_success: false, counts_as_partial_api_success: false }
   ],
   proof_reasoning_rows: [
-    { proof_axis: "api_reasoning_level", operator_level: "fast", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true },
-    { proof_axis: "api_reasoning_level", operator_level: "high", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true },
-    { proof_axis: "api_reasoning_level", operator_level: "max", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true }
+    { proof_axis: "api_reasoning_level", operator_level: "fast", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, counts_as_intelligence_proof: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true },
+    { proof_axis: "api_reasoning_level", operator_level: "high", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, counts_as_intelligence_proof: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true },
+    { proof_axis: "api_reasoning_level", operator_level: "max", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", provider_reasoning_proof_level: "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN", provider_declared_reasoning_level_proven: true, reasoning_level_access_proven: true, provider_reasoning_level_source: "provider_spec_and_live_call", counts_as_provider_level_proof: true, counts_as_independent_quality_benchmark: false, counts_as_intelligence_proof: false, independent_quality_benchmark_proven: false, benchmark_required_for_provider_level_proof: false, quality_benchmark_status: "not_required_for_provider_level_proof", intelligence_measured: false, not_intelligence_proof: true }
   ],
   proof_agent_rows: [
     { proof_axis: "agent_slot", agent_slot: "primary_model_slot", display_name: "Planner", aliases: ["Planner", "Agent 1", "1"], status: "ok", proof_level: "ALIAS_BINDING_PROVEN", native_execution_proven: false, display_aliases_are_separate_agents: false },
@@ -6415,6 +6415,13 @@ renderQuickStartModelReasoningAvailabilityMatrix({
   native_auth_wall_observed: true,
   native_execution_proven: false,
   reasoning_dispatch_matrix_proven: true,
+  provider_declared_reasoning_levels_proven: true,
+  provider_reasoning_level_source: "provider_spec_and_live_call",
+  provider_reasoning_level_proof_count: 3,
+  provider_reasoning_level_expected_count: 3,
+  independent_quality_benchmark_proven: false,
+  benchmark_required_for_provider_level_proof: false,
+  quality_benchmark_status: "not_required_for_provider_level_proof",
   command_loop_proven: true,
   runtime_context_file_proven: true,
   primary_alias_bound_to_chatgpt_lane: true,
@@ -6484,6 +6491,13 @@ if (
   rendered.native_auth_wall_observed !== true ||
   rendered.native_execution_proven !== false ||
   rendered.reasoning_dispatch_matrix_proven !== true ||
+  rendered.provider_declared_reasoning_levels_proven !== true ||
+  rendered.provider_reasoning_level_source !== "provider_spec_and_live_call" ||
+  rendered.provider_reasoning_level_proof_count !== 3 ||
+  rendered.provider_reasoning_level_expected_count !== 3 ||
+  rendered.independent_quality_benchmark_proven !== false ||
+  rendered.benchmark_required_for_provider_level_proof !== false ||
+  rendered.quality_benchmark_status !== "not_required_for_provider_level_proof" ||
   rendered.runtime_readiness_claimed !== false ||
   rendered.file_bridge_acceptance_proven !== true ||
   rendered.agent_alias_route_acceptance_proven !== true ||
@@ -6522,6 +6536,48 @@ if (
 ) {
   throw new Error(`matrix flags not preserved: ${node("quickStartRouteResponse").textContent}`);
 }
+if (!node("quickStartProofReasoningRows").textContent.includes("PROVIDER_DECLARED_REASONING_LEVEL_PROVEN")) {
+  throw new Error(`provider reasoning proof level missing: ${node("quickStartProofReasoningRows").textContent}`);
+}
+if (!rendered.proof_reasoning_rows.every((row) => row.counts_as_provider_level_proof === true)) {
+  throw new Error(`provider level proof flags missing: ${node("quickStartRouteResponse").textContent}`);
+}
+if (!rendered.proof_reasoning_rows.every((row) => row.counts_as_independent_quality_benchmark === false)) {
+  throw new Error(`benchmark non-claim flags missing: ${node("quickStartRouteResponse").textContent}`);
+}
+vm.runInContext(`
+renderQuickStartModelReasoningAvailabilityMatrix({
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_PROVEN_WITH_LIMITS",
+  execution_mode: "chatgpt_plus_api",
+  combined_full_proven: true,
+  chatgpt_lane_proven: true,
+  api_lane_proven: true,
+  alias_binding_proven: true,
+  combined_status_counts_as_full_success: true,
+  api_success_counts_as_combined_success: false,
+  native_execution_proven: true,
+  reasoning_dispatch_matrix_proven: true,
+  provider_declared_reasoning_levels_proven: true,
+  provider_reasoning_level_source: "provider_spec_and_live_call",
+  provider_reasoning_level_proof_count: 3,
+  provider_reasoning_level_expected_count: 3,
+  independent_quality_benchmark_proven: true,
+  benchmark_required_for_provider_level_proof: false,
+  quality_benchmark_status: "not_required_for_provider_level_proof",
+  fallback_used: false,
+  local_imitation_used: false,
+  secret_value_exposed: false,
+  raw_backend_details_exposed: false,
+  intelligence_measured: false,
+  not_intelligence_proof: true,
+  next_action: "none"
+});
+if (!document.getElementById("quickStartRouteChip").className.includes("green")) {
+  throw new Error("benchmark-backed packet must not be downgraded by provider-level UI gate");
+}
+`, sandbox);
 vm.runInContext(`
 renderQuickStartModelReasoningAvailabilityMatrix({
   status: "blocked",

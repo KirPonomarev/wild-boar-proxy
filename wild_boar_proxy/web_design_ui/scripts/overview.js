@@ -3748,7 +3748,11 @@ function quickStartProofRowLabel(row) {
 }
 
 function quickStartProofRowMeta(row) {
-  const proof = row?.proof_level || row?.machine_error_code || row?.status || "";
+  const proof = row?.provider_reasoning_proof_level
+    || row?.proof_level
+    || row?.machine_error_code
+    || row?.status
+    || "";
   const model = row?.model_id || row?.api_model_id || "";
   const aliases = Array.isArray(row?.aliases) && row.aliases.length
     ? row.aliases.slice(0, 4).join("/")
@@ -3967,6 +3971,20 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_execution_packet || {},
       reasoning_dispatch_matrix_proven:
         packet?.reasoning_dispatch_matrix_proven === true,
+      provider_declared_reasoning_levels_proven:
+        packet?.provider_declared_reasoning_levels_proven === true,
+      provider_reasoning_level_source:
+        packet?.provider_reasoning_level_source || "",
+      provider_reasoning_level_proof_count:
+        Number(packet?.provider_reasoning_level_proof_count || 0),
+      provider_reasoning_level_expected_count:
+        Number(packet?.provider_reasoning_level_expected_count || 0),
+      independent_quality_benchmark_proven:
+        packet?.independent_quality_benchmark_proven === true,
+      benchmark_required_for_provider_level_proof:
+        packet?.benchmark_required_for_provider_level_proof === true,
+      quality_benchmark_status:
+        packet?.quality_benchmark_status || "",
       native_free_text_command_loop_packet:
         packet?.native_free_text_command_loop_packet === true,
       native_free_text_command_loop_proven:
@@ -5183,6 +5201,7 @@ function renderQuickStartModelReasoningAvailabilityMatrix(packet) {
     && packet?.api_success_counts_as_combined_success !== true
     && packet?.native_execution_proven === true
     && packet?.reasoning_dispatch_matrix_proven === true
+    && packet?.provider_declared_reasoning_levels_proven === true
     && packet?.fallback_used !== true
     && packet?.local_imitation_used !== true
     && packet?.secret_value_exposed !== true
@@ -5267,6 +5286,20 @@ function renderQuickStartModelReasoningAvailabilityMatrix(packet) {
     native_execution_packet: packet?.native_execution_packet || {},
     reasoning_dispatch_matrix_proven:
       packet?.reasoning_dispatch_matrix_proven === true,
+    provider_declared_reasoning_levels_proven:
+      packet?.provider_declared_reasoning_levels_proven === true,
+    provider_reasoning_level_source:
+      packet?.provider_reasoning_level_source || "",
+    provider_reasoning_level_proof_count:
+      Number(packet?.provider_reasoning_level_proof_count || 0),
+    provider_reasoning_level_expected_count:
+      Number(packet?.provider_reasoning_level_expected_count || 0),
+    independent_quality_benchmark_proven:
+      packet?.independent_quality_benchmark_proven === true,
+    benchmark_required_for_provider_level_proof:
+      packet?.benchmark_required_for_provider_level_proof === true,
+    quality_benchmark_status:
+      packet?.quality_benchmark_status || "",
     command_loop_proven: packet?.command_loop_proven === true,
     runtime_context_file_proven: packet?.runtime_context_file_proven === true,
     primary_alias_bound_to_chatgpt_lane:
@@ -5591,6 +5624,13 @@ async function runQuickStartModelReasoningAvailabilityMatrix() {
       native_auth_wall_observed: false,
       native_execution_proven: false,
       reasoning_dispatch_matrix_proven: false,
+      provider_declared_reasoning_levels_proven: false,
+      provider_reasoning_level_source: "provider_spec_not_live_proven",
+      provider_reasoning_level_proof_count: 0,
+      provider_reasoning_level_expected_count: 0,
+      independent_quality_benchmark_proven: false,
+      benchmark_required_for_provider_level_proof: false,
+      quality_benchmark_status: "not_required_for_provider_level_proof",
       command_loop_proven: false,
       runtime_context_file_proven: false,
       fallback_used: false,
@@ -5638,6 +5678,13 @@ async function runQuickStartModelReasoningAvailabilityMatrix() {
     native_auth_wall_observed: false,
     native_execution_proven: false,
     reasoning_dispatch_matrix_proven: false,
+    provider_declared_reasoning_levels_proven: false,
+    provider_reasoning_level_source: "provider_spec_not_live_proven",
+    provider_reasoning_level_proof_count: 0,
+    provider_reasoning_level_expected_count: 0,
+    independent_quality_benchmark_proven: false,
+    benchmark_required_for_provider_level_proof: false,
+    quality_benchmark_status: "not_required_for_provider_level_proof",
     command_loop_proven: false,
     runtime_context_file_proven: false,
     primary_alias_bound_to_chatgpt_lane: false,
@@ -5670,6 +5717,13 @@ async function runQuickStartModelReasoningAvailabilityMatrix() {
         api_success_counts_as_combined_success: false,
         native_execution_proven: false,
         reasoning_dispatch_matrix_proven: false,
+        provider_declared_reasoning_levels_proven: false,
+        provider_reasoning_level_source: "provider_spec_not_live_proven",
+        provider_reasoning_level_proof_count: 0,
+        provider_reasoning_level_expected_count: 0,
+        independent_quality_benchmark_proven: false,
+        benchmark_required_for_provider_level_proof: false,
+        quality_benchmark_status: "not_required_for_provider_level_proof",
         command_loop_proven: false,
         runtime_context_file_proven: false,
         fallback_used: false,
@@ -5720,6 +5774,13 @@ async function runQuickStartModelReasoningAvailabilityMatrix() {
       native_auth_wall_observed: false,
       native_execution_proven: false,
       reasoning_dispatch_matrix_proven: false,
+      provider_declared_reasoning_levels_proven: false,
+      provider_reasoning_level_source: "provider_spec_not_live_proven",
+      provider_reasoning_level_proof_count: 0,
+      provider_reasoning_level_expected_count: 0,
+      independent_quality_benchmark_proven: false,
+      benchmark_required_for_provider_level_proof: false,
+      quality_benchmark_status: "not_required_for_provider_level_proof",
       command_loop_proven: false,
       runtime_context_file_proven: false,
       fallback_used: false,

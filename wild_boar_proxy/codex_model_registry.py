@@ -78,6 +78,7 @@ MODEL_BOUND_TO_LANE = "MODEL_BOUND_TO_LANE"
 PROVIDER_DECLARED_REASONING = "PROVIDER_DECLARED_REASONING"
 REASONING_OPTION_SERVER_VALIDATED = "REASONING_OPTION_SERVER_VALIDATED"
 LIVE_API_FORMAT_PROVEN = "LIVE_API_FORMAT_PROVEN"
+PROVIDER_DECLARED_REASONING_LEVEL_PROVEN = "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN"
 REASONING_PAYLOAD_MISMATCH = "REASONING_PAYLOAD_MISMATCH"
 BROWSER_ROUTE_AUTHORITY_REJECTED = "BROWSER_ROUTE_AUTHORITY_REJECTED"
 CUSTOM_NATIVE_AUTH_WALL_OBSERVED = "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
@@ -2852,9 +2853,36 @@ def _matrix_reasoning_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
     for result in level_results:
         if not isinstance(result, dict):
             continue
-        live_proven = result.get("reasoning_level_dispatch_proven") is True
+        live_proven = bool(
+            result.get("reasoning_level_dispatch_proven") is True
+            and result.get("api_reasoning_dispatch_proven") is True
+            and result.get("api_provider_acknowledged") is True
+            and result.get("provider_called") is True
+            and result.get("fallback_used") is not True
+            and result.get("local_imitation_used") is not True
+            and result.get("secret_value_exposed") is not True
+            and result.get("intelligence_measured") is False
+        )
         mismatch = "api_reasoning_thinking_mismatch" in set(
             str(reason) for reason in result.get("blocking_reasons") or []
+        )
+        blocking_reasons = [
+            str(reason) for reason in result.get("blocking_reasons") or []
+        ]
+        blocking_reason_set = set(blocking_reasons)
+        proof_level = (
+            LIVE_API_FORMAT_PROVEN
+            if live_proven
+            else REASONING_PAYLOAD_MISMATCH
+            if mismatch
+            else PROVIDER_DECLARED_REASONING
+        )
+        provider_reasoning_source = (
+            "provider_spec_and_live_call"
+            if live_proven
+            else "provider_spec_mismatch"
+            if mismatch
+            else "provider_spec_not_live_proven"
         )
         rows.append(
             {
@@ -2864,14 +2892,23 @@ def _matrix_reasoning_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 "model_id": str(result.get("api_model_id") or ""),
                 "status": "ok" if live_proven else "blocked",
-                "proof_level": LIVE_API_FORMAT_PROVEN
-                if live_proven
-                else REASONING_PAYLOAD_MISMATCH
-                if mismatch
-                else PROVIDER_DECLARED_REASONING,
+                "proof_level": proof_level,
+                "provider_reasoning_proof_level": (
+                    PROVIDER_DECLARED_REASONING_LEVEL_PROVEN
+                    if live_proven
+                    else proof_level
+                ),
+                "provider_reasoning_level_source": provider_reasoning_source,
                 "machine_error_code": "OK" if live_proven else REASONING_PAYLOAD_MISMATCH
                 if mismatch
                 else "REASONING_LEVEL_NOT_PROVEN",
+                "provider_declared_reasoning_level_proven": live_proven,
+                "reasoning_level_access_proven": live_proven,
+                "counts_as_provider_level_proof": live_proven,
+                "counts_as_independent_quality_benchmark": False,
+                "independent_quality_benchmark_proven": False,
+                "benchmark_required_for_provider_level_proof": False,
+                "quality_benchmark_status": "not_required_for_provider_level_proof",
                 "api_reasoning_dispatch_proven": result.get(
                     "api_reasoning_dispatch_proven"
                 )
@@ -2885,9 +2922,37 @@ def _matrix_reasoning_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
                 "secret_value_exposed": result.get("secret_value_exposed") is True,
                 "intelligence_measured": result.get("intelligence_measured") is True,
                 "not_intelligence_proof": result.get("not_intelligence_proof") is True,
-                "blocking_reasons": [
-                    str(reason) for reason in result.get("blocking_reasons") or []
-                ],
+                "blocking_reasons": blocking_reasons
+                + (
+                    ["api_provider_reasoning_not_acknowledged"]
+                    if result.get("api_provider_acknowledged") is not True
+                    and "api_provider_reasoning_not_acknowledged" not in blocking_reason_set
+                    else []
+                )
+                + (
+                    ["provider_not_called"]
+                    if result.get("provider_called") is not True
+                    and "provider_not_called" not in blocking_reason_set
+                    else []
+                )
+                + (
+                    ["fallback_used"]
+                    if result.get("fallback_used") is True
+                    and "fallback_used" not in blocking_reason_set
+                    else []
+                )
+                + (
+                    ["local_imitation_used"]
+                    if result.get("local_imitation_used") is True
+                    and "local_imitation_used" not in blocking_reason_set
+                    else []
+                )
+                + (
+                    ["secret_value_exposed"]
+                    if result.get("secret_value_exposed") is True
+                    and "secret_value_exposed" not in blocking_reason_set
+                    else []
+                ),
             }
         )
     return rows
@@ -3195,7 +3260,36 @@ def build_model_reasoning_availability_matrix_truth_packet(
         and reasoning.get("reasoning_dispatch_matrix_proven") is True
         and reasoning.get("intelligence_measured") is False
         and reasoning.get("secret_value_exposed") is not True
+        and reasoning.get("fallback_used") is not True
+        and reasoning.get("local_imitation_used") is not True
     )
+    reasoning_level_rows = _matrix_reasoning_rows(reasoning)
+    provider_reasoning_level_expected_count = len(reasoning_level_rows)
+    provider_reasoning_level_proof_count = sum(
+        1
+        for row in reasoning_level_rows
+        if row.get("provider_declared_reasoning_level_proven") is True
+    )
+    provider_declared_reasoning_levels_proven = bool(
+        reasoning_matrix_proven
+        and provider_reasoning_level_expected_count > 0
+        and provider_reasoning_level_proof_count
+        == provider_reasoning_level_expected_count
+    )
+    provider_reasoning_level_mismatch = any(
+        row.get("provider_reasoning_level_source") == "provider_spec_mismatch"
+        for row in reasoning_level_rows
+    )
+    provider_reasoning_level_source = (
+        "provider_spec_and_live_call"
+        if provider_declared_reasoning_levels_proven
+        else "provider_spec_mismatch"
+        if provider_reasoning_level_mismatch
+        else "provider_spec_not_live_proven"
+    )
+    independent_quality_benchmark_proven = False
+    benchmark_required_for_provider_level_proof = False
+    quality_benchmark_status = "not_required_for_provider_level_proof"
     alias_binding_proven = bool(
         command_loop.get("primary_alias_bound_to_chatgpt_lane") is True
         and command_loop.get("coding_alias_bound_to_api_lane") is True
@@ -3217,7 +3311,9 @@ def build_model_reasoning_availability_matrix_truth_packet(
         and combined_truth.get("raw_backend_details_exposed") is not True
         and combined_truth.get("secret_value_exposed") is not True
     )
-    api_lane_proven = bool(command_loop_api_proven and reasoning_matrix_proven)
+    api_lane_proven = bool(
+        command_loop_api_proven and provider_declared_reasoning_levels_proven
+    )
     chatgpt_lane_proven = native_execution_proven
     no_secret_exposed = not any(
         packet.get("secret_value_exposed") is True
@@ -3293,6 +3389,19 @@ def build_model_reasoning_availability_matrix_truth_packet(
         "bridge_or_file_bridge_used": command_loop.get("bridge_or_file_bridge_used") is True,
         "command_loop_route_authority_proven": command_loop_route_authority_proven,
         "reasoning_dispatch_matrix_proven": reasoning_matrix_proven,
+        "provider_declared_reasoning_levels_proven": (
+            provider_declared_reasoning_levels_proven
+        ),
+        "provider_reasoning_level_source": provider_reasoning_level_source,
+        "provider_reasoning_level_proof_count": provider_reasoning_level_proof_count,
+        "provider_reasoning_level_expected_count": (
+            provider_reasoning_level_expected_count
+        ),
+        "independent_quality_benchmark_proven": independent_quality_benchmark_proven,
+        "benchmark_required_for_provider_level_proof": (
+            benchmark_required_for_provider_level_proof
+        ),
+        "quality_benchmark_status": quality_benchmark_status,
         "provider_called": reasoning.get("provider_call_count", 0) != 0,
         "intelligence_measured": False,
         "not_intelligence_proof": True,
@@ -3376,7 +3485,6 @@ def build_model_reasoning_availability_matrix_truth_packet(
         machine_error_code = MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER
     status = "ok" if combined_full_proven else "blocked"
     matrix_rows = [chatgpt_row, api_row, combined_row]
-    reasoning_level_rows = _matrix_reasoning_rows(reasoning)
     primary_alias_value = str(
         command_loop.get("primary_alias") or native.get("primary_alias") or ""
     )
@@ -3420,7 +3528,11 @@ def build_model_reasoning_availability_matrix_truth_packet(
     proof_reasoning_rows = [
         {
             "proof_axis": "api_reasoning_level",
+            "counts_as_provider_level_proof": (
+                row.get("provider_declared_reasoning_level_proven") is True
+            ),
             "counts_as_intelligence_proof": False,
+            "counts_as_independent_quality_benchmark": False,
             **row,
         }
         for row in reasoning_level_rows
@@ -3437,7 +3549,7 @@ def build_model_reasoning_availability_matrix_truth_packet(
         coding_alias_bound=command_loop.get("coding_alias_bound_to_api_lane") is True,
         native_execution_proven=native_execution_proven,
         command_loop_api_proven=command_loop_api_proven,
-        reasoning_matrix_proven=reasoning_matrix_proven,
+        reasoning_matrix_proven=provider_declared_reasoning_levels_proven,
     )
     return {
         "schema_version": 1,
@@ -3491,6 +3603,19 @@ def build_model_reasoning_availability_matrix_truth_packet(
         "native_execution_proven": native_execution_proven,
         "native_execution_machine_error_code": native_execution_machine_error_code,
         "reasoning_dispatch_matrix_proven": reasoning_matrix_proven,
+        "provider_declared_reasoning_levels_proven": (
+            provider_declared_reasoning_levels_proven
+        ),
+        "provider_reasoning_level_source": provider_reasoning_level_source,
+        "provider_reasoning_level_proof_count": provider_reasoning_level_proof_count,
+        "provider_reasoning_level_expected_count": (
+            provider_reasoning_level_expected_count
+        ),
+        "independent_quality_benchmark_proven": independent_quality_benchmark_proven,
+        "benchmark_required_for_provider_level_proof": (
+            benchmark_required_for_provider_level_proof
+        ),
+        "quality_benchmark_status": quality_benchmark_status,
         "command_loop_proven": command_loop.get("command_loop_proven") is True,
         "runtime_context_file_proven": command_loop.get("runtime_context_file_proven")
         is True
