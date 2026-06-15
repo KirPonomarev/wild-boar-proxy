@@ -122,6 +122,19 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertNotIn("DEEPSEEK_API_KEY", payload)
         self.assertNotIn("OPENROUTER_API_KEY", payload)
 
+    def test_repo_owned_default_launcher_unsets_global_api_key_for_chatgpt_auth(
+        self,
+    ) -> None:
+        payload = runtime.build_repo_owned_default_launcher_script_payload()
+
+        self.assertIn('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn("print(str(data.get(\"auth_mode\", \"\")).strip().lower())", payload)
+        self.assertIn('OPENAI_API_KEY_FROM_AUTH="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('if [ "$AUTH_MODE" = "chatgpt" ]; then', payload)
+        self.assertIn('unset OPENAI_API_KEY', payload)
+        self.assertIn('elif [ -n "$OPENAI_API_KEY_FROM_AUTH" ]; then', payload)
+        self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
+
     def test_auth_pool_hygiene_uses_snapshot_as_observed_selection_when_runtime_loaded_ids_empty(
         self,
     ) -> None:

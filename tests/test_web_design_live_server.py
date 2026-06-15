@@ -11354,6 +11354,73 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         self.assertEqual(transcript["status"], "rejected")
         self.assertEqual(transcript["machine_error_code"], "SESSION_NOT_FOUND")
 
+    def test_custom_native_feature_parity_endpoint_reads_server_owned_profile_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile = Path(temp_dir) / "custom-profile"
+            managed = profile / "managed"
+            profile.mkdir(parents=True)
+            managed.mkdir(parents=True)
+            marker_value = "NATIVE_FEATURE_PARITY_WEB_TEST_VALUE"
+            (profile / "auth.json").write_text(
+                json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": marker_value}) + "\n",
+                encoding="utf-8",
+            )
+            (profile / "config.toml").write_text(
+                'model = "gpt-5.5"\nbase_url = "http://127.0.0.1:8318/v1"\n',
+                encoding="utf-8",
+            )
+            (profile / "codex-custom-launch.sh").write_text(
+                "\n".join(
+                    [
+                        'export CODEX_HOME="$PROFILE_DIR"',
+                        'export HOME="$APP_HOME"',
+                        'export OPENAI_API_KEY="$(python3 - "$AUTH_FILE")"',
+                        '"--user-data-dir=$APP_USER_DATA_DIR"',
+                        "primary_bin_hash=",
+                        "preferred_asar_hash=",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_AUTH_FILE": str(profile / "auth.json"),
+                    "WBP_CONFIG_TOML": str(profile / "config.toml"),
+                    "WBP_LAUNCHER_SCRIPT": str(profile / "codex-custom-launch.sh"),
+                },
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=MappingRunner(live_payloads())),
+                )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                response_text = fetch(f"{base}/api/codex/custom/native-feature-parity")
+                packet = json.loads(response_text)
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["packet_kind"], "custom_codex_native_feature_parity")
+        self.assertEqual(packet["effect"], "read")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "FAST_UNAVAILABLE_API_KEY_AUTH")
+        self.assertEqual(packet["changed_files"], [])
+        self.assertTrue(packet["custom_profile_isolated"])
+        self.assertFalse(packet["profile_is_original_codex_profile"])
+        self.assertFalse(packet["original_codex_profile_read"])
+        self.assertFalse(packet["browser_path_authority"])
+        self.assertFalse(packet["raw_auth_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertNotIn(marker_value, response_text)
+
     def test_registered_post_routes_are_behaviorally_required_before_dispatch(self) -> None:
         cases = (
             ("/api/operator/run", lambda route: route.method == "POST" and route.path == "/api/operator/run"),

@@ -106,6 +106,7 @@ from wild_boar_proxy.native_window_probe import (
     show_custom_native_window_packet,
     submit_custom_native_window_prompt_packet,
 )
+from wild_boar_proxy.native_feature_parity import build_native_feature_parity_packet
 from wild_boar_proxy.native_filesystem_probe import (
     AGENT_RUNTIME_CONTEXT_FILENAME,
     collect_codex_process_inventory,
@@ -1226,6 +1227,7 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/codex/custom/accounts"),
     _get_route("/api/codex/custom/account-selection"),
     _get_route("/api/codex/custom/agent-bindings"),
+    _get_route("/api/codex/custom/native-feature-parity"),
     _get_route("/api/codex/custom/sessions"),
     _get_route("/api/codex/custom/recovery/contract"),
     _get_route("/api/codex/custom/recovery/admitted-session-actions"),
@@ -15968,6 +15970,11 @@ def build_handler(
         def _handle_get_api_codex_custom_agent_bindings(self, request_path: str) -> None:
             parsed = urlparse(request_path)
             self._send_json(_custom_agent_bindings_read_packet())
+            return
+
+        def _handle_get_api_codex_custom_native_feature_parity(self, request_path: str) -> None:
+            parsed = urlparse(request_path)
+            self._send_json(build_native_feature_parity_packet(owner_paths))
             return
 
         def _handle_get_api_codex_custom_sessions(self, request_path: str) -> None:

@@ -23118,7 +23118,11 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', payload)
-        self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('OPENAI_API_KEY_FROM_AUTH="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('if [ "$AUTH_MODE" = "chatgpt" ]; then', payload)
+        self.assertIn('unset OPENAI_API_KEY', payload)
+        self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
         self.assertIn('WORKSPACE_PATH="${1:-}"', payload)
         self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', payload)
         self.assertIn(
