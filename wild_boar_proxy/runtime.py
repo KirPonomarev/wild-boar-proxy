@@ -3595,13 +3595,7 @@ def attempt_stable_proxyless_recovery_under_lock(
         result["adoption_outcome"] = "stable_proxyless_restart_failed"
         return result, None
 
-    state = read_json(paths.state_file, required=False)
     _, _, stable_endpoint = get_endpoint(paths, "stable")
-    state["effective_mode"] = "stable"
-    state["last_error"] = ""
-    write_json_atomic(paths.state_file, state)
-    write_text_atomic(paths.runtime_effective_mode_file, "stable")
-    write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
     reproof_payload: dict[str, Any] | None = None
     reproof_ok = False
     deadline = time.monotonic() + stable_proxyless_reproof_timeout_seconds()
@@ -3614,6 +3608,10 @@ def attempt_stable_proxyless_recovery_under_lock(
             allow_current_proxy_auto_adoption=False,
             allow_stable_fallback_write=False,
             allow_stale_pid_cleanup=False,
+            _effective_mode_override="stable",
+            _state_effective_mode_override="stable",
+            _effective_mode_artifact_override="stable",
+            _configured_base_url_override=stable_endpoint,
         )
         reproof_ok = (
             reproof_payload.get("status") == "ok"
@@ -9127,6 +9125,10 @@ def run_healthcheck(
     allow_stable_fallback_write: bool = True,
     allow_stale_pid_cleanup: bool = True,
     effect: str | None = None,
+    _effective_mode_override: str | None = None,
+    _state_effective_mode_override: str | None = None,
+    _effective_mode_artifact_override: str | None = None,
+    _configured_base_url_override: str | None = None,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     mutation_before = (
@@ -9151,11 +9153,19 @@ def run_healthcheck(
         clear_stale_managed_pid_if_needed(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
-    effective_mode = get_effective_mode(paths, state)
+    effective_mode = _effective_mode_override or get_effective_mode(paths, state)
     host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
-    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    configured_base_url = (
+        _configured_base_url_override
+        if _configured_base_url_override is not None
+        else read_toml_string(paths.config_toml, "base_url")
+    )
     listener_ok = socket_is_listening(host, port)
-    state_effective_mode = state.get("effective_mode")
+    state_effective_mode = (
+        _state_effective_mode_override
+        if _state_effective_mode_override is not None
+        else state.get("effective_mode")
+    )
     reported_effective_mode = reconcile_effective_mode_for_reporting(
         effective_mode, listener_ok=listener_ok
     )
@@ -9316,8 +9326,16 @@ def run_healthcheck(
         except Exception as exc:  # noqa: BLE001
             error_detail = str(exc)
 
-    state_effective_mode = state.get("effective_mode")
-    effective_mode_artifact = read_effective_mode_artifact(paths)
+    state_effective_mode = (
+        _state_effective_mode_override
+        if _state_effective_mode_override is not None
+        else state.get("effective_mode")
+    )
+    effective_mode_artifact = (
+        _effective_mode_artifact_override
+        if _effective_mode_artifact_override is not None
+        else read_effective_mode_artifact(paths)
+    )
     reported_effective_mode = reconcile_effective_mode_for_reporting(
         effective_mode, listener_ok=listener_ok
     )

@@ -1147,6 +1147,122 @@ class CliTests(unittest.TestCase):
             self.profile_dir.joinpath("config.toml").read_text(encoding="utf-8"),
         )
 
+    def test_stable_proxyless_recovery_does_not_publish_effective_truth_before_reproof(
+        self,
+    ) -> None:
+        self.stable_dir.joinpath("config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            "auth-dir: \"~/.cli-proxy-api\"\n"
+            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            encoding="utf-8",
+        )
+        before_state = self.managed_dir.joinpath("supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        before_effective_mode = self.profile_dir.joinpath(
+            "runtime-effective-mode.txt"
+        ).read_text(encoding="utf-8")
+        before_config_toml = self.profile_dir.joinpath("config.toml").read_text(
+            encoding="utf-8"
+        )
+        restart_result = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "listener_was_present": True,
+            "discovered_pids": [123],
+            "terminated_pids": [123],
+            "launch_result": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "pid": 456,
+                "launch_observed": True,
+            },
+        }
+        reproof_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "human_message": "Runtime attestation failed one or more checks.",
+            "liveness": "degraded",
+            "severity": "recoverable",
+            "operator_action": "retry",
+            "effective_mode": "stable",
+            "last_error": "forced reproof failure",
+            "attestation": {
+                "listener_ok": True,
+                "models_ok": True,
+                "responses_ok": False,
+                "effective_mode_match": True,
+                "base_url_match": True,
+            },
+        }
+
+        def fake_run_healthcheck(paths, **kwargs):
+            self.assertEqual(
+                self.managed_dir.joinpath("supervisor-state.json").read_text(
+                    encoding="utf-8"
+                ),
+                before_state,
+            )
+            self.assertEqual(
+                self.profile_dir.joinpath("runtime-effective-mode.txt").read_text(
+                    encoding="utf-8"
+                ),
+                before_effective_mode,
+            )
+            self.assertEqual(
+                self.profile_dir.joinpath("config.toml").read_text(encoding="utf-8"),
+                before_config_toml,
+            )
+            self.assertEqual(kwargs["_effective_mode_override"], "stable")
+            self.assertEqual(kwargs["_state_effective_mode_override"], "stable")
+            self.assertEqual(kwargs["_effective_mode_artifact_override"], "stable")
+            self.assertEqual(
+                kwargs["_configured_base_url_override"],
+                "http://127.0.0.1:8318/v1",
+            )
+            return reproof_payload
+
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=False),
+            mock.patch.object(
+                runtime_mod,
+                "restart_owned_stable_runtime_process",
+                return_value=restart_result,
+            ),
+            mock.patch.object(
+                runtime_mod, "run_healthcheck", side_effect=fake_run_healthcheck
+            ),
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
+                paths,
+                model="gpt-5.5",
+                configured_proxy_url="http://127.0.0.1:10808",
+            )
+
+        self.assertIsNone(reproof)
+        self.assertEqual(
+            result["adoption_outcome"], "stable_proxyless_live_reproof_failed"
+        )
+        self.assertTrue(result["rollback_restored"])
+        self.assertEqual(
+            self.managed_dir.joinpath("supervisor-state.json").read_text(
+                encoding="utf-8"
+            ),
+            before_state,
+        )
+        self.assertEqual(
+            self.profile_dir.joinpath("runtime-effective-mode.txt").read_text(
+                encoding="utf-8"
+            ),
+            before_effective_mode,
+        )
+        self.assertEqual(
+            self.profile_dir.joinpath("config.toml").read_text(encoding="utf-8"),
+            before_config_toml,
+        )
+
     def test_dynamic_local_proxy_candidates_use_bounded_lsof_probe(
         self,
     ) -> None:
