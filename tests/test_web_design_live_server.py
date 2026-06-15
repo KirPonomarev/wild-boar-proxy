@@ -1868,6 +1868,149 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(urlopen.call_count, 1)
 
+    def test_custom_model_reasoning_availability_matrix_endpoint_blocks_missing_native_api_model_id(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            bridge_root = root / "file-bridge"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id="wbp-deepseek-chat",
+            )
+            payloads = live_payloads_with_reasoning_variants()
+            routes_packet = routes_list_packet_with_reasoning_variants()
+            routes_packet["data"]["routes"].append(
+                {
+                    "schema_version": 1,
+                    "route_id": "wbp-deepseek-chat",
+                    "display_name": "WBP DeepSeek Chat",
+                    "provider": "deepseek",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                    "secret_ref": "DEEPSEEK_API_KEY",
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": True,
+                }
+            )
+            routes_packet["data"]["count"] = len(routes_packet["data"]["routes"])
+            payloads[("external-models", "routes", "list", "--json")] = routes_packet
+            runner = MappingRunner(payloads)
+            env = {
+                "WBP_MANAGED_DIR": str(managed_dir),
+                "WBP_PROFILE_DIR": str(profile_dir),
+            }
+            original_context_builder = live_server._custom_native_agent_runtime_context
+
+            def context_without_api_model_id(**kwargs: object) -> dict[str, object]:
+                context = dict(original_context_builder(**kwargs))
+                context.pop("api_model_id", None)
+                return context
+
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context",
+                    side_effect=context_without_api_model_id,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "show_custom_native_window_packet",
+                    return_value={"status": "ok", "machine_error_code": "OK"},
+                ) as show_window,
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text="WBP_MODEL_REASONING_MATRIX_API_OK",
+                    ),
+                ) as urlopen,
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=runner,
+                        owner_authorization_phrase=(
+                            "разрешаю тебе любые законные действия в рамках разработки проекта"
+                        ),
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    written = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/agent-bindings",
+                            {"agent_bindings": bindings},
+                        )
+                    )
+                    packet = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/model-reasoning-availability-matrix",
+                            {
+                                "execution_mode": "chatgpt_plus_api",
+                                "chatgpt_model_id": "gpt-5.5",
+                                "api_model_id": "wbp-deepseek-v4-pro-max",
+                                "api_reasoning_option_id": "provider_declared_max",
+                                "request_id": "endpoint-model-reasoning-matrix-missing-api-model",
+                            },
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(written["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "model_reasoning_availability_matrix_truth")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["native_execution_machine_error_code"],
+            "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+        )
+        self.assertFalse(packet["native_execution_proven"])
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertTrue(packet["partial_api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertIn("CUSTOM_NATIVE_API_MODEL_ID_MISSING", packet["blocking_reasons"])
+        self.assertEqual(
+            packet["native_execution_packet"]["machine_error_code"],
+            "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+        )
+        self.assertIn(
+            "api_model_id_missing",
+            packet["native_execution_packet"]["blocking_reasons"],
+        )
+        show_window.assert_not_called()
+        self.assertEqual(urlopen.call_count, 1)
+
     def test_custom_model_reasoning_availability_matrix_endpoint_rejects_browser_route_authority(
         self,
     ) -> None:
@@ -2243,6 +2386,64 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["runtime_context_file_proven"])
         self.assertIn("native_activation_not_configured", packet["blocking_reasons"])
         submitter.assert_not_called()
+
+    def test_custom_native_free_text_blocks_missing_api_model_id_before_window_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            context = dict(context)
+            context.pop("api_model_id", None)
+            submitter = mock.Mock()
+
+            with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
+                        "request_id": "native-api-model-missing",
+                        "timeout_seconds": 0,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    proof_root=root / "native-proof",
+                    native_activator=lambda **kwargs: live_server._custom_native_api_model_id_missing_activation_packet(
+                        request_id=str(kwargs["request_id"]),
+                        expected_text=str(kwargs["expected_text"]),
+                        context_metadata=metadata,
+                    ),
+                    native_prompt_submitter=submitter,
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_NATIVE_API_MODEL_ID_MISSING")
+        self.assertTrue(packet["native_activation_attempted"])
+        self.assertEqual(
+            packet["native_activation_machine_error_code"],
+            "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+        )
+        self.assertFalse(packet["native_activation_proven"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertIn("api_model_id_missing", packet["blocking_reasons"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["local_imitation_used"])
+        submitter.assert_not_called()
+        urlopen.assert_not_called()
 
     def test_custom_native_free_text_activation_blocks_before_submit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

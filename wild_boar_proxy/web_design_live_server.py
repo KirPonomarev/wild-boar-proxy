@@ -5004,6 +5004,38 @@ def _custom_native_auth_usability_fields(packet: dict[str, Any]) -> dict[str, An
     }
 
 
+def _custom_native_api_model_id_missing_activation_packet(
+    *,
+    request_id: str,
+    expected_text: str,
+    context_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    packet = {
+        "schema_version": 1,
+        "packet_kind": "custom_native_free_text_activation",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
+        "human_message": (
+            "Native activation requires api_model_id from the server runtime context."
+        ),
+        "request_id": request_id,
+        "expected_text": expected_text,
+        "context_metadata": context_metadata,
+        **_custom_native_context_readout_fields(context_metadata),
+        "native_free_text_activation_attempted": True,
+        "native_free_text_activation_source": "server_runtime_context",
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+        "blocking_reasons": ["api_model_id_missing"],
+    }
+    packet.update(_custom_native_auth_usability_fields(packet))
+    return packet
+
+
 def _custom_native_free_text_submit_proven(packet: dict[str, Any]) -> bool:
     return bool(
         packet.get("status") == "ok"
@@ -5038,6 +5070,8 @@ def _custom_native_free_text_activation_machine_error(packet: dict[str, Any]) ->
         "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO",
     }:
         return "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    if machine_code == "CUSTOM_NATIVE_API_MODEL_ID_MISSING":
+        return machine_code
     if not _custom_native_free_text_window_observed(packet):
         return "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED"
     if not _custom_native_free_text_input_observed(packet):
@@ -16039,15 +16073,13 @@ def build_handler(
                 request_id: str,
                 expected_text: str,
             ) -> dict[str, Any]:
-                del context_metadata, request_id, expected_text
                 api_model_id = str(context.get("api_model_id") or "").strip()
                 if not api_model_id:
-                    allowed_route_ids = [
-                        str(route_id)
-                        for route_id in context.get("allowed_api_route_ids", [])
-                        if str(route_id)
-                    ]
-                    api_model_id = allowed_route_ids[0] if allowed_route_ids else ""
+                    return _custom_native_api_model_id_missing_activation_packet(
+                        request_id=request_id,
+                        expected_text=expected_text,
+                        context_metadata=context_metadata,
+                    )
                 launch_payload = {
                     "execution_mode": "chatgpt_plus_api",
                     "chatgpt_model_id": str(
@@ -16458,28 +16490,11 @@ def build_handler(
                 ) -> dict[str, Any]:
                     api_model_id = str(context.get("api_model_id") or "").strip()
                     if not api_model_id:
-                        packet = {
-                            "schema_version": 1,
-                            "packet_kind": "custom_native_free_text_activation",
-                            "status": "blocked",
-                            "machine_error_code": "CUSTOM_NATIVE_API_MODEL_ID_MISSING",
-                            "human_message": "Native matrix activation requires api_model_id from the server runtime context.",
-                            "request_id": request_id,
-                            "expected_text": expected_text,
-                            "context_metadata": context_metadata,
-                            **_custom_native_context_readout_fields(context_metadata),
-                            "native_free_text_activation_attempted": True,
-                            "native_free_text_activation_source": "server_runtime_context",
-                            "browser_can_supply_route_authority": False,
-                            "browser_can_supply_reasoning_authority": False,
-                            "fallback_used": False,
-                            "local_imitation_used": False,
-                            "secret_value_exposed": False,
-                            "raw_backend_details_exposed": False,
-                            "blocking_reasons": ["api_model_id_missing"],
-                        }
-                        packet.update(_custom_native_auth_usability_fields(packet))
-                        return packet
+                        return _custom_native_api_model_id_missing_activation_packet(
+                            request_id=request_id,
+                            expected_text=expected_text,
+                            context_metadata=context_metadata,
+                        )
                     launch_payload = {
                         "execution_mode": "chatgpt_plus_api",
                         "chatgpt_model_id": str(

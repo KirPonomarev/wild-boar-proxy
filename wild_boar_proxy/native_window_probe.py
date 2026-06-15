@@ -140,12 +140,82 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
         {
             pid
             for line in custom_lines
-            if isinstance(line, str) and "/Contents/MacOS/Codex" in line
+            if (
+                isinstance(line, str)
+                and "/Contents/MacOS/Codex" in line
+                and "/Contents/Frameworks/" not in line
+                and "Codex Helper" not in line
+            )
             for pid in [_pid_from_process_line(line)]
             if pid is not None
         }
     )
     return custom_root_pids
+
+
+def _default_profile_process_pids(process_inventory: dict[str, Any]) -> list[int]:
+    default_lines = process_inventory.get("default_process_lines", [])
+    if not isinstance(default_lines, list):
+        default_lines = []
+    return sorted(
+        {
+            pid
+            for line in default_lines
+            if isinstance(line, str)
+            for pid in [_pid_from_process_line(line)]
+            if pid is not None
+        }
+    )
+
+
+def _custom_profile_process_pids(process_inventory: dict[str, Any]) -> list[int]:
+    custom_lines = process_inventory.get("custom_process_lines", [])
+    if not isinstance(custom_lines, list):
+        custom_lines = []
+    return sorted(
+        {
+            pid
+            for line in custom_lines
+            if isinstance(line, str)
+            for pid in [_pid_from_process_line(line)]
+            if pid is not None
+        }
+    )
+
+
+def _custom_window_candidate_pids(process_inventory: dict[str, Any]) -> list[int]:
+    root_pids = _custom_root_app_pids(process_inventory)
+    profile_pids = _custom_profile_process_pids(process_inventory)
+    default_pids = set(_default_profile_process_pids(process_inventory))
+    candidate_pids: list[int] = []
+    for pid in [*root_pids, *profile_pids]:
+        if pid not in default_pids and pid not in candidate_pids:
+            candidate_pids.append(pid)
+    return candidate_pids
+
+
+def _custom_pid_binding_fields(
+    process_inventory: dict[str, Any],
+    *,
+    candidate_pids: list[int] | None = None,
+) -> dict[str, Any]:
+    root_pids = _custom_root_app_pids(process_inventory)
+    profile_pids = _custom_profile_process_pids(process_inventory)
+    default_pids = _default_profile_process_pids(process_inventory)
+    candidates = (
+        candidate_pids
+        if candidate_pids is not None
+        else _custom_window_candidate_pids(process_inventory)
+    )
+    return {
+        "custom_root_process_pids": root_pids,
+        "custom_profile_process_pids": profile_pids,
+        "default_profile_process_pids": default_pids,
+        "custom_window_candidate_pids": candidates,
+        "custom_window_candidate_count": len(candidates),
+        "window_pid_candidate_strategy": "custom_root_first_then_same_profile_processes",
+        "browser_cdp_authority_widened": False,
+    }
 
 
 def _parse_ax_point(value: str) -> list[int]:
@@ -172,14 +242,17 @@ def _window_bounds_from_ax(position: str, size: str) -> dict[str, int]:
     }
 
 
-def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
-    root_pids = _custom_root_app_pids(process_inventory)
-    if not root_pids:
-        return build_native_window_observation_packet(
-            window_observed=False,
-            blocked_reason_class="custom_process_pid_not_observed",
-        )
-    observed_pid = int(root_pids[0])
+def _window_observation_for_pid_via_ax(
+    process_inventory: dict[str, Any],
+    *,
+    observed_pid: int,
+    candidate_pids: list[int],
+    candidate_index: int,
+) -> dict[str, Any]:
+    pid_binding_fields = _custom_pid_binding_fields(
+        process_inventory,
+        candidate_pids=candidate_pids,
+    )
     script = (
         'tell application "System Events"\n'
         f'  set p to first process whose unix id is {observed_pid}\n'
@@ -226,7 +299,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         packet = build_native_window_observation_packet(window_observed=True)
         packet.update(
             {
+                **pid_binding_fields,
                 "observed_pid": observed_pid,
+                "window_candidate_index": candidate_index,
+                "window_candidate_source": (
+                    "custom_root_process"
+                    if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                    else "custom_profile_process"
+                ),
                 "window_query": stdout,
                 "window_query_method": "AX/System Events process window count",
                 "window_query_rc": result.returncode,
@@ -246,7 +326,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         packet = build_native_window_observation_packet(window_observed=True)
         packet.update(
             {
+                **pid_binding_fields,
                 "observed_pid": observed_pid,
+                "window_candidate_index": candidate_index,
+                "window_candidate_source": (
+                    "custom_root_process"
+                    if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                    else "custom_profile_process"
+                ),
                 "window_query": cg_result,
                 "window_query_method": "CGWindowList pid-bound on-screen window",
                 "window_query_rc": result.returncode,
@@ -270,7 +357,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     )
     packet.update(
         {
+            **pid_binding_fields,
             "observed_pid": observed_pid,
+            "window_candidate_index": candidate_index,
+            "window_candidate_source": (
+                "custom_root_process"
+                if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                else "custom_profile_process"
+            ),
             "window_query": stdout,
             "window_query_method": "AX/System Events process window count",
             "window_query_rc": result.returncode,
@@ -283,6 +377,53 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
             "window_position": window_position,
             "window_size": window_size,
         }
+    )
+    return packet
+
+
+def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
+    candidate_pids = _custom_window_candidate_pids(process_inventory)
+    if not candidate_pids:
+        blocked_reason = (
+            "custom_process_pid_overlaps_default_profile"
+            if _custom_profile_process_pids(process_inventory)
+            else "custom_process_pid_not_observed"
+        )
+        packet = build_native_window_observation_packet(
+            window_observed=False,
+            blocked_reason_class=blocked_reason,
+        )
+        packet.update(
+            _custom_pid_binding_fields(
+                process_inventory,
+                candidate_pids=candidate_pids,
+            )
+        )
+        return packet
+    last_packet: dict[str, Any] | None = None
+    for index, observed_pid in enumerate(candidate_pids):
+        packet = _window_observation_for_pid_via_ax(
+            process_inventory,
+            observed_pid=observed_pid,
+            candidate_pids=candidate_pids,
+            candidate_index=index,
+        )
+        if packet.get("window_observed") is True:
+            packet["window_candidate_attempt_count"] = index + 1
+            return packet
+        last_packet = packet
+    if last_packet is not None:
+        last_packet["window_candidate_attempt_count"] = len(candidate_pids)
+        return last_packet
+    packet = build_native_window_observation_packet(
+        window_observed=False,
+        blocked_reason_class="custom_process_pid_not_observed",
+    )
+    packet.update(
+        _custom_pid_binding_fields(
+            process_inventory,
+            candidate_pids=candidate_pids,
+        )
     )
     return packet
 
@@ -358,7 +499,9 @@ def show_custom_native_window_packet(
     user_data_dir = str(paths["user_data_dir"])
     inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     root_pids = _custom_root_app_pids(inventory)
-    if not root_pids:
+    profile_pids = _custom_profile_process_pids(inventory)
+    candidate_pids = _custom_window_candidate_pids(inventory)
+    if not candidate_pids:
         return {
             "schema_version": 1,
             "captured_at_utc": utc_now(),
@@ -369,7 +512,12 @@ def show_custom_native_window_packet(
             "persistent_profile_id": persistent_profile_id,
             "persistent_user_data_dir": user_data_dir,
             "custom_process_observed": False,
+            "custom_profile_process_pids": profile_pids,
+            "custom_root_process_pids": root_pids,
+            "default_profile_process_pids": _default_profile_process_pids(inventory),
+            "custom_window_candidate_pids": candidate_pids,
             "custom_process_pid": None,
+            "custom_window_observed_pid": None,
             "custom_window_observed": False,
             "custom_window_visible": False,
             "custom_window_frontmost": False,
@@ -380,11 +528,23 @@ def show_custom_native_window_packet(
             "next_action": "launch_custom_codex_first",
         }
 
-    observed_pid = int(root_pids[0])
+    observed_pid = int(root_pids[0] if root_pids else candidate_pids[0])
     before = _window_observation_via_ax(inventory)
-    focus = _focus_custom_window_by_pid(observed_pid)
+    focus_pid = (
+        before.get("observed_pid")
+        if before.get("window_observed") is True
+        else observed_pid
+    )
+    if not isinstance(focus_pid, int):
+        focus_pid = observed_pid
+    focus = _focus_custom_window_by_pid(focus_pid)
     after_inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
+    after_profile_pids = _custom_profile_process_pids(after_inventory)
+    after_candidate_pids = _custom_window_candidate_pids(after_inventory)
     after = _window_observation_via_ax(after_inventory)
+    after_observed_pid = after.get("observed_pid")
+    if not isinstance(after_observed_pid, int):
+        after_observed_pid = focus_pid
     usability_packet = _window_usability_from_observation(after)
     usability_packet = _apply_codex_desktop_auth_blocker(
         usability_packet,
@@ -392,12 +552,16 @@ def show_custom_native_window_packet(
     )
     usability_packet, renderer_recovery_packet, recovered_after = _recover_startup_loader_if_needed(
         usability_packet,
-        observed_pid=observed_pid,
+        observed_pid=after_observed_pid,
+        allowed_cdp_owner_pids=after_candidate_pids,
         profile_dir=Path(str(paths["persistent_profile_root"])),
         custom_user_data_dir=user_data_dir,
     )
     if recovered_after is not None:
         after = recovered_after
+        recovered_observed_pid = recovered_after.get("observed_pid")
+        if isinstance(recovered_observed_pid, int):
+            after_observed_pid = recovered_observed_pid
     visible = after.get("window_observed") is True and after.get("window_visible") is True
     frontmost = after.get("window_frontmost") is True
     native_app_usable = usability_packet.get("native_window_usable") is True
@@ -451,6 +615,13 @@ def show_custom_native_window_packet(
         "persistent_user_data_dir": user_data_dir,
         "custom_process_observed": True,
         "custom_process_pid": observed_pid,
+        "custom_profile_process_pids": after_profile_pids,
+        "custom_root_process_pids": root_pids,
+        "custom_root_process_observed": bool(root_pids),
+        "default_profile_process_pids": _default_profile_process_pids(after_inventory),
+        "custom_window_candidate_pids": after_candidate_pids,
+        "custom_window_observed_pid": after_observed_pid,
+        "custom_window_focus_pid": focus_pid,
         "custom_window_observed": after.get("window_observed") is True,
         "custom_window_visible": visible,
         "custom_window_frontmost": frontmost,
@@ -705,7 +876,37 @@ def _cdp_command(ws_url: str, message: dict[str, Any], *, timeout_seconds: float
     return {"status": "blocked", "error": "cdp_response_timeout"}
 
 
-def _devtools_port_owned_by_pid(observed_pid: int, port: int) -> tuple[bool, str]:
+def _normalize_pid_set(pids: list[int] | tuple[int, ...] | set[int] | None) -> set[int]:
+    normalized: set[int] = set()
+    if not pids:
+        return normalized
+    for pid in pids:
+        try:
+            normalized.add(int(pid))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _pid_csv_to_ints(value: str) -> set[int]:
+    parsed: set[int] = set()
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            parsed.add(int(item))
+        except ValueError:
+            continue
+    return parsed
+
+
+def _devtools_port_owned_by_pid(
+    observed_pid: int,
+    port: int,
+    *,
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> tuple[bool, str]:
     result = subprocess.run(
         ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
         text=True,
@@ -715,7 +916,13 @@ def _devtools_port_owned_by_pid(observed_pid: int, port: int) -> tuple[bool, str
     pids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     if result.returncode != 0 or not pids:
         return False, str(result.stderr.strip() or "cdp_port_not_listening")
-    return str(observed_pid) in pids, ",".join(pids)
+    owner_pid_set = _pid_csv_to_ints(",".join(pids))
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    if not allowed_pid_set:
+        allowed_pid_set = {int(observed_pid)}
+    else:
+        allowed_pid_set.add(int(observed_pid))
+    return bool(owner_pid_set & allowed_pid_set), ",".join(pids)
 
 
 def _cdp_app_page_targets(port: int) -> tuple[list[dict[str, Any]], str]:
@@ -746,10 +953,18 @@ def _cdp_input_capable(
     observed_pid: int,
     *,
     port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
 ) -> tuple[bool, str]:
-    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
     if not port_owned:
         return False, f"cdp_port_owner_mismatch_or_absent:{owner_result}"
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
     pages, page_error = _cdp_app_page_targets(port)
     if page_error:
         return False, page_error
@@ -815,6 +1030,8 @@ def _cdp_input_capable(
         bounded = {
             "cdp_port": port,
             "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
             "cdp_page_target_count": len(pages),
             "cdp_target_url": page.get("url"),
             "cdp_target_type": page.get("type"),
@@ -849,6 +1066,7 @@ def _cdp_prompt_submit_blocked_packet(
     observed_pid: int | None = None,
     cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
     cdp_result: str = "",
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -861,6 +1079,8 @@ def _cdp_prompt_submit_blocked_packet(
         "blocking_reasons": blocking_reasons or [machine_error_code],
         "custom_process_pid": observed_pid,
         "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
         "cdp_localhost_only": True,
         "cdp_endpoint_redacted": True,
         "cdp_target_bound_to_custom_launch": False,
@@ -893,6 +1113,7 @@ def _cdp_submit_prompt_to_app_page(
     *,
     request_id: str,
     port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
 ) -> dict[str, Any]:
     if not prompt:
         return _cdp_prompt_submit_blocked_packet(
@@ -903,6 +1124,7 @@ def _cdp_submit_prompt_to_app_page(
             observed_pid=observed_pid,
             cdp_port=port,
             blocking_reasons=["prompt_empty"],
+            allowed_owner_pids=allowed_owner_pids,
         )
     if len(prompt) > CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS:
         return _cdp_prompt_submit_blocked_packet(
@@ -913,8 +1135,16 @@ def _cdp_submit_prompt_to_app_page(
             observed_pid=observed_pid,
             cdp_port=port,
             blocking_reasons=["prompt_too_long"],
+            allowed_owner_pids=allowed_owner_pids,
         )
-    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
     if not port_owned:
         return _cdp_prompt_submit_blocked_packet(
             machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
@@ -925,6 +1155,7 @@ def _cdp_submit_prompt_to_app_page(
             cdp_port=port,
             blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
             cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
         )
     pages, page_error = _cdp_app_page_targets(port)
     if page_error:
@@ -937,6 +1168,7 @@ def _cdp_submit_prompt_to_app_page(
             cdp_port=port,
             blocking_reasons=[page_error],
             cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
         )
 
     focus_expression = """
@@ -1129,6 +1361,8 @@ def _cdp_submit_prompt_to_app_page(
             "custom_process_pid": observed_pid,
             "cdp_port": port,
             "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
             "cdp_page_target_count": len(pages),
             "cdp_target_url": str(page.get("url") or ""),
             "cdp_target_type": str(page.get("type") or ""),
@@ -1158,6 +1392,7 @@ def _cdp_submit_prompt_to_app_page(
         cdp_port=port,
         blocking_reasons=[last_error or "cdp_prompt_submit_failed"],
         cdp_result=last_error,
+        allowed_owner_pids=allowed_owner_pids,
     )
 
 
@@ -1189,6 +1424,9 @@ def submit_custom_native_window_prompt_packet(
             blocking_reasons=["native_window_not_input_capable"],
             observed_pid=observed_pid if isinstance(observed_pid, int) else None,
             cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
+            if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+            else None,
         ) | {
             "native_window_observed": show_packet.get("custom_window_observed") is True,
             "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
@@ -1198,6 +1436,9 @@ def submit_custom_native_window_prompt_packet(
         int(observed_pid),
         prompt,
         request_id=request_id,
+        allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None,
     )
     packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
@@ -1262,8 +1503,13 @@ def _cdp_reload_app_page_for_pid(
     observed_pid: int,
     *,
     port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
 ) -> dict[str, Any]:
-    port_owned, owner_result = _devtools_port_owned_by_pid(observed_pid, port)
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
     if not port_owned:
         return _renderer_recovery_packet(
             status="blocked",
@@ -1334,12 +1580,16 @@ def _recover_startup_loader_if_needed(
     usability_packet: dict[str, Any],
     *,
     observed_pid: int,
+    allowed_cdp_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
     profile_dir: Path,
     custom_user_data_dir: str,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
     if not _renderer_startup_loader_stuck(usability_packet):
         return usability_packet, _renderer_recovery_not_required_packet(), None
-    recovery_packet = _cdp_reload_app_page_for_pid(observed_pid)
+    recovery_packet = _cdp_reload_app_page_for_pid(
+        observed_pid,
+        allowed_owner_pids=allowed_cdp_owner_pids,
+    )
     if recovery_packet.get("status") != "ok":
         return usability_packet, recovery_packet, None
     time.sleep(CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
@@ -1764,7 +2014,13 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
             "input_capable_query_method": "AX/System Events pid-bound UI scripting fallback (Mechanism 0)",
         })
         return packet
-    input_capable_cdp, result_cdp = _cdp_input_capable(observed_pid)
+    allowed_owner_pids = window_observation.get("custom_window_candidate_pids")
+    if not isinstance(allowed_owner_pids, list):
+        allowed_owner_pids = []
+    input_capable_cdp, result_cdp = _cdp_input_capable(
+        observed_pid,
+        allowed_owner_pids=allowed_owner_pids,
+    )
     if input_capable_cdp:
         packet = build_native_window_usability_packet(
             window_observed=True,
@@ -1916,16 +2172,38 @@ def _build_identity_binding(
     window_name = window_packet.get("window_query", "")
     observed_pid = window_packet.get("observed_pid")
     startup_inventory = launch_result.get("startup_inventory", {})
-    custom_root_pids = _custom_root_app_pids(startup_inventory) if isinstance(startup_inventory, dict) else []
+    custom_root_pids = (
+        _custom_root_app_pids(startup_inventory)
+        if isinstance(startup_inventory, dict)
+        else []
+    )
+    default_profile_pids = (
+        _default_profile_process_pids(startup_inventory)
+        if isinstance(startup_inventory, dict)
+        else []
+    )
+    custom_profile_pids = (
+        _custom_profile_process_pids(startup_inventory)
+        if isinstance(startup_inventory, dict)
+        else []
+    )
+    custom_candidate_pids = (
+        _custom_window_candidate_pids(startup_inventory)
+        if isinstance(startup_inventory, dict)
+        else []
+    )
     bound = (
         window_observed
         and isinstance(window_name, str)
         and len(window_name) > 0
         and isinstance(observed_pid, int)
-        and observed_pid in custom_root_pids
+        and observed_pid in custom_candidate_pids
     )
-    distinguishable = bound and "/Applications/Codex.app/Contents/MacOS/Codex" in str(
-        launch_result.get("startup_inventory", {}).get("sample", [])
+    distinguishable = (
+        bound
+        and isinstance(observed_pid, int)
+        and observed_pid in custom_profile_pids
+        and observed_pid not in default_profile_pids
     )
     identity_chain = [
         "repo_canonical_custom_proxy_auth_isolated_home",
@@ -1942,6 +2220,10 @@ def _build_identity_binding(
         "machine_error_code": "OK" if bound else "NATIVE_WINDOW_IDENTITY_NOT_PROVEN",
         "window_bound_to_custom_launch": bound,
         "window_distinguishable_from_original_codex": distinguishable,
+        "custom_root_process_pids": custom_root_pids,
+        "custom_profile_process_pids": custom_profile_pids,
+        "default_profile_process_pids": default_profile_pids,
+        "custom_window_candidate_pids": custom_candidate_pids,
         "identity_chain": identity_chain,
     }
 
@@ -2356,6 +2638,9 @@ def launch_custom_native_app_packet(
             ) = _recover_startup_loader_if_needed(
                 usability_packet,
                 observed_pid=observed_pid_for_recovery,
+                allowed_cdp_owner_pids=window_packet.get("custom_window_candidate_pids")
+                if isinstance(window_packet.get("custom_window_candidate_pids"), list)
+                else None,
                 profile_dir=layout.profile_dir,
                 custom_user_data_dir=str(layout.custom_user_data_dir),
             )

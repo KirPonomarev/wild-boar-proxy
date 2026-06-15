@@ -176,6 +176,80 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["ax_window_count"], 0)
         self.assertEqual(packet["window_count"], 1)
 
+    def test_window_observation_can_bind_same_profile_renderer_pid_after_root_miss(self) -> None:
+        process_inventory = {
+            "root_app_pids": [111, 222],
+            "custom_process_lines": [
+                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+            ],
+        }
+        root_completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex\ttrue\tfalse\tfalse\t0\n",
+            stderr="",
+        )
+        renderer_completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex Helper\ttrue\ttrue\tfalse\t1\t120,80\t1320,820\n",
+            stderr="",
+        )
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.subprocess.run",
+                side_effect=[root_completed, renderer_completed],
+            ) as run,
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cg_window_presence",
+                return_value=(False, "cg_query_no_windows_found_for_pid"),
+            ),
+        ):
+            packet = native_probe._window_observation_via_ax(process_inventory)
+
+        self.assertTrue(packet["window_observed"])
+        self.assertEqual(packet["observed_pid"], 333)
+        self.assertEqual(packet["window_candidate_source"], "custom_profile_process")
+        self.assertEqual(packet["custom_root_process_pids"], [222])
+        self.assertEqual(packet["custom_profile_process_pids"], [222, 333])
+        self.assertEqual(packet["custom_window_candidate_pids"], [222, 333])
+        self.assertEqual(packet["window_candidate_attempt_count"], 2)
+        self.assertIn("unix id is 222", run.call_args_list[0].args[0][2])
+        self.assertIn("unix id is 333", run.call_args_list[1].args[0][2])
+
+    def test_window_observation_accepts_helper_only_same_profile_candidate(self) -> None:
+        process_inventory = {
+            "root_app_pids": [111],
+            "custom_process_lines": [
+                "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+            ],
+            "default_process_lines": [
+                "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/me/Library/Application Support/Codex",
+            ],
+        }
+        completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex Helper\ttrue\ttrue\tfalse\t1\t120,80\t1320,820\n",
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe.subprocess.run",
+            return_value=completed,
+        ) as run:
+            packet = native_probe._window_observation_via_ax(process_inventory)
+
+        self.assertTrue(packet["window_observed"])
+        self.assertEqual(packet["observed_pid"], 333)
+        self.assertEqual(packet["custom_root_process_pids"], [])
+        self.assertEqual(packet["custom_profile_process_pids"], [333])
+        self.assertEqual(packet["default_profile_process_pids"], [111])
+        self.assertEqual(packet["custom_window_candidate_pids"], [333])
+        self.assertEqual(packet["window_candidate_source"], "custom_profile_process")
+        self.assertFalse(packet["browser_cdp_authority_widened"])
+        self.assertIn("unix id is 333", run.call_args.args[0][2])
+
     def test_window_observation_does_not_fallback_to_unbound_root_pid(self) -> None:
         process_inventory = {
             "root_app_pids": [111],
@@ -884,6 +958,61 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(bounded["cdp_prompt_attempted"])
         self.assertFalse(bounded["cdp_route_trace_bound"])
 
+    def test_cdp_input_capable_accepts_port_owner_from_same_profile_candidate_pids(self) -> None:
+        lsof_completed = subprocess.CompletedProcess(
+            args=["lsof"],
+            returncode=0,
+            stdout="333\n",
+            stderr="",
+        )
+        cdp_packet = {
+            "id": 1,
+            "result": {
+                "result": {
+                    "value": {
+                        "readyState": "complete",
+                        "url": "app://-/index.html",
+                        "title": "Codex",
+                        "inputCandidateCount": 1,
+                        "visibleInputCandidateCount": 1,
+                        "textValueCaptured": False,
+                    }
+                }
+            },
+        }
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.subprocess.run",
+                return_value=lsof_completed,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                return_value=cdp_packet,
+            ),
+        ):
+            input_capable, result = native_probe._cdp_input_capable(
+                222,
+                port=9223,
+                allowed_owner_pids=[222, 333],
+            )
+
+        self.assertTrue(input_capable)
+        bounded = json.loads(result)
+        self.assertEqual(bounded["cdp_port_owner_pids"], "333")
+        self.assertEqual(bounded["cdp_allowed_owner_pids"], [222, 333])
+        self.assertTrue(bounded["cdp_port_owner_bound_to_custom_profile"])
+        self.assertFalse(bounded["browser_cdp_authority_widened"])
+
     def test_cdp_prompt_submit_inserts_and_submits_without_raw_prompt_readback(self) -> None:
         cdp_packets = [
             {
@@ -990,6 +1119,44 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["native_window_observed"])
         self.assertFalse(packet["input_capable_ui_observed"])
         self.assertFalse(packet["prompt_submitted"])
+
+    def test_submit_custom_native_window_prompt_passes_same_profile_candidate_pids_to_cdp(self) -> None:
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.show_custom_native_window_packet",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "custom_process_pid": 222,
+                    "custom_window_candidate_pids": [222, 333],
+                    "custom_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                },
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_submit_prompt_to_app_page",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "prompt_submitted": True,
+                    "input_text_insert_succeeded": True,
+                },
+            ) as submitter,
+        ):
+            packet = native_probe.submit_custom_native_window_prompt_packet(
+                prompt="Planner: do it",
+                request_id="native-submit-ok",
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["prompt_submitted"])
+        submitter.assert_called_once_with(
+            222,
+            "Planner: do it",
+            request_id="native-submit-ok",
+            allowed_owner_pids=[222, 333],
+        )
 
     def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
         response = mock.MagicMock()
@@ -1130,6 +1297,116 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["original_codex_touched"])
         self.assertFalse(packet["asar_touched"])
         focus.assert_called_once_with(222)
+
+    def test_show_custom_native_window_accepts_helper_only_same_profile_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            user_data_dir = (
+                profile_base / "wbp-custom-main" / "electron-user-data"
+            )
+            process_inventory = {
+                "root_app_pids": [111],
+                "custom_process_lines": [
+                    f"333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir={user_data_dir}"
+                ],
+                "default_process_lines": [
+                    "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/me/Library/Application Support/Codex"
+                ],
+            }
+            before = {
+                "window_observed": True,
+                "observed_pid": 333,
+                "window_visible": True,
+                "window_frontmost": False,
+                "custom_window_candidate_pids": [333],
+                "window_bounds": {"x": 793, "y": 0, "width": 1280, "height": 783},
+            }
+            after = {
+                "window_observed": True,
+                "observed_pid": 333,
+                "window_visible": True,
+                "window_frontmost": True,
+                "custom_window_candidate_pids": [333],
+                "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=process_inventory,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    side_effect=[before, after],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": True,
+                        "window_focus_observed_pid": 333,
+                        "window_focus_bounds": after["window_bounds"],
+                    },
+                ) as focus,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ),
+            ):
+                packet = native_probe.show_custom_native_window_packet(
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["custom_process_pid"], 333)
+        self.assertEqual(packet["custom_root_process_pids"], [])
+        self.assertEqual(packet["custom_profile_process_pids"], [333])
+        self.assertEqual(packet["default_profile_process_pids"], [111])
+        self.assertEqual(packet["custom_window_candidate_pids"], [333])
+        self.assertFalse(packet["custom_root_process_observed"])
+        self.assertEqual(packet["custom_window_focus_pid"], 333)
+        self.assertTrue(packet["native_app_usable"])
+        self.assertFalse(packet["original_codex_touched"])
+        focus.assert_called_once_with(333)
+
+    def test_identity_binding_accepts_helper_only_custom_profile_pid_not_default(self) -> None:
+        launch_result = {
+            "launcher_pid": 222,
+            "startup_inventory": {
+                "root_app_pids": [111],
+                "custom_process_lines": [
+                    "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data"
+                ],
+                "default_process_lines": [
+                    "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/me/Library/Application Support/Codex"
+                ],
+            },
+        }
+        window_packet = {
+            "window_observed": True,
+            "observed_pid": 333,
+            "window_query": "Codex Helper\ttrue\ttrue\tfalse\t1\t120,80\t1320,820",
+        }
+        layout = SimpleNamespace(launcher_path=Path("/tmp/wbp-launcher.sh"))
+
+        packet = native_probe._build_identity_binding(
+            window_packet,
+            layout,
+            launch_result,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["window_bound_to_custom_launch"])
+        self.assertTrue(packet["window_distinguishable_from_original_codex"])
+        self.assertEqual(packet["custom_root_process_pids"], [])
+        self.assertEqual(packet["custom_profile_process_pids"], [333])
+        self.assertEqual(packet["default_profile_process_pids"], [111])
+        self.assertEqual(packet["custom_window_candidate_pids"], [333])
 
     def test_show_custom_native_window_does_not_promote_visible_window_to_usable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1825,6 +2102,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 "window_frontmost": True,
                 "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
                 "window_query": "Codex\ttrue\ttrue\tfalse\t1\t120,80\t1320,820",
+                "custom_window_candidate_pids": [222],
             }
             startup_usability = {
                 "native_window_usable": False,
@@ -1967,7 +2245,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["renderer_recovery_action"], "cdp_page_reload")
         self.assertEqual(packet["native_app_usability_source"], "cdp_renderer_input_capable_ui")
         self.assertEqual(packet["next_action"], "none")
-        reload_app_page.assert_called_once_with(222)
+        reload_app_page.assert_called_once_with(222, allowed_owner_pids=[222])
         sleep.assert_called_once_with(native_probe.CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
 
     def test_live_custom_native_launch_blocks_if_existing_same_profile_process_survives(self) -> None:
