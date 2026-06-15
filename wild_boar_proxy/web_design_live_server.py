@@ -32,6 +32,7 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+from wild_boar_proxy.core import packets as command_packets
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
     UiShellError,
@@ -1464,6 +1465,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "set_mode_managed",
         "launch_smoke",
         "launch_client_dispatch",
+        "launch_custom_client_native",
         "export_diagnostics",
     }
 )
@@ -2165,10 +2167,11 @@ def _legacy_import_confirmed_packet(
         machine_error_code=str(runtime_packet.get("machine_error_code", "")),
         liveness=str(runtime_packet.get("liveness", "unknown")),
         severity=str(runtime_packet.get("severity", "recoverable")),
-        operator_action=str(
+        operator_action=_command_operator_action_token(
             runtime_packet.get("operator_action")
             or runtime_packet.get("next_action")
-            or "none"
+            or "none",
+            fallback="none" if ok else "retry",
         ),
         changed_files=changed_files,
         exit_code=(
@@ -2227,7 +2230,10 @@ def _direct_ui_action_packet_response(
             "status": str(packet.get("status", "error")),
             "machine_error_code": str(packet.get("machine_error_code", "")),
             "human_message": str(packet.get("human_message", "")),
-            "next_action": str(packet.get("next_action", "")),
+            "next_action": _command_next_action_token(
+                packet.get("next_action"),
+                fallback="none" if ok else "retry",
+            ),
             "changed_files": list(packet.get("changed_files", [])),
             "data": packet.get("data", {}) if isinstance(packet.get("data"), dict) else {},
         },
@@ -4937,6 +4943,23 @@ def _custom_native_free_text_input_observed(packet: dict[str, Any]) -> bool:
         packet.get("input_capable_ui_observed") is True
         or packet.get("native_app_usable") is True
     )
+
+
+def _command_next_action_token(value: object, *, fallback: str = "retry") -> str:
+    token = str(value or "").strip()
+    if (
+        command_packets.classify_command_next_action(token) != "invalid_shape"
+        and token not in command_packets.COMMAND_NEXT_ACTION_RESERVED_VALUES
+    ):
+        return token
+    return fallback
+
+
+def _command_operator_action_token(value: object, *, fallback: str = "retry") -> str:
+    token = str(value or "").strip()
+    if token in command_packets.COMMAND_OPERATOR_ACTION_VALUES:
+        return token
+    return fallback
 
 
 def _custom_native_free_text_activation_ready(packet: dict[str, Any]) -> bool:
@@ -14679,7 +14702,18 @@ def _run_quick_start_check_all_action(runner: CommandRunner) -> dict[str, Any]:
             "status": str(api_check_result["status"]) if api_check_result is not None else "not_run",
             "machine_error_code": str(api_check_result["machine_error_code"]) if api_check_result is not None else "NOT_RUN",
             "human_message": str(api_check_result["human_message"]) if api_check_result is not None else "API verify action was not run.",
-            "next_action": str(api_check_result["next_action"]) if api_check_result is not None else "none",
+            "next_action": (
+                _command_next_action_token(
+                    api_check_result.get("next_action"),
+                    fallback=(
+                        "none"
+                        if api_check_result.get("status") == "ok"
+                        else "retry"
+                    ),
+                )
+                if api_check_result is not None
+                else "none"
+            ),
         },
     }
     return {
@@ -19584,11 +19618,15 @@ def _action_result(
         "account_login_cancel",
     } and isinstance(changed_files, list):
         changed_files = ["account_onboarding_artifact"] * len(changed_files)
+    result_status = str(result["status"])
     payload = {
-        "status": result["status"],
+        "status": result_status,
         "machine_error_code": result["machine_error_code"],
         "human_message": result["human_message"],
-        "next_action": result["next_action"],
+        "next_action": _command_next_action_token(
+            result.get("next_action"),
+            fallback="none" if result_status == "ok" else "retry",
+        ),
         "changed_files": changed_files,
         "data": data if isinstance(data, dict) else {},
     }
@@ -19668,7 +19706,10 @@ def _codex_login_bridge_public_summary(
         ),
         "browser_secret_intake": False,
         "browser_path_intake": False,
-        "next_action": str(result.get("next_action") or ""),
+        "next_action": _command_next_action_token(
+            result.get("next_action"),
+            fallback="none" if result.get("status") == "ok" else "retry",
+        ),
         "machine_error_code": str(result.get("machine_error_code") or ""),
     }
 
@@ -20187,9 +20228,15 @@ def _run_account_login_cancel_action(
 
 def _ui_action_response_from_result(ui_action: str, result: dict[str, Any]) -> dict[str, Any]:
     action_spec = UI_ACTION_ALLOWLIST[ui_action]
+    safe_result = dict(result)
+    result_status = str(safe_result.get("status", ""))
+    safe_result["next_action"] = _command_next_action_token(
+        safe_result.get("next_action"),
+        fallback="none" if result_status == "ok" else "retry",
+    )
     session_id = ""
-    if isinstance(result.get("data"), dict):
-        login_bridge = result["data"].get("login_bridge")
+    if isinstance(safe_result.get("data"), dict):
+        login_bridge = safe_result["data"].get("login_bridge")
         if isinstance(login_bridge, dict):
             session_id = str(
                 login_bridge.get("session_id")
@@ -20198,7 +20245,7 @@ def _ui_action_response_from_result(ui_action: str, result: dict[str, Any]) -> d
             )
     return {
         "schema_version": 1,
-        "status": "ok" if result["status"] == "ok" else "command_error",
+        "status": "ok" if result_status == "ok" else "command_error",
         "source": "ui_action",
         "ui_action": ui_action,
         "action_role": action_spec["action_role"],
@@ -20211,7 +20258,7 @@ def _ui_action_response_from_result(ui_action: str, result: dict[str, Any]) -> d
         "account_id": "",
         "route_id": "",
         "session_id": session_id,
-        "result": result,
+        "result": safe_result,
     }
 
 
@@ -20547,7 +20594,10 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
             "machine_error_code": result["machine_error_code"],
             "human_message": result["human_message"],
             "exit_code": result["exit_code"],
-            "next_action": result["next_action"],
+            "next_action": _command_next_action_token(
+                result.get("next_action"),
+                fallback="none" if result.get("status") == "ok" else "retry",
+            ),
         }
         for command_id, result in commands.items()
     }

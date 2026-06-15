@@ -1898,10 +1898,11 @@ async function runSafeAppCopyLiveAdmission() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       bounded_live_launch_execution_ready: false,
       launch_ready_claimed: false,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
@@ -2587,6 +2588,9 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
     renderQuickStartConfigAdmission({
       status: "failed",
       machine_error_code: timedOut ? "QUICK_START_CONFIG_ADMISSION_TIMEOUT" : "QUICK_START_CONFIG_ADMISSION_FETCH_FAILED",
+      human_message: timedOut
+        ? "Quick Start config admission timed out before packet truth returned."
+        : error.message,
       final_status: "KNOWN_BLOCKER_QUICK_START_CONFIG_ADMISSION_NOT_PROVEN",
       execution_mode: payload.execution_mode || "",
       chatgpt_model: {
@@ -2614,7 +2618,7 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
       raw_path_exposed: false,
       original_codex_touched: false,
       asar_touched: false,
-      next_action: error.message
+      next_action: "retry"
     }, { remember: true, selectionPayload: payload });
   } finally {
     if (timeoutHandle) {
@@ -2867,7 +2871,7 @@ async function runQuickStartLaunchAdmissionProjection() {
       raw_path_exposed: false,
       original_codex_touched: false,
       asar_touched: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     if (timeoutHandle) {
@@ -3073,8 +3077,9 @@ async function runSafeAppCopyLaunchDryRun() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
@@ -3110,8 +3115,9 @@ async function runSafeAppCopyLaunch() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   }
 }
@@ -6760,6 +6766,7 @@ async function runQuickStartDeepSeekCoderCheck() {
     renderQuickStartDeepSeekCoderCheck({
       status: "failed",
       machine_error_code: "QUICK_START_DEEPSEEK_SAFE_WORKTREE_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_PROVEN",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -6783,7 +6790,7 @@ async function runQuickStartDeepSeekCoderCheck() {
       commit_attempted: false,
       push_attempted: false,
       merge_attempted: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("quickStartDeepSeekCoderCheckAction")?.removeAttribute("disabled");
@@ -6822,6 +6829,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
     renderQuickStartDeepSeekCodeEditProof({
       status: "failed",
       machine_error_code: "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_PROOF_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -6840,7 +6848,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
       commit_attempted: false,
       push_attempted: false,
       merge_attempted: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("quickStartDeepSeekCodeEditProofAction")?.removeAttribute("disabled");
@@ -7295,7 +7303,8 @@ async function refreshCodexCustomApiActionGate() {
         api_action_visible: true,
         api_action_enabled: false,
         live_provider_request_allowed: false,
-        next_action: error.message,
+        human_message: error.message,
+        next_action: "retry",
       },
     });
   }
@@ -7339,6 +7348,7 @@ async function runCodexCustomExecutionModeDryRun() {
     renderCodexCustomExecutionMode({
       status: "failed",
       machine_error_code: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
+      human_message: error.message,
       final_status: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -7353,7 +7363,7 @@ async function runCodexCustomExecutionModeDryRun() {
       wbp_patch_applier_used: false,
       selector_packet_truth_only: true,
       ui_text_counts_as_runtime_truth: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("codexCustomExecutionModeDryRunAction")?.removeAttribute("disabled");
@@ -7383,6 +7393,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
     renderCodexCustomDeepSeekLiveFormat({
       status: "failed",
       machine_error_code: "API_ONLY_DEEPSEEK_LIVE_FORMAT_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -7400,7 +7411,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
       secret_value_exposed: false,
       state_written: false,
       evidence_written: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("codexCustomDeepSeekLiveFormatAction")?.removeAttribute("disabled");

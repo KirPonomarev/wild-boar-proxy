@@ -6152,8 +6152,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
         native_launch = metadata["actions"]["launch_custom_client_native"]
         self.assertFalse(native_launch["available"])
-        self.assertEqual(native_launch["availability_state"], "owner_authorization_required")
-        self.assertEqual(native_launch["disabled_reason_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(native_launch["availability_state"], "disabled_live_action")
+        self.assertEqual(
+            native_launch["disabled_reason_code"],
+            LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+        )
         for ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
             action = metadata["actions"][ui_action]
             self.assertFalse(action["available"], ui_action)
@@ -6170,7 +6173,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
-        self.assertIn("exact owner authorization", native_launch["unavailable_reason"])
+        self.assertIn("live-readonly", native_launch["unavailable_reason"])
         self.assertTrue(sandbox_blocked["actions"]["setup_discovery"]["available"])
         self.assertTrue(sandbox_blocked["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(sandbox_blocked["actions"]["legacy_import"]["available"])
@@ -9042,6 +9045,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("launch", "smoke", "--json"),
             ],
         )
+
+    def test_ui_action_response_normalizes_prose_next_action_to_machine_token(self) -> None:
+        error_payloads = live_payloads()
+        error_payloads[("sync", "--json")] = command_packet(
+            status="error",
+            exit_code=1,
+            machine_error_code="SYNC_FAILED",
+            human_message="Sync failed; inspect /tmp/wbp-debug-log for details.",
+            next_action="inspect /tmp/wbp-debug-log for details",
+        )
+        ok_payloads = live_payloads()
+        ok_payloads[("sync", "--json")] = command_packet(
+            human_message="Sync completed with a legacy prose hint.",
+            next_action="no further action needed",
+        )
+
+        error_result = run_ui_action(
+            MappingRunner(error_payloads),
+            {"ui_action": "sync_runtime"},
+        )
+        ok_result = run_ui_action(
+            MappingRunner(ok_payloads),
+            {"ui_action": "sync_runtime"},
+        )
+
+        self.assertEqual(error_result["status"], "command_error")
+        self.assertEqual(error_result["result"]["next_action"], "retry")
+        self.assertIn("/tmp/wbp-debug-log", error_result["result"]["human_message"])
+        self.assertEqual(ok_result["status"], "ok")
+        self.assertEqual(ok_result["result"]["next_action"], "none")
 
     def test_validate_account_action_preflights_account_id_and_executes_exact_command(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -12665,7 +12698,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(native_action["disabled_reason_code"], "OWNER_AUTHORIZATION_REQUIRED")
         self.assertIn("exact owner authorization", native_action["unavailable_reason"])
 
-    def test_custom_native_launch_action_metadata_available_with_owner_authorization(self) -> None:
+    def test_custom_native_launch_action_metadata_parked_in_live_readonly_with_owner_authorization(self) -> None:
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
             build_handler(
@@ -12686,11 +12719,17 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(metadata["action_phase"], live_server.LIVE_READONLY_ACTION_PHASE)
         native_action = metadata["actions"]["launch_custom_client_native"]
-        self.assertTrue(native_action["available"])
-        self.assertEqual(native_action["availability_state"], "displayable_readonly")
-        self.assertEqual(native_action["disabled_reason_code"], "")
-        self.assertEqual(native_action["disabled_reasons"], [])
-        self.assertEqual(native_action["unavailable_reason"], "")
+        self.assertFalse(native_action["available"])
+        self.assertEqual(native_action["availability_state"], "disabled_live_action")
+        self.assertEqual(
+            native_action["disabled_reason_code"],
+            live_server.LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+        )
+        self.assertEqual(
+            tuple(native_action["disabled_reasons"]),
+            live_server.LIVE_READONLY_ACTION_DISABLED_REASONS,
+        )
+        self.assertIn("live-readonly", native_action["unavailable_reason"])
 
     def test_custom_native_launch_endpoint_rejects_browser_authority_fields(self) -> None:
         payloads = live_payloads()

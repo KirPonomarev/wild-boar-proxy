@@ -508,6 +508,14 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("process_started: packet?.process_started === true", js)
         self.assertIn("expected_custom_identity_observed: packet?.expected_custom_identity_observed === true", js)
         self.assertIn("native_window_observed: packet?.native_window_observed === true", js)
+
+    def test_overview_fallback_packets_do_not_put_error_prose_in_machine_fields(self) -> None:
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertNotIn("next_action: error.message", js)
+        self.assertNotIn("operator_action: error.message", js)
+        self.assertNotIn("machine_error_code: error.message", js)
+        self.assertNotIn("status: error.message", js)
         self.assertIn("native_app_usable: packet?.native_app_usable === true", js)
         self.assertIn("browser_route_injection: packet?.browser_route_injection === true", js)
         self.assertIn("browser_backend_injection: packet?.browser_backend_injection === true", js)
