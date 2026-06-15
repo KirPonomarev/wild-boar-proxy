@@ -69,6 +69,10 @@ MODEL_REASONING_AVAILABILITY_MATRIX_FINAL_STATUS = (
 MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER = (
     "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN"
 )
+MODEL_REASONING_PROOF_RANK_FULL_NATIVE_MIXED = "full_native_mixed"
+MODEL_REASONING_PROOF_RANK_API_REASONING_LIVE_ONLY = "api_reasoning_live_only"
+MODEL_REASONING_PROOF_RANK_SELECTION_ONLY = "selection_only"
+MODEL_REASONING_PROOF_RANK_BLOCKED = "blocked"
 MODEL_LISTED_ONLY = "MODEL_LISTED_ONLY"
 MODEL_BOUND_TO_LANE = "MODEL_BOUND_TO_LANE"
 PROVIDER_DECLARED_REASONING = "PROVIDER_DECLARED_REASONING"
@@ -78,6 +82,8 @@ REASONING_PAYLOAD_MISMATCH = "REASONING_PAYLOAD_MISMATCH"
 BROWSER_ROUTE_AUTHORITY_REJECTED = "BROWSER_ROUTE_AUTHORITY_REJECTED"
 CUSTOM_NATIVE_AUTH_WALL_OBSERVED = "CUSTOM_NATIVE_AUTH_WALL_OBSERVED"
 NATIVE_EXECUTION_PROVEN = "NATIVE_EXECUTION_PROVEN"
+ALIAS_BINDING_PROVEN = "ALIAS_BINDING_PROVEN"
+ALIAS_BINDING_NOT_PROVEN = "ALIAS_BINDING_NOT_PROVEN"
 COMBINED_MODE_PARTIAL_API_ONLY = "COMBINED_MODE_PARTIAL_API_ONLY"
 COMBINED_MODE_PROVEN = "COMBINED_MODE_PROVEN"
 COMBINED_MODE_BLOCKED_NATIVE_AUTH = "COMBINED_MODE_BLOCKED_NATIVE_AUTH"
@@ -2887,6 +2893,176 @@ def _matrix_reasoning_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _matrix_unique_texts(*values: Any) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if isinstance(value, list):
+            candidates = value
+        else:
+            candidates = [value]
+        for candidate in candidates:
+            text = str(candidate or "").strip()
+            if not text:
+                continue
+            key = text.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(text)
+    return result
+
+
+def _matrix_mode_proof_rows(
+    matrix_rows: list[dict[str, Any]],
+    *,
+    combined_full_proven: bool,
+    api_lane_proven: bool,
+) -> list[dict[str, Any]]:
+    labels = {
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY: "ChatGPT",
+        CUSTOM_CODEX_EXECUTION_MODE_API_ONLY: "API / DeepSeek",
+        CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API: "ChatGPT + API",
+    }
+    rows: list[dict[str, Any]] = []
+    for row in matrix_rows:
+        mode = str(row.get("execution_mode") or "")
+        rows.append(
+            {
+                "proof_axis": "execution_mode",
+                "execution_mode": mode,
+                "display_name": labels.get(mode, mode or "unknown"),
+                "lane": str(row.get("lane") or ""),
+                "status": str(row.get("status") or "blocked"),
+                "proof_level": str(row.get("proof_level") or ""),
+                "machine_error_code": str(row.get("machine_error_code") or ""),
+                "counts_as_full_success": bool(
+                    mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API
+                    and combined_full_proven
+                ),
+                "counts_as_partial_api_success": bool(
+                    mode == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY
+                    and api_lane_proven
+                    and not combined_full_proven
+                ),
+                "intelligence_measured": row.get("intelligence_measured") is True,
+                "not_intelligence_proof": row.get("not_intelligence_proof") is True,
+            }
+        )
+    return rows
+
+
+def _matrix_agent_proof_rows(
+    *,
+    chatgpt_truth: dict[str, Any],
+    api_truth: dict[str, Any],
+    command_loop: dict[str, Any],
+    native: dict[str, Any],
+    primary_alias: str,
+    coding_alias: str,
+    primary_alias_bound: bool,
+    coding_alias_bound: bool,
+    native_execution_proven: bool,
+    command_loop_api_proven: bool,
+    reasoning_matrix_proven: bool,
+) -> list[dict[str, Any]]:
+    primary_binding = (
+        command_loop.get("primary_binding")
+        if isinstance(command_loop.get("primary_binding"), dict)
+        else {}
+    )
+    coding_binding = (
+        command_loop.get("coding_binding")
+        if isinstance(command_loop.get("coding_binding"), dict)
+        else {}
+    )
+    primary_aliases = _matrix_unique_texts(
+        primary_alias,
+        primary_binding.get("aliases"),
+        native.get("primary_aliases"),
+    )
+    coding_aliases = _matrix_unique_texts(
+        coding_alias,
+        coding_binding.get("aliases"),
+        native.get("coding_aliases"),
+    )
+    primary_runtime_alias_proven = bool(
+        primary_alias_bound
+        and command_loop.get("primary_alias_resolved_from_context") is True
+        and command_loop.get("primary_alias_precedes_coding_alias") is True
+    )
+    coding_runtime_alias_proven = bool(
+        coding_alias_bound
+        and command_loop.get("coding_alias_resolved_from_context") is True
+        and command_loop.get("agent_alias_route_acceptance_proven") is True
+    )
+    return [
+        {
+            "proof_axis": "agent_slot",
+            "agent_slot": "primary_model_slot",
+            "agent_id": str(primary_binding.get("agent_id") or "codex"),
+            "display_name": str(primary_binding.get("display_name") or primary_alias),
+            "primary_alias": primary_alias,
+            "aliases": primary_aliases,
+            "role": str(primary_binding.get("role") or "orchestrator"),
+            "lane": "primary_chatgpt",
+            "model_id": str(
+                primary_binding.get("model_id")
+                or chatgpt_truth.get("selected_chatgpt_model")
+                or ""
+            ),
+            "status": "ok" if primary_runtime_alias_proven else "blocked",
+            "proof_level": NATIVE_EXECUTION_PROVEN
+            if native_execution_proven
+            else ALIAS_BINDING_PROVEN
+            if primary_runtime_alias_proven
+            else ALIAS_BINDING_NOT_PROVEN,
+            "machine_error_code": "OK"
+            if primary_runtime_alias_proven
+            else "PRIMARY_ALIAS_BINDING_NOT_PROVEN",
+            "alias_runtime_binding_proven": primary_runtime_alias_proven,
+            "native_execution_proven": native_execution_proven,
+            "api_route_execution_proven": False,
+            "display_aliases_are_runtime_aliases": bool(primary_aliases),
+            "display_aliases_are_separate_agents": False,
+            "intelligence_measured": False,
+            "not_intelligence_proof": True,
+        },
+        {
+            "proof_axis": "agent_slot",
+            "agent_slot": "coding_agent_model_slot",
+            "agent_id": str(coding_binding.get("agent_id") or "dip"),
+            "display_name": str(coding_binding.get("display_name") or coding_alias),
+            "primary_alias": coding_alias,
+            "aliases": coding_aliases,
+            "role": str(coding_binding.get("role") or "coding_agent"),
+            "lane": "api_route",
+            "model_id": str(
+                coding_binding.get("route_id")
+                or api_truth.get("selected_api_model")
+                or ""
+            ),
+            "status": "ok" if coding_runtime_alias_proven else "blocked",
+            "proof_level": LIVE_API_FORMAT_PROVEN
+            if command_loop_api_proven and reasoning_matrix_proven
+            else ALIAS_BINDING_PROVEN
+            if coding_runtime_alias_proven
+            else ALIAS_BINDING_NOT_PROVEN,
+            "machine_error_code": "OK"
+            if coding_runtime_alias_proven
+            else "CODING_ALIAS_BINDING_NOT_PROVEN",
+            "alias_runtime_binding_proven": coding_runtime_alias_proven,
+            "native_execution_proven": False,
+            "api_route_execution_proven": command_loop_api_proven,
+            "reasoning_dispatch_matrix_proven": reasoning_matrix_proven,
+            "display_aliases_are_runtime_aliases": bool(coding_aliases),
+            "display_aliases_are_separate_agents": False,
+            "intelligence_measured": False,
+            "not_intelligence_proof": True,
+        },
+    ]
+
+
 def build_model_reasoning_availability_matrix_truth_packet(
     payload: Any,
     operator_status: dict[str, Any] | None,
@@ -3199,6 +3375,70 @@ def build_model_reasoning_availability_matrix_truth_packet(
     else:
         machine_error_code = MODEL_REASONING_AVAILABILITY_MATRIX_BLOCKER
     status = "ok" if combined_full_proven else "blocked"
+    matrix_rows = [chatgpt_row, api_row, combined_row]
+    reasoning_level_rows = _matrix_reasoning_rows(reasoning)
+    primary_alias_value = str(
+        command_loop.get("primary_alias") or native.get("primary_alias") or ""
+    )
+    coding_alias_value = str(
+        command_loop.get("coding_alias") or native.get("coding_alias") or ""
+    )
+    if forbidden_fields or not no_secret_exposed or not no_raw_backend_exposed:
+        proof_rank = MODEL_REASONING_PROOF_RANK_BLOCKED
+        proof_rank_score = 0
+        proof_rank_status = "blocked"
+        proof_rank_label = "authority rejected"
+    elif combined_full_proven:
+        proof_rank = MODEL_REASONING_PROOF_RANK_FULL_NATIVE_MIXED
+        proof_rank_score = 100
+        proof_rank_status = "ok"
+        proof_rank_label = "full native GPT+API"
+    elif api_lane_proven:
+        proof_rank = MODEL_REASONING_PROOF_RANK_API_REASONING_LIVE_ONLY
+        proof_rank_score = 70
+        proof_rank_status = "partial"
+        proof_rank_label = "API live; ChatGPT native not proven"
+    elif (
+        chatgpt_truth.get("model_selection_truth_proven") is True
+        or api_truth.get("executor_truth_proven") is True
+        or combined_slot_binding_proven
+    ):
+        proof_rank = MODEL_REASONING_PROOF_RANK_SELECTION_ONLY
+        proof_rank_score = 30
+        proof_rank_status = "blocked"
+        proof_rank_label = "server selection only"
+    else:
+        proof_rank = MODEL_REASONING_PROOF_RANK_BLOCKED
+        proof_rank_score = 0
+        proof_rank_status = "blocked"
+        proof_rank_label = "blocked"
+    proof_mode_rows = _matrix_mode_proof_rows(
+        matrix_rows,
+        combined_full_proven=combined_full_proven,
+        api_lane_proven=api_lane_proven,
+    )
+    proof_reasoning_rows = [
+        {
+            "proof_axis": "api_reasoning_level",
+            "counts_as_intelligence_proof": False,
+            **row,
+        }
+        for row in reasoning_level_rows
+    ]
+    proof_agent_rows = _matrix_agent_proof_rows(
+        chatgpt_truth=chatgpt_truth,
+        api_truth=api_truth,
+        command_loop=command_loop,
+        native=native,
+        primary_alias=primary_alias_value,
+        coding_alias=coding_alias_value,
+        primary_alias_bound=command_loop.get("primary_alias_bound_to_chatgpt_lane")
+        is True,
+        coding_alias_bound=command_loop.get("coding_alias_bound_to_api_lane") is True,
+        native_execution_proven=native_execution_proven,
+        command_loop_api_proven=command_loop_api_proven,
+        reasoning_matrix_proven=reasoning_matrix_proven,
+    )
     return {
         "schema_version": 1,
         "packet_kind": "model_reasoning_availability_matrix_truth",
@@ -3223,8 +3463,22 @@ def build_model_reasoning_availability_matrix_truth_packet(
             CUSTOM_CODEX_EXECUTION_MODE_API_ONLY,
             CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API,
         ],
-        "matrix_rows": [chatgpt_row, api_row, combined_row],
-        "reasoning_level_rows": _matrix_reasoning_rows(reasoning),
+        "matrix_rows": matrix_rows,
+        "reasoning_level_rows": reasoning_level_rows,
+        "proof_rank": proof_rank,
+        "proof_rank_score": proof_rank_score,
+        "proof_rank_status": proof_rank_status,
+        "proof_rank_label": proof_rank_label,
+        "proof_rank_counts_as_full_success": combined_full_proven,
+        "proof_rank_machine_error_code": machine_error_code,
+        "proof_mode_rows": proof_mode_rows,
+        "proof_mode_row_count": len(proof_mode_rows),
+        "proof_reasoning_rows": proof_reasoning_rows,
+        "proof_reasoning_row_count": len(proof_reasoning_rows),
+        "proof_agent_rows": proof_agent_rows,
+        "proof_agent_row_count": len(proof_agent_rows),
+        "display_aliases_are_runtime_aliases": True,
+        "display_aliases_are_separate_agents": False,
         "chatgpt_lane_proven": chatgpt_lane_proven,
         "api_lane_proven": api_lane_proven,
         "alias_binding_proven": alias_binding_proven,
@@ -3241,8 +3495,8 @@ def build_model_reasoning_availability_matrix_truth_packet(
         "runtime_context_file_proven": command_loop.get("runtime_context_file_proven")
         is True
         or native.get("runtime_context_file_proven") is True,
-        "primary_alias": str(command_loop.get("primary_alias") or native.get("primary_alias") or ""),
-        "coding_alias": str(command_loop.get("coding_alias") or native.get("coding_alias") or ""),
+        "primary_alias": primary_alias_value,
+        "coding_alias": coding_alias_value,
         "primary_alias_bound_to_chatgpt_lane": command_loop.get(
             "primary_alias_bound_to_chatgpt_lane"
         )

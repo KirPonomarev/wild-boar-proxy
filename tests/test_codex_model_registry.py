@@ -236,9 +236,27 @@ def command_loop_ok_packet() -> dict[str, object]:
         "runtime_context_file_proven": True,
         "primary_alias": "Planner",
         "coding_alias": "Builder",
+        "primary_alias_resolved_from_context": True,
+        "coding_alias_resolved_from_context": True,
         "primary_alias_bound_to_chatgpt_lane": True,
         "coding_alias_bound_to_api_lane": True,
         "primary_alias_precedes_coding_alias": True,
+        "primary_binding": {
+            "agent_id": "codex",
+            "display_name": "Planner",
+            "role": "orchestrator",
+            "aliases": ["Planner", "Lead", "Agent 1", "1"],
+            "lane": "primary_chatgpt",
+            "model_id": "gpt-5.3-codex",
+        },
+        "coding_binding": {
+            "agent_id": "dip",
+            "display_name": "Builder",
+            "role": "coding_agent",
+            "aliases": ["Builder", "Worker", "Agent 2", "2"],
+            "lane": "api_route",
+            "route_id": "wbp-deepseek-v4-pro-max",
+        },
         "reasoning_prerequisite_proven": True,
         "api_lane_exact_token_matched": True,
         "file_bridge_acceptance_proven": True,
@@ -268,6 +286,8 @@ def native_auth_wall_packet() -> dict[str, object]:
         "runtime_context_file_proven": True,
         "primary_alias": "Planner",
         "coding_alias": "Builder",
+        "primary_aliases": ["Planner", "Lead", "Agent 1", "1"],
+        "coding_aliases": ["Builder", "Worker", "Agent 2", "2"],
         "native_free_text_command_loop_proven": False,
         "native_free_text_tool_bridge_proven": False,
         "native_free_text_alias_routing_proven": False,
@@ -290,6 +310,8 @@ def native_execution_ok_packet() -> dict[str, object]:
         "runtime_context_file_proven": True,
         "primary_alias": "Planner",
         "coding_alias": "Builder",
+        "primary_aliases": ["Planner", "Lead", "Agent 1", "1"],
+        "coding_aliases": ["Builder", "Worker", "Agent 2", "2"],
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
         "intelligence_measured": False,
@@ -1278,8 +1300,32 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["intelligence_measured"])
         self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(packet["proof_rank"], "api_reasoning_live_only")
+        self.assertEqual(packet["proof_rank_status"], "partial")
+        self.assertEqual(packet["proof_rank_score"], 70)
+        self.assertFalse(packet["proof_rank_counts_as_full_success"])
+        self.assertEqual(packet["proof_mode_row_count"], 3)
+        self.assertEqual(packet["proof_reasoning_row_count"], 3)
+        self.assertEqual(packet["proof_agent_row_count"], 2)
+        self.assertTrue(packet["display_aliases_are_runtime_aliases"])
+        self.assertFalse(packet["display_aliases_are_separate_agents"])
         self.assertEqual(packet["primary_alias"], "Planner")
         self.assertEqual(packet["coding_alias"], "Builder")
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(agent_rows["primary_model_slot"]["status"], "ok")
+        self.assertEqual(
+            agent_rows["primary_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
+        self.assertFalse(agent_rows["primary_model_slot"]["native_execution_proven"])
+        self.assertIn("Agent 1", agent_rows["primary_model_slot"]["aliases"])
+        self.assertEqual(agent_rows["coding_agent_model_slot"]["status"], "ok")
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "LIVE_API_FORMAT_PROVEN",
+        )
+        self.assertTrue(agent_rows["coding_agent_model_slot"]["api_route_execution_proven"])
+        self.assertIn("Agent 2", agent_rows["coding_agent_model_slot"]["aliases"])
         rows = {row["execution_mode"]: row for row in packet["matrix_rows"]}
         self.assertEqual(
             rows["chatgpt_plus_api"]["machine_error_code"],
@@ -1324,6 +1370,9 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["command_loop_route_authority_proven"])
         self.assertFalse(packet["allowed_api_route_ids_enforced"])
         self.assertFalse(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["proof_rank"], "selection_only")
+        self.assertEqual(packet["proof_rank_status"], "blocked")
+        self.assertEqual(packet["proof_rank_score"], 30)
         self.assertIn("api_route_authority_not_enforced", packet["blocking_reasons"])
         rows = {row["execution_mode"]: row for row in packet["matrix_rows"]}
         self.assertEqual(rows["api_only"]["status"], "ok")
@@ -1365,7 +1414,33 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["intelligence_measured"])
         self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(packet["proof_rank"], "full_native_mixed")
+        self.assertEqual(packet["proof_rank_status"], "ok")
+        self.assertEqual(packet["proof_rank_score"], 100)
+        self.assertTrue(packet["proof_rank_counts_as_full_success"])
+        self.assertEqual(packet["proof_mode_row_count"], 3)
+        self.assertEqual(packet["proof_reasoning_row_count"], 3)
+        self.assertEqual(packet["proof_agent_row_count"], 2)
+        mode_rows = {row["execution_mode"]: row for row in packet["proof_mode_rows"]}
+        self.assertTrue(mode_rows["chatgpt_plus_api"]["counts_as_full_success"])
+        self.assertFalse(mode_rows["api_only"]["counts_as_partial_api_success"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["primary_model_slot"]["proof_level"],
+            "NATIVE_EXECUTION_PROVEN",
+        )
+        self.assertTrue(agent_rows["primary_model_slot"]["native_execution_proven"])
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "LIVE_API_FORMAT_PROVEN",
+        )
         self.assertEqual(len(packet["reasoning_level_rows"]), 3)
+        self.assertTrue(
+            all(
+                row["counts_as_intelligence_proof"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
         self.assertTrue(
             all(row["intelligence_measured"] is False for row in packet["matrix_rows"])
         )
@@ -1408,6 +1483,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["api_success_counts_as_combined_success"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["intelligence_measured"])
+        self.assertEqual(packet["proof_rank"], "full_native_mixed")
 
     def test_model_reasoning_availability_matrix_rejects_browser_route_authority(
         self,
@@ -1436,6 +1512,10 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(packet["forbidden_fields_redacted"])
         self.assertEqual(packet["forbidden_field_count"], 2)
         self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertEqual(packet["proof_rank"], "blocked")
+        self.assertEqual(packet["proof_rank_status"], "blocked")
+        self.assertEqual(packet["proof_rank_score"], 0)
+        self.assertFalse(packet["proof_rank_counts_as_full_success"])
         self.assertFalse(packet["browser_can_supply_reasoning_authority"])
         self.assertFalse(packet["browser_model_authority"])
         self.assertFalse(packet["secret_value_exposed"])

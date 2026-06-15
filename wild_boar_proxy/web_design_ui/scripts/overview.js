@@ -3710,6 +3710,123 @@ function quickStartRouteProofResultLocked() {
   return Date.now() < quickStartRouteProofResultLockedUntil;
 }
 
+function quickStartProofRankVisual(status) {
+  if (status === "ok") {
+    return "green";
+  }
+  if (status === "partial") {
+    return "amber";
+  }
+  if (status === "blocked") {
+    return "red";
+  }
+  return "neutral";
+}
+
+function quickStartProofRowVisual(row) {
+  if (row?.counts_as_full_success === true) {
+    return "green";
+  }
+  if (row?.counts_as_partial_api_success === true || row?.status === "partial") {
+    return "amber";
+  }
+  if (row?.status === "ok") {
+    return "green";
+  }
+  if (row?.status === "blocked") {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartProofRowLabel(row) {
+  return row?.display_name
+    || row?.agent_slot
+    || row?.execution_mode
+    || row?.operator_level
+    || "unknown";
+}
+
+function quickStartProofRowMeta(row) {
+  const proof = row?.proof_level || row?.machine_error_code || row?.status || "";
+  const model = row?.model_id || row?.api_model_id || "";
+  const aliases = Array.isArray(row?.aliases) && row.aliases.length
+    ? row.aliases.slice(0, 4).join("/")
+    : "";
+  return [proof, model, aliases].filter(Boolean).join(" · ");
+}
+
+function setQuickStartProofRows(id, rows) {
+  const container = document.getElementById(id);
+  if (!container) {
+    return;
+  }
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) {
+    container.textContent = "pending";
+    return;
+  }
+  const plainRows = safeRows.map((row) => {
+    const label = quickStartProofRowLabel(row);
+    const meta = quickStartProofRowMeta(row);
+    return meta ? `${label}: ${meta}` : label;
+  });
+  if (
+    typeof document.createElement !== "function"
+    || typeof container.replaceChildren !== "function"
+  ) {
+    container.textContent = plainRows.join(" | ");
+    return;
+  }
+  container.replaceChildren();
+  for (const row of safeRows) {
+    const node = document.createElement("div");
+    node.className = "quick-start-proof-row";
+    const main = document.createElement("span");
+    main.className = "quick-start-proof-row-main";
+    main.textContent = quickStartProofRowLabel(row);
+    const chip = document.createElement("span");
+    chip.className = `chip ${quickStartProofRowVisual(row)}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = row?.status || row?.machine_error_code || "unknown";
+    chip.appendChild(dot);
+    chip.appendChild(label);
+    const meta = document.createElement("span");
+    meta.className = "quick-start-proof-row-meta";
+    meta.textContent = quickStartProofRowMeta(row);
+    node.appendChild(main);
+    node.appendChild(chip);
+    node.appendChild(meta);
+    container.appendChild(node);
+  }
+}
+
+function renderQuickStartProofBoard(packet) {
+  const rankStatus = packet?.proof_rank_status || "";
+  const rankLabel = packet?.proof_rank_label || packet?.proof_rank || "pending";
+  setQuickStartChip(
+    "quickStartProofRankChip",
+    quickStartProofRankVisual(rankStatus),
+    rankLabel
+  );
+  setQuickStartProofRows(
+    "quickStartProofModeRows",
+    Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows : packet?.matrix_rows
+  );
+  setQuickStartProofRows(
+    "quickStartProofReasoningRows",
+    Array.isArray(packet?.proof_reasoning_rows)
+      ? packet.proof_reasoning_rows
+      : packet?.reasoning_level_rows
+  );
+  setQuickStartProofRows(
+    "quickStartProofAgentRows",
+    Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows : []
+  );
+}
+
 function setQuickStartRouteResponse(packet) {
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
@@ -3798,6 +3915,34 @@ function setQuickStartRouteResponse(packet) {
         Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows : [],
       reasoning_level_row_count:
         Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows.length : 0,
+      proof_rank:
+        packet?.proof_rank || "",
+      proof_rank_score:
+        Number(packet?.proof_rank_score || 0),
+      proof_rank_status:
+        packet?.proof_rank_status || "",
+      proof_rank_label:
+        packet?.proof_rank_label || "",
+      proof_rank_counts_as_full_success:
+        packet?.proof_rank_counts_as_full_success === true,
+      proof_rank_machine_error_code:
+        packet?.proof_rank_machine_error_code || "",
+      proof_mode_rows:
+        Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows : [],
+      proof_mode_row_count:
+        Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows.length : 0,
+      proof_reasoning_rows:
+        Array.isArray(packet?.proof_reasoning_rows) ? packet.proof_reasoning_rows : [],
+      proof_reasoning_row_count:
+        Array.isArray(packet?.proof_reasoning_rows) ? packet.proof_reasoning_rows.length : 0,
+      proof_agent_rows:
+        Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows : [],
+      proof_agent_row_count:
+        Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows.length : 0,
+      display_aliases_are_runtime_aliases:
+        packet?.display_aliases_are_runtime_aliases === true,
+      display_aliases_are_separate_agents:
+        packet?.display_aliases_are_separate_agents === true,
       chatgpt_lane_proven:
         packet?.chatgpt_lane_proven === true,
       api_lane_proven:
@@ -4219,6 +4364,7 @@ function setQuickStartRouteResponse(packet) {
       next_action: packet?.next_action || ""
     }, null, 2);
   }
+  renderQuickStartProofBoard(packet);
 }
 
 function quickStartLaunchRequiresBridgeStability(packet) {

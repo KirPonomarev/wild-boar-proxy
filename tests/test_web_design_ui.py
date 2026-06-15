@@ -5951,7 +5951,11 @@ for (const id of [
   "quickStartBridgeState",
   "quickStartWindowState",
   "quickStartConfigState",
-  "quickStartNextActionState"
+  "quickStartNextActionState",
+  "quickStartProofRankChip",
+  "quickStartProofModeRows",
+  "quickStartProofReasoningRows",
+  "quickStartProofAgentRows"
 ]) {
   node(id);
 }
@@ -6379,6 +6383,28 @@ renderQuickStartModelReasoningAvailabilityMatrix({
     { operator_level: "high", intelligence_measured: false, not_intelligence_proof: true },
     { operator_level: "max", intelligence_measured: false, not_intelligence_proof: true }
   ],
+  proof_rank: "api_reasoning_live_only",
+  proof_rank_score: 70,
+  proof_rank_status: "partial",
+  proof_rank_label: "API live; ChatGPT native not proven",
+  proof_rank_counts_as_full_success: false,
+  proof_rank_machine_error_code: "COMBINED_MODE_BLOCKED_NATIVE_AUTH",
+  proof_mode_rows: [
+    { proof_axis: "execution_mode", execution_mode: "chatgpt_only", display_name: "ChatGPT", status: "blocked", proof_level: "CUSTOM_NATIVE_AUTH_WALL_OBSERVED", counts_as_full_success: false, counts_as_partial_api_success: false },
+    { proof_axis: "execution_mode", execution_mode: "api_only", display_name: "API / DeepSeek", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_full_success: false, counts_as_partial_api_success: true },
+    { proof_axis: "execution_mode", execution_mode: "chatgpt_plus_api", display_name: "ChatGPT + API", status: "blocked", proof_level: "COMBINED_MODE_BLOCKED_NATIVE_AUTH", counts_as_full_success: false, counts_as_partial_api_success: false }
+  ],
+  proof_reasoning_rows: [
+    { proof_axis: "api_reasoning_level", operator_level: "fast", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true },
+    { proof_axis: "api_reasoning_level", operator_level: "high", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true },
+    { proof_axis: "api_reasoning_level", operator_level: "max", status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", counts_as_intelligence_proof: false, intelligence_measured: false, not_intelligence_proof: true }
+  ],
+  proof_agent_rows: [
+    { proof_axis: "agent_slot", agent_slot: "primary_model_slot", display_name: "Planner", aliases: ["Planner", "Agent 1", "1"], status: "ok", proof_level: "ALIAS_BINDING_PROVEN", native_execution_proven: false, display_aliases_are_separate_agents: false },
+    { proof_axis: "agent_slot", agent_slot: "coding_agent_model_slot", display_name: "Builder", aliases: ["Builder", "Agent 2", "2"], status: "ok", proof_level: "LIVE_API_FORMAT_PROVEN", api_route_execution_proven: true, display_aliases_are_separate_agents: false }
+  ],
+  display_aliases_are_runtime_aliases: true,
+  display_aliases_are_separate_agents: false,
   chatgpt_lane_proven: false,
   api_lane_proven: true,
   alias_binding_proven: true,
@@ -6431,6 +6457,21 @@ if (node("quickStartChatSlotState").className.includes("green")) {
 if (node("quickStartRouteChip").lastElementChild.textContent !== "auth wall") {
   throw new Error(`matrix auth wall label missing: ${node("quickStartRouteChip").lastElementChild.textContent}`);
 }
+if (!node("quickStartProofRankChip").className.includes("amber")) {
+  throw new Error(`partial rank chip must be amber: ${node("quickStartProofRankChip").className}`);
+}
+if (node("quickStartProofRankChip").lastElementChild.textContent !== "API live; ChatGPT native not proven") {
+  throw new Error(`partial rank label missing: ${node("quickStartProofRankChip").lastElementChild.textContent}`);
+}
+if (!node("quickStartProofModeRows").textContent.includes("API / DeepSeek")) {
+  throw new Error(`mode proof row missing API lane: ${node("quickStartProofModeRows").textContent}`);
+}
+if (!node("quickStartProofReasoningRows").textContent.includes("fast")) {
+  throw new Error(`reasoning proof rows missing levels: ${node("quickStartProofReasoningRows").textContent}`);
+}
+if (!node("quickStartProofAgentRows").textContent.includes("Agent 1")) {
+  throw new Error(`agent proof rows missing display aliases: ${node("quickStartProofAgentRows").textContent}`);
+}
 const rendered = JSON.parse(node("quickStartRouteResponse").textContent);
 if (
   rendered.model_reasoning_availability_matrix_packet !== true ||
@@ -6468,7 +6509,16 @@ if (
   rendered.forbidden_field_categories.length !== 0 ||
   rendered.matrix_row_count !== 3 ||
   rendered.reasoning_level_rows.length !== 3 ||
-  rendered.reasoning_level_row_count !== 3
+  rendered.reasoning_level_row_count !== 3 ||
+  rendered.proof_rank !== "api_reasoning_live_only" ||
+  rendered.proof_rank_score !== 70 ||
+  rendered.proof_rank_status !== "partial" ||
+  rendered.proof_rank_counts_as_full_success !== false ||
+  rendered.proof_mode_row_count !== 3 ||
+  rendered.proof_reasoning_row_count !== 3 ||
+  rendered.proof_agent_row_count !== 2 ||
+  rendered.display_aliases_are_runtime_aliases !== true ||
+  rendered.display_aliases_are_separate_agents !== false
 ) {
   throw new Error(`matrix flags not preserved: ${node("quickStartRouteResponse").textContent}`);
 }
