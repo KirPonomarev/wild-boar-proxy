@@ -152,8 +152,6 @@ LEGACY_PROXY_REPROBE_EXCLUDED_PORTS = {
 DYNAMIC_PROXY_REPROBE_EXCLUDED_COMMAND_PREFIXES = (
     "python",
     "codex",
-    "node",
-    "electron",
     "cli-proxy",
     "cli-proxy-api",
 )
@@ -2855,6 +2853,16 @@ def _parse_positive_pid(value: object) -> int | None:
     return candidate
 
 
+def _parse_non_negative_uid(value: object) -> int | None:
+    try:
+        candidate = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if candidate < 0:
+        return None
+    return candidate
+
+
 def _normalize_ps_text(text: str) -> str:
     return " ".join(text.split())
 
@@ -2871,6 +2879,10 @@ def _system_ps_bin() -> str | None:
     ):
         return None
     return str(candidate)
+
+
+def _system_lsof_bin() -> str | None:
+    return shutil.which("lsof", path=DETERMINISTIC_RUNTIME_PATH)
 
 
 def _run_process_probe_ps(*args: str) -> subprocess.CompletedProcess[str] | None:
@@ -2905,7 +2917,7 @@ def _probe_process_uid(pid: int) -> int | None:
     result = _run_process_probe_ps("-o", "uid=", "-p", str(pid))
     if result is None or result.returncode != 0:
         return None
-    return _parse_positive_pid(result.stdout)
+    return _parse_non_negative_uid(result.stdout)
 
 
 def _probe_process_create_time(pid: int) -> float | None:
@@ -3340,7 +3352,16 @@ def _changed_files_from_named_snapshots(
 
 
 def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
-    return pid_command_line_contains_path(pid_text, paths.managed_config_file)
+    try:
+        pid = int(pid_text.strip())
+    except ValueError:
+        return False
+    result = _run_process_probe_ps("-p", str(pid), "-o", "command=")
+    if result is None or result.returncode != 0:
+        return False
+    command_line = result.stdout.strip()
+    expected = f"{paths.managed_config_file}"
+    return bool(command_line) and expected in command_line
 
 
 def stable_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
@@ -3361,7 +3382,7 @@ def pid_command_line_contains_path(pid_text: str, expected_path: Path) -> bool:
 
 
 def discover_stable_runtime_pids(paths: RuntimePaths) -> list[int]:
-    lsof_bin = shutil.which("lsof")
+    lsof_bin = _system_lsof_bin()
     if not lsof_bin:
         return []
     stable_host, stable_port, _ = get_endpoint(paths, "stable")
@@ -7495,35 +7516,43 @@ def proxy_reprobe_excluded_ports_for_state(state: dict[str, Any]) -> set[int]:
     return ports
 
 
+_DYNAMIC_LOCAL_LISTENER_RE = re.compile(
+    r"(?<![\w.:-])(?P<host>127\.0\.0\.1|localhost|\[::1\]|::1):(?P<port>\d+)"
+)
+
+
 def parse_dynamic_local_listener_candidates(raw_output: str) -> list[str]:
-    ports: list[int] = []
-    seen_ports: set[int] = set()
+    endpoints: list[tuple[str, int]] = []
+    seen_endpoints: set[tuple[str, int]] = set()
     for line in raw_output.splitlines():
         command_name = line.split(maxsplit=1)[0].strip().lower() if line.strip() else ""
         if command_name.startswith(DYNAMIC_PROXY_REPROBE_EXCLUDED_COMMAND_PREFIXES):
             continue
-        match = re.search(r"(127\.0\.0\.1|localhost):(\d+)", line)
+        match = _DYNAMIC_LOCAL_LISTENER_RE.search(line)
         if match is None:
             continue
-        port = int(match.group(2))
+        raw_host = match.group("host")
+        port = int(match.group("port"))
         if port in LEGACY_PROXY_REPROBE_EXCLUDED_PORTS:
             continue
         if port < 1024 or port > 65535:
             continue
-        if port in seen_ports:
+        host = "[::1]" if raw_host in {"::1", "[::1]"} else "127.0.0.1"
+        endpoint = (host, port)
+        if endpoint in seen_endpoints:
             continue
-        seen_ports.add(port)
-        ports.append(port)
+        seen_endpoints.add(endpoint)
+        endpoints.append(endpoint)
     candidates: list[str] = []
-    for port in ports:
-        candidates.append(f"http://127.0.0.1:{port}")
-    for port in ports:
-        candidates.append(f"socks5h://127.0.0.1:{port}")
+    for host, port in endpoints:
+        candidates.append(f"http://{host}:{port}")
+    for host, port in endpoints:
+        candidates.append(f"socks5h://{host}:{port}")
     return candidates
 
 
 def discover_dynamic_local_proxy_candidates() -> list[str]:
-    lsof_bin = shutil.which("lsof")
+    lsof_bin = _system_lsof_bin()
     if not lsof_bin:
         return []
     process_result = _process_runner.run_bounded_process(

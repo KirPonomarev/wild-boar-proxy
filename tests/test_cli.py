@@ -1017,6 +1017,25 @@ class CliTests(unittest.TestCase):
                 runtime_mod.managed_pid_matches_expected(paths, "not-a-pid")
             )
 
+    def test_probe_process_uid_accepts_root_uid(self) -> None:
+        command = ["/bin/ps", "-o", "uid=", "-p", "123"]
+        root_uid = subprocess.CompletedProcess(command, 0, "0\n", "")
+        regular_uid = subprocess.CompletedProcess(command, 0, "501\n", "")
+        invalid_uid = subprocess.CompletedProcess(command, 0, "-1\n", "")
+
+        with mock.patch.object(
+            runtime_mod, "_run_process_probe_ps", return_value=root_uid
+        ):
+            self.assertEqual(runtime_mod._probe_process_uid(123), 0)
+        with mock.patch.object(
+            runtime_mod, "_run_process_probe_ps", return_value=regular_uid
+        ):
+            self.assertEqual(runtime_mod._probe_process_uid(123), 501)
+        with mock.patch.object(
+            runtime_mod, "_run_process_probe_ps", return_value=invalid_uid
+        ):
+            self.assertIsNone(runtime_mod._probe_process_uid(123))
+
     def test_stable_pid_matches_expected_consumes_bounded_process_probe(
         self,
     ) -> None:
@@ -1144,13 +1163,17 @@ class CliTests(unittest.TestCase):
             duration_seconds=0.01,
         )
 
+        def fake_which(binary, *, path=None):
+            captured["which"] = (binary, path)
+            return "/usr/sbin/lsof"
+
         def fake_run_bounded_process(command, **kwargs):
             captured["command"] = [str(item) for item in command]
             captured.update(kwargs)
             return success
 
         with (
-            mock.patch.object(runtime_mod.shutil, "which", return_value="/usr/sbin/lsof"),
+            mock.patch.object(runtime_mod.shutil, "which", side_effect=fake_which),
             mock.patch.object(
                 runtime_mod._process_runner,
                 "run_bounded_process",
@@ -1162,6 +1185,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             candidates,
             ["http://127.0.0.1:12345", "socks5h://127.0.0.1:12345"],
+        )
+        self.assertEqual(
+            captured["which"], ("lsof", runtime_mod.DETERMINISTIC_RUNTIME_PATH)
         )
         self.assertEqual(
             captured["command"],
@@ -6881,12 +6907,15 @@ class CliTests(unittest.TestCase):
                     "cliproxy 1 user 10u IPv4 0t0 TCP 127.0.0.1:8318 (LISTEN)",
                     "Python 7 user 3u IPv4 0t0 TCP 127.0.0.1:65164 (LISTEN)",
                     "node 8 user 4u IPv4 0t0 TCP 127.0.0.1:65165 (LISTEN)",
+                    "Electron 9 user 5u IPv6 0t0 TCP [::1]:65166 (LISTEN)",
                     "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8765 (LISTEN)",
                     "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8788 (LISTEN)",
                     "bridge 1 user 10u IPv4 0t0 TCP 127.0.0.1:50555 (LISTEN)",
+                    "remote 2 user 10u IPv4 0t0 TCP 192.168.1.10:18082 (LISTEN)",
                     "vpn 2 user 11u IPv4 0t0 TCP localhost:10808 (LISTEN)",
                     "random 3 user 12u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
                     "random 4 user 13u IPv4 0t0 TCP localhost:18081 (LISTEN)",
+                    "random 4 user 13u IPv6 0t0 TCP ::1:18083 (LISTEN)",
                     "random 5 user 14u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
                 ]
             )
@@ -6894,12 +6923,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             parsed,
             [
+                "http://127.0.0.1:65165",
+                "http://[::1]:65166",
                 "http://127.0.0.1:10808",
                 "http://127.0.0.1:18080",
                 "http://127.0.0.1:18081",
+                "http://[::1]:18083",
+                "socks5h://127.0.0.1:65165",
+                "socks5h://[::1]:65166",
                 "socks5h://127.0.0.1:10808",
                 "socks5h://127.0.0.1:18080",
                 "socks5h://127.0.0.1:18081",
+                "socks5h://[::1]:18083",
             ],
         )
 
