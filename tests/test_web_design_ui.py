@@ -1599,6 +1599,8 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("Проверить native GPT+API", section)
         self.assertIn('id="quickStartModelReasoningMatrixAction"', section)
         self.assertIn("Проверить matrix", section)
+        self.assertIn('id="quickStartManualFreeChatRouterRealityAction"', section)
+        self.assertIn("Проверить manual router", section)
         self.assertIn('id="quickStartLaunchPreflightAction"', section)
         self.assertIn("Предзапусковая проверка", section)
         self.assertIn('id="quickStartChatSlotState"', section)
@@ -1621,12 +1623,18 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
             js,
         )
         self.assertIn(
+            'document.getElementById("quickStartManualFreeChatRouterRealityAction")?.addEventListener("click", () => runQuickStartManualFreeChatRouterReality())',
+            js,
+        )
+        self.assertIn(
             'document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus({ force: true }))',
             js,
         )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
         self.assertIn("async function runQuickStartNativeFreeTextCommandLoopProof()", js)
         self.assertIn('fetch("api/codex/custom/native-natural-dip-command-proof"', js)
+        self.assertIn("async function runQuickStartManualFreeChatRouterReality()", js)
+        self.assertIn('fetch("api/codex/custom/manual-free-chat-router-reality"', js)
         self.assertIn("async function runQuickStartModelReasoningAvailabilityMatrix()", js)
         self.assertIn('fetch("api/codex/custom/model-reasoning-availability-matrix"', js)
         self.assertIn("renderQuickStartModelReasoningAvailabilityMatrix", js)
@@ -6639,6 +6647,246 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.secret_value_exposed !== false
   ) {
     throw new Error(`native free-text proof flags missing: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
+    def test_quick_start_manual_free_chat_router_reality_stays_fail_closed(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+for (const id of [
+  "quickStartRouteChip",
+  "quickStartExecutionModeState",
+  "quickStartChatSlotState",
+  "quickStartApiSlotState",
+  "quickStartOwnerAuthState",
+  "quickStartLaunchState",
+  "quickStartBridgeState",
+  "quickStartWindowState",
+  "quickStartConfigState",
+  "quickStartNextActionState",
+  "quickStartProofRankChip",
+  "quickStartProofModeRows",
+  "quickStartProofReasoningRows",
+  "quickStartProofAgentRows",
+  "quickStartManualFreeChatRouterRealityAction"
+]) {
+  node(id);
+}
+node("quickStartRouteResponse");
+node("quickStartExecutionModeSelect").value = "chatgpt_plus_api";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "deep";
+
+const urls = [];
+const packets = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  Date,
+  fetch(url, options) {
+    urls.push(url);
+    const body = JSON.parse(options?.body || "{}");
+    packets.push(body);
+    if (url !== "api/codex/custom/manual-free-chat-router-reality") {
+      throw new Error(`unexpected manual-router fetch url ${url}`);
+    }
+    for (const forbidden of ["prompt", "route_id", "model_id", "api_reasoning_option_id", "expected_text"]) {
+      if (Object.prototype.hasOwnProperty.call(body, forbidden)) {
+        throw new Error(`manual-router body leaked ${forbidden}: ${JSON.stringify(body)}`);
+      }
+    }
+    if (!String(body.request_id || "").startsWith("ui-manual-router-")) {
+      throw new Error(`manual-router request id missing: ${JSON.stringify(body)}`);
+    }
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        status: "blocked",
+        machine_error_code: "MANUAL_USER_PROMPT_NOT_OBSERVED",
+        final_status: "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_NOT_PROVEN",
+        packet_kind: "custom_codex_manual_free_chat_router_reality",
+        request_id: body.request_id,
+        manual_free_chat_router_reality_proven: false,
+        manual_user_prompt_observed: false,
+        manual_user_prompt_source: "not_observed",
+        manual_user_prompt_digest_present: false,
+        wbp_owned_router_hook_observed: false,
+        router_hook_truth_source: "not_observable",
+        router_hook_transcript_digest_present: false,
+        bridge_or_file_bridge_used: false,
+        command_loop_provider_call_count: 0,
+        api_lane_exact_token_matched: false,
+        allowed_api_route_ids_enforced: false,
+        api_lane_proven: false,
+        codex_subagent_used_as_dip: false,
+        native_codex_subagent_used_as_dip: false,
+        server_owned_proof_counts_as_manual_router: false,
+        server_owned_natural_proof_counts_as_manual_router: false,
+        server_owned_natural_dip_command_proven: true,
+        browser_authority_contract_enforced: true,
+        browser_prompt_authority_rejected: true,
+        browser_can_supply_prompt_authority: false,
+        browser_can_supply_route_authority: false,
+        browser_can_supply_reasoning_authority: false,
+        browser_model_authority: false,
+        does_not_prove_universal_manual_chat_interception: true,
+        universal_manual_chat_interception_proven: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        prompt_text_recorded: false,
+        raw_prompt_recorded: false,
+        raw_backend_details_exposed: false,
+        secret_value_exposed: false,
+        next_action: "manual_user_prompt_not_observed"
+      })
+    });
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext("actionMetadataLoaded = true;", sandbox);
+sandbox.runQuickStartManualFreeChatRouterReality().then(() => {
+  if (JSON.stringify(urls) !== JSON.stringify(["api/codex/custom/manual-free-chat-router-reality"])) {
+    throw new Error(`unexpected manual-router fetches ${JSON.stringify(urls)}`);
+  }
+  if (packets.length !== 1) {
+    throw new Error(`manual-router should perform one probe fetch: ${JSON.stringify(packets)}`);
+  }
+  if (nodes.quickStartRouteChip.className.includes("green")) {
+    throw new Error(`manual-router reality must not render green: ${nodes.quickStartRouteChip.className}`);
+  }
+  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "manual unseen") {
+    throw new Error(`manual-router blocked label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+  }
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "router absent") {
+    throw new Error(`manual-router hook label missing: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
+  }
+  const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (
+    rendered.machine_error_code !== "MANUAL_USER_PROMPT_NOT_OBSERVED" ||
+    rendered.manual_free_chat_router_reality_packet !== true ||
+    rendered.manual_free_chat_router_reality_proven !== false ||
+    rendered.manual_user_prompt_observed !== false ||
+    rendered.manual_user_prompt_source !== "not_observed" ||
+    rendered.manual_user_prompt_digest_present !== false ||
+    rendered.wbp_owned_router_hook_observed !== false ||
+    rendered.router_hook_truth_source !== "not_observable" ||
+    rendered.router_hook_transcript_digest_present !== false ||
+    rendered.api_lane_proven !== false ||
+    rendered.bridge_or_file_bridge_used !== false ||
+    rendered.command_loop_provider_call_count !== 0 ||
+    rendered.api_lane_exact_token_matched !== false ||
+    rendered.allowed_api_route_ids_enforced !== false ||
+    rendered.codex_subagent_used_as_dip !== false ||
+    rendered.server_owned_proof_counts_as_manual_router !== false ||
+    rendered.server_owned_natural_proof_counts_as_manual_router !== false ||
+	    rendered.server_owned_natural_dip_command_proven !== true ||
+	    rendered.chatgpt_model_id !== "" ||
+	    rendered.api_model_id !== "" ||
+	    rendered.does_not_prove_universal_manual_chat_interception !== true ||
+    rendered.universal_manual_chat_interception_proven !== false ||
+    rendered.browser_can_supply_prompt_authority !== false ||
+    rendered.browser_can_supply_route_authority !== false ||
+    rendered.browser_model_authority !== false ||
+    rendered.prompt_text_recorded !== false ||
+    rendered.raw_prompt_recorded !== false ||
+    rendered.raw_backend_details_exposed !== false ||
+    rendered.secret_value_exposed !== false ||
+    rendered.launch_attempted !== false ||
+    rendered.native_launch_attempted !== false ||
+    rendered.runtime_readiness_claimed !== false
+  ) {
+    throw new Error(`manual-router reality flags missing: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);

@@ -3603,6 +3603,159 @@ class WebDesignLiveServerTests(unittest.TestCase):
             live_server._custom_native_natural_dip_command_product_proven(packet)
         )
 
+    def test_custom_manual_free_chat_router_reality_blocks_without_observed_manual_prompt(self) -> None:
+        packet = live_server._custom_manual_free_chat_router_reality_packet(
+            payload={"request_id": "manual-router-default"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["packet_kind"],
+            "custom_codex_manual_free_chat_router_reality",
+        )
+        self.assertEqual(packet["machine_error_code"], "MANUAL_USER_PROMPT_NOT_OBSERVED")
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_NOT_PROVEN",
+        )
+        self.assertFalse(packet["manual_user_prompt_observed"])
+        self.assertEqual(packet["manual_user_prompt_source"], "not_observed")
+        self.assertFalse(packet["manual_user_prompt_digest_present"])
+        self.assertFalse(packet["wbp_owned_router_hook_observed"])
+        self.assertEqual(packet["router_hook_truth_source"], "not_observable")
+        self.assertFalse(packet["router_hook_transcript_digest_present"])
+        self.assertFalse(packet["bridge_or_file_bridge_used"])
+        self.assertEqual(packet["command_loop_provider_call_count"], 0)
+        self.assertFalse(packet["api_lane_exact_token_matched"])
+        self.assertFalse(packet["allowed_api_route_ids_enforced"])
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["codex_subagent_used_as_dip"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["manual_free_chat_router_reality_proven"])
+        self.assertFalse(packet["universal_manual_chat_interception_proven"])
+        self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertFalse(packet["server_owned_proof_counts_as_manual_router"])
+        self.assertFalse(packet["server_owned_natural_proof_counts_as_manual_router"])
+        self.assertTrue(packet["browser_authority_contract_enforced"])
+        self.assertTrue(packet["browser_prompt_authority_rejected"])
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(packet["next_action"], "manual_user_prompt_not_observed")
+
+    def test_custom_manual_free_chat_router_reality_rejects_browser_authority_fields(self) -> None:
+        packet = live_server._custom_manual_free_chat_router_reality_packet(
+            payload={
+                "request_id": "manual-router-forbidden",
+                "prompt": "DIP do this manually",
+                "route_id": "wbp-browser-route",
+                "model_id": "browser-model",
+                "api_reasoning_option_id": "browser-reasoning",
+                "expected_text": "BROWSER_TOKEN",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "MANUAL_FREE_CHAT_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("prompt", packet["browser_supplied_authority_fields"])
+        self.assertIn("route_id", packet["browser_supplied_authority_fields"])
+        self.assertIn("model_id", packet["browser_supplied_authority_fields"])
+        self.assertIn("api_reasoning_option_id", packet["browser_supplied_authority_fields"])
+        self.assertIn("expected_text", packet["browser_supplied_authority_fields"])
+        self.assertFalse(packet["manual_free_chat_router_reality_proven"])
+        self.assertFalse(packet["manual_user_prompt_observed"])
+        self.assertFalse(packet["wbp_owned_router_hook_observed"])
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(
+            packet["next_action"],
+            "remove_browser_supplied_manual_router_authority",
+        )
+
+    def test_custom_manual_free_chat_router_reality_does_not_count_server_owned_natural_proof(self) -> None:
+        packet = live_server._custom_manual_free_chat_router_reality_packet(
+            payload={"request_id": "manual-router-server-owned-proof"},
+            server_owned_natural_packet={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "server_owned_natural_dip_command_proven": True,
+                "server_owned_natural_dip_command_path": True,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "MANUAL_USER_PROMPT_NOT_OBSERVED")
+        self.assertTrue(packet["server_owned_natural_dip_command_proven"])
+        self.assertFalse(packet["server_owned_proof_counts_as_manual_router"])
+        self.assertFalse(packet["server_owned_natural_proof_counts_as_manual_router"])
+        self.assertFalse(packet["manual_user_prompt_observed"])
+        self.assertFalse(packet["wbp_owned_router_hook_observed"])
+        self.assertFalse(packet["manual_free_chat_router_reality_proven"])
+        self.assertFalse(packet["universal_manual_chat_interception_proven"])
+        self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+
+    def test_custom_manual_free_chat_router_reality_requires_full_hook_and_api_evidence(self) -> None:
+        packet = live_server._custom_manual_free_chat_router_reality_packet(
+            payload={"request_id": "manual-router-proven"},
+            manual_prompt_packet={
+                "manual_user_prompt_observed": True,
+                "manual_user_prompt_source": "wbp_owned_router_hook",
+                "manual_user_prompt_digest_present": True,
+            },
+            router_hook_packet={
+                "wbp_owned_router_hook_observed": True,
+                "router_hook_truth_source": "wbp_owned_router_transcript",
+                "router_hook_transcript_digest_present": True,
+            },
+            api_lane_packet={
+                "bridge_or_file_bridge_used": True,
+                "command_loop_provider_call_count": 1,
+                "api_lane_exact_token_matched": True,
+                "allowed_api_route_ids_enforced": True,
+                "codex_subagent_used_as_dip": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["manual_free_chat_router_reality_proven"])
+        self.assertTrue(packet["manual_user_prompt_observed"])
+        self.assertTrue(packet["manual_user_prompt_digest_present"])
+        self.assertTrue(packet["wbp_owned_router_hook_observed"])
+        self.assertTrue(packet["router_hook_transcript_digest_present"])
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertTrue(packet["bridge_or_file_bridge_used"])
+        self.assertEqual(packet["command_loop_provider_call_count"], 1)
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertFalse(packet["codex_subagent_used_as_dip"])
+        self.assertFalse(packet["server_owned_proof_counts_as_manual_router"])
+        self.assertFalse(packet["universal_manual_chat_interception_proven"])
+        self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertEqual(packet["next_action"], "none")
+
     def test_custom_native_free_text_default_submitter_receives_expected_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

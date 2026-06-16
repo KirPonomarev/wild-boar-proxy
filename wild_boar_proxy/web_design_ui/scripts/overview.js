@@ -2303,6 +2303,21 @@ function quickStartNextActionLabel(nextAction) {
 
 function quickStartNativeFreeTextBlockerLabel(packet) {
   const machineCode = packet?.machine_error_code || "";
+  if (machineCode === "MANUAL_USER_PROMPT_NOT_OBSERVED") {
+    return "manual unseen";
+  }
+  if (machineCode === "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE") {
+    return "router absent";
+  }
+  if (machineCode === "API_LANE_NOT_PROVEN") {
+    return "API not proven";
+  }
+  if (machineCode === "CODEX_SUBAGENT_USED_AS_DIP") {
+    return "sub-agent fail";
+  }
+  if (machineCode === "MANUAL_FREE_CHAT_BROWSER_AUTHORITY_REJECTED") {
+    return "browser blocked";
+  }
   if (machineCode === "OWNER_AUTHORIZATION_REQUIRED") {
     return "owner auth";
   }
@@ -4583,6 +4598,29 @@ function setQuickStartRouteResponse(packet) {
         packet?.does_not_prove_universal_manual_chat_interception === true,
       universal_manual_chat_interception_proven:
         packet?.universal_manual_chat_interception_proven === true,
+      manual_free_chat_router_reality_packet:
+        packet?.manual_free_chat_router_reality_packet === true
+        || packet?.packet_kind === "custom_codex_manual_free_chat_router_reality",
+      manual_free_chat_router_reality_proven:
+        packet?.manual_free_chat_router_reality_proven === true,
+      manual_user_prompt_observed:
+        packet?.manual_user_prompt_observed === true,
+      manual_user_prompt_source:
+        packet?.manual_user_prompt_source || "",
+      manual_user_prompt_digest_present:
+        packet?.manual_user_prompt_digest_present === true,
+      wbp_owned_router_hook_observed:
+        packet?.wbp_owned_router_hook_observed === true,
+      router_hook_truth_source:
+        packet?.router_hook_truth_source || "",
+      router_hook_transcript_digest_present:
+        packet?.router_hook_transcript_digest_present === true,
+      codex_subagent_used_as_dip:
+        packet?.codex_subagent_used_as_dip === true,
+      server_owned_proof_counts_as_manual_router:
+        packet?.server_owned_proof_counts_as_manual_router === true,
+      server_owned_natural_proof_counts_as_manual_router:
+        packet?.server_owned_natural_proof_counts_as_manual_router === true,
       api_lane_truth_source:
         packet?.api_lane_truth_source || "",
       native_free_text_tool_bridge_proven:
@@ -4655,6 +4693,8 @@ function setQuickStartRouteResponse(packet) {
         packet?.prompt_submitted === true,
       prompt_text_recorded:
         packet?.prompt_text_recorded === true,
+      raw_prompt_recorded:
+        packet?.raw_prompt_recorded === true,
       native_agent_provider_call_directly_observed:
         packet?.native_agent_provider_call_directly_observed === true,
       custom_codex_response_text_read_proven:
@@ -5882,6 +5922,256 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
       packet?.browser_can_supply_reasoning_authority === true,
     next_action: packet?.next_action || ""
   });
+}
+
+function renderQuickStartManualFreeChatRouterReality(packet) {
+  lockQuickStartRouteProofResult();
+  const blockedLabel = quickStartNativeFreeTextBlockerLabel(packet);
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.manual_free_chat_router_reality_proven === true
+    && packet?.manual_user_prompt_observed === true
+    && packet?.manual_user_prompt_digest_present === true
+    && packet?.wbp_owned_router_hook_observed === true
+    && packet?.router_hook_transcript_digest_present === true
+    && packet?.bridge_or_file_bridge_used === true
+    && Number(packet?.command_loop_provider_call_count || 0) > 0
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.allowed_api_route_ids_enforced === true
+    && packet?.codex_subagent_used_as_dip !== true
+    && packet?.native_codex_subagent_used_as_dip !== true
+    && packet?.local_imitation_used !== true
+    && packet?.fallback_used !== true
+    && packet?.server_owned_proof_counts_as_manual_router !== true
+    && packet?.server_owned_natural_proof_counts_as_manual_router !== true
+    && packet?.does_not_prove_universal_manual_chat_interception === true
+    && packet?.universal_manual_chat_interception_proven !== true
+    && packet?.prompt_text_recorded !== true
+    && packet?.raw_prompt_recorded !== true
+    && packet?.raw_backend_details_exposed !== true
+    && packet?.secret_value_exposed !== true
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? "green" : "amber",
+    proven ? "manual router ok" : blockedLabel
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.manual_user_prompt_observed === true ? "green" : "amber",
+    packet?.manual_user_prompt_observed === true ? "manual seen" : "manual unseen"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip("quickStartOwnerAuthState", "neutral", "preflight");
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? "green" : "amber",
+    proven ? "manual router ok" : blockedLabel
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.wbp_owned_router_hook_observed === true ? "green" : "amber",
+    packet?.wbp_owned_router_hook_observed === true ? "hook observed" : "router absent"
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.browser_authority_contract_enforced === true ? "green" : "amber",
+    packet?.browser_authority_contract_enforced === true ? "contract ok" : "contract drift"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    manual_free_chat_router_reality_packet: true,
+    manual_free_chat_router_reality_proven:
+      packet?.manual_free_chat_router_reality_proven === true,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: "",
+    api_model_id: "",
+    api_lane_proven: packet?.api_lane_proven === true,
+    manual_user_prompt_observed: packet?.manual_user_prompt_observed === true,
+    manual_user_prompt_source: packet?.manual_user_prompt_source || "",
+    manual_user_prompt_digest_present:
+      packet?.manual_user_prompt_digest_present === true,
+    wbp_owned_router_hook_observed:
+      packet?.wbp_owned_router_hook_observed === true,
+    router_hook_truth_source: packet?.router_hook_truth_source || "",
+    router_hook_transcript_digest_present:
+      packet?.router_hook_transcript_digest_present === true,
+    bridge_or_file_bridge_used: packet?.bridge_or_file_bridge_used === true,
+    command_loop_provider_call_count:
+      Number(packet?.command_loop_provider_call_count || 0),
+    api_lane_exact_token_matched:
+      packet?.api_lane_exact_token_matched === true,
+    allowed_api_route_ids_enforced:
+      packet?.allowed_api_route_ids_enforced === true,
+    codex_subagent_used_as_dip:
+      packet?.codex_subagent_used_as_dip === true,
+    native_codex_subagent_used_as_dip:
+      packet?.native_codex_subagent_used_as_dip === true,
+    server_owned_proof_counts_as_manual_router:
+      packet?.server_owned_proof_counts_as_manual_router === true,
+    server_owned_natural_proof_counts_as_manual_router:
+      packet?.server_owned_natural_proof_counts_as_manual_router === true,
+    server_owned_natural_dip_command_proven:
+      packet?.server_owned_natural_dip_command_proven === true,
+    browser_authority_contract_enforced:
+      packet?.browser_authority_contract_enforced === true,
+    browser_prompt_authority_rejected:
+      packet?.browser_prompt_authority_rejected === true,
+    browser_can_supply_prompt_authority:
+      packet?.browser_can_supply_prompt_authority === true,
+    browser_can_supply_route_authority:
+      packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    browser_model_authority:
+      packet?.browser_model_authority === true,
+    does_not_prove_universal_manual_chat_interception:
+      packet?.does_not_prove_universal_manual_chat_interception === true,
+    universal_manual_chat_interception_proven:
+      packet?.universal_manual_chat_interception_proven === true,
+    prompt_text_recorded: packet?.prompt_text_recorded === true,
+    raw_prompt_recorded: packet?.raw_prompt_recorded === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    secret_value_exposed: packet?.secret_value_exposed === true,
+    fallback_used: packet?.fallback_used === true,
+    local_imitation_used: packet?.local_imitation_used === true,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartManualFreeChatRouterReality() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartManualFreeChatRouterRealityAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "manual router");
+  setQuickStartChip("quickStartLaunchState", "neutral", "checking");
+  setQuickStartChip("quickStartNextActionState", "neutral", "checking");
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: "",
+    api_model_id: "",
+    manual_free_chat_router_reality_packet: true,
+    manual_free_chat_router_reality_proven: false,
+    manual_user_prompt_observed: false,
+    manual_user_prompt_source: "not_observed",
+    manual_user_prompt_digest_present: false,
+    wbp_owned_router_hook_observed: false,
+    router_hook_truth_source: "not_observable",
+    router_hook_transcript_digest_present: false,
+    bridge_or_file_bridge_used: false,
+    command_loop_provider_call_count: 0,
+    api_lane_exact_token_matched: false,
+    allowed_api_route_ids_enforced: false,
+    api_lane_proven: false,
+    codex_subagent_used_as_dip: false,
+    native_codex_subagent_used_as_dip: false,
+    server_owned_proof_counts_as_manual_router: false,
+    server_owned_natural_proof_counts_as_manual_router: false,
+    does_not_prove_universal_manual_chat_interception: true,
+    universal_manual_chat_interception_proven: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    prompt_text_recorded: false,
+    raw_prompt_recorded: false,
+    raw_backend_details_exposed: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_manual_free_chat_router_reality"
+  });
+  try {
+    const response = await fetch("api/codex/custom/manual-free-chat-router-reality", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        request_id: `ui-manual-router-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`manual free-chat router reality http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartManualFreeChatRouterReality(packet);
+  } catch (error) {
+    renderQuickStartManualFreeChatRouterReality({
+      status: "failed",
+      machine_error_code: "QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      manual_free_chat_router_reality_packet: true,
+      manual_free_chat_router_reality_proven: false,
+      manual_user_prompt_observed: false,
+      manual_user_prompt_source: "not_observed",
+      manual_user_prompt_digest_present: false,
+      wbp_owned_router_hook_observed: false,
+      router_hook_truth_source: "not_observable",
+      router_hook_transcript_digest_present: false,
+      bridge_or_file_bridge_used: false,
+      command_loop_provider_call_count: 0,
+      api_lane_exact_token_matched: false,
+      allowed_api_route_ids_enforced: false,
+      api_lane_proven: false,
+      codex_subagent_used_as_dip: false,
+      native_codex_subagent_used_as_dip: false,
+      server_owned_proof_counts_as_manual_router: false,
+      server_owned_natural_proof_counts_as_manual_router: false,
+      browser_authority_contract_enforced: true,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      browser_can_supply_route_authority: false,
+      browser_can_supply_reasoning_authority: false,
+      browser_model_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      prompt_text_recorded: false,
+      raw_prompt_recorded: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_manual_free_chat_router_reality"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartManualFreeChatRouterRealityAction")?.removeAttribute("disabled");
+  }
 }
 
 function renderQuickStartModelReasoningAvailabilityMatrix(packet) {
@@ -17307,6 +17597,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
   document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof());
   document.getElementById("quickStartModelReasoningMatrixAction")?.addEventListener("click", () => runQuickStartModelReasoningAvailabilityMatrix());
+  document.getElementById("quickStartManualFreeChatRouterRealityAction")?.addEventListener("click", () => runQuickStartManualFreeChatRouterReality());
   document.getElementById("quickStartVoiceRecordAction")?.addEventListener("click", () => startQuickStartVoiceDraft());
   document.getElementById("quickStartVoiceClearAction")?.addEventListener("click", () => clearQuickStartVoiceDraft());
   document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft());

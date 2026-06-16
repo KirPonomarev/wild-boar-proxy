@@ -1343,6 +1343,11 @@ WEB_DESIGN_LIVE_ROUTES = (
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
     _post_route(
+        "/api/codex/custom/manual-free-chat-router-reality",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
         "/api/codex/custom/reasoning-dispatch-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
@@ -6538,6 +6543,188 @@ def _custom_native_natural_dip_command_proof_packet(
         "next_action": "none"
         if product_proven
         else "stop_and_diagnose_server_owned_natural_dip_command",
+    }
+
+
+MANUAL_FREE_CHAT_ROUTER_REALITY_ALLOWED_FIELDS: set[str] = {"request_id"}
+
+
+def _manual_free_chat_router_forbidden_payload_fields(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    return sorted(set(payload) - MANUAL_FREE_CHAT_ROUTER_REALITY_ALLOWED_FIELDS)
+
+
+def _manual_free_chat_router_safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _custom_manual_free_chat_router_reality_packet(
+    *,
+    payload: dict[str, Any] | None,
+    manual_prompt_packet: dict[str, Any] | None = None,
+    router_hook_packet: dict[str, Any] | None = None,
+    api_lane_packet: dict[str, Any] | None = None,
+    server_owned_natural_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    request_payload = payload if isinstance(payload, dict) else {}
+    forbidden_fields = _manual_free_chat_router_forbidden_payload_fields(request_payload)
+    manual_prompt = manual_prompt_packet if isinstance(manual_prompt_packet, dict) else {}
+    router_hook = router_hook_packet if isinstance(router_hook_packet, dict) else {}
+    api_lane = api_lane_packet if isinstance(api_lane_packet, dict) else {}
+    server_owned_natural = (
+        server_owned_natural_packet
+        if isinstance(server_owned_natural_packet, dict)
+        else {}
+    )
+    request_id = str(request_payload.get("request_id") or "").strip()
+    manual_user_prompt_observed = bool(
+        manual_prompt.get("manual_user_prompt_observed") is True
+    )
+    manual_user_prompt_digest_present = bool(
+        manual_prompt.get("manual_user_prompt_digest_present") is True
+    )
+    manual_user_prompt_source = str(
+        manual_prompt.get("manual_user_prompt_source") or "not_observed"
+    )
+    wbp_owned_router_hook_observed = bool(
+        router_hook.get("wbp_owned_router_hook_observed") is True
+    )
+    router_hook_transcript_digest_present = bool(
+        router_hook.get("router_hook_transcript_digest_present") is True
+    )
+    router_hook_truth_source = str(
+        router_hook.get("router_hook_truth_source") or "not_observable"
+    )
+    bridge_or_file_bridge_used = bool(
+        api_lane.get("bridge_or_file_bridge_used") is True
+    )
+    command_loop_provider_call_count = _manual_free_chat_router_safe_int(
+        api_lane.get("command_loop_provider_call_count")
+    )
+    api_lane_exact_token_matched = bool(
+        api_lane.get("api_lane_exact_token_matched") is True
+    )
+    allowed_api_route_ids_enforced = bool(
+        api_lane.get("allowed_api_route_ids_enforced") is True
+    )
+    codex_subagent_used_as_dip = bool(
+        api_lane.get("codex_subagent_used_as_dip") is True
+        or api_lane.get("native_codex_subagent_used_as_dip") is True
+    )
+    local_imitation_used = bool(api_lane.get("local_imitation_used") is True)
+    fallback_used = bool(api_lane.get("fallback_used") is True)
+    raw_backend_details_exposed = bool(
+        api_lane.get("raw_backend_details_exposed") is True
+        or server_owned_natural.get("raw_backend_details_exposed") is True
+    )
+    secret_value_exposed = bool(
+        api_lane.get("secret_value_exposed") is True
+        or server_owned_natural.get("secret_value_exposed") is True
+    )
+    server_owned_natural_dip_command_proven = bool(
+        server_owned_natural.get("server_owned_natural_dip_command_proven") is True
+    )
+    api_lane_proven = bool(
+        bridge_or_file_bridge_used
+        and command_loop_provider_call_count > 0
+        and api_lane_exact_token_matched
+        and allowed_api_route_ids_enforced
+    )
+    manual_free_chat_router_reality_proven = bool(
+        not forbidden_fields
+        and manual_user_prompt_observed
+        and manual_user_prompt_digest_present
+        and wbp_owned_router_hook_observed
+        and router_hook_transcript_digest_present
+        and api_lane_proven
+        and not codex_subagent_used_as_dip
+        and not local_imitation_used
+        and not fallback_used
+        and not raw_backend_details_exposed
+        and not secret_value_exposed
+    )
+    if manual_free_chat_router_reality_proven:
+        machine_error_code = "OK"
+        next_action = "none"
+    elif forbidden_fields:
+        machine_error_code = "MANUAL_FREE_CHAT_BROWSER_AUTHORITY_REJECTED"
+        next_action = "remove_browser_supplied_manual_router_authority"
+    elif not manual_user_prompt_observed:
+        machine_error_code = "MANUAL_USER_PROMPT_NOT_OBSERVED"
+        next_action = "manual_user_prompt_not_observed"
+    elif not wbp_owned_router_hook_observed:
+        machine_error_code = "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE"
+        next_action = "manual_free_chat_router_not_observable"
+    elif not api_lane_proven:
+        machine_error_code = "API_LANE_NOT_PROVEN"
+        next_action = "prove_api_lane_before_manual_router_claim"
+    elif codex_subagent_used_as_dip:
+        machine_error_code = "CODEX_SUBAGENT_USED_AS_DIP"
+        next_action = "reject_codex_subagent_as_dip"
+    else:
+        machine_error_code = "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE"
+        next_action = "manual_free_chat_router_not_observable"
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_manual_free_chat_router_reality",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if manual_free_chat_router_reality_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": (
+            "WBP-owned manual free-chat router is observed with API-lane proof."
+            if manual_free_chat_router_reality_proven
+            else "Ordinary Custom Codex free-chat router is not proven as WBP-owned API-lane interception."
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_PROVEN"
+            if manual_free_chat_router_reality_proven
+            else "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_NOT_PROVEN"
+        ),
+        "request_id": request_id,
+        "manual_user_prompt_observed": manual_user_prompt_observed,
+        "manual_user_prompt_source": manual_user_prompt_source,
+        "manual_user_prompt_digest_present": manual_user_prompt_digest_present,
+        "manual_prompt_text_recorded": False,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "wbp_owned_router_hook_observed": wbp_owned_router_hook_observed,
+        "router_hook_truth_source": router_hook_truth_source,
+        "router_hook_transcript_digest_present": router_hook_transcript_digest_present,
+        "bridge_or_file_bridge_used": bridge_or_file_bridge_used,
+        "command_loop_provider_call_count": command_loop_provider_call_count,
+        "api_lane_exact_token_matched": api_lane_exact_token_matched,
+        "allowed_api_route_ids_enforced": allowed_api_route_ids_enforced,
+        "api_lane_proven": api_lane_proven,
+        "codex_subagent_used_as_dip": codex_subagent_used_as_dip,
+        "native_codex_subagent_used_as_dip": codex_subagent_used_as_dip,
+        "local_imitation_used": local_imitation_used,
+        "fallback_used": fallback_used,
+        "server_owned_natural_dip_command_proven": server_owned_natural_dip_command_proven,
+        "server_owned_proof_counts_as_manual_router": False,
+        "server_owned_natural_proof_counts_as_manual_router": False,
+        "browser_authority_contract_enforced": True,
+        "browser_prompt_authority_rejected": True,
+        "browser_can_supply_prompt_authority": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "browser_model_authority": False,
+        "browser_can_supply_model_authority": False,
+        "browser_supplied_authority_fields": forbidden_fields,
+        "universal_manual_chat_interception_proven": False,
+        "does_not_prove_universal_manual_chat_interception": True,
+        "manual_free_chat_router_reality_proven": manual_free_chat_router_reality_proven,
+        "runtime_readiness_claimed": False,
+        "raw_backend_details_exposed": raw_backend_details_exposed,
+        "secret_value_exposed": secret_value_exposed,
+        "no_secret_exposed": not secret_value_exposed,
+        "blocking_reasons": [] if manual_free_chat_router_reality_proven else (
+            forbidden_fields or [machine_error_code]
+        ),
+        "next_action": next_action,
     }
 
 
@@ -18416,6 +18603,14 @@ def build_handler(
                     bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
                     native_activator=native_free_text_activator,
                     reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_manual_free_chat_router_reality(self, actual_path: str) -> None:
+            self._send_json(
+                _custom_manual_free_chat_router_reality_packet(
+                    payload=self._read_optional_json_body(),
                 )
             )
             return
