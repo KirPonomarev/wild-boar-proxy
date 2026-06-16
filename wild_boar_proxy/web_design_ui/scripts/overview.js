@@ -4593,6 +4593,8 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_free_text_tool_bridge_source || "",
       native_free_text_observability_proven:
         packet?.native_free_text_observability_proven === true,
+      native_submitter_trust_boundary_proven:
+        packet?.native_submitter_trust_boundary_proven === true,
       native_agent_proof_file_observed:
         packet?.native_agent_proof_file_observed === true,
       native_agent_proof_file_valid:
@@ -4615,6 +4617,20 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_agent_provider_call_directly_observed === true,
       custom_codex_response_text_read_proven:
         packet?.custom_codex_response_text_read_proven === true,
+      custom_response_exact_token_observed:
+        packet?.custom_response_exact_token_observed === true,
+      custom_response_bound_to_request:
+        packet?.custom_response_bound_to_request === true,
+      custom_response_expected_sha256:
+        packet?.custom_response_expected_sha256 || "",
+      custom_response_expected_sha256_match:
+        packet?.custom_response_expected_sha256_match === true,
+      custom_response_observer_attempted:
+        packet?.custom_response_observer_attempted === true,
+      custom_response_observer_scan_performed:
+        packet?.custom_response_observer_scan_performed === true,
+      custom_response_text_read_without_storing:
+        packet?.custom_response_text_read_without_storing === true,
       native_codex_subagent_used_as_dip:
         packet?.native_codex_subagent_used_as_dip === true,
       native_codex_subagent_absence_proven:
@@ -5676,8 +5692,11 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     && packet?.command_loop_proven === true
     && packet?.api_lane_exact_token_matched === true
     && packet?.native_free_text_observability_proven === true
-    && packet?.native_agent_provider_call_directly_observed === true
+    && packet?.native_submitter_trust_boundary_proven === true
     && packet?.custom_codex_response_text_read_proven === true
+    && packet?.custom_response_exact_token_observed === true
+    && packet?.custom_response_bound_to_request === true
+    && packet?.custom_response_expected_sha256_match === true
     && packet?.native_codex_subagent_absence_proven === true
     && packet?.native_codex_subagent_used_as_dip !== true
     && packet?.fallback_used !== true
@@ -6028,6 +6047,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
       native_free_text_observability_proven: false,
+      native_submitter_trust_boundary_proven: false,
       native_window_observed: false,
       input_capable_ui_observed: false,
       prompt_submitted: false,
@@ -6039,6 +6059,12 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       local_imitation_used: false,
       native_agent_provider_call_directly_observed: false,
       custom_codex_response_text_read_proven: false,
+      custom_response_exact_token_observed: false,
+      custom_response_bound_to_request: false,
+      custom_response_expected_sha256_match: false,
+      custom_response_observer_attempted: false,
+      custom_response_observer_scan_performed: false,
+      custom_response_text_read_without_storing: false,
       native_codex_subagent_used_as_dip: false,
       native_codex_subagent_absence_proven: false,
       secret_value_exposed: false,
@@ -6068,6 +6094,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     native_free_text_command_loop_proven: false,
     native_free_text_tool_bridge_proven: false,
     native_free_text_observability_proven: false,
+    native_submitter_trust_boundary_proven: false,
     native_free_text_activation_proven: false,
     native_window_observed: false,
     input_capable_ui_observed: false,
@@ -6076,6 +6103,12 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     prompt_submitted: false,
     native_agent_provider_call_directly_observed: false,
     custom_codex_response_text_read_proven: false,
+    custom_response_exact_token_observed: false,
+    custom_response_bound_to_request: false,
+    custom_response_expected_sha256_match: false,
+    custom_response_observer_attempted: false,
+    custom_response_observer_scan_performed: false,
+    custom_response_text_read_without_storing: false,
     native_codex_subagent_used_as_dip: false,
     native_codex_subagent_absence_proven: false,
     native_agent_proof_file_observed: false,
@@ -6109,6 +6142,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
         native_free_text_command_loop_proven: false,
         native_free_text_tool_bridge_proven: false,
         native_free_text_observability_proven: false,
+        native_submitter_trust_boundary_proven: false,
         native_window_observed: false,
         input_capable_ui_observed: false,
         prompt_submitted: false,
@@ -6124,6 +6158,12 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
         local_imitation_used: false,
         native_agent_provider_call_directly_observed: false,
         custom_codex_response_text_read_proven: false,
+        custom_response_exact_token_observed: false,
+        custom_response_bound_to_request: false,
+        custom_response_expected_sha256_match: false,
+        custom_response_observer_attempted: false,
+        custom_response_observer_scan_performed: false,
+        custom_response_text_read_without_storing: false,
         native_codex_subagent_used_as_dip: false,
         native_codex_subagent_absence_proven: false,
         secret_value_exposed: false,
@@ -6131,14 +6171,15 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       });
       return;
     }
-    const expectedCodingResponse = "WBP_UI_NATIVE_FREE_TEXT_OK";
+    const requestId = `ui-native-free-text-${Date.now()}`;
+    const expectedCodingResponse = `WBP_UI_NATIVE_FREE_TEXT_OK_${requestId}`;
     const response = await fetch("api/codex/custom/native-free-text-command-loop-proof", {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         expected_coding_response: expectedCodingResponse,
-        request_id: `ui-native-free-text-${Date.now()}`
+        request_id: requestId
       })
     });
     if (!response.ok) {
@@ -6158,6 +6199,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
       native_free_text_observability_proven: false,
+      native_submitter_trust_boundary_proven: false,
       native_window_observed: false,
       input_capable_ui_observed: false,
       prompt_submitted: false,
@@ -6173,6 +6215,12 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       local_imitation_used: false,
       native_agent_provider_call_directly_observed: false,
       custom_codex_response_text_read_proven: false,
+      custom_response_exact_token_observed: false,
+      custom_response_bound_to_request: false,
+      custom_response_expected_sha256_match: false,
+      custom_response_observer_attempted: false,
+      custom_response_observer_scan_performed: false,
+      custom_response_text_read_without_storing: false,
       native_codex_subagent_used_as_dip: false,
       native_codex_subagent_absence_proven: false,
       secret_value_exposed: false,

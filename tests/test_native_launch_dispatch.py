@@ -1420,6 +1420,8 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["raw_dom_exposed"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
         self.assertEqual(
@@ -1428,6 +1430,248 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         )
         self.assertFalse(packet["secret_value_exposed"])
         self.assertEqual(cdp_command.call_count, 4)
+
+    def test_cdp_prompt_submit_observes_exact_response_token_without_raw_text(self) -> None:
+        cdp_packets = [
+            {
+                "id": 3001,
+                "result": {
+                    "result": {
+                        "value": {
+                            "focused": True,
+                            "readyState": "complete",
+                            "url": "app://-/index.html",
+                            "inputCandidateCount": 1,
+                            "visibleInputCandidateCount": 1,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {"id": 3101, "result": {}},
+            {
+                "id": 3201,
+                "result": {
+                    "result": {
+                        "value": {
+                            "inputFocused": True,
+                            "insertedLengthMatches": True,
+                            "insertedLength": 11,
+                            "expectedLength": 11,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3301,
+                "result": {
+                    "result": {
+                        "value": {
+                            "submitted": True,
+                            "submitButtonObserved": True,
+                            "submitMechanism": "cdp_button_click",
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 1,
+                            "responseLikeCandidateCount": 1,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": True,
+                            "customResponseBoundToRequest": True,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": True,
+                            "textValueCaptured": False,
+                            "rawDomExposed": False,
+                            "rawPromptRecorded": False,
+                        }
+                    }
+                },
+            },
+        ]
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=cdp_packets,
+            ) as cdp_command,
+        ):
+            packet = native_probe._cdp_submit_prompt_to_app_page(
+                222,
+                "hello world",
+                request_id="native-submit-response-ok",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-response-ok",
+                port=9223,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["prompt_submitted"])
+        self.assertFalse(packet["native_agent_provider_call_directly_observed"])
+        self.assertTrue(packet["custom_codex_response_text_read_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(packet["native_free_text_observer_machine_error_code"], "OK")
+        self.assertTrue(packet["custom_response_observer_attempted"])
+        self.assertTrue(packet["custom_response_observer_scan_performed"])
+        self.assertTrue(packet["custom_response_text_read_without_storing"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertEqual(cdp_command.call_count, 5)
+        observer_expression = cdp_command.call_args_list[-1].args[1]["params"]["expression"]
+        self.assertIn("expectedText.includes(requestId)", observer_expression)
+        self.assertNotIn("requestId,\n    'expected_token'", observer_expression)
+
+    def test_cdp_response_observer_blocks_subagent_marker(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._cdp_command",
+            return_value={
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 1,
+                            "responseLikeCandidateCount": 1,
+                            "subagentMarkerCandidateCount": 1,
+                            "customResponseExactTokenObserved": True,
+                            "customResponseBoundToRequest": True,
+                            "nativeCodexSubagentUsedAsDip": True,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-subagent",
+                request_id="native-submit-subagent",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["custom_codex_response_text_read_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP",
+        )
+
+    def test_cdp_response_observer_blocks_unbound_exact_token(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._cdp_command",
+            return_value={
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 1,
+                            "responseLikeCandidateCount": 1,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": True,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": True,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK",
+                request_id="native-submit-stale-token",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["custom_codex_response_text_read_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
+
+    def test_cdp_response_observer_blocks_prompt_echo_without_response_token(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._cdp_command",
+            return_value={
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 1,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-echo",
+                request_id="native-submit-echo",
+                timeout_seconds=0.1,
+            )
+
+        self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
 
     def test_submit_custom_native_window_prompt_blocks_without_input_capable_window(self) -> None:
         with mock.patch(
@@ -1453,6 +1697,8 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["prompt_submitted"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
         self.assertEqual(
@@ -1493,6 +1739,8 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["prompt_submitted"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
         self.assertEqual(
@@ -1503,6 +1751,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             222,
             "Planner: do it",
             request_id="native-submit-ok",
+            expected_text="",
             allowed_owner_pids=[222, 333],
         )
 

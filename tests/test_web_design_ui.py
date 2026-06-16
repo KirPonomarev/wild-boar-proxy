@@ -6446,7 +6446,10 @@ const sandbox = {
       if (Object.prototype.hasOwnProperty.call(body, "prompt")) {
         throw new Error(`native free-text endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
       }
-      if (body.expected_coding_response !== "WBP_UI_NATIVE_FREE_TEXT_OK") {
+      if (!String(body.request_id || "").startsWith("ui-native-free-text-")) {
+        throw new Error(`native free-text request id missing: ${JSON.stringify(body)}`);
+      }
+      if (body.expected_coding_response !== `WBP_UI_NATIVE_FREE_TEXT_OK_${body.request_id}`) {
         throw new Error(`native free-text expected token mismatch: ${JSON.stringify(body)}`);
       }
       return Promise.resolve({
@@ -6471,10 +6474,18 @@ const sandbox = {
           native_free_text_command_loop_proven: true,
           native_free_text_tool_bridge_proven: true,
           native_free_text_observability_proven: true,
+          native_submitter_trust_boundary_proven: true,
           native_free_text_activation_proven: true,
           native_free_text_tool_bridge_source: "native_agent_proof_file_plus_server_gpt_api_command_loop",
-          native_agent_provider_call_directly_observed: true,
+          native_agent_provider_call_directly_observed: false,
           custom_codex_response_text_read_proven: true,
+          custom_response_exact_token_observed: true,
+          custom_response_bound_to_request: true,
+          custom_response_expected_sha256: "ui-native-free-text-hash",
+          custom_response_expected_sha256_match: true,
+          custom_response_observer_attempted: true,
+          custom_response_observer_scan_performed: true,
+          custom_response_text_read_without_storing: true,
           native_codex_subagent_used_as_dip: false,
           native_codex_subagent_absence_proven: true,
           command_loop_proven: true,
@@ -6546,6 +6557,7 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.native_free_text_command_loop_proven !== true ||
     rendered.native_free_text_tool_bridge_proven !== true ||
     rendered.native_free_text_observability_proven !== true ||
+    rendered.native_submitter_trust_boundary_proven !== true ||
     rendered.native_window_observed !== true ||
     rendered.input_capable_ui_observed !== true ||
     rendered.input_text_insert_succeeded !== true ||
@@ -6559,8 +6571,14 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.launch_attempted !== false ||
     rendered.native_launch_attempted !== false ||
     rendered.runtime_readiness_claimed !== false ||
-    rendered.native_agent_provider_call_directly_observed !== true ||
+    rendered.native_agent_provider_call_directly_observed !== false ||
     rendered.custom_codex_response_text_read_proven !== true ||
+    rendered.custom_response_exact_token_observed !== true ||
+    rendered.custom_response_bound_to_request !== true ||
+    rendered.custom_response_expected_sha256_match !== true ||
+    rendered.custom_response_observer_attempted !== true ||
+    rendered.custom_response_observer_scan_performed !== true ||
+    rendered.custom_response_text_read_without_storing !== true ||
     rendered.native_codex_subagent_used_as_dip !== false ||
     rendered.native_codex_subagent_absence_proven !== true ||
     rendered.prompt_text_recorded !== false ||
@@ -6697,8 +6715,15 @@ renderQuickStartNativeFreeTextCommandLoopProof({
   native_free_text_command_loop_proven: false,
   native_free_text_tool_bridge_proven: false,
   native_free_text_observability_proven: false,
+  native_submitter_trust_boundary_proven: false,
   native_agent_provider_call_directly_observed: false,
   custom_codex_response_text_read_proven: false,
+  custom_response_exact_token_observed: false,
+  custom_response_bound_to_request: false,
+  custom_response_expected_sha256_match: false,
+  custom_response_observer_attempted: false,
+  custom_response_observer_scan_performed: false,
+  custom_response_text_read_without_storing: false,
   native_codex_subagent_used_as_dip: false,
   native_codex_subagent_absence_proven: false,
   command_loop_proven: false,
@@ -6729,9 +6754,16 @@ if (
   rendered.native_free_text_command_loop_proven !== false ||
   rendered.native_free_text_tool_bridge_proven !== false ||
   rendered.native_free_text_observability_proven !== false ||
+  rendered.native_submitter_trust_boundary_proven !== false ||
   rendered.native_agent_proof_file_valid !== false ||
   rendered.native_agent_provider_call_directly_observed !== false ||
   rendered.custom_codex_response_text_read_proven !== false ||
+  rendered.custom_response_exact_token_observed !== false ||
+  rendered.custom_response_bound_to_request !== false ||
+  rendered.custom_response_expected_sha256_match !== false ||
+  rendered.custom_response_observer_attempted !== false ||
+  rendered.custom_response_observer_scan_performed !== false ||
+  rendered.custom_response_text_read_without_storing !== false ||
   rendered.native_codex_subagent_used_as_dip !== false ||
   rendered.native_codex_subagent_absence_proven !== false ||
   rendered.command_loop_proven !== false ||

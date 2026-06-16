@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import os
@@ -2511,7 +2512,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
             proof_root = root / "native-proof"
 
-            def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
                 proof_root.mkdir(parents=True, exist_ok=True)
                 (proof_root / f"{request_id}.json").write_text(
                     json.dumps(
@@ -2525,8 +2526,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "primary_aliases": context["primary_aliases"],
                             "coding_aliases": context["coding_aliases"],
                             "allowed_api_route_ids": context["allowed_api_route_ids"],
-                            "expected_token": "WBP_NATIVE_FREE_TEXT_OK",
-                            "native_free_text_agent_ack": "WBP_NATIVE_FREE_TEXT_OK",
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
                             "no_secret_exposed": True,
                             "secret_value_exposed": False,
                         },
@@ -2549,14 +2550,21 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "secret_value_exposed": False,
                 }
 
-            with mock.patch.object(
-                live_server,
-                "proxyless_urlopen",
-                return_value=self._bridge_response(
-                    route_id="wbp-deepseek-chat",
-                    output_text="WBP_NATIVE_FREE_TEXT_OK",
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
                 ),
-            ) as urlopen:
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text="WBP_NATIVE_FREE_TEXT_OK",
+                    ),
+                ) as urlopen,
+            ):
                 packet = live_server._custom_native_free_text_command_loop_proof_packet(
                     payload={
                         "expected_text": "WBP_NATIVE_FREE_TEXT_OK",
@@ -2579,7 +2587,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         "secret_value_exposed": False,
                         "raw_backend_details_exposed": False,
                     },
-                    native_prompt_submitter=submitter,
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
 
@@ -2599,11 +2606,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["native_free_text_command_loop_proven"])
         self.assertFalse(packet["native_free_text_tool_bridge_proven"])
         self.assertFalse(packet["native_free_text_observability_proven"])
+        self.assertTrue(packet["native_submitter_trust_boundary_proven"])
         self.assertTrue(packet["command_loop_proven"])
         self.assertTrue(packet["api_lane_exact_token_matched"])
         self.assertTrue(packet["bridge_or_file_bridge_used"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertFalse(packet["custom_response_bound_to_request"])
+        self.assertFalse(packet["custom_response_expected_sha256_match"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
         self.assertFalse(packet["prompt_text_recorded"])
@@ -2649,8 +2660,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 context, metadata = live_server._load_custom_native_agent_runtime_context({})
 
             proof_root = root / "native-proof"
+            request_id = "native-free-text-subagent-fail"
+            expected_text = f"WBP_NATIVE_SUBAGENT_FAIL_GUARD_{request_id}"
 
-            def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
                 proof_root.mkdir(parents=True, exist_ok=True)
                 (proof_root / f"{request_id}.json").write_text(
                     json.dumps(
@@ -2664,8 +2677,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "primary_aliases": context["primary_aliases"],
                             "coding_aliases": context["coding_aliases"],
                             "allowed_api_route_ids": context["allowed_api_route_ids"],
-                            "expected_token": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
-                            "native_free_text_agent_ack": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
                             "no_secret_exposed": True,
                             "secret_value_exposed": False,
                         },
@@ -2686,10 +2699,275 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "prompt_text_recorded": False,
                     "raw_dom_exposed": False,
                     "secret_value_exposed": False,
-                    "native_agent_provider_call_directly_observed": True,
+                    "native_agent_provider_call_directly_observed": False,
                     "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": hashlib.sha256(
+                        expected_text.encode("utf-8")
+                    ).hexdigest(),
                     "native_codex_subagent_used_as_dip": True,
                     "native_codex_subagent_absence_proven": False,
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ),
+            ):
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP",
+        )
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertFalse(packet["native_free_text_observability_proven"])
+        self.assertTrue(packet["native_submitter_trust_boundary_proven"])
+        self.assertFalse(packet["native_agent_provider_call_directly_observed"])
+        self.assertTrue(packet["custom_codex_response_text_read_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertTrue(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(
+            packet["blocking_reasons"],
+            ["CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"],
+        )
+
+    def test_custom_native_free_text_blocks_observer_hash_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Codex"],
+                coding_aliases=["DIP"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            proof_root = root / "native-proof"
+            request_id = "native-hash-mismatch"
+            expected_text = f"WBP_NATIVE_HASH_MISMATCH_OK_{request_id}"
+
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": metadata["context_sha256"],
+                            "primary_aliases": context["primary_aliases"],
+                            "coding_aliases": context["coding_aliases"],
+                            "allowed_api_route_ids": context["allowed_api_route_ids"],
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": "wrong-observer-hash",
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ),
+            ):
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertFalse(packet["native_free_text_observability_proven"])
+        self.assertTrue(packet["native_submitter_trust_boundary_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertFalse(packet["custom_response_expected_sha256_match"])
+        self.assertEqual(packet["custom_response_expected_sha256"], "wrong-observer-hash")
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertFalse(packet["local_imitation_used"])
+
+    def test_custom_native_free_text_blocks_injected_submitter_green_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Codex"],
+                coding_aliases=["DIP"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            proof_root = root / "native-proof"
+            request_id = "native-injected-submit"
+            expected_text = f"WBP_NATIVE_INJECTED_SUBMIT_OK_{request_id}"
+
+            def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": metadata["context_sha256"],
+                            "primary_aliases": context["primary_aliases"],
+                            "coding_aliases": context["coding_aliases"],
+                            "allowed_api_route_ids": context["allowed_api_route_ids"],
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": hashlib.sha256(
+                        expected_text.encode("utf-8")
+                    ).hexdigest(),
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
                 }
 
             with mock.patch.object(
@@ -2697,13 +2975,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "proxyless_urlopen",
                 return_value=self._bridge_response(
                     route_id="wbp-deepseek-chat",
-                    output_text="WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                    output_text=expected_text,
                 ),
             ):
                 packet = live_server._custom_native_free_text_command_loop_proof_packet(
                     payload={
-                        "expected_text": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
-                        "request_id": "native-free-text-subagent-fail",
+                        "expected_text": expected_text,
+                        "request_id": request_id,
                         "timeout_seconds": 0.1,
                     },
                     file_bridge_worker=worker,
@@ -2729,23 +3007,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP",
+            "CUSTOM_NATIVE_FREE_TEXT_SUBMITTER_TRUST_BOUNDARY_NOT_PROVEN",
         )
         self.assertFalse(packet["native_free_text_command_loop_proven"])
-        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
         self.assertFalse(packet["native_free_text_observability_proven"])
-        self.assertTrue(packet["native_agent_provider_call_directly_observed"])
-        self.assertTrue(packet["custom_codex_response_text_read_proven"])
-        self.assertTrue(packet["native_codex_subagent_used_as_dip"])
-        self.assertFalse(packet["native_codex_subagent_absence_proven"])
-        self.assertTrue(packet["command_loop_proven"])
-        self.assertTrue(packet["api_lane_exact_token_matched"])
-        self.assertFalse(packet["local_imitation_used"])
-        self.assertFalse(packet["secret_value_exposed"])
-        self.assertEqual(
-            packet["blocking_reasons"],
-            ["CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"],
-        )
+        self.assertFalse(packet["native_submitter_trust_boundary_proven"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["native_codex_subagent_absence_proven"])
 
     def test_custom_native_free_text_command_loop_accepts_arbitrary_runtime_alias_variants(self) -> None:
         variants = [
@@ -2779,9 +3048,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     ):
                         context, metadata = live_server._load_custom_native_agent_runtime_context({})
                     proof_root = root / f"native-proof-{index}"
-                    expected_text = f"WBP_NATIVE_VARIANT_{index}_OK"
+                    request_id = f"native-variant-{index}"
+                    expected_text = f"WBP_NATIVE_VARIANT_{index}_OK_{request_id}"
 
-                    def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+                    def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
                         self.assertIn(primary_alias, prompt)
                         self.assertIn(coding_alias, prompt)
                         proof_root.mkdir(parents=True, exist_ok=True)
@@ -2818,24 +3088,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "prompt_submitted": True,
                             "prompt_text_recorded": False,
                             "secret_value_exposed": False,
-                            "native_agent_provider_call_directly_observed": True,
+                            "native_agent_provider_call_directly_observed": False,
                             "custom_codex_response_text_read_proven": True,
+                            "custom_response_exact_token_observed": True,
+                            "custom_response_bound_to_request": True,
+                            "custom_response_expected_sha256": hashlib.sha256(
+                                expected_text.encode("utf-8")
+                            ).hexdigest(),
                             "native_codex_subagent_used_as_dip": False,
                             "native_codex_subagent_absence_proven": True,
                         }
 
-                    with mock.patch.object(
-                        live_server,
-                        "proxyless_urlopen",
-                        return_value=self._bridge_response(
-                            route_id="wbp-deepseek-chat",
-                            output_text=expected_text,
+                    with (
+                        mock.patch.object(
+                            live_server,
+                            "submit_custom_native_window_prompt_packet",
+                            side_effect=submitter,
+                        ),
+                        mock.patch.object(
+                            live_server,
+                            "proxyless_urlopen",
+                            return_value=self._bridge_response(
+                                route_id="wbp-deepseek-chat",
+                                output_text=expected_text,
+                            ),
                         ),
                     ):
                         packet = live_server._custom_native_free_text_command_loop_proof_packet(
                             payload={
                                 "expected_text": expected_text,
-                                "request_id": f"native-variant-{index}",
+                                "request_id": request_id,
                                 "timeout_seconds": 0.1,
                             },
                             file_bridge_worker=worker,
@@ -2854,7 +3136,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
                                 "secret_value_exposed": False,
                                 "raw_backend_details_exposed": False,
                             },
-                            native_prompt_submitter=submitter,
                             reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                         )
 
@@ -2866,14 +3147,137 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     self.assertTrue(packet["native_free_text_command_loop_proven"])
                     self.assertTrue(packet["native_free_text_tool_bridge_proven"])
                     self.assertTrue(packet["native_free_text_observability_proven"])
-                    self.assertTrue(packet["native_agent_provider_call_directly_observed"])
+                    self.assertTrue(packet["native_submitter_trust_boundary_proven"])
+                    self.assertFalse(packet["native_agent_provider_call_directly_observed"])
                     self.assertTrue(packet["custom_codex_response_text_read_proven"])
+                    self.assertTrue(packet["custom_response_exact_token_observed"])
+                    self.assertTrue(packet["custom_response_bound_to_request"])
+                    self.assertTrue(packet["custom_response_expected_sha256_match"])
                     self.assertFalse(packet["native_codex_subagent_used_as_dip"])
                     self.assertTrue(packet["native_codex_subagent_absence_proven"])
                     self.assertTrue(packet["api_lane_exact_token_matched"])
                     self.assertTrue(packet["allowed_api_route_ids_enforced"])
                     self.assertFalse(packet["local_imitation_used"])
                     self.assertFalse(packet["secret_value_exposed"])
+
+    def test_custom_native_free_text_default_submitter_receives_expected_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            proof_root = root / "native-proof"
+            request_id = "native-default-submitter"
+            expected_text = f"WBP_NATIVE_DEFAULT_SUBMITTER_OK_{request_id}"
+
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
+                self.assertEqual(expected_text, "WBP_NATIVE_DEFAULT_SUBMITTER_OK_native-default-submitter")
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": metadata["context_sha256"],
+                            "primary_aliases": context["primary_aliases"],
+                            "coding_aliases": context["coding_aliases"],
+                            "allowed_api_route_ids": context["allowed_api_route_ids"],
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": hashlib.sha256(
+                        expected_text.encode("utf-8")
+                    ).hexdigest(),
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ) as default_submitter,
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ),
+            ):
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["native_free_text_observability_proven"])
+        self.assertTrue(packet["native_submitter_trust_boundary_proven"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertEqual(default_submitter.call_count, 1)
 
     def test_custom_native_free_text_blocks_invalid_runtime_context_before_native_submit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

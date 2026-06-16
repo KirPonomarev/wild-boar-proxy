@@ -5329,8 +5329,17 @@ def _custom_native_free_text_blocked_packet(
         "native_free_text_command_loop_proven": False,
         "native_free_text_tool_bridge_proven": False,
         "native_free_text_observability_proven": False,
+        "native_submitter_trust_boundary_proven": False,
         "native_agent_provider_call_directly_observed": False,
         "custom_codex_response_text_read_proven": False,
+        "custom_response_exact_token_observed": False,
+        "custom_response_bound_to_request": False,
+        "custom_response_expected_sha256": hashlib.sha256(
+            expected_text.encode("utf-8")
+        ).hexdigest()
+        if expected_text
+        else "",
+        "custom_response_expected_sha256_match": False,
         "native_codex_subagent_used_as_dip": False,
         "native_codex_subagent_absence_proven": False,
         "runtime_context_file_proven": context_file_proven,
@@ -5889,7 +5898,15 @@ def _custom_native_free_text_command_loop_proof_packet(
             native_activation_packet=native_activation_packet,
         )
     submitter = native_prompt_submitter or submit_custom_native_window_prompt_packet
-    native_submit_packet = submitter(prompt=prompt, request_id=request_id)
+    native_submit_packet = (
+        submitter(prompt=prompt, request_id=request_id)
+        if native_prompt_submitter is not None
+        else submitter(
+            prompt=prompt,
+            request_id=request_id,
+            expected_text=expected_text,
+        )
+    )
     if not _custom_native_free_text_submit_proven(native_submit_packet):
         submit_machine_error = _custom_native_free_text_submit_machine_error(
             native_submit_packet,
@@ -5974,22 +5991,45 @@ def _custom_native_free_text_command_loop_proof_packet(
     custom_codex_response_text_read_proven = bool(
         native_submit_packet.get("custom_codex_response_text_read_proven") is True
     )
+    custom_response_exact_token_observed = bool(
+        native_submit_packet.get("custom_response_exact_token_observed") is True
+    )
+    custom_response_bound_to_request = bool(
+        native_submit_packet.get("custom_response_bound_to_request") is True
+    )
+    expected_response_sha256 = hashlib.sha256(
+        expected_text.encode("utf-8")
+    ).hexdigest()
+    observed_response_sha256 = str(
+        native_submit_packet.get("custom_response_expected_sha256") or ""
+    )
+    custom_response_expected_sha256_match = bool(
+        observed_response_sha256 == expected_response_sha256
+    )
     native_codex_subagent_used_as_dip = bool(
         native_submit_packet.get("native_codex_subagent_used_as_dip") is True
     )
     native_codex_subagent_absence_proven = bool(
         native_submit_packet.get("native_codex_subagent_absence_proven") is True
     )
+    native_submitter_trust_boundary_proven = native_prompt_submitter is None
     native_free_text_observability_proven = bool(
-        native_agent_provider_call_directly_observed
-        and custom_codex_response_text_read_proven
+        custom_codex_response_text_read_proven
+        and custom_response_exact_token_observed
+        and custom_response_bound_to_request
+        and custom_response_expected_sha256_match
         and native_codex_subagent_absence_proven
         and not native_codex_subagent_used_as_dip
+        and native_submitter_trust_boundary_proven
     )
     native_observability_machine_error_code = "OK"
     if native_codex_subagent_used_as_dip:
         native_observability_machine_error_code = (
             "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"
+        )
+    elif not native_submitter_trust_boundary_proven:
+        native_observability_machine_error_code = (
+            "CUSTOM_NATIVE_FREE_TEXT_SUBMITTER_TRUST_BOUNDARY_NOT_PROVEN"
         )
     elif not native_free_text_observability_proven:
         native_observability_machine_error_code = (
@@ -6105,11 +6145,25 @@ def _custom_native_free_text_command_loop_proof_packet(
         "native_free_text_command_loop_proven": native_free_text_command_loop_proven,
         "native_free_text_tool_bridge_proven": native_free_text_command_loop_proven,
         "native_free_text_observability_proven": native_free_text_observability_proven,
+        "native_submitter_trust_boundary_proven": native_submitter_trust_boundary_proven,
         "native_free_text_tool_bridge_source": "native_agent_proof_file_plus_server_gpt_api_command_loop",
         "native_agent_provider_call_directly_observed": native_agent_provider_call_directly_observed,
         "custom_codex_response_text_read_proven": custom_codex_response_text_read_proven,
+        "custom_response_exact_token_observed": custom_response_exact_token_observed,
+        "custom_response_bound_to_request": custom_response_bound_to_request,
+        "custom_response_observer_attempted": native_submit_packet.get("custom_response_observer_attempted") is True,
+        "custom_response_observer_scan_performed": native_submit_packet.get("custom_response_observer_scan_performed") is True,
+        "custom_response_text_read_without_storing": native_submit_packet.get("custom_response_text_read_without_storing") is True,
+        "custom_response_expected_sha256": observed_response_sha256,
+        "custom_response_expected_sha256_match": custom_response_expected_sha256_match,
+        "expected_response_sha256": expected_response_sha256,
+        "custom_response_token_leaf_candidate_count": int(native_submit_packet.get("custom_response_token_leaf_candidate_count") or 0),
+        "custom_response_prompt_echo_candidate_count": int(native_submit_packet.get("custom_response_prompt_echo_candidate_count") or 0),
+        "custom_response_exact_token_candidate_count": int(native_submit_packet.get("custom_response_exact_token_candidate_count") or 0),
+        "custom_response_like_candidate_count": int(native_submit_packet.get("custom_response_like_candidate_count") or 0),
         "native_codex_subagent_used_as_dip": native_codex_subagent_used_as_dip,
         "native_codex_subagent_absence_proven": native_codex_subagent_absence_proven,
+        "native_codex_subagent_marker_candidate_count": int(native_submit_packet.get("native_codex_subagent_marker_candidate_count") or 0),
         "runtime_context_file_proven": command_loop_packet.get("runtime_context_file_proven") is True,
         "custom_codex_agent_runtime_context_proven": command_loop_packet.get("custom_codex_agent_runtime_context_proven") is True,
         "command_loop_proven": command_loop_packet.get("command_loop_proven") is True,

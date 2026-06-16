@@ -79,6 +79,8 @@ CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
 )
 CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
 CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
+CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 12.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
     {
         "cdp_renderer_input_surface_not_observed",
@@ -1183,6 +1185,190 @@ def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _native_free_text_observer_defaults() -> dict[str, Any]:
+    return {
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": False,
+        "custom_response_exact_token_observed": False,
+        "custom_response_bound_to_request": False,
+        "native_codex_subagent_used_as_dip": False,
+        "native_codex_subagent_absence_proven": False,
+        "native_free_text_observer_source": "not_observable_by_prompt_submit",
+        "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+    }
+
+
+def _cdp_observe_custom_response_token(
+    ws_url: str,
+    *,
+    expected_text: str,
+    request_id: str,
+    timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
+) -> dict[str, Any]:
+    expected_text = str(expected_text or "")
+    request_id = str(request_id or "")
+    if not expected_text:
+        return _native_free_text_observer_defaults() | {
+            "custom_response_observer_attempted": False,
+            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_EXPECTED_TEXT_REQUIRED",
+        }
+    timeout_seconds = max(0.0, min(float(timeout_seconds), CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS))
+    expected_literal = json.dumps(expected_text, ensure_ascii=False)
+    request_id_literal = json.dumps(request_id, ensure_ascii=False)
+    expression = f"""
+(() => {{
+  const expectedText = {expected_literal};
+  const requestId = {request_id_literal};
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').replace(/\\r\\n/g, '\\n').trim();
+  const promptMarkers = [
+    'expected_token',
+    'native_free_text_agent_ack',
+    'custom_codex_native_free_text_agent_proof',
+    'schema_version=1',
+    'Создай UTF-8 JSON файл',
+    'Запиши один JSON object'
+  ].filter(Boolean);
+  const subagentMarkers = [
+    'subagent',
+    'sub-agent',
+    'sub agent',
+    'субагент',
+    'субагенты',
+    'создано1 агент',
+    'создано 1 агент',
+    'created 1 agent'
+  ];
+  const hasVisibleChildWith = (node, needle) => (
+    Array.from(node.children || []).some((child) => visible(child) && normalize(child.innerText || child.textContent).includes(needle))
+  );
+  const elements = Array.from(document.querySelectorAll('main, [role="main"], article, section, div, p, pre, code, span'));
+  const textElements = elements.filter((node) => {{
+    if (!visible(node)) return false;
+    const text = normalize(node.innerText || node.textContent);
+    return text.length > 0;
+  }});
+  const tokenLeafs = textElements.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text.includes(expectedText) && !hasVisibleChildWith(node, expectedText);
+  }});
+  const promptEchoLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return promptMarkers.some((marker) => marker && text.includes(marker));
+  }});
+  const exactLeafs = tokenLeafs.filter((node) => normalize(node.innerText || node.textContent) === expectedText);
+  const responseLikeLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text === expectedText && !promptMarkers.some((marker) => marker && text.includes(marker));
+  }});
+  const subagentMarkerLeafs = textElements.filter((node) => {{
+    if (hasVisibleChildWith(node, 'Subagents') || hasVisibleChildWith(node, 'Субагенты')) return false;
+    const text = normalize(node.innerText || node.textContent).toLowerCase();
+    return subagentMarkers.some((marker) => text.includes(marker));
+  }});
+  const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
+  const requestBoundExpectedToken = !!requestId && expectedText.includes(requestId);
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    responseObserverScanPerformed: true,
+    responseTextReadWithoutStoring: true,
+    textValueCaptured: false,
+    rawDomExposed: false,
+    rawPromptRecorded: false,
+    tokenLeafCandidateCount: tokenLeafs.length,
+    promptEchoCandidateCount: promptEchoLeafs.length,
+    exactTokenCandidateCount: exactLeafs.length,
+    responseLikeCandidateCount: responseLikeLeafs.length,
+    subagentMarkerCandidateCount: subagentMarkerLeafs.length,
+    customResponseExactTokenObserved: responseExactTokenObserved,
+    nativeCodexSubagentUsedAsDip: subagentMarkerLeafs.length > 0,
+    nativeCodexSubagentAbsenceProven: responseExactTokenObserved && subagentMarkerLeafs.length === 0,
+    customResponseBoundToRequest: responseExactTokenObserved && requestBoundExpectedToken
+  }};
+}})()
+""".strip()
+    last_packet: dict[str, Any] = {}
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() <= deadline:
+        try:
+            cdp_result = _cdp_command(
+                ws_url,
+                {
+                    "id": 3700,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            return _native_free_text_observer_defaults() | {
+                "custom_response_observer_attempted": True,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_RESPONSE_OBSERVER_CDP_FAILED",
+                "cdp_result": f"cdp_response_observer_failed:{type(exc).__name__}",
+            }
+        value = _cdp_result_value(cdp_result)
+        last_packet = value
+        token_observed = value.get("customResponseExactTokenObserved") is True
+        subagent_used = value.get("nativeCodexSubagentUsedAsDip") is True
+        absence_proven = value.get("nativeCodexSubagentAbsenceProven") is True
+        request_bound = token_observed and value.get("customResponseBoundToRequest") is True
+        if token_observed or subagent_used:
+            machine_code = "OK"
+            if subagent_used:
+                machine_code = "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"
+            elif not absence_proven or not request_bound:
+                machine_code = "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+            return {
+                "native_agent_provider_call_directly_observed": False,
+                "custom_codex_response_text_read_proven": token_observed,
+                "custom_response_exact_token_observed": token_observed,
+                "custom_response_bound_to_request": request_bound,
+                "native_codex_subagent_used_as_dip": subagent_used,
+                "native_codex_subagent_absence_proven": absence_proven,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": machine_code,
+                "custom_response_observer_attempted": True,
+                "custom_response_observer_scan_performed": value.get("responseObserverScanPerformed") is True,
+                "custom_response_text_read_without_storing": value.get("responseTextReadWithoutStoring") is True,
+                "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
+                "custom_response_token_leaf_candidate_count": int(value.get("tokenLeafCandidateCount") or 0),
+                "custom_response_prompt_echo_candidate_count": int(value.get("promptEchoCandidateCount") or 0),
+                "custom_response_exact_token_candidate_count": int(value.get("exactTokenCandidateCount") or 0),
+                "custom_response_like_candidate_count": int(value.get("responseLikeCandidateCount") or 0),
+                "native_codex_subagent_marker_candidate_count": int(value.get("subagentMarkerCandidateCount") or 0),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        if timeout_seconds <= 0:
+            break
+        time.sleep(CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS)
+    return _native_free_text_observer_defaults() | {
+        "custom_response_observer_attempted": True,
+        "custom_response_observer_scan_performed": bool(last_packet),
+        "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+        "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
+        "custom_response_token_leaf_candidate_count": int(last_packet.get("tokenLeafCandidateCount") or 0),
+        "custom_response_prompt_echo_candidate_count": int(last_packet.get("promptEchoCandidateCount") or 0),
+        "custom_response_exact_token_candidate_count": int(last_packet.get("exactTokenCandidateCount") or 0),
+        "custom_response_like_candidate_count": int(last_packet.get("responseLikeCandidateCount") or 0),
+        "native_codex_subagent_marker_candidate_count": int(last_packet.get("subagentMarkerCandidateCount") or 0),
+        "raw_dom_exposed": False,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "text_value_captured": False,
+    }
+
+
 def _custom_paste_packet_base(
     *,
     packet_kind: str,
@@ -2186,6 +2372,7 @@ def _cdp_submit_prompt_to_app_page(
     prompt: str,
     *,
     request_id: str,
+    expected_text: str = "",
     port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
     allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
 ) -> dict[str, Any]:
@@ -2527,6 +2714,15 @@ def _cdp_submit_prompt_to_app_page(
             if submit_value.get("submitted") is not True:
                 last_error = "cdp_submit_event_failed"
                 continue
+            observer_packet = (
+                _cdp_observe_custom_response_token(
+                    ws_url,
+                    expected_text=expected_text,
+                    request_id=request_id,
+                )
+                if expected_text
+                else _native_free_text_observer_defaults()
+            )
         except (OSError, json.JSONDecodeError) as exc:
             last_error = f"cdp_prompt_submit_failed:{type(exc).__name__}"
             continue
@@ -2566,12 +2762,7 @@ def _cdp_submit_prompt_to_app_page(
             "prompt_submitted": True,
             "submit_button_observed": submit_value.get("submitButtonObserved") is True,
             "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
-            "native_agent_provider_call_directly_observed": False,
-            "custom_codex_response_text_read_proven": False,
-            "native_codex_subagent_used_as_dip": False,
-            "native_codex_subagent_absence_proven": False,
-            "native_free_text_observer_source": "not_observable_by_prompt_submit",
-            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+            **observer_packet,
             "secret_value_exposed": False,
             "next_action": "none",
         }
@@ -2592,6 +2783,7 @@ def submit_custom_native_window_prompt_packet(
     *,
     prompt: str,
     request_id: str,
+    expected_text: str = "",
     persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     persistent_profile_base_dir: Path | None = None,
 ) -> dict[str, Any]:
@@ -2622,18 +2814,14 @@ def submit_custom_native_window_prompt_packet(
         ) | {
             "native_window_observed": show_packet.get("custom_window_observed") is True,
             "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
-            "native_agent_provider_call_directly_observed": False,
-            "custom_codex_response_text_read_proven": False,
-            "native_codex_subagent_used_as_dip": False,
-            "native_codex_subagent_absence_proven": False,
-            "native_free_text_observer_source": "not_observable_by_prompt_submit",
-            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+            **_native_free_text_observer_defaults(),
             "show_window_packet": show_packet,
         }
     packet = _cdp_submit_prompt_to_app_page(
         int(observed_pid),
         prompt,
         request_id=request_id,
+        expected_text=expected_text,
         allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
         if isinstance(show_packet.get("custom_window_candidate_pids"), list)
         else None,
@@ -2641,15 +2829,8 @@ def submit_custom_native_window_prompt_packet(
     packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
     packet["native_app_usable"] = show_packet.get("native_app_usable") is True
-    packet.setdefault("native_agent_provider_call_directly_observed", False)
-    packet.setdefault("custom_codex_response_text_read_proven", False)
-    packet.setdefault("native_codex_subagent_used_as_dip", False)
-    packet.setdefault("native_codex_subagent_absence_proven", False)
-    packet.setdefault("native_free_text_observer_source", "not_observable_by_prompt_submit")
-    packet.setdefault(
-        "native_free_text_observer_machine_error_code",
-        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
-    )
+    for key, value in _native_free_text_observer_defaults().items():
+        packet.setdefault(key, value)
     packet["show_window_packet"] = show_packet
     return packet
 
