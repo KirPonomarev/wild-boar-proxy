@@ -34,6 +34,11 @@ WIRING_PACKET_KIND = "wbp_codex_mcp_wiring_reality"
 WIRING_FINAL_STATUS_PROVEN = "WBP_CODEX_MCP_WIRING_PROVEN"
 WIRING_FINAL_STATUS_WORKS_WITH_LIMITS = "WBP_CODEX_MCP_WIRING_WORKS_WITH_LIMITS"
 WIRING_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_WIRING_BLOCKED"
+CODEX_EXEC_TOOL_CALL_PACKET_KIND = "wbp_codex_exec_tool_call_observation"
+CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED = (
+    "WBP_CODEX_EXEC_TOOL_CALL_OBSERVED"
+)
+CODEX_EXEC_TOOL_CALL_FINAL_STATUS_BLOCKED = "WBP_CODEX_EXEC_TOOL_CALL_BLOCKED"
 
 
 @dataclass(frozen=True)
@@ -417,18 +422,279 @@ def build_codex_mcp_config_probe_packet(
     )
 
 
-def build_prompt_observation_packet(prompt_text: str, *, source: str = "manual") -> dict[str, Any]:
+def build_prompt_observation_packet(
+    prompt_text: str,
+    *,
+    source: str = "manual",
+    expected_delegate_arguments: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     prompt = _safe_text(prompt_text, limit=4096)
+    expected_arguments = (
+        dict(expected_delegate_arguments)
+        if isinstance(expected_delegate_arguments, Mapping)
+        else {}
+    )
     return {
         "packet_kind": "wbp_codex_prompt_observation",
         "prompt_sha256": _sha256_text(prompt) if prompt else "",
         "prompt_digest_present": bool(prompt),
         "prompt_source": _safe_text(source, limit=80) or "manual",
+        "expected_delegate_tool_call_sha256": (
+            _delegate_call_sha256(expected_arguments) if expected_arguments else ""
+        ),
+        "expected_delegate_tool_call_digest_present": bool(expected_arguments),
+        "expected_delegate_tool_name": (
+            DELEGATE_TO_DIP_TOOL if expected_arguments else ""
+        ),
         "prompt_text_recorded": False,
         "raw_prompt_recorded": False,
+        "expected_delegate_arguments_recorded": False,
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
     }
+
+
+def _jsonl_event_objects(jsonl_text: str) -> tuple[list[dict[str, Any]], list[str]]:
+    events: list[dict[str, Any]] = []
+    parse_errors: list[str] = []
+    for index, line in enumerate(str(jsonl_text or "").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            parse_errors.append(f"jsonl_line_{index}_invalid")
+            continue
+        if isinstance(payload, dict):
+            events.append(payload)
+    return events, parse_errors
+
+
+def _iter_mappings(value: Any) -> list[Mapping[str, Any]]:
+    found: list[Mapping[str, Any]] = []
+    if isinstance(value, Mapping):
+        found.append(value)
+        for item in value.values():
+            found.extend(_iter_mappings(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_iter_mappings(item))
+    return found
+
+
+def _first_text_field(mapping: Mapping[str, Any], fields: tuple[str, ...]) -> str:
+    for field in fields:
+        text = _safe_text(mapping.get(field) or "", limit=256)
+        if text:
+            return text
+    return ""
+
+
+def _json_mapping_from_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return dict(parsed) if isinstance(parsed, Mapping) else {}
+    return {}
+
+
+def _tool_call_arguments_from_event_mapping(
+    mapping: Mapping[str, Any],
+) -> dict[str, Any]:
+    for field in ("arguments", "args", "input", "parameters", "params"):
+        candidate = _json_mapping_from_value(mapping.get(field))
+        if candidate:
+            return candidate
+    return {}
+
+
+def _codex_exec_mcp_tool_call_candidates(
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for event in events:
+        event_type = _safe_text(event.get("type") or "", limit=128)
+        for mapping in _iter_mappings(event):
+            item_type = _first_text_field(
+                mapping,
+                ("type", "kind", "item_type", "itemType"),
+            )
+            tool_name = _first_text_field(
+                mapping,
+                ("tool_name", "toolName", "tool", "name"),
+            )
+            server_name = _first_text_field(
+                mapping,
+                ("server_name", "serverName", "mcp_server", "mcpServer", "server"),
+            )
+            item_type_key = item_type.casefold()
+            structured_mcp_tool_event = "mcp" in item_type_key and "tool" in item_type_key
+            if tool_name != DELEGATE_TO_DIP_TOOL:
+                continue
+            if not structured_mcp_tool_event:
+                continue
+            status = _first_text_field(mapping, ("status", "state"))
+            candidates.append(
+                {
+                    "event_type": event_type,
+                    "item_type": item_type,
+                    "server_name": server_name,
+                    "tool_name": tool_name,
+                    "status": status,
+                    "arguments": _tool_call_arguments_from_event_mapping(mapping),
+                }
+            )
+    return candidates
+
+
+def _select_codex_exec_tool_call_candidate(
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    completed_statuses = {"completed", "complete", "succeeded", "success", "ok"}
+    for candidate in reversed(candidates):
+        status_key = str(candidate.get("status") or "").casefold()
+        if (
+            candidate.get("event_type") == "item.completed"
+            or status_key in completed_statuses
+        ):
+            return candidate
+    return candidates[-1] if candidates else {}
+
+
+def build_codex_exec_tool_call_observation_packet(
+    jsonl_text: str,
+    *,
+    prompt_packet: Mapping[str, Any] | None = None,
+    exec_exit_code: int = 0,
+    stderr_text: str = "",
+) -> dict[str, Any]:
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    events, parse_errors = _jsonl_event_objects(jsonl_text)
+    event_types = [
+        _safe_text(event.get("type") or "", limit=128) for event in events
+    ]
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    expected_call_sha256 = _hex_sha256(
+        prompt.get("expected_delegate_tool_call_sha256") or ""
+    )
+    candidates = _codex_exec_mcp_tool_call_candidates(events)
+    selected_call = _select_codex_exec_tool_call_candidate(candidates)
+    arguments = (
+        dict(selected_call.get("arguments"))
+        if isinstance(selected_call.get("arguments"), Mapping)
+        else {}
+    )
+    actual_call_sha256 = _delegate_call_sha256(arguments) if arguments else ""
+    task_text = _safe_text(arguments.get("task") or "", limit=4096)
+    task_sha256 = _sha256_text(task_text) if task_text else ""
+    expected_call_matches = bool(
+        expected_call_sha256 and actual_call_sha256 == expected_call_sha256
+    )
+    prompt_task_matches = bool(prompt_sha256 and task_sha256 == prompt_sha256)
+    prompt_to_mcp_call_bound = (
+        expected_call_matches if expected_call_sha256 else prompt_task_matches
+    )
+    delegate_to_dip_tool_called = bool(selected_call)
+    events_observed = bool(events)
+    real_codex_prompt_executed = any(
+        event_type in {"thread.started", "turn.started", "turn.completed"}
+        for event_type in event_types
+    )
+    stderr_safe = _safe_text(stderr_text, limit=4096)
+    auth_blocker_observed = bool(
+        re.search(r"(?i)\b(auth|login|not authenticated|api key|CODEX_API_KEY)\b", stderr_safe)
+    )
+    blocking_reasons: list[str] = []
+    if exec_exit_code != 0:
+        blocking_reasons.append("codex_exec_nonzero_exit")
+    if auth_blocker_observed:
+        blocking_reasons.append("codex_exec_auth_or_model_admission_required")
+    if parse_errors:
+        blocking_reasons.append("codex_exec_jsonl_parse_error")
+    if not events_observed:
+        blocking_reasons.append("codex_exec_json_events_not_observed")
+    if not real_codex_prompt_executed:
+        blocking_reasons.append("real_codex_prompt_not_executed")
+    if not delegate_to_dip_tool_called:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    if delegate_to_dip_tool_called and not prompt_to_mcp_call_bound:
+        blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif auth_blocker_observed:
+        machine_error_code = "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED"
+    elif parse_errors and not events:
+        machine_error_code = "WBP_CODEX_EXEC_JSONL_INVALID"
+    else:
+        machine_error_code = "WBP_CODEX_EXEC_TOOL_CALL_NOT_PROVEN"
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "Codex exec JSONL proves a prompt-bound delegate_to_dip MCP tool call."
+            if ok
+            else "Codex exec JSONL does not prove a prompt-bound delegate_to_dip MCP tool call."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra={
+            "codex_exec_json_events_observed": events_observed,
+            "codex_exec_exit_code": int(exec_exit_code),
+            "codex_exec_auth_blocker_observed": auth_blocker_observed,
+            "codex_exec_jsonl_parse_error_count": len(parse_errors),
+            "codex_exec_event_count": len(events),
+            "codex_exec_event_digest": _sha256_text(
+                json.dumps(event_types, sort_keys=True)
+            ),
+            "real_codex_prompt_executed": real_codex_prompt_executed,
+            "delegate_to_dip_tool_called": delegate_to_dip_tool_called,
+            "codex_delegate_to_dip_tool_called": delegate_to_dip_tool_called,
+            "tool_name": DELEGATE_TO_DIP_TOOL if delegate_to_dip_tool_called else "",
+            "mcp_server_name_observed": _safe_text(
+                selected_call.get("server_name") or "", limit=128
+            ),
+            "tool_call_status_observed": _safe_text(
+                selected_call.get("status") or "", limit=80
+            ),
+            "tool_call_digest_present": bool(actual_call_sha256),
+            "tool_call_sha256": actual_call_sha256,
+            "prompt_sha256": prompt_sha256 if prompt_to_mcp_call_bound else "",
+            "prompt_digest_present": bool(prompt_sha256),
+            "expected_delegate_tool_call_digest_present": bool(expected_call_sha256),
+            "expected_delegate_tool_call_matched": expected_call_matches,
+            "prompt_task_digest_matched": prompt_task_matches,
+            "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
+            "api_lane_called": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_api_lane_provider_dispatch": True,
+            "raw_jsonl_recorded": False,
+            "raw_stderr_recorded": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "tool_call_arguments_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=CODEX_EXEC_TOOL_CALL_PACKET_KIND,
+        final_status=(
+            CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED
+            if ok
+            else CODEX_EXEC_TOOL_CALL_FINAL_STATUS_BLOCKED
+        ),
+        result_status="observed" if ok else "blocked",
+    )
 
 
 def build_codex_mcp_wiring_reality_packet(
@@ -496,6 +762,10 @@ def build_codex_mcp_wiring_reality_packet(
         codex_call.get("real_codex_prompt_executed") is True
         or codex_call.get("codex_prompt_executed") is True
     )
+    codex_tool_call_observation_ok = bool(
+        codex_call.get("status") == "ok"
+        and codex_call.get("result_status") in {"", "observed"}
+    ) if codex_call else False
     codex_delegate_to_dip_tool_called = bool(
         codex_call.get("delegate_to_dip_tool_called") is True
         or codex_call.get("tool_name") == DELEGATE_TO_DIP_TOOL
@@ -522,6 +792,7 @@ def build_codex_mcp_wiring_reality_packet(
     )
     codex_mcp_wiring_proven = bool(
         direct_mcp_proven_with_limits
+        and codex_tool_call_observation_ok
         and real_codex_prompt_executed
         and codex_delegate_to_dip_tool_called
         and prompt_to_mcp_call_bound
@@ -544,6 +815,8 @@ def build_codex_mcp_wiring_reality_packet(
         blocking_reasons.append("direct_mcp_reality_packet_not_ok")
     if direct_mcp_proven_with_limits and not real_codex_prompt_executed:
         blocking_reasons.append("real_codex_prompt_not_executed")
+    if direct_mcp_proven_with_limits and codex_call and not codex_tool_call_observation_ok:
+        blocking_reasons.append("codex_tool_call_observation_packet_not_ok")
     if direct_mcp_proven_with_limits and not codex_delegate_to_dip_tool_called:
         blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
     if direct_mcp_proven_with_limits and not prompt_to_mcp_call_bound:
@@ -604,6 +877,14 @@ def build_codex_mcp_wiring_reality_packet(
             "hook_can_enforce_router": hook.get("hook_can_enforce_router") is True,
             "hook_can_route_delegate_to_dip": hook.get("hook_can_route_delegate_to_dip") is True,
             "codex_mcp_wiring_proven": codex_mcp_wiring_proven,
+            "codex_cli_prompt_mcp_tool_call_proven": codex_mcp_wiring_proven,
+            "codex_tool_call_observation_packet_ok": codex_tool_call_observation_ok,
+            "codex_exec_json_events_observed": (
+                codex_call.get("codex_exec_json_events_observed") is True
+            ),
+            "codex_exec_tool_call_observation_status": str(
+                codex_call.get("status") or ""
+            ),
             "limiting_reasons": limiting_reasons,
             "missing_evidence_reasons": blocking_reasons,
             "api_lane_called": api_lane_called,

@@ -100,6 +100,13 @@ wbp
 """
 
 
+PROMPT_TEXT = "Codex, дай задачу DIP: верни короткий план."
+PROMPT_DELEGATE_ARGUMENTS = {
+    "task": "Codex, дай задачу DIP: верни короткий план.",
+    "expected_alias": "DIP",
+}
+
+
 def _direct_mcp_reality_packet(
     config_packet: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -123,10 +130,7 @@ def _direct_mcp_reality_packet(
             "method": "tools/call",
             "params": {
                 "name": "delegate_to_dip",
-                "arguments": {
-                    "task": "Codex, дай задачу DIP: верни короткий план.",
-                    "expected_alias": "DIP",
-                },
+                "arguments": PROMPT_DELEGATE_ARGUMENTS,
             },
         }
         called = mcp_delegate.handle_jsonrpc_message(
@@ -178,10 +182,7 @@ class McpDelegateToDipTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "delegate_to_dip",
-                    "arguments": {
-                        "task": "Codex, дай задачу DIP: верни короткий план.",
-                        "expected_alias": "DIP",
-                    },
+                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
                 },
             }
             initialized = mcp_delegate.handle_jsonrpc_message(
@@ -561,19 +562,34 @@ class McpDelegateToDipTests(unittest.TestCase):
         )
         direct_proof = _direct_mcp_reality_packet(config_packet)
         prompt_packet = mcp_delegate.build_prompt_observation_packet(
-            "Codex, дай задачу DIP: верни короткий план.",
+            PROMPT_TEXT,
             source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
         )
-        codex_tool_call_packet = {
-            "real_codex_prompt_executed": True,
-            "delegate_to_dip_tool_called": True,
-            "prompt_to_mcp_call_bound": True,
-            "prompt_sha256": prompt_packet["prompt_sha256"],
-            "api_lane_called": False,
-            "fallback_used": False,
-            "local_imitation_used": False,
-            "native_free_chat_router_proven": False,
-        }
+        codex_tool_call_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_1",
+                                "type": "mcp_tool_call",
+                                "server_name": "wild-boar-proxy",
+                                "tool_name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
 
         packet = mcp_delegate.build_codex_mcp_wiring_reality_packet(
             config_packet=config_packet,
@@ -586,6 +602,9 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertEqual(packet["result_status"], "proven")
         self.assertEqual(packet["final_status"], "WBP_CODEX_MCP_WIRING_PROVEN")
         self.assertTrue(packet["codex_mcp_wiring_proven"])
+        self.assertTrue(packet["codex_cli_prompt_mcp_tool_call_proven"])
+        self.assertTrue(packet["codex_tool_call_observation_packet_ok"])
+        self.assertTrue(packet["codex_exec_json_events_observed"])
         self.assertTrue(packet["real_codex_prompt_executed"])
         self.assertTrue(packet["codex_delegate_to_dip_tool_called"])
         self.assertTrue(packet["prompt_digest_present"])
@@ -600,6 +619,322 @@ class McpDelegateToDipTests(unittest.TestCase):
             [],
         )
 
+    def test_codex_exec_jsonl_observation_parses_prompt_bound_mcp_call(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_2",
+                                "type": "mcp_tool_call",
+                                "server": "wbp",
+                                "name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["packet_kind"], "wbp_codex_exec_tool_call_observation")
+        self.assertEqual(packet["result_status"], "observed")
+        self.assertTrue(packet["codex_exec_json_events_observed"])
+        self.assertTrue(packet["real_codex_prompt_executed"])
+        self.assertTrue(packet["delegate_to_dip_tool_called"])
+        self.assertTrue(packet["codex_delegate_to_dip_tool_called"])
+        self.assertTrue(packet["expected_delegate_tool_call_matched"])
+        self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["raw_jsonl_recorded"])
+        self.assertFalse(packet["tool_call_arguments_recorded"])
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(packet),
+            [],
+        )
+
+    def test_codex_exec_jsonl_observation_ignores_agent_message_mentions(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_3",
+                                "type": "agent_message",
+                                "text": "I should call delegate_to_dip for DIP.",
+                            },
+                        }
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["result_status"], "blocked")
+        self.assertFalse(packet["delegate_to_dip_tool_called"])
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertIn(
+            "codex_delegate_to_dip_tool_call_not_observed",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["product_ready"])
+
+    def test_codex_exec_jsonl_observation_requires_expected_call_digest(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "mcp_tool_call",
+                                "server": "wbp",
+                                "name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": {
+                                    "task": PROMPT_TEXT,
+                                    "expected_alias": "Agent 2",
+                                },
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertTrue(packet["delegate_to_dip_tool_called"])
+        self.assertFalse(packet["expected_delegate_tool_call_matched"])
+        self.assertTrue(packet["prompt_task_digest_matched"])
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertIn(
+            "prompt_not_bound_to_codex_mcp_tool_call",
+            packet["blocking_reasons"],
+        )
+
+    def test_codex_exec_jsonl_observation_rejects_agent_message_metadata(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_4",
+                                "type": "agent_message",
+                                "metadata": {
+                                    "server": "wbp",
+                                    "name": "delegate_to_dip",
+                                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                                },
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["delegate_to_dip_tool_called"])
+        self.assertIn(
+            "codex_delegate_to_dip_tool_call_not_observed",
+            packet["blocking_reasons"],
+        )
+
+    def test_codex_exec_jsonl_observation_blocks_prompt_digest_mismatch(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "mcp_tool_call",
+                                "server_name": "wild-boar-proxy",
+                                "tool_name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": {
+                                    "task": "Different task",
+                                    "expected_alias": "DIP",
+                                },
+                            },
+                        }
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertTrue(packet["delegate_to_dip_tool_called"])
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertIn(
+            "prompt_not_bound_to_codex_mcp_tool_call",
+            packet["blocking_reasons"],
+        )
+
+    def test_codex_exec_jsonl_observation_reports_auth_admission_blocker(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "",
+            prompt_packet=prompt_packet,
+            exec_exit_code=1,
+            stderr_text="not authenticated; run codex login",
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED",
+        )
+        self.assertTrue(packet["codex_exec_auth_blocker_observed"])
+        self.assertIn(
+            "codex_exec_auth_or_model_admission_required",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["raw_stderr_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_codex_mcp_wiring_does_not_promote_blocked_codex_observation(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        direct_proof = _direct_mcp_reality_packet(config_packet)
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        codex_tool_call_packet = (
+            mcp_delegate.build_codex_exec_tool_call_observation_packet(
+                "\n".join(
+                    [
+                        "{not-json",
+                        json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                        json.dumps({"type": "turn.started"}),
+                        json.dumps(
+                            {
+                                "type": "item.completed",
+                                "item": {
+                                    "type": "mcp_tool_call",
+                                    "server": "wbp",
+                                    "name": "delegate_to_dip",
+                                    "status": "completed",
+                                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                                },
+                            },
+                            ensure_ascii=False,
+                        ),
+                        json.dumps({"type": "turn.completed"}),
+                    ]
+                ),
+                prompt_packet=prompt_packet,
+            )
+        )
+
+        self.assertEqual(codex_tool_call_packet["status"], "error")
+        self.assertTrue(codex_tool_call_packet["delegate_to_dip_tool_called"])
+        packet = mcp_delegate.build_codex_mcp_wiring_reality_packet(
+            config_packet=config_packet,
+            mcp_reality_packet=direct_proof,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_tool_call_packet,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["result_status"], "works_with_limits")
+        self.assertFalse(packet["codex_mcp_wiring_proven"])
+        self.assertFalse(packet["codex_cli_prompt_mcp_tool_call_proven"])
+        self.assertFalse(packet["codex_tool_call_observation_packet_ok"])
+        self.assertIn(
+            "codex_tool_call_observation_packet_not_ok",
+            packet["limiting_reasons"],
+        )
+
+    def test_codex_mcp_wiring_blocks_original_profile_touch(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        config_packet["codex_mcp_original_profile_touched"] = True
+        direct_proof = _direct_mcp_reality_packet(config_packet)
+
+        packet = mcp_delegate.build_codex_mcp_wiring_reality_packet(
+            config_packet=config_packet,
+            mcp_reality_packet=direct_proof,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["result_status"], "blocked")
+        self.assertTrue(packet["codex_mcp_original_profile_touched"])
+        self.assertFalse(packet["direct_mcp_proven_with_limits"])
+        self.assertFalse(packet["codex_cli_prompt_mcp_tool_call_proven"])
+        self.assertIn(
+            "codex_mcp_original_profile_touched",
+            packet["blocking_reasons"],
+        )
+
     def test_codex_mcp_wiring_does_not_count_hook_logging_as_router(self) -> None:
         config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
             CODEX_MCP_LIST_OUTPUT,
@@ -607,8 +942,9 @@ class McpDelegateToDipTests(unittest.TestCase):
         )
         direct_proof = _direct_mcp_reality_packet(config_packet)
         prompt_packet = mcp_delegate.build_prompt_observation_packet(
-            "Codex, дай задачу DIP: верни короткий план.",
+            PROMPT_TEXT,
             source="user_prompt_submit_hook",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
         )
 
         packet = mcp_delegate.build_codex_mcp_wiring_reality_packet(
