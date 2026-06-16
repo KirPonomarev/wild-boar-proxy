@@ -41,6 +41,21 @@ ROUTE_BOUND_DISPATCH_FINAL_STATUS_BLOCKED = "WBP_ROUTE_BOUND_DISPATCH_BLOCKED"
 ROUTE_BOUND_DISPATCH_NOT_PROVEN = "WBP_ROUTE_BOUND_DISPATCH_NOT_PROVEN"
 CONTROLLED_PROVIDER_UNAVAILABLE = "WBP_CONTROLLED_PROVIDER_UNAVAILABLE"
 CONTROLLED_PROVIDER_ERROR = "WBP_CONTROLLED_PROVIDER_ERROR"
+LIVE_ROUTE_SMOKE_PACKET_KIND = "wbp_live_route_bound_api_smoke"
+LIVE_ROUTE_SMOKE_PROOF_PACKET_KIND = "wbp_live_route_bound_api_smoke_proof"
+LIVE_ROUTE_SMOKE_FINAL_STATUS_ADMITTED = "WBP_LIVE_ROUTE_BOUND_API_SMOKE_ADMITTED"
+LIVE_ROUTE_SMOKE_FINAL_STATUS_BLOCKED = "WBP_LIVE_ROUTE_BOUND_API_SMOKE_BLOCKED"
+LIVE_ROUTE_SMOKE_PROOF_FINAL_STATUS_ADMITTED = (
+    "WBP_LIVE_ROUTE_BOUND_API_SMOKE_PROOF_ADMITTED"
+)
+LIVE_ROUTE_SMOKE_PROOF_FINAL_STATUS_BLOCKED = (
+    "WBP_LIVE_ROUTE_BOUND_API_SMOKE_PROOF_BLOCKED"
+)
+LIVE_ROUTE_SMOKE_NOT_PROVEN = "WBP_LIVE_ROUTE_BOUND_API_SMOKE_NOT_PROVEN"
+LIVE_ROUTE_BROWSER_AUTHORITY_REJECTED = "WBP_LIVE_ROUTE_BROWSER_AUTHORITY_REJECTED"
+LIVE_PROVIDER_CREDENTIAL_MISSING = "WBP_LIVE_PROVIDER_CREDENTIAL_MISSING"
+LIVE_PROVIDER_TRANSPORT_UNAVAILABLE = "WBP_LIVE_PROVIDER_TRANSPORT_UNAVAILABLE"
+LIVE_PROVIDER_ERROR = "WBP_LIVE_PROVIDER_ERROR"
 CONFIG_PROBE_PACKET_KIND = "wbp_codex_mcp_config_probe"
 CONFIG_PROBE_FINAL_STATUS_LOADED = "WBP_CODEX_MCP_CONFIG_PROBE_LOADED"
 CONFIG_PROBE_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_CONFIG_PROBE_BLOCKED"
@@ -1610,6 +1625,469 @@ def build_delegate_to_dip_packet(
             "secret_value_exposed": False,
             "no_secret_exposed": True,
         },
+    )
+
+
+def _route_bound_delegate_evidence_failures(packet: Mapping[str, Any]) -> list[str]:
+    failures: list[str] = []
+    if packet.get("packet_kind") != DELEGATE_PACKET_KIND:
+        failures.append("delegate_packet_kind_invalid")
+    if packet.get("status") != "ok":
+        failures.append("delegate_packet_not_ok")
+    if packet.get("alias_context_read") is not True:
+        failures.append("alias_context_not_read")
+    if packet.get("allowed_api_route_ids_enforced") is not True:
+        failures.append("allowed_api_route_ids_not_enforced")
+    if packet.get("forbidden_stale_route_ids_enforced") is not True:
+        failures.append("stale_route_guard_missing")
+    if packet.get("route_allowed") is not True:
+        failures.append("selected_api_route_not_allowed")
+    if packet.get("route_bound_dispatch_packet_kind") != ROUTE_BOUND_DISPATCH_PACKET_KIND:
+        failures.append("route_bound_dispatch_packet_kind_invalid")
+    if packet.get("route_bound_dispatch_proven") is not True:
+        failures.append("route_bound_dispatch_not_proven")
+    if packet.get("route_bound_request_sent") is not True:
+        failures.append("route_bound_request_not_sent")
+    if not _hex_sha256(packet.get("route_bound_request_sha256") or ""):
+        failures.append("route_bound_request_digest_missing")
+    if (
+        packet.get("dispatch_truth_source")
+        != "server_owned_controlled_provider_no_live_network"
+    ):
+        failures.append("dispatch_truth_source_invalid")
+    if packet.get("controlled_provider_called") is not True:
+        failures.append("controlled_provider_not_called")
+    if packet.get("controlled_provider_response_digest_present") is not True:
+        failures.append("controlled_provider_response_digest_missing")
+    if not _hex_sha256(packet.get("controlled_provider_response_sha256") or ""):
+        failures.append("controlled_provider_response_digest_invalid")
+    if packet.get("controlled_provider_response_proven") is not True:
+        failures.append("controlled_provider_response_not_proven")
+    if packet.get("provider_response_proven") is not True:
+        failures.append("provider_response_not_proven")
+    if packet.get("live_provider_response_proven") is not False:
+        failures.append("live_provider_response_already_claimed")
+    if packet.get("selected_api_route_id_present") is not True:
+        failures.append("selected_api_route_id_missing")
+    if not _hex_sha256(packet.get("selected_api_route_id_sha256") or ""):
+        failures.append("selected_api_route_digest_missing")
+    if packet.get("selected_api_route_id_recorded") is not False:
+        failures.append("selected_api_route_id_must_not_be_recorded")
+    if packet.get("fallback_used") is not False:
+        failures.append("fallback_used")
+    if packet.get("local_imitation_used") is not False:
+        failures.append("local_imitation_used")
+    if packet.get("product_ready") is not False:
+        failures.append("product_ready_must_not_be_claimed")
+    if packet.get("raw_provider_response_recorded") is not False:
+        failures.append("raw_provider_response_must_not_be_recorded")
+    if packet.get("raw_backend_details_exposed") is not False:
+        failures.append("raw_backend_details_must_not_be_exposed")
+    if packet.get("secret_value_exposed") is not False:
+        failures.append("secret_value_must_not_be_exposed")
+    return failures
+
+
+def build_live_route_bound_api_smoke_packet(
+    arguments: Mapping[str, Any] | None,
+    *,
+    env: Mapping[str, str] | None = None,
+    live_credential_present: bool = True,
+    live_transport_available: bool = True,
+    live_provider_error_code: str = "",
+    route_bound_dispatch_evidence_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = arguments if isinstance(arguments, Mapping) else {}
+    expected_alias = _safe_text(
+        args.get("expected_alias") or args.get("alias") or "",
+        limit=80,
+    )
+    forbidden_fields = sorted(
+        _safe_text(field, limit=80)
+        for field in set(args) - {"task", "expected_alias", "alias"}
+    )
+    safe_provider_error_code = _safe_text(live_provider_error_code, limit=96)
+    delegate_packet: dict[str, Any] = {}
+    if not forbidden_fields:
+        if isinstance(route_bound_dispatch_evidence_packet, Mapping):
+            delegate_packet = dict(route_bound_dispatch_evidence_packet)
+        else:
+            delegate_packet = build_delegate_to_dip_packet(
+                args,
+                env=env,
+                mcp_tool_called=True,
+            )
+
+    evidence_failures = (
+        _route_bound_delegate_evidence_failures(delegate_packet)
+        if delegate_packet
+        else ["delegate_packet_missing"]
+    )
+    controlled_dispatch_proven = not evidence_failures
+    selected_route_sha256 = _hex_sha256(
+        delegate_packet.get("selected_api_route_id_sha256") or ""
+    )
+    route_bound_request_sha256 = _hex_sha256(
+        delegate_packet.get("route_bound_request_sha256") or ""
+    )
+
+    blocking_reasons: list[str] = []
+    if forbidden_fields:
+        blocking_reasons.extend(f"forbidden_field:{field}" for field in forbidden_fields)
+    elif not controlled_dispatch_proven:
+        delegate_blocking_reasons = [
+            _safe_text(reason, limit=128)
+            for reason in delegate_packet.get("blocking_reasons", [])
+        ]
+        blocking_reasons.extend(delegate_blocking_reasons or evidence_failures)
+
+    if controlled_dispatch_proven and not live_credential_present:
+        blocking_reasons.append("live_provider_credential_missing")
+    if controlled_dispatch_proven and live_credential_present and not live_transport_available:
+        blocking_reasons.append("live_provider_transport_unavailable")
+    live_provider_error_observed = bool(
+        controlled_dispatch_proven
+        and live_credential_present
+        and live_transport_available
+        and safe_provider_error_code
+    )
+    if live_provider_error_observed:
+        blocking_reasons.append("live_provider_error")
+
+    live_provider_smoke_attempted = bool(
+        controlled_dispatch_proven
+        and live_credential_present
+        and live_transport_available
+    )
+    live_request_fingerprint = json.dumps(
+        {
+            "delegate_tool_call_sha256": str(delegate_packet.get("tool_call_sha256") or ""),
+            "route_bound_request_sha256": route_bound_request_sha256,
+            "route_id_sha256": selected_route_sha256,
+            "task_sha256": str(delegate_packet.get("task_sha256") or ""),
+            "transport": "fake_live_smoke_transport",
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    live_request_sha256 = (
+        _sha256_text(live_request_fingerprint) if live_provider_smoke_attempted else ""
+    )
+    fake_transport_response_fingerprint = json.dumps(
+        {
+            "smoke_request_sha256": live_request_sha256,
+            "route_id_sha256": selected_route_sha256,
+            "transport_response": "fake_route_bound_smoke_response",
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif forbidden_fields:
+        machine_error_code = LIVE_ROUTE_BROWSER_AUTHORITY_REJECTED
+    elif "FAIL_ALIAS_CONTEXT_MISSING" in blocking_reasons:
+        machine_error_code = "FAIL_ALIAS_CONTEXT_MISSING"
+    elif "live_provider_credential_missing" in blocking_reasons:
+        machine_error_code = LIVE_PROVIDER_CREDENTIAL_MISSING
+    elif "live_provider_transport_unavailable" in blocking_reasons:
+        machine_error_code = LIVE_PROVIDER_TRANSPORT_UNAVAILABLE
+    elif "live_provider_error" in blocking_reasons:
+        machine_error_code = LIVE_PROVIDER_ERROR
+    else:
+        machine_error_code = LIVE_ROUTE_SMOKE_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP live route-bound API smoke admission accepted the fake transport contract."
+            if ok
+            else "WBP live route-bound API smoke admission is blocked."
+        ),
+        blocking_reasons=blocking_reasons,
+        extra={
+            "live_smoke_boundary": "explicit_wbp_owned_route_bound_api_smoke",
+            "live_smoke_contract_proven": ok,
+            "delegate_packet_kind": str(delegate_packet.get("packet_kind") or ""),
+            "delegate_packet_status": str(delegate_packet.get("status") or ""),
+            "delegate_packet_machine_error_code": str(
+                delegate_packet.get("machine_error_code") or ""
+            ),
+            "controlled_dispatch_evidence_proven": controlled_dispatch_proven,
+            "route_bound_dispatch_packet_kind": str(
+                delegate_packet.get("route_bound_dispatch_packet_kind") or ""
+            ),
+            "route_bound_dispatch_proven": (
+                delegate_packet.get("route_bound_dispatch_proven") is True
+            ),
+            "route_bound_request_sent": (
+                delegate_packet.get("route_bound_request_sent") is True
+            ),
+            "route_bound_request_sha256": route_bound_request_sha256,
+            "controlled_provider_response_proven": (
+                delegate_packet.get("controlled_provider_response_proven") is True
+            ),
+            "selected_alias": str(delegate_packet.get("selected_alias") or expected_alias),
+            "selected_alias_lane": str(delegate_packet.get("selected_alias_lane") or ""),
+            "alias_context_read": delegate_packet.get("alias_context_read") is True,
+            "allowed_api_route_ids_enforced": (
+                delegate_packet.get("allowed_api_route_ids_enforced") is True
+            ),
+            "forbidden_stale_route_ids_enforced": (
+                delegate_packet.get("forbidden_stale_route_ids_enforced") is True
+            ),
+            "route_allowed": delegate_packet.get("route_allowed") is True,
+            "selected_api_route_id_present": bool(selected_route_sha256),
+            "selected_api_route_id_sha256": selected_route_sha256,
+            "selected_api_route_id_recorded": False,
+            "task_digest_preserved": delegate_packet.get("task_digest_preserved") is True,
+            "task_sha256": str(delegate_packet.get("task_sha256") or ""),
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "live_credential_present": bool(live_credential_present),
+            "live_credential_value_recorded": False,
+            "live_transport_available": bool(live_transport_available),
+            "live_transport_kind": "fake",
+            "live_transport_truth_source": "fake_transport_no_external_network",
+            "external_provider_network_used": False,
+            "live_provider_smoke_attempted": live_provider_smoke_attempted,
+            "live_smoke_attempted": live_provider_smoke_attempted,
+            "smoke_route_bound": ok,
+            "fake_transport_called": live_provider_smoke_attempted,
+            "fake_transport_response_digest_present": ok,
+            "fake_transport_response_sha256": (
+                _sha256_text(fake_transport_response_fingerprint) if ok else ""
+            ),
+            "fake_transport_response_proven": ok,
+            "live_provider_called": False,
+            "live_provider_route_bound": False,
+            "live_request_digest_present": bool(live_request_sha256),
+            "live_request_sha256": live_request_sha256,
+            "live_provider_error_observed": live_provider_error_observed,
+            "live_provider_error_code_recorded": bool(live_provider_error_observed),
+            "live_response_digest_present": False,
+            "live_response_sha256": "",
+            "live_provider_response_proven": False,
+            "external_live_provider_response_proven": False,
+            "live_provider_truth_source": "not_proven_external_provider_not_called",
+            "state_written": False,
+            "evidence_written": False,
+            "file_mutation_attempted": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_external_provider_network_call": True,
+            "raw_provider_response_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=LIVE_ROUTE_SMOKE_PACKET_KIND,
+        final_status=(
+            LIVE_ROUTE_SMOKE_FINAL_STATUS_ADMITTED
+            if ok
+            else LIVE_ROUTE_SMOKE_FINAL_STATUS_BLOCKED
+        ),
+        result_status="admitted" if ok else "blocked",
+    )
+
+
+def build_live_route_bound_api_smoke_proof_packet(
+    smoke_packet: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    packet = smoke_packet if isinstance(smoke_packet, Mapping) else {}
+    blocking_reasons: list[str] = []
+    if packet.get("packet_kind") != LIVE_ROUTE_SMOKE_PACKET_KIND:
+        blocking_reasons.append("live_smoke_packet_kind_invalid")
+    if packet.get("status") != "ok":
+        blocking_reasons.append("live_smoke_packet_not_ok")
+    if packet.get("live_smoke_contract_proven") is not True:
+        blocking_reasons.append("live_smoke_contract_not_proven")
+    if packet.get("controlled_dispatch_evidence_proven") is not True:
+        blocking_reasons.append("controlled_dispatch_evidence_not_proven")
+    if packet.get("route_bound_dispatch_packet_kind") != ROUTE_BOUND_DISPATCH_PACKET_KIND:
+        blocking_reasons.append("route_bound_dispatch_packet_kind_invalid")
+    if packet.get("route_bound_dispatch_proven") is not True:
+        blocking_reasons.append("route_bound_dispatch_not_proven")
+    if packet.get("route_bound_request_sent") is not True:
+        blocking_reasons.append("route_bound_request_not_sent")
+    if not _hex_sha256(packet.get("route_bound_request_sha256") or ""):
+        blocking_reasons.append("route_bound_request_digest_missing")
+    if packet.get("alias_context_read") is not True:
+        blocking_reasons.append("alias_context_not_read")
+    if packet.get("allowed_api_route_ids_enforced") is not True:
+        blocking_reasons.append("allowed_api_route_ids_not_enforced")
+    if packet.get("forbidden_stale_route_ids_enforced") is not True:
+        blocking_reasons.append("stale_route_guard_missing")
+    if packet.get("route_allowed") is not True:
+        blocking_reasons.append("selected_api_route_not_allowed")
+    if packet.get("selected_api_route_id_present") is not True:
+        blocking_reasons.append("selected_api_route_id_missing")
+    if not _hex_sha256(packet.get("selected_api_route_id_sha256") or ""):
+        blocking_reasons.append("selected_api_route_digest_missing")
+    if packet.get("selected_api_route_id_recorded") is not False:
+        blocking_reasons.append("selected_api_route_id_must_not_be_recorded")
+    if packet.get("live_provider_smoke_attempted") is not True:
+        blocking_reasons.append("live_provider_smoke_not_attempted")
+    if packet.get("live_smoke_attempted") is not True:
+        blocking_reasons.append("live_smoke_not_attempted")
+    if packet.get("smoke_route_bound") is not True:
+        blocking_reasons.append("smoke_not_route_bound")
+    if packet.get("fake_transport_called") is not True:
+        blocking_reasons.append("fake_transport_not_called")
+    if packet.get("fake_transport_response_digest_present") is not True:
+        blocking_reasons.append("fake_transport_response_digest_missing")
+    if not _hex_sha256(packet.get("fake_transport_response_sha256") or ""):
+        blocking_reasons.append("fake_transport_response_digest_invalid")
+    if packet.get("fake_transport_response_proven") is not True:
+        blocking_reasons.append("fake_transport_response_not_proven")
+    if packet.get("live_provider_called") is not False:
+        blocking_reasons.append("live_provider_call_must_not_be_claimed")
+    if packet.get("live_provider_route_bound") is not False:
+        blocking_reasons.append("live_provider_route_bound_must_not_be_claimed")
+    if packet.get("live_request_digest_present") is not True:
+        blocking_reasons.append("live_request_digest_missing")
+    if not _hex_sha256(packet.get("live_request_sha256") or ""):
+        blocking_reasons.append("live_request_digest_invalid")
+    if packet.get("live_response_digest_present") is not False:
+        blocking_reasons.append("live_response_digest_must_not_be_claimed")
+    if packet.get("live_response_sha256") not in {None, ""}:
+        blocking_reasons.append("live_response_digest_must_not_be_recorded")
+    if packet.get("live_provider_response_proven") is not False:
+        blocking_reasons.append("live_provider_response_must_not_be_claimed")
+    if packet.get("live_transport_kind") != "fake":
+        blocking_reasons.append("live_transport_kind_invalid")
+    if packet.get("live_transport_truth_source") != "fake_transport_no_external_network":
+        blocking_reasons.append("live_transport_truth_source_invalid")
+    if packet.get("external_provider_network_used") is not False:
+        blocking_reasons.append("external_provider_network_must_not_be_used")
+    if packet.get("external_live_provider_response_proven") is not False:
+        blocking_reasons.append("external_live_provider_response_must_not_be_claimed")
+    if packet.get("state_written") is not False:
+        blocking_reasons.append("state_must_not_be_written")
+    if packet.get("evidence_written") is not False:
+        blocking_reasons.append("evidence_must_not_be_written")
+    if packet.get("file_mutation_attempted") is not False:
+        blocking_reasons.append("file_mutation_must_not_be_attempted")
+    if packet.get("fallback_used") is not False:
+        blocking_reasons.append("fallback_used")
+    if packet.get("local_imitation_used") is not False:
+        blocking_reasons.append("local_imitation_used")
+    if packet.get("product_ready") is not False:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+    if packet.get("native_free_chat_router_proven") is not False:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if packet.get("raw_prompt_recorded") is not False:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if packet.get("raw_provider_response_recorded") is not False:
+        blocking_reasons.append("raw_provider_response_must_not_be_recorded")
+    if packet.get("raw_backend_details_exposed") is not False:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if packet.get("secret_value_exposed") is not False:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+
+    ok = not blocking_reasons
+    machine_error_code = "OK" if ok else str(
+        packet.get("machine_error_code") or LIVE_ROUTE_SMOKE_NOT_PROVEN
+    )
+    if not ok and machine_error_code == "OK":
+        machine_error_code = LIVE_ROUTE_SMOKE_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP live route-bound API smoke proof accepted the admission packet."
+            if ok
+            else "WBP live route-bound API smoke proof rejected the supplied packet."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra={
+            "source_packet_kind": str(packet.get("packet_kind") or ""),
+            "live_smoke_contract_proven": (
+                packet.get("live_smoke_contract_proven") is True
+            ),
+            "controlled_dispatch_evidence_proven": (
+                packet.get("controlled_dispatch_evidence_proven") is True
+            ),
+            "selected_api_route_id_present": (
+                packet.get("selected_api_route_id_present") is True
+            ),
+            "selected_api_route_id_sha256": str(
+                packet.get("selected_api_route_id_sha256") or ""
+            ),
+            "selected_api_route_id_recorded": (
+                packet.get("selected_api_route_id_recorded") is True
+            ),
+            "live_provider_smoke_attempted": (
+                packet.get("live_provider_smoke_attempted") is True
+            ),
+            "live_smoke_attempted": packet.get("live_smoke_attempted") is True,
+            "smoke_route_bound": packet.get("smoke_route_bound") is True,
+            "fake_transport_called": packet.get("fake_transport_called") is True,
+            "fake_transport_response_digest_present": (
+                packet.get("fake_transport_response_digest_present") is True
+            ),
+            "fake_transport_response_sha256": str(
+                packet.get("fake_transport_response_sha256") or ""
+            ),
+            "fake_transport_response_proven": (
+                packet.get("fake_transport_response_proven") is True
+            ),
+            "live_provider_called": packet.get("live_provider_called") is True,
+            "live_provider_route_bound": (
+                packet.get("live_provider_route_bound") is True
+            ),
+            "live_request_digest_present": (
+                packet.get("live_request_digest_present") is True
+            ),
+            "live_request_sha256": str(packet.get("live_request_sha256") or ""),
+            "live_response_digest_present": (
+                packet.get("live_response_digest_present") is True
+            ),
+            "live_response_sha256": str(packet.get("live_response_sha256") or ""),
+            "live_provider_response_proven": (
+                packet.get("live_provider_response_proven") is True
+            ),
+            "external_provider_network_used": (
+                packet.get("external_provider_network_used") is True
+            ),
+            "external_live_provider_response_proven": (
+                packet.get("external_live_provider_response_proven") is True
+            ),
+            "state_written": packet.get("state_written") is True,
+            "evidence_written": packet.get("evidence_written") is True,
+            "file_mutation_attempted": packet.get("file_mutation_attempted") is True,
+            "fallback_used": packet.get("fallback_used") is True,
+            "local_imitation_used": packet.get("local_imitation_used") is True,
+            "product_ready": packet.get("product_ready") is True,
+            "native_free_chat_router_proven": (
+                packet.get("native_free_chat_router_proven") is True
+            ),
+            "raw_prompt_recorded": packet.get("raw_prompt_recorded") is True,
+            "raw_provider_response_recorded": (
+                packet.get("raw_provider_response_recorded") is True
+            ),
+            "raw_backend_details_exposed": (
+                packet.get("raw_backend_details_exposed") is True
+            ),
+            "secret_value_exposed": packet.get("secret_value_exposed") is True,
+            "no_secret_exposed": True,
+        },
+        packet_kind=LIVE_ROUTE_SMOKE_PROOF_PACKET_KIND,
+        final_status=(
+            LIVE_ROUTE_SMOKE_PROOF_FINAL_STATUS_ADMITTED
+            if ok
+            else LIVE_ROUTE_SMOKE_PROOF_FINAL_STATUS_BLOCKED
+        ),
+        result_status="admitted" if ok else "blocked",
     )
 
 

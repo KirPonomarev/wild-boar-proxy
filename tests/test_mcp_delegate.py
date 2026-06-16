@@ -143,6 +143,29 @@ def _direct_mcp_reality_packet(
     )
 
 
+def _live_smoke_packet(
+    *,
+    context_payload: dict[str, object] | None = None,
+    arguments: dict[str, object] | None = None,
+    **kwargs: object,
+) -> dict[str, object]:
+    args = arguments or PROMPT_DELEGATE_ARGUMENTS
+    if context_payload is None:
+        return mcp_delegate.build_live_route_bound_api_smoke_packet(
+            args,
+            env={},
+            **kwargs,
+        )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        profile_dir = Path(temp_dir)
+        _write_context(profile_dir, context_payload)
+        return mcp_delegate.build_live_route_bound_api_smoke_packet(
+            args,
+            env={"WBP_PROFILE_DIR": str(profile_dir)},
+            **kwargs,
+        )
+
+
 class McpDelegateToDipTests(unittest.TestCase):
     def test_initialize_and_tools_list_expose_delegate_to_dip(self) -> None:
         initialized = mcp_delegate.handle_jsonrpc_message(
@@ -332,6 +355,290 @@ class McpDelegateToDipTests(unittest.TestCase):
             packets.inspect_command_packet_semantics(proof),
             [],
         )
+
+    def test_live_route_bound_api_smoke_accepts_fake_transport_contract(self) -> None:
+        packet = _live_smoke_packet(context_payload=_context_payload())
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["packet_kind"], "wbp_live_route_bound_api_smoke")
+        self.assertEqual(packet["result_status"], "admitted")
+        self.assertTrue(packet["live_smoke_contract_proven"])
+        self.assertTrue(packet["controlled_dispatch_evidence_proven"])
+        self.assertTrue(packet["alias_context_read"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertTrue(packet["route_allowed"])
+        self.assertEqual(
+            packet["route_bound_dispatch_packet_kind"],
+            "wbp_route_bound_controlled_dispatch",
+        )
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertTrue(packet["route_bound_request_sent"])
+        self.assertTrue(packet["route_bound_request_sha256"])
+        self.assertTrue(packet["selected_api_route_id_present"])
+        self.assertEqual(
+            packet["selected_api_route_id_sha256"],
+            hashlib.sha256(b"wbp-deepseek-chat").hexdigest(),
+        )
+        self.assertFalse(packet["selected_api_route_id_recorded"])
+        self.assertNotIn("wbp-deepseek-chat", serialized)
+        self.assertTrue(packet["live_credential_present"])
+        self.assertFalse(packet["live_credential_value_recorded"])
+        self.assertTrue(packet["live_transport_available"])
+        self.assertEqual(packet["live_transport_kind"], "fake")
+        self.assertEqual(
+            packet["live_transport_truth_source"],
+            "fake_transport_no_external_network",
+        )
+        self.assertFalse(packet["external_provider_network_used"])
+        self.assertTrue(packet["live_provider_smoke_attempted"])
+        self.assertTrue(packet["live_smoke_attempted"])
+        self.assertTrue(packet["smoke_route_bound"])
+        self.assertTrue(packet["fake_transport_called"])
+        self.assertTrue(packet["fake_transport_response_digest_present"])
+        self.assertTrue(packet["fake_transport_response_sha256"])
+        self.assertTrue(packet["fake_transport_response_proven"])
+        self.assertFalse(packet["live_provider_called"])
+        self.assertFalse(packet["live_provider_route_bound"])
+        self.assertTrue(packet["live_request_digest_present"])
+        self.assertTrue(packet["live_request_sha256"])
+        self.assertFalse(packet["live_response_digest_present"])
+        self.assertEqual(packet["live_response_sha256"], "")
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["external_live_provider_response_proven"])
+        self.assertFalse(packet["state_written"])
+        self.assertFalse(packet["evidence_written"])
+        self.assertFalse(packet["file_mutation_attempted"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_provider_response_recorded"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+        proof = mcp_delegate.build_live_route_bound_api_smoke_proof_packet(packet)
+        self.assertEqual(proof["status"], "ok")
+        self.assertEqual(proof["machine_error_code"], "OK")
+        self.assertEqual(
+            proof["packet_kind"],
+            "wbp_live_route_bound_api_smoke_proof",
+        )
+        self.assertTrue(proof["live_smoke_contract_proven"])
+        self.assertTrue(proof["live_provider_smoke_attempted"])
+        self.assertTrue(proof["live_smoke_attempted"])
+        self.assertTrue(proof["smoke_route_bound"])
+        self.assertTrue(proof["fake_transport_response_proven"])
+        self.assertFalse(proof["live_provider_called"])
+        self.assertFalse(proof["live_provider_route_bound"])
+        self.assertFalse(proof["live_provider_response_proven"])
+        self.assertFalse(proof["external_provider_network_used"])
+        self.assertFalse(proof["product_ready"])
+        self.assertFalse(proof["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(proof), [])
+
+    def test_delegate_to_dip_remains_no_live_smoke_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            packet = mcp_delegate.build_delegate_to_dip_packet(
+                PROMPT_DELEGATE_ARGUMENTS,
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+                mcp_tool_called=True,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertNotIn("live_provider_smoke_attempted", packet)
+        self.assertNotIn("live_request_sha256", packet)
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_live_route_bound_api_smoke_blocks_context_and_route_failures(self) -> None:
+        outside_allowlist = _context_payload(
+            route_id="wbp-deepseek-chat",
+            allowed_api_route_ids=["wbp-other-route"],
+        )
+        missing_route = _context_payload(route_id="", allowed_api_route_ids=[])
+        missing_stale_guard = _context_payload()
+        missing_stale_guard["forbidden_stale_route_ids"] = []
+        cases = [
+            (None, "FAIL_ALIAS_CONTEXT_MISSING", "FAIL_ALIAS_CONTEXT_MISSING"),
+            (
+                outside_allowlist,
+                "WBP_LIVE_ROUTE_BOUND_API_SMOKE_NOT_PROVEN",
+                "coding_route_not_allowed",
+            ),
+            (
+                missing_route,
+                "WBP_LIVE_ROUTE_BOUND_API_SMOKE_NOT_PROVEN",
+                "coding_route_id_missing",
+            ),
+            (
+                missing_stale_guard,
+                "WBP_LIVE_ROUTE_BOUND_API_SMOKE_NOT_PROVEN",
+                "stale_route_guard_missing",
+            ),
+        ]
+        for payload, machine_code, expected_reason in cases:
+            with self.subTest(expected_reason=expected_reason):
+                packet = _live_smoke_packet(context_payload=payload)
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(packet["machine_error_code"], machine_code)
+                self.assertIn(expected_reason, packet["blocking_reasons"])
+                self.assertFalse(packet["controlled_dispatch_evidence_proven"])
+                self.assertFalse(packet["live_provider_smoke_attempted"])
+                self.assertFalse(packet["live_provider_response_proven"])
+                self.assertFalse(packet["fallback_used"])
+                self.assertFalse(packet["local_imitation_used"])
+                self.assertFalse(packet["product_ready"])
+                self.assertFalse(packet["raw_provider_response_recorded"])
+                self.assertFalse(packet["secret_value_exposed"])
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_live_route_bound_api_smoke_blocks_provider_failures_without_leak(self) -> None:
+        cases = [
+            (
+                {"live_credential_present": False},
+                "WBP_LIVE_PROVIDER_CREDENTIAL_MISSING",
+                "live_provider_credential_missing",
+                False,
+            ),
+            (
+                {"live_transport_available": False},
+                "WBP_LIVE_PROVIDER_TRANSPORT_UNAVAILABLE",
+                "live_provider_transport_unavailable",
+                False,
+            ),
+            (
+                {"live_provider_error_code": "fixture-secret-upstream-error"},
+                "WBP_LIVE_PROVIDER_ERROR",
+                "live_provider_error",
+                True,
+            ),
+        ]
+        for kwargs, machine_code, expected_reason, attempted in cases:
+            with self.subTest(expected_reason=expected_reason):
+                packet = _live_smoke_packet(
+                    context_payload=_context_payload(),
+                    **kwargs,
+                )
+                serialized = json.dumps(packet, sort_keys=True)
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(packet["machine_error_code"], machine_code)
+                self.assertIn(expected_reason, packet["blocking_reasons"])
+                self.assertTrue(packet["controlled_dispatch_evidence_proven"])
+                self.assertEqual(packet["live_provider_smoke_attempted"], attempted)
+                self.assertFalse(packet["live_provider_response_proven"])
+                self.assertFalse(packet["live_response_digest_present"])
+                self.assertFalse(packet["fallback_used"])
+                self.assertFalse(packet["local_imitation_used"])
+                self.assertFalse(packet["raw_provider_response_recorded"])
+                self.assertFalse(packet["secret_value_exposed"])
+                self.assertNotIn("fixture-secret-upstream-error", serialized)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_live_route_bound_api_smoke_rejects_browser_authority_fields(self) -> None:
+        packet = _live_smoke_packet(
+            context_payload=_context_payload(),
+            arguments={
+                "task": "DIP: implement this",
+                "expected_alias": "DIP",
+                "route_id": "evil-route-id",
+                "backend": "https://evil.invalid",
+                "secret": "secret-from-browser",
+                "model": "evil-model",
+            },
+        )
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_LIVE_ROUTE_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertIn("forbidden_field:route_id", packet["blocking_reasons"])
+        self.assertIn("forbidden_field:backend", packet["blocking_reasons"])
+        self.assertIn("forbidden_field:secret", packet["blocking_reasons"])
+        self.assertIn("forbidden_field:model", packet["blocking_reasons"])
+        self.assertFalse(packet["controlled_dispatch_evidence_proven"])
+        self.assertFalse(packet["live_provider_smoke_attempted"])
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertNotIn("evil-route-id", serialized)
+        self.assertNotIn("https://evil.invalid", serialized)
+        self.assertNotIn("secret-from-browser", serialized)
+        self.assertNotIn("evil-model", serialized)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_live_route_bound_api_smoke_requires_controlled_dispatch_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            delegate_packet = mcp_delegate.build_delegate_to_dip_packet(
+                PROMPT_DELEGATE_ARGUMENTS,
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+                mcp_tool_called=True,
+            )
+        mutated_packet = dict(delegate_packet)
+        mutated_packet["route_bound_dispatch_proven"] = False
+
+        packet = mcp_delegate.build_live_route_bound_api_smoke_packet(
+            PROMPT_DELEGATE_ARGUMENTS,
+            env={},
+            route_bound_dispatch_evidence_packet=mutated_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_LIVE_ROUTE_BOUND_API_SMOKE_NOT_PROVEN",
+        )
+        self.assertIn("route_bound_dispatch_not_proven", packet["blocking_reasons"])
+        self.assertFalse(packet["controlled_dispatch_evidence_proven"])
+        self.assertFalse(packet["live_provider_smoke_attempted"])
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_live_smoke_proof_rejects_claim_without_digest_or_route_bound_evidence(self) -> None:
+        packet = _live_smoke_packet(context_payload=_context_payload())
+        mutated_packet = dict(packet)
+        mutated_packet["smoke_route_bound"] = False
+        mutated_packet["fake_transport_response_digest_present"] = False
+        mutated_packet["fake_transport_response_sha256"] = ""
+        mutated_packet["live_provider_response_proven"] = True
+
+        proof = mcp_delegate.build_live_route_bound_api_smoke_proof_packet(mutated_packet)
+
+        self.assertEqual(proof["status"], "error")
+        self.assertIn("smoke_not_route_bound", proof["blocking_reasons"])
+        self.assertIn(
+            "fake_transport_response_digest_missing",
+            proof["blocking_reasons"],
+        )
+        self.assertIn(
+            "fake_transport_response_digest_invalid",
+            proof["blocking_reasons"],
+        )
+        self.assertIn(
+            "live_provider_response_must_not_be_claimed",
+            proof["blocking_reasons"],
+        )
+        self.assertTrue(proof["live_provider_response_proven"])
+        self.assertFalse(proof["smoke_route_bound"])
+        self.assertFalse(proof["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(proof), [])
 
     def test_reality_spike_rejects_live_provider_response_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
