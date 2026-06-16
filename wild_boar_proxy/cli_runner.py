@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import mcp_delegate
 from .cli_runner_via_wbp import PRIMARY_MODEL_ID, build_codex_auth_command_config, remove_tree
 from .codex_account_selection import build_account_selection_packet
 from .codex_custom_sessions import CodexCustomSessionManager
@@ -123,6 +124,7 @@ def _run_wbp_cli_prompt(
     codex_bin: Path,
     model_id: str,
     prompt: str,
+    expected_delegate_arguments: dict[str, Any] | None = None,
     timeout_seconds: int = 120,
 ) -> dict[str, Any]:
     auth_command_path = REPO_ROOT / "wbp_codex_auth_command.py"
@@ -140,6 +142,8 @@ def _run_wbp_cli_prompt(
     config_text = ""
     process_result: BoundedProcessResult | None = None
     trace_packet: dict[str, Any] = {}
+    prompt_observation_packet: dict[str, Any] = {}
+    submit_boundary_probe_packet: dict[str, Any] = {}
     started = time.time()
     with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
         config_text = build_codex_auth_command_config(
@@ -148,6 +152,51 @@ def _run_wbp_cli_prompt(
             model_id=model_id,
         )
         config_path.write_text(config_text, encoding="utf-8")
+        prompt_observation_packet = mcp_delegate.build_prompt_observation_packet(
+            prompt,
+            source="controlled_codex_exec_stdin_submit",
+            expected_delegate_arguments=expected_delegate_arguments,
+        )
+        submit_boundary_probe_packet = (
+            mcp_delegate.build_exec_wrapper_submit_boundary_probe_packet(
+                prompt_packet=prompt_observation_packet,
+                submit_entrypoint_packet={
+                    "entrypoint_kind": "codex_cli_runner_stdin_submit",
+                    "wbp_owned_entrypoint": True,
+                    "prompt_digest_observed": True,
+                    "prompt_sha256": prompt_observation_packet.get("prompt_sha256"),
+                    "pre_codex_decision": True,
+                    "post_factum_only": False,
+                    "router_delegate_prompt_contract_bound": bool(
+                        expected_delegate_arguments
+                    ),
+                    "stdin_prompt_used": True,
+                    "command_uses_stdin_dash": True,
+                    "command_json_mode": True,
+                    "env_codex_home_is_temp": True,
+                    "env_home_is_temp": True,
+                    "workdir_is_temp": True,
+                    "command_workdir_is_temp": True,
+                    "command_output_file_is_temp": True,
+                    "current_codex_home_used": False,
+                    "owned_temp_config_written": True,
+                    "owned_temp_output_file_reserved": True,
+                    "effective_config_written": False,
+                    "state_written": False,
+                    "profile_written": False,
+                    "config_written": False,
+                    "route_registry_written": False,
+                    "credential_written": False,
+                    "runtime_state_written": False,
+                    "raw_prompt_recorded": False,
+                    "raw_route_id_recorded": False,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                    "product_ready": False,
+                    "native_free_chat_router_proven": False,
+                },
+            )
+        )
         process_result = run_bounded_process(
             [
                 str(codex_bin),
@@ -197,6 +246,10 @@ def _run_wbp_cli_prompt(
             "independent_wbp_trace_observed": False,
             "trace_observer_packet": trace_packet,
             "process_network_observation_packet": _default_process_network_observation(),
+            "prompt_observation_packet": prompt_observation_packet,
+            "router_hook_control_boundary_evidence_packet": (
+                submit_boundary_probe_packet
+            ),
             "warning_classes": _runner_warning_classes(process_result.stderr),
             "auth_command_invoked": auth_stamp.exists(),
         }
@@ -243,6 +296,10 @@ def _run_wbp_cli_prompt(
         ),
         "trace_observer_packet": trace_packet,
         "process_network_observation_packet": _default_process_network_observation(),
+        "prompt_observation_packet": prompt_observation_packet,
+        "router_hook_control_boundary_evidence_packet": (
+            submit_boundary_probe_packet
+        ),
         "warning_classes": _runner_warning_classes(stderr),
         "auth_command_invoked": auth_command_invoked,
         "stdout_sha256_present": bool(stdout),

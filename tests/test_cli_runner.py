@@ -12,6 +12,7 @@ from unittest import mock
 
 from wild_boar_proxy import cli
 from wild_boar_proxy import cli_runner as cli_runner_mod
+from wild_boar_proxy import mcp_delegate
 from wild_boar_proxy.cli_runner import run_codex_cli_runner_smoke
 from wild_boar_proxy.cli_runner_via_wbp import (
     PRIMARY_MODEL_ID,
@@ -461,7 +462,10 @@ class CliRunnerTests(unittest.TestCase):
                 "wild_boar_proxy.cli_runner._build_runner_env",
                 return_value={"PATH": "/usr/bin"},
             ),
-            mock.patch("wild_boar_proxy.cli_runner.WbpTraceObserver", FakeTraceObserver),
+            mock.patch(
+                "wild_boar_proxy.cli_runner.WbpTraceObserver",
+                FakeTraceObserver,
+            ),
             mock.patch(
                 "wild_boar_proxy.cli_runner.run_bounded_process",
                 side_effect=fake_run_bounded_process,
@@ -485,6 +489,153 @@ class CliRunnerTests(unittest.TestCase):
         self.assertEqual(calls[0]["timeout_seconds"], 9)
         self.assertIn("-", calls[0]["command"])
         self.assertIn("-o", calls[0]["command"])
+        prompt_packet = result["prompt_observation_packet"]
+        boundary_evidence = result["router_hook_control_boundary_evidence_packet"]
+        self.assertEqual(
+            prompt_packet["packet_kind"],
+            "wbp_codex_prompt_observation",
+        )
+        self.assertTrue(prompt_packet["prompt_digest_present"])
+        self.assertFalse(prompt_packet["raw_prompt_recorded"])
+        self.assertEqual(
+            boundary_evidence["packet_kind"],
+            "wbp_exec_wrapper_submit_boundary_probe",
+        )
+        self.assertEqual(boundary_evidence["status"], "error")
+        self.assertTrue(boundary_evidence["control_boundary_can_enforce_router"])
+        self.assertFalse(
+            boundary_evidence["control_boundary_can_route_delegate_to_dip"]
+        )
+        self.assertIn(
+            "expected_delegate_contract_missing",
+            boundary_evidence["blocking_reasons"],
+        )
+
+    def test_run_wbp_cli_prompt_produces_route_bound_boundary_evidence(self) -> None:
+        calls: list[dict[str, object]] = []
+        prompt = "Codex, дай задачу DIP: верни короткий план."
+        expected_arguments = {"task": prompt, "expected_alias": "DIP"}
+
+        def fake_run_bounded_process(
+            command: list[str],
+            *,
+            env: dict[str, str],
+            stdin_text: str,
+            timeout_seconds: int,
+        ) -> BoundedProcessResult:
+            output_path = Path(command[command.index("-o") + 1])
+            output_path.write_text("CLI_RUNNER_OK\n", encoding="utf-8")
+            calls.append(
+                {
+                    "command": command,
+                    "env": env,
+                    "stdin_text": stdin_text,
+                    "timeout_seconds": timeout_seconds,
+                }
+            )
+            return BoundedProcessResult(
+                status="ok",
+                machine_error_code=PROCESS_OK,
+                exit_code=0,
+                stdout="runner stdout",
+                stderr="",
+                stdout_truncated=False,
+                stderr_truncated=False,
+                timed_out=False,
+                duration_seconds=0.01,
+            )
+
+        with (
+            mock.patch(
+                "wild_boar_proxy.cli_runner._build_runner_env",
+                return_value={"PATH": "/usr/bin"},
+            ),
+            mock.patch(
+                "wild_boar_proxy.cli_runner.WbpTraceObserver",
+                FakeTraceObserver,
+            ),
+            mock.patch(
+                "wild_boar_proxy.cli_runner.run_bounded_process",
+                side_effect=fake_run_bounded_process,
+            ),
+        ):
+            result = cli_runner_mod._run_wbp_cli_prompt(
+                mock.Mock(),
+                codex_bin=Path("/tmp/codex"),
+                model_id=PRIMARY_MODEL_ID,
+                prompt=prompt,
+                expected_delegate_arguments=expected_arguments,
+                timeout_seconds=9,
+            )
+
+        prompt_packet = result["prompt_observation_packet"]
+        boundary_evidence = result["router_hook_control_boundary_evidence_packet"]
+        control_boundary = mcp_delegate.build_router_hook_control_boundary_packet(
+            prompt_packet=prompt_packet,
+            boundary_evidence_packet=boundary_evidence,
+        )
+        codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_router_1",
+                                "type": "mcp_tool_call",
+                                "server_name": "wild-boar-proxy",
+                                "tool_name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": expected_arguments,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+        source_event = mcp_delegate.build_router_hook_source_event_packet(
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            control_boundary_packet=control_boundary,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(calls[0]["stdin_text"], prompt)
+        self.assertEqual(boundary_evidence["status"], "ok")
+        self.assertEqual(
+            boundary_evidence["packet_kind"],
+            "wbp_exec_wrapper_submit_boundary_probe",
+        )
+        self.assertTrue(boundary_evidence["submit_boundary_claim_digest_present"])
+        self.assertTrue(boundary_evidence["control_boundary_pre_codex_decision"])
+        self.assertTrue(boundary_evidence["control_boundary_can_enforce_router"])
+        self.assertTrue(
+            boundary_evidence["control_boundary_can_route_delegate_to_dip"]
+        )
+        self.assertTrue(boundary_evidence["owned_temp_config_written"])
+        self.assertTrue(boundary_evidence["owned_temp_output_file_reserved"])
+        self.assertFalse(boundary_evidence["effective_config_written"])
+        self.assertFalse(boundary_evidence["config_written"])
+        self.assertFalse(boundary_evidence["raw_prompt_recorded"])
+        self.assertFalse(boundary_evidence["raw_backend_details_exposed"])
+        self.assertFalse(boundary_evidence["secret_value_exposed"])
+        self.assertFalse(boundary_evidence["product_ready"])
+        self.assertFalse(boundary_evidence["native_free_chat_router_proven"])
+        self.assertEqual(control_boundary["status"], "ok")
+        self.assertTrue(control_boundary["control_boundary_evidence_packet_ok"])
+        self.assertTrue(control_boundary["control_boundary_evidence_producer_valid"])
+        self.assertTrue(
+            control_boundary["control_boundary_evidence_claim_digest_matched"]
+        )
+        self.assertEqual(source_event["status"], "ok")
+        self.assertTrue(source_event["source_control_boundary_proven"])
+        self.assertTrue(source_event["hook_can_route_delegate_to_dip"])
+        self.assertFalse(source_event["product_ready"])
 
     def test_run_wbp_cli_prompt_maps_bounded_timeout_without_false_green(self) -> None:
         def fake_run_bounded_process(

@@ -207,7 +207,63 @@ def _prompt_bound_codex_tool_call_packet(
     return prompt_packet, codex_packet
 
 
+def _exec_wrapper_submit_entrypoint_packet(
+    prompt_packet: dict[str, object],
+    **overrides: object,
+) -> dict[str, object]:
+    entrypoint: dict[str, object] = {
+        "entrypoint_kind": "controlled_codex_exec_stdin_submit",
+        "wbp_owned_entrypoint": True,
+        "prompt_digest_observed": True,
+        "prompt_sha256": prompt_packet["prompt_sha256"],
+        "pre_codex_decision": True,
+        "post_factum_only": False,
+        "router_delegate_prompt_contract_bound": True,
+        "stdin_prompt_used": True,
+        "command_uses_stdin_dash": True,
+        "command_json_mode": True,
+        "env_codex_home_is_temp": True,
+        "env_home_is_temp": True,
+        "workdir_is_temp": True,
+        "command_workdir_is_temp": True,
+        "command_output_file_is_temp": True,
+        "current_codex_home_used": False,
+        "owned_temp_config_written": True,
+        "owned_temp_output_file_reserved": True,
+        "effective_config_written": False,
+        "prompt_supplied_hook_flags": False,
+        "browser_supplied_hook_flags": False,
+        "state_written": False,
+        "profile_written": False,
+        "config_written": False,
+        "route_registry_written": False,
+        "credential_written": False,
+        "runtime_state_written": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+    }
+    entrypoint.update(overrides)
+    return entrypoint
+
+
 def _router_hook_control_boundary_evidence(
+    prompt_packet: dict[str, object],
+    **overrides: object,
+) -> dict[str, object]:
+    return mcp_delegate.build_exec_wrapper_submit_boundary_probe_packet(
+        prompt_packet=prompt_packet,
+        submit_entrypoint_packet=_exec_wrapper_submit_entrypoint_packet(
+            prompt_packet,
+            **overrides,
+        ),
+    )
+
+
+def _manual_router_hook_control_boundary_evidence(
     prompt_packet: dict[str, object],
     **overrides: object,
 ) -> dict[str, object]:
@@ -221,7 +277,7 @@ def _router_hook_control_boundary_evidence(
         "control_boundary_can_route_delegate_to_dip": True,
         "effect": "probe",
         "changed_files": [],
-        "source_run_sha256": hashlib.sha256(b"router-control-run-1").hexdigest(),
+        "source_run_sha256": hashlib.sha256(b"manual-evidence").hexdigest(),
         "source_prompt_sha256": prompt_packet["prompt_sha256"],
         "prompt_supplied_hook_flags": False,
         "browser_supplied_hook_flags": False,
@@ -1460,6 +1516,10 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["control_boundary_post_factum_only"])
         self.assertTrue(packet["control_boundary_can_enforce_router"])
         self.assertTrue(packet["control_boundary_can_route_delegate_to_dip"])
+        self.assertTrue(packet["control_boundary_evidence_packet_ok"])
+        self.assertTrue(packet["control_boundary_evidence_producer_valid"])
+        self.assertTrue(packet["control_boundary_evidence_claim_digest_present"])
+        self.assertTrue(packet["control_boundary_evidence_claim_digest_matched"])
         self.assertTrue(packet["control_boundary_claim_digest_present"])
         self.assertFalse(packet["manual_boundary_evidence_used"])
         self.assertFalse(packet["synthetic_boundary_evidence_used"])
@@ -1469,6 +1529,77 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["native_free_chat_router_proven"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_exec_wrapper_submit_boundary_producer_accepts_controlled_stdin(
+        self,
+    ) -> None:
+        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+
+        packet = _router_hook_control_boundary_evidence(prompt_packet)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["packet_kind"],
+            "wbp_exec_wrapper_submit_boundary_probe",
+        )
+        self.assertEqual(packet["result_status"], "proven")
+        self.assertEqual(packet["submit_boundary_status"], "ok")
+        self.assertEqual(
+            packet["entrypoint_kind"],
+            "controlled_codex_exec_stdin_submit",
+        )
+        self.assertTrue(packet["control_boundary_wbp_owned"])
+        self.assertTrue(packet["control_boundary_observed_prompt"])
+        self.assertTrue(packet["control_boundary_pre_codex_decision"])
+        self.assertFalse(packet["control_boundary_post_factum_only"])
+        self.assertTrue(packet["control_boundary_can_enforce_router"])
+        self.assertTrue(packet["control_boundary_can_route_delegate_to_dip"])
+        self.assertTrue(packet["router_delegate_prompt_contract_bound"])
+        self.assertTrue(packet["submit_boundary_claim_digest_present"])
+        self.assertEqual(packet["changed_files"], [])
+        self.assertTrue(packet["owned_temp_config_written"])
+        self.assertTrue(packet["owned_temp_output_file_reserved"])
+        self.assertFalse(packet["effective_config_written"])
+        self.assertFalse(packet["config_written"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_route_id_recorded"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_exec_wrapper_submit_boundary_blocks_without_route_contract(
+        self,
+    ) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="controlled_codex_exec_stdin_submit",
+        )
+
+        packet = mcp_delegate.build_exec_wrapper_submit_boundary_probe_packet(
+            prompt_packet=prompt_packet,
+            submit_entrypoint_packet=_exec_wrapper_submit_entrypoint_packet(
+                prompt_packet,
+                router_delegate_prompt_contract_bound=False,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_NOT_PROVEN",
+        )
+        self.assertTrue(packet["control_boundary_can_enforce_router"])
+        self.assertFalse(packet["control_boundary_can_route_delegate_to_dip"])
+        self.assertIn("expected_delegate_contract_missing", packet["blocking_reasons"])
+        self.assertIn(
+            "router_delegate_prompt_contract_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_router_hook_control_boundary_blocks_post_factum_jsonl_evidence(
         self,
     ) -> None:
@@ -1476,7 +1607,7 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         packet = mcp_delegate.build_router_hook_control_boundary_packet(
             prompt_packet=prompt_packet,
-            boundary_evidence_packet=_router_hook_control_boundary_evidence(
+            boundary_evidence_packet=_manual_router_hook_control_boundary_evidence(
                 prompt_packet,
                 packet_kind="wbp_codex_exec_jsonl_observer",
                 control_boundary_pre_codex_decision=False,
@@ -1495,6 +1626,8 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertTrue(packet["control_boundary_post_factum_only"])
         self.assertFalse(packet["control_boundary_can_enforce_router"])
         self.assertFalse(packet["control_boundary_can_route_delegate_to_dip"])
+        self.assertFalse(packet["control_boundary_evidence_packet_ok"])
+        self.assertFalse(packet["control_boundary_evidence_producer_valid"])
         self.assertIn(
             "control_boundary_evidence_kind_not_admitted",
             packet["blocking_reasons"],
@@ -1507,6 +1640,104 @@ class McpDelegateToDipTests(unittest.TestCase):
             "control_boundary_post_factum_only",
             packet["blocking_reasons"],
         )
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_router_hook_control_boundary_rejects_manual_evidence_dict(
+        self,
+    ) -> None:
+        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+
+        packet = mcp_delegate.build_router_hook_control_boundary_packet(
+            prompt_packet=prompt_packet,
+            boundary_evidence_packet=_manual_router_hook_control_boundary_evidence(
+                prompt_packet
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_NOT_PROVEN",
+        )
+        self.assertFalse(packet["control_boundary_evidence_packet_ok"])
+        self.assertFalse(packet["control_boundary_evidence_producer_valid"])
+        self.assertFalse(packet["control_boundary_evidence_claim_digest_present"])
+        self.assertFalse(packet["control_boundary_evidence_claim_digest_matched"])
+        self.assertIn(
+            "control_boundary_evidence_producer_invalid",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "control_boundary_evidence_claim_digest_missing",
+            packet["blocking_reasons"],
+        )
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_router_hook_control_boundary_rejects_tampered_producer_evidence(
+        self,
+    ) -> None:
+        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+        evidence = dict(_router_hook_control_boundary_evidence(prompt_packet))
+        evidence["changed_files"] = ["config.toml"]
+
+        packet = mcp_delegate.build_router_hook_control_boundary_packet(
+            prompt_packet=prompt_packet,
+            boundary_evidence_packet=evidence,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["control_boundary_evidence_packet_ok"])
+        self.assertTrue(packet["control_boundary_evidence_producer_valid"])
+        self.assertFalse(packet["control_boundary_evidence_claim_digest_matched"])
+        self.assertIn(
+            "control_boundary_evidence_claim_digest_mismatch",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "control_boundary_write_side_effect",
+            packet["blocking_reasons"],
+        )
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_exec_wrapper_submit_boundary_blocks_unsafe_entrypoint_claims(
+        self,
+    ) -> None:
+        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+
+        packet = mcp_delegate.build_exec_wrapper_submit_boundary_probe_packet(
+            prompt_packet=prompt_packet,
+            submit_entrypoint_packet=_exec_wrapper_submit_entrypoint_packet(
+                prompt_packet,
+                state_written=True,
+                raw_prompt_recorded=True,
+                raw_route_id_recorded=True,
+                raw_backend_details_exposed=True,
+                secret_value_exposed=True,
+                product_ready=True,
+                native_free_chat_router_proven=True,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_SIDE_EFFECT_REJECTED",
+        )
+        self.assertIn("control_boundary_write_side_effect", packet["blocking_reasons"])
+        self.assertIn("raw_prompt_must_not_be_recorded", packet["blocking_reasons"])
+        self.assertIn("raw_route_id_must_not_be_recorded", packet["blocking_reasons"])
+        self.assertIn(
+            "raw_backend_details_must_not_be_exposed",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("secret_value_must_not_be_exposed", packet["blocking_reasons"])
+        self.assertIn(
+            "native_free_chat_router_must_not_be_claimed",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("product_ready_must_not_be_claimed", packet["blocking_reasons"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["native_free_chat_router_proven"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])

@@ -122,9 +122,30 @@ ROUTER_HOOK_CONTROL_BOUNDARY_SIDE_EFFECT_REJECTED = (
 ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_NOT_BOUND = (
     "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_NOT_BOUND"
 )
+EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND = (
+    "wbp_exec_wrapper_submit_boundary_probe"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_PROVEN = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_PROVEN"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_BLOCKED = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_BLOCKED"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_NOT_PROVEN = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_NOT_PROVEN"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_AUTHORITY_REJECTED = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_AUTHORITY_REJECTED"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_SIDE_EFFECT_REJECTED = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_SIDE_EFFECT_REJECTED"
+)
+EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_NOT_BOUND = (
+    "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_NOT_BOUND"
+)
 ROUTER_HOOK_CONTROL_BOUNDARY_ALLOWED_EVIDENCE_KINDS = frozenset(
     {
-        "wbp_exec_wrapper_submit_boundary_probe",
+        EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND,
         "wbp_owned_router_hook_boundary_probe",
     }
 )
@@ -889,6 +910,362 @@ def build_prompt_observation_packet(
     }
 
 
+_EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_FIELDS = (
+    "packet_kind",
+    "submit_boundary_status",
+    "entrypoint_kind",
+    "control_boundary_wbp_owned",
+    "control_boundary_observed_prompt",
+    "control_boundary_pre_codex_decision",
+    "control_boundary_post_factum_only",
+    "control_boundary_can_enforce_router",
+    "control_boundary_can_route_delegate_to_dip",
+    "router_delegate_prompt_contract_bound",
+    "effect",
+    "changed_files",
+    "source_run_sha256",
+    "source_prompt_sha256",
+    "stdin_prompt_used",
+    "command_uses_stdin_dash",
+    "command_json_mode",
+    "env_codex_home_is_temp",
+    "env_home_is_temp",
+    "workdir_is_temp",
+    "command_workdir_is_temp",
+    "command_output_file_is_temp",
+    "current_codex_home_used",
+    "owned_temp_config_written",
+    "owned_temp_output_file_reserved",
+    "effective_config_written",
+    "state_written",
+    "profile_written",
+    "config_written",
+    "route_registry_written",
+    "credential_written",
+    "runtime_state_written",
+    "raw_prompt_recorded",
+    "raw_route_id_recorded",
+    "raw_backend_details_exposed",
+    "secret_value_exposed",
+    "product_ready",
+    "native_free_chat_router_proven",
+)
+
+
+def _exec_wrapper_submit_boundary_claim_sha256(
+    packet: Mapping[str, Any],
+) -> str:
+    payload = {
+        field: packet.get(field)
+        for field in _EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_FIELDS
+    }
+    return _sha256_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def build_exec_wrapper_submit_boundary_probe_packet(
+    *,
+    prompt_packet: Mapping[str, Any] | None = None,
+    submit_entrypoint_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    entrypoint = (
+        dict(submit_entrypoint_packet)
+        if isinstance(submit_entrypoint_packet, Mapping)
+        else {}
+    )
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    expected_delegate_contract_present = bool(
+        prompt.get("expected_delegate_tool_call_digest_present") is True
+        and prompt.get("expected_delegate_tool_name") == DELEGATE_TO_DIP_TOOL
+        and _hex_sha256(prompt.get("expected_delegate_tool_call_sha256") or "")
+    )
+    entrypoint_kind = _safe_text(
+        entrypoint.get("entrypoint_kind") or "",
+        limit=96,
+    )
+    entrypoint_kind_admitted = entrypoint_kind in {
+        "controlled_codex_exec_stdin_submit",
+        "codex_cli_runner_stdin_submit",
+    }
+    control_boundary_wbp_owned = (
+        entrypoint.get("wbp_owned_entrypoint") is True
+        and entrypoint_kind_admitted
+    )
+    control_boundary_observed_prompt = bool(
+        prompt_digest_present
+        and entrypoint.get("prompt_digest_observed") is True
+        and _hex_sha256(entrypoint.get("prompt_sha256") or "") == prompt_sha256
+    )
+    control_boundary_pre_codex_decision = (
+        entrypoint.get("pre_codex_decision") is True
+    )
+    control_boundary_post_factum_only = bool(
+        entrypoint.get("post_factum_only") is True
+        or entrypoint_kind in {"wbp_codex_exec_jsonl_observer", "jsonl_observer"}
+    )
+    stdin_prompt_used = entrypoint.get("stdin_prompt_used") is True
+    command_uses_stdin_dash = entrypoint.get("command_uses_stdin_dash") is True
+    command_json_mode = entrypoint.get("command_json_mode") is True
+    env_codex_home_is_temp = entrypoint.get("env_codex_home_is_temp") is True
+    env_home_is_temp = entrypoint.get("env_home_is_temp") is True
+    workdir_is_temp = entrypoint.get("workdir_is_temp") is True
+    command_workdir_is_temp = entrypoint.get("command_workdir_is_temp") is True
+    command_output_file_is_temp = (
+        entrypoint.get("command_output_file_is_temp") is True
+    )
+    current_codex_home_used = entrypoint.get("current_codex_home_used") is True
+    owned_temp_config_written = entrypoint.get("owned_temp_config_written") is True
+    owned_temp_output_file_reserved = (
+        entrypoint.get("owned_temp_output_file_reserved") is True
+    )
+    effective_config_written = entrypoint.get("effective_config_written") is True
+    router_delegate_prompt_contract_bound = bool(
+        expected_delegate_contract_present
+        and entrypoint.get("router_delegate_prompt_contract_bound") is True
+    )
+    prompt_supplied_hook_flags = bool(
+        entrypoint.get("prompt_supplied_hook_flags") is True
+        or entrypoint.get("browser_can_supply_prompt_authority") is True
+    )
+    browser_supplied_hook_flags = bool(
+        entrypoint.get("browser_supplied_hook_flags") is True
+        or entrypoint.get("browser_can_supply_route_authority") is True
+        or entrypoint.get("browser_can_supply_model_authority") is True
+    )
+    state_written = entrypoint.get("state_written") is True
+    profile_written = entrypoint.get("profile_written") is True
+    config_written = (
+        entrypoint.get("config_written") is True or effective_config_written
+    )
+    route_registry_written = entrypoint.get("route_registry_written") is True
+    credential_written = entrypoint.get("credential_written") is True
+    runtime_state_written = entrypoint.get("runtime_state_written") is True
+    write_side_effect_observed = bool(
+        state_written
+        or profile_written
+        or config_written
+        or route_registry_written
+        or credential_written
+        or runtime_state_written
+        or entrypoint.get("changed_files") not in (None, [])
+        or entrypoint.get("effect") not in (None, "", EFFECT_PROBE, "read")
+    )
+    raw_prompt_recorded = bool(
+        entrypoint.get("raw_prompt_recorded") is True
+        or entrypoint.get("prompt_text_recorded") is True
+    )
+    raw_route_id_recorded = entrypoint.get("raw_route_id_recorded") is True
+    raw_backend_details_exposed = (
+        entrypoint.get("raw_backend_details_exposed") is True
+    )
+    secret_value_exposed = entrypoint.get("secret_value_exposed") is True
+    product_ready_claimed = entrypoint.get("product_ready") is True
+    native_free_chat_router_claimed = (
+        entrypoint.get("native_free_chat_router_proven") is True
+    )
+    control_boundary_can_enforce_router = bool(
+        control_boundary_wbp_owned
+        and control_boundary_observed_prompt
+        and control_boundary_pre_codex_decision
+        and not control_boundary_post_factum_only
+        and stdin_prompt_used
+        and command_uses_stdin_dash
+        and command_json_mode
+        and env_codex_home_is_temp
+        and env_home_is_temp
+        and workdir_is_temp
+        and command_workdir_is_temp
+        and command_output_file_is_temp
+        and not current_codex_home_used
+        and not write_side_effect_observed
+    )
+    control_boundary_can_route_delegate_to_dip = bool(
+        control_boundary_can_enforce_router
+        and router_delegate_prompt_contract_bound
+    )
+    run_fingerprint = json.dumps(
+        {
+            "entrypoint_kind": entrypoint_kind,
+            "prompt_sha256": prompt_sha256,
+            "router_delegate_prompt_contract_bound": (
+                router_delegate_prompt_contract_bound
+            ),
+            "stdin_prompt_used": stdin_prompt_used,
+            "command_uses_stdin_dash": command_uses_stdin_dash,
+            "command_json_mode": command_json_mode,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    source_run_sha256 = _sha256_text(run_fingerprint) if prompt_sha256 else ""
+
+    blocking_reasons: list[str] = []
+    if not entrypoint:
+        blocking_reasons.append("submit_entrypoint_evidence_missing")
+    if not prompt_digest_present:
+        blocking_reasons.append("prompt_digest_missing")
+    if not entrypoint_kind_admitted:
+        blocking_reasons.append("submit_entrypoint_kind_not_admitted")
+    if not control_boundary_wbp_owned:
+        blocking_reasons.append("control_boundary_not_wbp_owned")
+    if not control_boundary_observed_prompt:
+        blocking_reasons.append("control_boundary_prompt_not_observed")
+    if not control_boundary_pre_codex_decision:
+        blocking_reasons.append("control_boundary_pre_codex_decision_not_proven")
+    if control_boundary_post_factum_only:
+        blocking_reasons.append("control_boundary_post_factum_only")
+    if not stdin_prompt_used:
+        blocking_reasons.append("stdin_prompt_not_used")
+    if not command_uses_stdin_dash:
+        blocking_reasons.append("command_stdin_dash_not_used")
+    if not command_json_mode:
+        blocking_reasons.append("command_json_mode_not_used")
+    if not env_codex_home_is_temp:
+        blocking_reasons.append("env_codex_home_not_temp")
+    if not env_home_is_temp:
+        blocking_reasons.append("env_home_not_temp")
+    if not workdir_is_temp:
+        blocking_reasons.append("workdir_not_temp")
+    if not command_workdir_is_temp:
+        blocking_reasons.append("command_workdir_not_temp")
+    if not command_output_file_is_temp:
+        blocking_reasons.append("command_output_file_not_temp")
+    if current_codex_home_used:
+        blocking_reasons.append("current_codex_home_used")
+    if not control_boundary_can_enforce_router:
+        blocking_reasons.append("control_boundary_cannot_enforce_router")
+    if not expected_delegate_contract_present:
+        blocking_reasons.append("expected_delegate_contract_missing")
+    if not router_delegate_prompt_contract_bound:
+        blocking_reasons.append("router_delegate_prompt_contract_not_bound")
+    if not control_boundary_can_route_delegate_to_dip:
+        blocking_reasons.append("control_boundary_cannot_route_delegate_to_dip")
+    if prompt_supplied_hook_flags:
+        blocking_reasons.append("prompt_supplied_hook_flags")
+    if browser_supplied_hook_flags:
+        blocking_reasons.append("browser_supplied_hook_flags")
+    if write_side_effect_observed:
+        blocking_reasons.append("control_boundary_write_side_effect")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_route_id_recorded:
+        blocking_reasons.append("raw_route_id_must_not_be_recorded")
+    if raw_backend_details_exposed:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if secret_value_exposed:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+    if native_free_chat_router_claimed:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if product_ready_claimed:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+
+    ok = not blocking_reasons
+    submit_boundary_status = "ok" if ok else "blocked"
+    packet_extra = {
+        "producer_built_by": "build_exec_wrapper_submit_boundary_probe_packet",
+        "submit_boundary_status": submit_boundary_status,
+        "entrypoint_kind": entrypoint_kind if entrypoint_kind_admitted else "",
+        "entrypoint_scope": "controlled_codex_exec_stdin_submit",
+        "control_boundary_wbp_owned": control_boundary_wbp_owned,
+        "control_boundary_observed_prompt": control_boundary_observed_prompt,
+        "control_boundary_pre_codex_decision": control_boundary_pre_codex_decision,
+        "control_boundary_post_factum_only": control_boundary_post_factum_only,
+        "control_boundary_can_enforce_router": control_boundary_can_enforce_router,
+        "control_boundary_can_route_delegate_to_dip": (
+            control_boundary_can_route_delegate_to_dip
+        ),
+        "router_delegate_prompt_contract_bound": (
+            router_delegate_prompt_contract_bound
+        ),
+        "effect": EFFECT_PROBE,
+        "changed_files": [],
+        "source_prompt_sha256": (
+            prompt_sha256 if control_boundary_observed_prompt else ""
+        ),
+        "source_run_sha256": source_run_sha256,
+        "stdin_prompt_used": stdin_prompt_used,
+        "command_uses_stdin_dash": command_uses_stdin_dash,
+        "command_json_mode": command_json_mode,
+        "env_codex_home_is_temp": env_codex_home_is_temp,
+        "env_home_is_temp": env_home_is_temp,
+        "workdir_is_temp": workdir_is_temp,
+        "command_workdir_is_temp": command_workdir_is_temp,
+        "command_output_file_is_temp": command_output_file_is_temp,
+        "current_codex_home_used": current_codex_home_used,
+        "owned_temp_config_written": owned_temp_config_written,
+        "owned_temp_output_file_reserved": owned_temp_output_file_reserved,
+        "effective_config_written": effective_config_written,
+        "prompt_supplied_hook_flags": prompt_supplied_hook_flags,
+        "browser_supplied_hook_flags": browser_supplied_hook_flags,
+        "state_written": state_written,
+        "profile_written": profile_written,
+        "config_written": config_written,
+        "route_registry_written": route_registry_written,
+        "credential_written": credential_written,
+        "runtime_state_written": runtime_state_written,
+        "write_side_effect_observed": write_side_effect_observed,
+        "raw_prompt_recorded": raw_prompt_recorded,
+        "prompt_text_recorded": False,
+        "raw_route_id_recorded": raw_route_id_recorded,
+        "raw_backend_details_exposed": raw_backend_details_exposed,
+        "secret_value_exposed": secret_value_exposed,
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+        "does_not_prove_native_free_chat_router": True,
+        "does_not_prove_product_ready_free_chat": True,
+        "no_secret_exposed": not secret_value_exposed,
+    }
+    digest_packet = {
+        "packet_kind": EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND,
+        **packet_extra,
+    }
+    packet_extra["submit_boundary_claim_digest_present"] = True
+    packet_extra["submit_boundary_claim_sha256"] = (
+        _exec_wrapper_submit_boundary_claim_sha256(digest_packet)
+    )
+
+    if ok:
+        machine_error_code = "OK"
+    elif prompt_supplied_hook_flags or browser_supplied_hook_flags:
+        machine_error_code = EXEC_WRAPPER_SUBMIT_BOUNDARY_AUTHORITY_REJECTED
+    elif write_side_effect_observed:
+        machine_error_code = EXEC_WRAPPER_SUBMIT_BOUNDARY_SIDE_EFFECT_REJECTED
+    elif not prompt_digest_present or not source_run_sha256:
+        machine_error_code = EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_NOT_BOUND
+    else:
+        machine_error_code = EXEC_WRAPPER_SUBMIT_BOUNDARY_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP exec-wrapper submit boundary is proven by bounded evidence."
+            if ok
+            else "WBP exec-wrapper submit boundary is not proven."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra=packet_extra,
+        packet_kind=EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND,
+        final_status=(
+            EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_PROVEN
+            if ok
+            else EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_BLOCKED
+        ),
+        result_status="proven" if ok else "blocked",
+    )
+
+
 def _jsonl_event_objects(jsonl_text: str) -> tuple[list[dict[str, Any]], list[str]]:
     events: list[dict[str, Any]] = []
     parse_errors: list[str] = []
@@ -1576,6 +1953,35 @@ def build_router_hook_control_boundary_packet(
     evidence_kind_admitted = (
         evidence_kind in ROUTER_HOOK_CONTROL_BOUNDARY_ALLOWED_EVIDENCE_KINDS
     )
+    evidence_status_ok = bool(
+        evidence.get("status") == "ok"
+        and evidence.get("result_status") in {"", "proven"}
+        and evidence.get("final_status")
+        == EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_PROVEN
+    )
+    evidence_producer_valid = bool(
+        evidence_kind == EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND
+        and evidence.get("producer_built_by")
+        == "build_exec_wrapper_submit_boundary_probe_packet"
+    )
+    evidence_claim_sha256 = _hex_sha256(
+        evidence.get("submit_boundary_claim_sha256") or ""
+    )
+    evidence_claim_digest_present = bool(
+        evidence.get("submit_boundary_claim_digest_present") is True
+        and evidence_claim_sha256
+    )
+    evidence_claim_digest_matched = bool(
+        evidence_claim_digest_present
+        and evidence_claim_sha256
+        == _exec_wrapper_submit_boundary_claim_sha256(evidence)
+    )
+    evidence_packet_ok = bool(
+        evidence_kind_admitted
+        and evidence_status_ok
+        and evidence_producer_valid
+        and evidence_claim_digest_matched
+    )
     evidence_effect = _safe_text(
         evidence.get("source_effect") or evidence.get("effect") or "",
         limit=80,
@@ -1688,6 +2094,7 @@ def build_router_hook_control_boundary_packet(
         and control_boundary_run_digest_present
         and control_boundary_pre_codex_decision
         and not control_boundary_post_factum_only
+        and evidence_packet_ok
         and evidence_can_enforce_router
     )
     control_boundary_can_route_delegate_to_dip = bool(
@@ -1700,6 +2107,14 @@ def build_router_hook_control_boundary_packet(
         blocking_reasons.append("control_boundary_evidence_missing")
     if not evidence_kind_admitted:
         blocking_reasons.append("control_boundary_evidence_kind_not_admitted")
+    if not evidence_status_ok:
+        blocking_reasons.append("control_boundary_evidence_packet_not_ok")
+    if not evidence_producer_valid:
+        blocking_reasons.append("control_boundary_evidence_producer_invalid")
+    if not evidence_claim_digest_present:
+        blocking_reasons.append("control_boundary_evidence_claim_digest_missing")
+    elif not evidence_claim_digest_matched:
+        blocking_reasons.append("control_boundary_evidence_claim_digest_mismatch")
     if not prompt_digest_present:
         blocking_reasons.append("prompt_digest_missing")
     if not control_boundary_wbp_owned:
@@ -1753,6 +2168,14 @@ def build_router_hook_control_boundary_packet(
         "producer_built_by": "build_router_hook_control_boundary_packet",
         "control_boundary_status": control_boundary_status,
         "control_boundary_wbp_owned": control_boundary_wbp_owned,
+        "control_boundary_evidence_packet_ok": evidence_packet_ok,
+        "control_boundary_evidence_producer_valid": evidence_producer_valid,
+        "control_boundary_evidence_claim_digest_present": (
+            evidence_claim_digest_present
+        ),
+        "control_boundary_evidence_claim_digest_matched": (
+            evidence_claim_digest_matched
+        ),
         "control_boundary_evidence_kind": (
             evidence_kind if evidence_kind_admitted else ""
         ),
