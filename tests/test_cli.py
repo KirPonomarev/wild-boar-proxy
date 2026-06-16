@@ -1263,6 +1263,88 @@ class CliTests(unittest.TestCase):
             before_config_toml,
         )
 
+    def test_stable_proxyless_recovery_restores_candidate_config_on_restart_failure(
+        self,
+    ) -> None:
+        stable_config = self.stable_dir.joinpath("config.yaml")
+        stable_config.write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            "auth-dir: \"~/.cli-proxy-api\"\n"
+            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            encoding="utf-8",
+        )
+        before_stable_config = stable_config.read_text(encoding="utf-8")
+        before_state = self.managed_dir.joinpath("supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        before_effective_mode = self.profile_dir.joinpath(
+            "runtime-effective-mode.txt"
+        ).read_text(encoding="utf-8")
+        before_config_toml = self.profile_dir.joinpath("config.toml").read_text(
+            encoding="utf-8"
+        )
+        restart_result = {
+            "status": "error",
+            "machine_error_code": "STABLE_RUNTIME_LAUNCH_FAILED",
+            "listener_was_present": False,
+            "discovered_pids": [],
+            "terminated_pids": [],
+            "launch_result": {
+                "status": "error",
+                "machine_error_code": "CLIPROXY_BIN_MISSING",
+                "pid": None,
+                "launch_observed": False,
+            },
+        }
+
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=False),
+            mock.patch.object(
+                runtime_mod,
+                "restart_owned_stable_runtime_process",
+                return_value=restart_result,
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "run_healthcheck",
+                side_effect=AssertionError(
+                    "restart failure must not run live reproof"
+                ),
+            ),
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
+                paths,
+                model="gpt-5.5",
+                configured_proxy_url="http://127.0.0.1:10808",
+            )
+
+        self.assertIsNone(reproof)
+        self.assertEqual(result["adoption_outcome"], "stable_proxyless_restart_failed")
+        self.assertTrue(result["stable_config_rewritten"])
+        self.assertFalse(result["stable_runtime_restarted"])
+        self.assertTrue(result["rollback_restored"])
+        self.assertEqual(
+            stable_config.read_text(encoding="utf-8"), before_stable_config
+        )
+        self.assertEqual(
+            self.managed_dir.joinpath("supervisor-state.json").read_text(
+                encoding="utf-8"
+            ),
+            before_state,
+        )
+        self.assertEqual(
+            self.profile_dir.joinpath("runtime-effective-mode.txt").read_text(
+                encoding="utf-8"
+            ),
+            before_effective_mode,
+        )
+        self.assertEqual(
+            self.profile_dir.joinpath("config.toml").read_text(encoding="utf-8"),
+            before_config_toml,
+        )
+
     def test_dynamic_local_proxy_candidates_use_bounded_lsof_probe(
         self,
     ) -> None:
