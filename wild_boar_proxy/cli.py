@@ -8,6 +8,11 @@ import json
 import sys
 from typing import Any
 
+from .approved_handoff import (
+    APPROVED_HANDOFF_SURFACES,
+    HANDOFF_SURFACE_LOCAL_PROOF_COMMAND,
+    run_approved_handoff_command,
+)
 from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets as command_packets
@@ -154,6 +159,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
     )
     router_hook_dispatch.add_argument("--json", action="store_true", required=True)
+    router_hook_handoff = router_hook_subparsers.add_parser("handoff")
+    router_hook_handoff.add_argument("--prompt", required=True)
+    router_hook_handoff.add_argument("--runtime-context-file")
+    router_hook_handoff.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_handoff.add_argument(
+        "--handoff-surface-kind",
+        choices=sorted(APPROVED_HANDOFF_SURFACES),
+        default=HANDOFF_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_handoff.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -444,6 +463,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
         "entry",
         "dispatch",
+        "handoff",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -649,6 +669,16 @@ def main(argv: list[str] | None = None) -> int:
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
                     hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "handoff":
+            return emit_json(
+                run_approved_handoff_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    handoff_surface_kind=args.handoff_surface_kind,
                 )
             )
         if args.command == "accounts" and args.accounts_command == "list":
