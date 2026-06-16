@@ -39,6 +39,20 @@ CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED = (
     "WBP_CODEX_EXEC_TOOL_CALL_OBSERVED"
 )
 CODEX_EXEC_TOOL_CALL_FINAL_STATUS_BLOCKED = "WBP_CODEX_EXEC_TOOL_CALL_BLOCKED"
+CODEX_EXEC_MODEL_GUARD_PACKET_KIND = "wbp_codex_exec_model_admission_guard"
+CODEX_EXEC_MODEL_GUARD_FINAL_STATUS_ADMITTED = (
+    "WBP_CODEX_EXEC_MODEL_ADMISSION_GUARD_ADMITTED"
+)
+CODEX_EXEC_MODEL_GUARD_FINAL_STATUS_BLOCKED = (
+    "WBP_CODEX_EXEC_MODEL_ADMISSION_GUARD_BLOCKED"
+)
+CODEX_EXEC_MODEL_NOT_ADMITTED = "CODEX_MODEL_NOT_ADMITTED"
+CHATGPT_ACCOUNT_ADMITTED_CODEX_EXEC_MODEL = "gpt-5.4"
+CHATGPT_ACCOUNT_UNSAFE_DEFAULT_CODEX_EXEC_MODELS = {"gpt-5.3-codex"}
+CHATGPT_ACCOUNT_AUTH_MODE_HINTS = {
+    "chatgpt_login_status",
+    "chatgpt_account_inferred_from_safe_error",
+}
 
 
 @dataclass(frozen=True)
@@ -297,6 +311,89 @@ def _command_packet(
             else DELEGATE_FINAL_STATUS_NOT_PROVEN
         ),
         result_status="with_limits" if ok else "blocked",
+    )
+
+
+def build_codex_exec_model_admission_guard_packet(
+    requested_model: str = "",
+    *,
+    explicit_model_requested: bool = False,
+    auth_mode_hint: str = "unknown",
+) -> dict[str, Any]:
+    requested = _safe_text(requested_model, limit=128)
+    hint = _safe_text(auth_mode_hint, limit=80) or "unknown"
+    if hint not in CHATGPT_ACCOUNT_AUTH_MODE_HINTS:
+        hint = "unknown"
+
+    if requested == CHATGPT_ACCOUNT_ADMITTED_CODEX_EXEC_MODEL:
+        ok = True
+        effective_model = requested
+        model_override_used = False
+        model_override_reason = ""
+        machine_error_code = "OK"
+        blocking_reasons: list[str] = []
+    elif requested in CHATGPT_ACCOUNT_UNSAFE_DEFAULT_CODEX_EXEC_MODELS:
+        if explicit_model_requested:
+            ok = False
+            effective_model = ""
+            model_override_used = False
+            model_override_reason = "explicit_model_not_admitted_for_chatgpt_account_exec"
+            machine_error_code = CODEX_EXEC_MODEL_NOT_ADMITTED
+            blocking_reasons = ["codex_model_not_admitted"]
+        else:
+            ok = True
+            effective_model = CHATGPT_ACCOUNT_ADMITTED_CODEX_EXEC_MODEL
+            model_override_used = True
+            model_override_reason = "chatgpt_account_default_model_not_admitted"
+            machine_error_code = "OK"
+            blocking_reasons = []
+    elif not requested:
+        ok = True
+        effective_model = CHATGPT_ACCOUNT_ADMITTED_CODEX_EXEC_MODEL
+        model_override_used = True
+        model_override_reason = "chatgpt_account_default_model_not_admitted"
+        machine_error_code = "OK"
+        blocking_reasons = []
+    else:
+        ok = True
+        effective_model = requested
+        model_override_used = False
+        model_override_reason = ""
+        machine_error_code = "OK"
+        blocking_reasons = []
+
+    model_admitted = bool(ok and effective_model)
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "Codex exec model is admitted for the bounded ChatGPT-account proof."
+            if ok
+            else "Codex exec model is not admitted for the bounded ChatGPT-account proof."
+        ),
+        blocking_reasons=blocking_reasons,
+        extra={
+            "requested_model": requested,
+            "effective_model": effective_model,
+            "model_override_used": model_override_used,
+            "model_override_reason": model_override_reason,
+            "model_admission_checked": True,
+            "model_admitted": model_admitted,
+            "auth_mode_hint": hint,
+            "raw_error_recorded": False,
+            "raw_jsonl_recorded": False,
+            "raw_stderr_recorded": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+            "product_ready": False,
+        },
+        packet_kind=CODEX_EXEC_MODEL_GUARD_PACKET_KIND,
+        final_status=(
+            CODEX_EXEC_MODEL_GUARD_FINAL_STATUS_ADMITTED
+            if ok
+            else CODEX_EXEC_MODEL_GUARD_FINAL_STATUS_BLOCKED
+        ),
+        result_status="admitted" if ok else "blocked",
     )
 
 
@@ -561,6 +658,12 @@ _CODEX_EXEC_AUTH_BLOCKER_PATTERN = re.compile(
     r"entitled|entitlement"
     r")\b"
 )
+_CODEX_EXEC_UNSUPPORTED_MODEL_PATTERN = re.compile(
+    r"(?i)\b("
+    r"unsupported model|model is not supported|model .* not supported|"
+    r"not supported when using codex with a chatgpt account"
+    r")\b"
+)
 
 
 def _codex_exec_auth_blocker_from_events(events: list[dict[str, Any]]) -> bool:
@@ -572,6 +675,19 @@ def _codex_exec_auth_blocker_from_events(events: list[dict[str, Any]]) -> bool:
         except (TypeError, ValueError):
             encoded = repr(event)
         if _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(encoded):
+            return True
+    return False
+
+
+def _codex_exec_unsupported_model_from_events(events: list[dict[str, Any]]) -> bool:
+    for event in events:
+        if _safe_text(event.get("type") or "", limit=128) != "error":
+            continue
+        try:
+            encoded = json.dumps(event, ensure_ascii=True, sort_keys=True)
+        except (TypeError, ValueError):
+            encoded = repr(event)
+        if _CODEX_EXEC_UNSUPPORTED_MODEL_PATTERN.search(encoded):
             return True
     return False
 
@@ -630,8 +746,16 @@ def build_codex_exec_tool_call_observation_packet(
         for event_type in event_types
     )
     stderr_safe = _safe_text(stderr_text, limit=4096)
+    unsupported_model_observed = bool(
+        exec_exit_code != 0
+        and (
+            _CODEX_EXEC_UNSUPPORTED_MODEL_PATTERN.search(stderr_safe)
+            or _codex_exec_unsupported_model_from_events(events)
+        )
+    )
     auth_blocker_observed = bool(
         exec_exit_code != 0
+        and not unsupported_model_observed
         and (
             _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(stderr_safe)
             or _codex_exec_auth_blocker_from_events(events)
@@ -640,6 +764,8 @@ def build_codex_exec_tool_call_observation_packet(
     blocking_reasons: list[str] = []
     if exec_exit_code != 0:
         blocking_reasons.append("codex_exec_nonzero_exit")
+    if unsupported_model_observed:
+        blocking_reasons.append("codex_model_not_admitted")
     if auth_blocker_observed:
         blocking_reasons.append("codex_exec_auth_or_model_admission_required")
     if parse_errors:
@@ -656,6 +782,8 @@ def build_codex_exec_tool_call_observation_packet(
     ok = not blocking_reasons
     if ok:
         machine_error_code = "OK"
+    elif unsupported_model_observed:
+        machine_error_code = CODEX_EXEC_MODEL_NOT_ADMITTED
     elif auth_blocker_observed:
         machine_error_code = "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED"
     elif parse_errors and not events:
@@ -675,6 +803,7 @@ def build_codex_exec_tool_call_observation_packet(
         extra={
             "codex_exec_json_events_observed": events_observed,
             "codex_exec_exit_code": int(exec_exit_code),
+            "codex_exec_unsupported_model_observed": unsupported_model_observed,
             "codex_exec_auth_blocker_observed": auth_blocker_observed,
             "codex_exec_jsonl_parse_error_count": len(parse_errors),
             "codex_exec_event_count": len(events),

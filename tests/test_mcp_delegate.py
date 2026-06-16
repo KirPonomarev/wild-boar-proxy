@@ -927,6 +927,97 @@ class McpDelegateToDipTests(unittest.TestCase):
             "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED",
         )
 
+    def test_codex_exec_model_guard_overrides_absent_or_unsafe_default(self) -> None:
+        for requested_model in ("", "gpt-5.3-codex"):
+            with self.subTest(requested_model=requested_model):
+                packet = mcp_delegate.build_codex_exec_model_admission_guard_packet(
+                    requested_model,
+                    explicit_model_requested=False,
+                    auth_mode_hint="chatgpt_login_status",
+                )
+
+                self.assertEqual(packet["status"], "ok")
+                self.assertEqual(packet["machine_error_code"], "OK")
+                self.assertEqual(packet["requested_model"], requested_model)
+                self.assertEqual(packet["effective_model"], "gpt-5.4")
+                self.assertTrue(packet["model_override_used"])
+                self.assertEqual(
+                    packet["model_override_reason"],
+                    "chatgpt_account_default_model_not_admitted",
+                )
+                self.assertTrue(packet["model_admission_checked"])
+                self.assertTrue(packet["model_admitted"])
+                self.assertEqual(packet["auth_mode_hint"], "chatgpt_login_status")
+                self.assertFalse(packet["raw_error_recorded"])
+                self.assertFalse(packet["secret_value_exposed"])
+
+    def test_codex_exec_model_guard_blocks_explicit_unsupported_model(self) -> None:
+        packet = mcp_delegate.build_codex_exec_model_admission_guard_packet(
+            "gpt-5.3-codex",
+            explicit_model_requested=True,
+            auth_mode_hint="chatgpt_login_status",
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "CODEX_MODEL_NOT_ADMITTED")
+        self.assertEqual(packet["requested_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["effective_model"], "")
+        self.assertFalse(packet["model_override_used"])
+        self.assertFalse(packet["model_admitted"])
+        self.assertIn("codex_model_not_admitted", packet["blocking_reasons"])
+        self.assertFalse(packet["raw_error_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+
+    def test_codex_exec_model_guard_passes_explicit_admitted_model(self) -> None:
+        packet = mcp_delegate.build_codex_exec_model_admission_guard_packet(
+            "gpt-5.4",
+            explicit_model_requested=True,
+            auth_mode_hint="chatgpt_login_status",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["requested_model"], "gpt-5.4")
+        self.assertEqual(packet["effective_model"], "gpt-5.4")
+        self.assertFalse(packet["model_override_used"])
+        self.assertTrue(packet["model_admission_checked"])
+        self.assertTrue(packet["model_admitted"])
+
+    def test_codex_exec_jsonl_observation_reports_unsupported_model(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "message": (
+                                "The 'gpt-5.3-codex' model is not supported "
+                                "when using Codex with a ChatGPT account."
+                            ),
+                        }
+                    ),
+                    json.dumps({"type": "turn.failed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+            exec_exit_code=1,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "CODEX_MODEL_NOT_ADMITTED")
+        self.assertTrue(packet["codex_exec_unsupported_model_observed"])
+        self.assertFalse(packet["codex_exec_auth_blocker_observed"])
+        self.assertIn("codex_model_not_admitted", packet["blocking_reasons"])
+        self.assertFalse(packet["raw_jsonl_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+
     def test_codex_mcp_wiring_does_not_promote_blocked_codex_observation(self) -> None:
         config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
             CODEX_MCP_LIST_OUTPUT,
