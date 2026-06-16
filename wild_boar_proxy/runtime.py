@@ -12935,6 +12935,9 @@ def _run_rollout_stage_prove_impl(
     stage_proof_result["delegated_evidence"]["runtime_smoke_summary"] = {
         "status": smoke_payload.get("status"),
         "machine_error_code": smoke_payload.get("machine_error_code"),
+        "changed_files": smoke_payload.get("changed_files")
+        if isinstance(smoke_payload.get("changed_files"), list)
+        else [],
         "effective_mode": smoke_payload.get("effective_mode"),
         "launcher_exit_code": smoke_payload.get("launcher_exit_code"),
         "attestation_summary": smoke_payload.get("attestation_summary", {}),

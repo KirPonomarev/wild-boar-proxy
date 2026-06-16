@@ -4132,7 +4132,7 @@ class CliTests(unittest.TestCase):
                 "#!/bin/sh\n"
                 "mode=\"$1\"\n"
                 "[ \"$mode\" = smoke ] || exit 7\n"
-                "printf 'managed\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
+                "printf 'managed\\n\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
                 "python3 - <<'PY'\n"
                 "import json\n"
                 "import os\n"
@@ -4142,6 +4142,7 @@ class CliTests(unittest.TestCase):
                 "state['effective_mode'] = 'managed'\n"
                 "state['status'] = 'healthy'\n"
                 "state['last_error'] = ''\n"
+                "state['recording_smoke_launcher_observed'] = True\n"
                 "state_path.write_text(json.dumps(state) + '\\n')\n"
                 "PY\n"
                 f"exit {exit_code}\n"
@@ -15022,6 +15023,14 @@ class CliTests(unittest.TestCase):
             proof["delegated_evidence"]["runtime_smoke_summary"]["effective_mode"],
             "managed",
         )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"),
+            proof["delegated_evidence"]["runtime_smoke_summary"]["changed_files"],
+        )
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            proof["delegated_evidence"]["runtime_smoke_summary"]["changed_files"],
+        )
         self.assertEqual(
             proof["delegated_evidence"]["post_smoke_healthcheck_summary"][
                 "effective_mode"
@@ -15671,6 +15680,14 @@ class CliTests(unittest.TestCase):
                 "outcome"
             ],
             "not_needed",
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"),
+            proof["delegated_evidence"]["runtime_smoke_summary"]["changed_files"],
+        )
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            proof["delegated_evidence"]["runtime_smoke_summary"]["changed_files"],
         )
         self.assertIn(
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
