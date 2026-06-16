@@ -104,6 +104,30 @@ ROUTER_HOOK_SOURCE_EVENT_CAPABILITY_NOT_PROVEN = (
     "WBP_ROUTER_HOOK_SOURCE_EVENT_CAPABILITY_NOT_PROVEN"
 )
 ROUTER_HOOK_CONTROL_BOUNDARY_PACKET_KIND = "wbp_router_hook_control_boundary"
+ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_PROVEN = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_PROVEN"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_BLOCKED = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_BLOCKED"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_NOT_PROVEN = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_NOT_PROVEN"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_AUTHORITY_REJECTED = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_AUTHORITY_REJECTED"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_SIDE_EFFECT_REJECTED = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_SIDE_EFFECT_REJECTED"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_NOT_BOUND = (
+    "WBP_ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_NOT_BOUND"
+)
+ROUTER_HOOK_CONTROL_BOUNDARY_ALLOWED_EVIDENCE_KINDS = frozenset(
+    {
+        "wbp_exec_wrapper_submit_boundary_probe",
+        "wbp_owned_router_hook_boundary_probe",
+    }
+)
 ROUTER_HOOK_SOURCE_ALLOWED_KINDS = frozenset(
     {
         "wbp_codex_exec_jsonl_observer",
@@ -1477,6 +1501,346 @@ def _router_hook_source_event_claim_sha256(
     )
 
 
+_ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_FIELDS = (
+    "packet_kind",
+    "control_boundary_status",
+    "control_boundary_wbp_owned",
+    "control_boundary_evidence_kind",
+    "control_boundary_source_effect",
+    "changed_files",
+    "source_run_sha256",
+    "source_prompt_sha256",
+    "control_boundary_observed_prompt",
+    "control_boundary_prompt_digest_bound",
+    "control_boundary_run_digest_present",
+    "control_boundary_pre_codex_decision",
+    "control_boundary_post_factum_only",
+    "control_boundary_can_enforce_router",
+    "control_boundary_can_route_delegate_to_dip",
+    "manual_boundary_evidence_used",
+    "synthetic_boundary_evidence_used",
+    "prompt_supplied_hook_flags",
+    "browser_supplied_hook_flags",
+    "state_written",
+    "profile_written",
+    "config_written",
+    "route_registry_written",
+    "credential_written",
+    "runtime_state_written",
+    "raw_prompt_recorded",
+    "raw_route_id_recorded",
+    "raw_backend_details_exposed",
+    "secret_value_exposed",
+    "local_codex_subagent_used_as_dip",
+    "local_imitation_used",
+    "fallback_used",
+    "product_ready",
+    "native_free_chat_router_proven",
+)
+
+
+def _router_hook_control_boundary_claim_sha256(
+    packet: Mapping[str, Any],
+) -> str:
+    payload = {
+        field: packet.get(field)
+        for field in _ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_FIELDS
+    }
+    return _sha256_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def build_router_hook_control_boundary_packet(
+    *,
+    prompt_packet: Mapping[str, Any] | None = None,
+    boundary_evidence_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    evidence = (
+        dict(boundary_evidence_packet)
+        if isinstance(boundary_evidence_packet, Mapping)
+        else {}
+    )
+
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    evidence_kind = _safe_text(evidence.get("packet_kind") or "", limit=128)
+    evidence_kind_admitted = (
+        evidence_kind in ROUTER_HOOK_CONTROL_BOUNDARY_ALLOWED_EVIDENCE_KINDS
+    )
+    evidence_effect = _safe_text(
+        evidence.get("source_effect") or evidence.get("effect") or "",
+        limit=80,
+    )
+    evidence_effect_admitted = evidence_effect in {"probe", "read"}
+    evidence_changed_files = evidence.get("changed_files")
+    evidence_changed_files_empty = (
+        isinstance(evidence_changed_files, list)
+        and not evidence_changed_files
+    )
+    source_prompt_sha256 = _hex_sha256(
+        evidence.get("source_prompt_sha256")
+        or evidence.get("prompt_sha256")
+        or ""
+    )
+    source_run_sha256 = _hex_sha256(
+        evidence.get("source_run_sha256")
+        or evidence.get("run_sha256")
+        or evidence.get("run_id_sha256")
+        or ""
+    )
+    control_boundary_wbp_owned = evidence.get("control_boundary_wbp_owned") is True
+    control_boundary_observed_prompt = bool(
+        evidence.get("control_boundary_observed_prompt") is True
+        or evidence.get("hook_observed_prompt") is True
+        or evidence.get("prompt_observed") is True
+    )
+    control_boundary_prompt_digest_bound = bool(
+        prompt_digest_present
+        and source_prompt_sha256
+        and source_prompt_sha256 == prompt_sha256
+    )
+    control_boundary_run_digest_present = bool(source_run_sha256)
+    control_boundary_pre_codex_decision = (
+        evidence.get("control_boundary_pre_codex_decision") is True
+    )
+    control_boundary_post_factum_only = bool(
+        evidence.get("control_boundary_post_factum_only") is True
+        or evidence_kind == "wbp_codex_exec_jsonl_observer"
+        or (
+            control_boundary_observed_prompt
+            and not control_boundary_pre_codex_decision
+        )
+    )
+    evidence_can_enforce_router = (
+        evidence.get("control_boundary_can_enforce_router") is True
+    )
+    evidence_can_route_delegate_to_dip = (
+        evidence.get("control_boundary_can_route_delegate_to_dip") is True
+    )
+    manual_boundary_evidence_used = bool(
+        evidence.get("manual_boundary_evidence_used") is True
+        or evidence_kind in {"", "manual", "manual_boundary_evidence"}
+    )
+    synthetic_boundary_evidence_used = bool(
+        evidence.get("synthetic_boundary_evidence_used") is True
+        or evidence_kind in {"synthetic", "test_only"}
+    )
+    prompt_supplied_hook_flags = bool(
+        evidence.get("prompt_supplied_hook_flags") is True
+        or evidence.get("browser_can_supply_prompt_authority") is True
+    )
+    browser_supplied_hook_flags = bool(
+        evidence.get("browser_supplied_hook_flags") is True
+        or evidence.get("browser_can_supply_route_authority") is True
+        or evidence.get("browser_can_supply_model_authority") is True
+    )
+    state_written = evidence.get("state_written") is True
+    profile_written = evidence.get("profile_written") is True
+    config_written = evidence.get("config_written") is True
+    route_registry_written = evidence.get("route_registry_written") is True
+    credential_written = evidence.get("credential_written") is True
+    runtime_state_written = evidence.get("runtime_state_written") is True
+    write_side_effect_observed = bool(
+        state_written
+        or profile_written
+        or config_written
+        or route_registry_written
+        or credential_written
+        or runtime_state_written
+        or (
+            bool(evidence)
+            and (not evidence_changed_files_empty or not evidence_effect_admitted)
+        )
+    )
+    raw_prompt_recorded = bool(
+        evidence.get("raw_prompt_recorded") is True
+        or evidence.get("prompt_text_recorded") is True
+    )
+    raw_route_id_recorded = evidence.get("raw_route_id_recorded") is True
+    raw_backend_details_exposed = evidence.get("raw_backend_details_exposed") is True
+    secret_value_exposed = evidence.get("secret_value_exposed") is True
+    local_codex_subagent_used_as_dip = bool(
+        evidence.get("local_codex_subagent_used_as_dip") is True
+        or evidence.get("codex_subagent_used_as_dip") is True
+    )
+    local_imitation_used = bool(
+        local_codex_subagent_used_as_dip
+        or evidence.get("local_imitation_used") is True
+    )
+    fallback_used = evidence.get("fallback_used") is True
+    product_ready_claimed = evidence.get("product_ready") is True
+    native_free_chat_router_claimed = (
+        evidence.get("native_free_chat_router_proven") is True
+    )
+    control_boundary_can_enforce_router = bool(
+        control_boundary_wbp_owned
+        and control_boundary_observed_prompt
+        and control_boundary_prompt_digest_bound
+        and control_boundary_run_digest_present
+        and control_boundary_pre_codex_decision
+        and not control_boundary_post_factum_only
+        and evidence_can_enforce_router
+    )
+    control_boundary_can_route_delegate_to_dip = bool(
+        control_boundary_can_enforce_router
+        and evidence_can_route_delegate_to_dip
+    )
+
+    blocking_reasons: list[str] = []
+    if not evidence:
+        blocking_reasons.append("control_boundary_evidence_missing")
+    if not evidence_kind_admitted:
+        blocking_reasons.append("control_boundary_evidence_kind_not_admitted")
+    if not prompt_digest_present:
+        blocking_reasons.append("prompt_digest_missing")
+    if not control_boundary_wbp_owned:
+        blocking_reasons.append("control_boundary_not_wbp_owned")
+    if not control_boundary_observed_prompt:
+        blocking_reasons.append("control_boundary_prompt_not_observed")
+    if not control_boundary_prompt_digest_bound:
+        blocking_reasons.append("control_boundary_prompt_digest_not_bound")
+    if not control_boundary_run_digest_present:
+        blocking_reasons.append("control_boundary_run_digest_missing")
+    if not control_boundary_pre_codex_decision:
+        blocking_reasons.append("control_boundary_pre_codex_decision_not_proven")
+    if control_boundary_post_factum_only:
+        blocking_reasons.append("control_boundary_post_factum_only")
+    if not control_boundary_can_enforce_router:
+        blocking_reasons.append("control_boundary_cannot_enforce_router")
+    if not control_boundary_can_route_delegate_to_dip:
+        blocking_reasons.append("control_boundary_cannot_route_delegate_to_dip")
+    if manual_boundary_evidence_used:
+        blocking_reasons.append("manual_boundary_evidence_not_admitted")
+    if synthetic_boundary_evidence_used:
+        blocking_reasons.append("synthetic_boundary_evidence_not_admitted")
+    if prompt_supplied_hook_flags:
+        blocking_reasons.append("prompt_supplied_hook_flags")
+    if browser_supplied_hook_flags:
+        blocking_reasons.append("browser_supplied_hook_flags")
+    if write_side_effect_observed:
+        blocking_reasons.append("control_boundary_write_side_effect")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_route_id_recorded:
+        blocking_reasons.append("raw_route_id_must_not_be_recorded")
+    if raw_backend_details_exposed:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if secret_value_exposed:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+    if local_codex_subagent_used_as_dip:
+        blocking_reasons.append("local_codex_subagent_used_as_dip")
+    if local_imitation_used:
+        blocking_reasons.append("local_imitation_used")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if native_free_chat_router_claimed:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if product_ready_claimed:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+
+    ok = not blocking_reasons
+    control_boundary_status = "ok" if ok else "blocked"
+    packet_extra = {
+        "producer_built_by": "build_router_hook_control_boundary_packet",
+        "control_boundary_status": control_boundary_status,
+        "control_boundary_wbp_owned": control_boundary_wbp_owned,
+        "control_boundary_evidence_kind": (
+            evidence_kind if evidence_kind_admitted else ""
+        ),
+        "control_boundary_source_effect": (
+            evidence_effect if evidence_effect_admitted else ""
+        ),
+        "changed_files": [],
+        "source_run_sha256": source_run_sha256,
+        "source_prompt_sha256": (
+            source_prompt_sha256 if control_boundary_prompt_digest_bound else ""
+        ),
+        "control_boundary_observed_prompt": control_boundary_observed_prompt,
+        "control_boundary_prompt_digest_bound": control_boundary_prompt_digest_bound,
+        "control_boundary_run_digest_present": control_boundary_run_digest_present,
+        "control_boundary_pre_codex_decision": control_boundary_pre_codex_decision,
+        "control_boundary_post_factum_only": control_boundary_post_factum_only,
+        "control_boundary_can_enforce_router": control_boundary_can_enforce_router,
+        "control_boundary_can_route_delegate_to_dip": (
+            control_boundary_can_route_delegate_to_dip
+        ),
+        "manual_boundary_evidence_used": manual_boundary_evidence_used,
+        "synthetic_boundary_evidence_used": synthetic_boundary_evidence_used,
+        "prompt_supplied_hook_flags": prompt_supplied_hook_flags,
+        "browser_supplied_hook_flags": browser_supplied_hook_flags,
+        "state_written": state_written,
+        "profile_written": profile_written,
+        "config_written": config_written,
+        "route_registry_written": route_registry_written,
+        "credential_written": credential_written,
+        "runtime_state_written": runtime_state_written,
+        "write_side_effect_observed": write_side_effect_observed,
+        "raw_prompt_recorded": raw_prompt_recorded,
+        "prompt_text_recorded": False,
+        "raw_route_id_recorded": raw_route_id_recorded,
+        "raw_backend_details_exposed": raw_backend_details_exposed,
+        "secret_value_exposed": secret_value_exposed,
+        "local_codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
+        "local_imitation_used": local_imitation_used,
+        "fallback_used": fallback_used,
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+        "does_not_prove_native_free_chat_router": True,
+        "does_not_prove_product_ready_free_chat": True,
+        "no_secret_exposed": not secret_value_exposed,
+    }
+    digest_packet = {
+        "packet_kind": ROUTER_HOOK_CONTROL_BOUNDARY_PACKET_KIND,
+        **packet_extra,
+    }
+    packet_extra["control_boundary_claim_digest_present"] = True
+    packet_extra["control_boundary_claim_sha256"] = (
+        _router_hook_control_boundary_claim_sha256(digest_packet)
+    )
+
+    if ok:
+        machine_error_code = "OK"
+    elif prompt_supplied_hook_flags or browser_supplied_hook_flags:
+        machine_error_code = ROUTER_HOOK_CONTROL_BOUNDARY_AUTHORITY_REJECTED
+    elif write_side_effect_observed:
+        machine_error_code = ROUTER_HOOK_CONTROL_BOUNDARY_SIDE_EFFECT_REJECTED
+    elif (
+        not control_boundary_run_digest_present
+        or not control_boundary_prompt_digest_bound
+    ):
+        machine_error_code = ROUTER_HOOK_CONTROL_BOUNDARY_DIGEST_NOT_BOUND
+    else:
+        machine_error_code = ROUTER_HOOK_CONTROL_BOUNDARY_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP router hook control boundary is proven by bounded evidence."
+            if ok
+            else "WBP router hook control boundary is not proven."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra=packet_extra,
+        packet_kind=ROUTER_HOOK_CONTROL_BOUNDARY_PACKET_KIND,
+        final_status=(
+            ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_PROVEN
+            if ok
+            else ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_BLOCKED
+        ),
+        result_status="proven" if ok else "blocked",
+    )
+
+
 def build_router_hook_source_event_packet(
     *,
     prompt_packet: Mapping[str, Any] | None = None,
@@ -1552,10 +1916,37 @@ def build_router_hook_source_event_packet(
         isinstance(boundary_changed_files, list)
         and not boundary_changed_files
     )
+    boundary_producer_valid = (
+        control_boundary.get("producer_built_by")
+        == "build_router_hook_control_boundary_packet"
+    )
+    boundary_claim_sha256 = _hex_sha256(
+        control_boundary.get("control_boundary_claim_sha256") or ""
+    )
+    boundary_claim_digest_present = bool(
+        control_boundary.get("control_boundary_claim_digest_present") is True
+        and boundary_claim_sha256
+    )
+    boundary_claim_digest_matched = bool(
+        boundary_claim_digest_present
+        and boundary_claim_sha256
+        == _router_hook_control_boundary_claim_sha256(control_boundary)
+    )
     control_boundary_packet_ok = bool(
         control_boundary.get("status") == "ok"
         and control_boundary.get("packet_kind") == ROUTER_HOOK_CONTROL_BOUNDARY_PACKET_KIND
+        and control_boundary.get("result_status") in {"", "proven"}
+        and control_boundary.get("final_status")
+        == ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_PROVEN
+        and control_boundary.get("control_boundary_status") == "ok"
+        and boundary_producer_valid
+        and boundary_claim_digest_matched
         and control_boundary.get("control_boundary_wbp_owned") is True
+        and control_boundary.get("control_boundary_observed_prompt") is True
+        and control_boundary.get("control_boundary_prompt_digest_bound") is True
+        and control_boundary.get("control_boundary_run_digest_present") is True
+        and control_boundary.get("control_boundary_pre_codex_decision") is True
+        and control_boundary.get("control_boundary_post_factum_only") is not True
         and control_boundary.get("control_boundary_can_enforce_router") is True
         and control_boundary.get("control_boundary_can_route_delegate_to_dip") is True
         and boundary_effect in {"probe", "read"}
@@ -1691,6 +2082,12 @@ def build_router_hook_source_event_packet(
         blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
     if not control_boundary_packet_ok:
         blocking_reasons.append("router_hook_control_boundary_not_proven")
+    if control_boundary and not boundary_producer_valid:
+        blocking_reasons.append("router_hook_control_boundary_producer_invalid")
+    if control_boundary and not boundary_claim_digest_present:
+        blocking_reasons.append("router_hook_control_boundary_claim_digest_missing")
+    elif control_boundary and not boundary_claim_digest_matched:
+        blocking_reasons.append("router_hook_control_boundary_claim_digest_mismatch")
     if hook_logging_only:
         blocking_reasons.append("router_hook_source_logging_only")
     if codex_browser_authority_rejected or prompt_supplied_hook_flags:
@@ -1743,6 +2140,9 @@ def build_router_hook_source_event_packet(
             control_boundary.get("packet_kind") or ""
         ),
         "control_boundary_packet_ok": control_boundary_packet_ok,
+        "control_boundary_producer_valid": boundary_producer_valid,
+        "control_boundary_claim_digest_present": boundary_claim_digest_present,
+        "control_boundary_claim_digest_matched": boundary_claim_digest_matched,
         "hook_observed_prompt": hook_observed_prompt,
         "hook_can_enforce_router": hook_can_enforce_router,
         "hook_can_route_delegate_to_dip": hook_can_route_delegate_to_dip,
