@@ -173,7 +173,7 @@ class McpDelegateToDipTests(unittest.TestCase):
         packet = json.loads(stdout.getvalue())
         self.assertEqual(packet["tools"][0]["name"], "delegate_to_dip")
 
-    def test_delegate_to_dip_call_returns_bounded_with_limits_packet(self) -> None:
+    def test_delegate_to_dip_call_returns_route_bound_controlled_dispatch_packet(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             profile_dir = Path(temp_dir)
             _write_context(profile_dir, _context_payload())
@@ -243,15 +243,36 @@ class McpDelegateToDipTests(unittest.TestCase):
             "wbp_api_lane_adapter_admission",
         )
         self.assertEqual(packet["api_lane_adapter_machine_error_code"], "OK")
+        self.assertEqual(
+            packet["route_bound_dispatch_packet_kind"],
+            "wbp_route_bound_controlled_dispatch",
+        )
+        self.assertEqual(packet["route_bound_dispatch_machine_error_code"], "OK")
+        self.assertTrue(packet["route_bound_dispatch_attempted"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertTrue(packet["route_bound_request_sent"])
+        self.assertTrue(packet["route_bound_request_sha256"])
+        self.assertEqual(
+            packet["dispatch_truth_source"],
+            "server_owned_controlled_provider_no_live_network",
+        )
+        self.assertTrue(packet["controlled_provider_called"])
+        self.assertTrue(packet["controlled_provider_response_digest_present"])
+        self.assertTrue(packet["controlled_provider_response_sha256"])
+        self.assertTrue(packet["controlled_provider_response_proven"])
         self.assertTrue(packet["api_lane_called"])
-        self.assertFalse(packet["api_lane_provider_called"])
-        self.assertFalse(packet["provider_response_proven"])
+        self.assertTrue(packet["api_lane_provider_called"])
+        self.assertTrue(packet["provider_response_proven"])
+        self.assertFalse(packet["live_provider_response_proven"])
         self.assertFalse(packet["bounded_api_lane_mock_used"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["native_free_chat_router_proven"])
         self.assertTrue(packet["does_not_prove_native_free_chat_router"])
+        self.assertFalse(packet["does_not_prove_api_lane_provider_dispatch"])
+        self.assertTrue(packet["does_not_prove_live_provider_dispatch"])
+        self.assertFalse(packet["raw_provider_response_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertEqual(packet["changed_files"], [])
@@ -280,6 +301,18 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(proof["bounded_api_lane_mock_used"])
         self.assertTrue(proof["api_lane_adapter_called"])
         self.assertTrue(proof["api_lane_dispatch_admitted"])
+        self.assertTrue(proof["route_bound_dispatch_attempted"])
+        self.assertTrue(proof["route_bound_dispatch_proven"])
+        self.assertTrue(proof["route_bound_request_sent"])
+        self.assertTrue(proof["route_bound_request_sha256"])
+        self.assertEqual(
+            proof["dispatch_truth_source"],
+            "server_owned_controlled_provider_no_live_network",
+        )
+        self.assertTrue(proof["controlled_provider_called"])
+        self.assertTrue(proof["controlled_provider_response_digest_present"])
+        self.assertTrue(proof["controlled_provider_response_sha256"])
+        self.assertTrue(proof["controlled_provider_response_proven"])
         self.assertEqual(
             proof["selected_api_route_id_sha256"],
             hashlib.sha256(b"wbp-deepseek-chat").hexdigest(),
@@ -287,18 +320,20 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertNotIn("wbp-deepseek-chat", json.dumps(proof, sort_keys=True))
         self.assertFalse(proof["selected_api_route_id_recorded"])
         self.assertTrue(proof["api_lane_called"])
-        self.assertFalse(proof["api_lane_provider_called"])
-        self.assertFalse(proof["provider_response_proven"])
+        self.assertTrue(proof["api_lane_provider_called"])
+        self.assertTrue(proof["provider_response_proven"])
+        self.assertFalse(proof["live_provider_response_proven"])
         self.assertFalse(proof["fallback_used"])
         self.assertFalse(proof["local_imitation_used"])
         self.assertFalse(proof["product_ready"])
         self.assertFalse(proof["raw_transcript_recorded"])
+        self.assertFalse(proof["raw_provider_response_recorded"])
         self.assertEqual(
             packets.inspect_command_packet_semantics(proof),
             [],
         )
 
-    def test_reality_spike_rejects_provider_response_claim(self) -> None:
+    def test_reality_spike_rejects_live_provider_response_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             profile_dir = Path(temp_dir)
             _write_context(profile_dir, _context_payload())
@@ -329,7 +364,7 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         assert response is not None
         structured = dict(response["result"]["structuredContent"])
-        structured["provider_response_proven"] = True
+        structured["live_provider_response_proven"] = True
         response["result"]["structuredContent"] = structured
         response["result"]["content"][0]["text"] = json.dumps(structured, sort_keys=True)
 
@@ -339,15 +374,94 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         self.assertEqual(proof["status"], "error")
         self.assertIn(
-            "provider_response_must_not_be_claimed",
+            "live_provider_response_must_not_be_claimed",
             proof["blocking_reasons"],
         )
         self.assertFalse(proof["product_ready"])
         self.assertTrue(proof["provider_response_proven"])
+        self.assertTrue(proof["live_provider_response_proven"])
         self.assertEqual(
             packets.inspect_command_packet_semantics(proof),
             [],
         )
+
+    def test_reality_spike_rejects_mutated_controlled_dispatch_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            call_request = {
+                "jsonrpc": "2.0",
+                "id": 41,
+                "method": "tools/call",
+                "params": {
+                    "name": "delegate_to_dip",
+                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                },
+            }
+            initialized = mcp_delegate.handle_jsonrpc_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 39,
+                    "method": "initialize",
+                    "params": {"protocolVersion": "2024-11-05"},
+                }
+            )
+            listed = mcp_delegate.handle_jsonrpc_message(
+                {"jsonrpc": "2.0", "id": 40, "method": "tools/list"}
+            )
+            response = mcp_delegate.handle_jsonrpc_message(
+                call_request,
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+            )
+
+        assert response is not None
+        mutations = [
+            (
+                "route_bound_dispatch_packet_kind",
+                "wrong_packet_kind",
+                "route_bound_dispatch_packet_kind_invalid",
+            ),
+            (
+                "dispatch_truth_source",
+                "not_the_controlled_truth_source",
+                "dispatch_truth_source_invalid",
+            ),
+            ("route_bound_request_sent", False, "route_bound_request_not_sent"),
+            ("route_bound_request_sha256", "", "route_bound_request_digest_missing"),
+            ("controlled_provider_called", False, "controlled_provider_not_called"),
+            (
+                "controlled_provider_response_digest_present",
+                False,
+                "controlled_provider_response_digest_missing",
+            ),
+            (
+                "controlled_provider_response_sha256",
+                "",
+                "controlled_provider_response_digest_invalid",
+            ),
+        ]
+        for field, value, expected_reason in mutations:
+            with self.subTest(field=field):
+                mutated_response = json.loads(json.dumps(response))
+                structured = dict(mutated_response["result"]["structuredContent"])
+                structured[field] = value
+                mutated_response["result"]["structuredContent"] = structured
+                mutated_response["result"]["content"][0]["text"] = json.dumps(
+                    structured,
+                    sort_keys=True,
+                )
+
+                proof = mcp_delegate.build_reality_spike_proof_packet(
+                    [_config_probe(), initialized, listed, call_request, mutated_response]
+                )
+
+                self.assertEqual(proof["status"], "error")
+                self.assertIn(expected_reason, proof["blocking_reasons"])
+                self.assertFalse(proof["product_ready"])
+                self.assertEqual(
+                    packets.inspect_command_packet_semantics(proof),
+                    [],
+                )
 
     def test_missing_runtime_context_fails_closed_with_alias_context_code(self) -> None:
         packet = mcp_delegate.build_delegate_to_dip_packet(
@@ -363,6 +477,9 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertIn("FAIL_ALIAS_CONTEXT_MISSING", packet["blocking_reasons"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["bounded_api_lane_mock_used"])
+        self.assertFalse(packet["api_lane_adapter_called"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
 
     def test_route_outside_runtime_allowlist_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -396,6 +513,8 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["selected_api_route_id_recorded"])
         self.assertFalse(packet["api_lane_adapter_called"])
         self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertIn("coding_route_not_allowed", packet["blocking_reasons"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
@@ -420,6 +539,8 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["coding_alias_bound_to_api_lane"])
         self.assertFalse(packet["api_lane_adapter_called"])
         self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertIn("coding_alias_binding_invalid", packet["blocking_reasons"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
@@ -447,6 +568,8 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["selected_api_route_id_recorded"])
         self.assertFalse(packet["api_lane_adapter_called"])
         self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertIn("coding_route_id_missing", packet["blocking_reasons"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
@@ -470,11 +593,122 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertTrue(packet["api_lane_adapter_called"])
         self.assertFalse(packet["api_lane_dispatch_admitted"])
         self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertFalse(packet["api_lane_provider_called"])
         self.assertFalse(packet["provider_response_proven"])
+        self.assertFalse(packet["live_provider_response_proven"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
         self.assertIn("api_lane_adapter_unavailable", packet["blocking_reasons"])
+
+    def test_controlled_provider_unavailable_rejects_without_local_imitation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            packet = mcp_delegate.build_delegate_to_dip_packet(
+                {"task": "DIP: implement this", "expected_alias": "DIP"},
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+                mcp_tool_called=True,
+                controlled_provider_available=False,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "WBP_CONTROLLED_PROVIDER_UNAVAILABLE")
+        self.assertTrue(packet["api_lane_adapter_called"])
+        self.assertTrue(packet["api_lane_dispatch_admitted"])
+        self.assertTrue(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["route_bound_request_sent"])
+        self.assertFalse(packet["controlled_provider_called"])
+        self.assertFalse(packet["controlled_provider_response_proven"])
+        self.assertFalse(packet["api_lane_provider_called"])
+        self.assertFalse(packet["provider_response_proven"])
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertIn("controlled_provider_unavailable", packet["blocking_reasons"])
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(packet),
+            [],
+        )
+
+    def test_controlled_provider_error_rejects_without_raw_error_or_imitation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            packet = mcp_delegate.build_delegate_to_dip_packet(
+                {"task": "DIP: implement this", "expected_alias": "DIP"},
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+                mcp_tool_called=True,
+                controlled_provider_error_code="fixture-secret-upstream-error",
+            )
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "WBP_CONTROLLED_PROVIDER_ERROR")
+        self.assertTrue(packet["api_lane_adapter_called"])
+        self.assertTrue(packet["api_lane_dispatch_admitted"])
+        self.assertTrue(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["route_bound_request_sent"])
+        self.assertTrue(packet["controlled_provider_called"])
+        self.assertTrue(packet["controlled_provider_error_observed"])
+        self.assertTrue(packet["controlled_provider_error_code_recorded"])
+        self.assertFalse(packet["controlled_provider_response_proven"])
+        self.assertFalse(packet["provider_response_proven"])
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertIn("controlled_provider_error", packet["blocking_reasons"])
+        self.assertNotIn("fixture-secret-upstream-error", serialized)
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(packet),
+            [],
+        )
+
+    def test_browser_supplied_route_backend_or_secret_fields_reject_before_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            packet = mcp_delegate.build_delegate_to_dip_packet(
+                {
+                    "task": "DIP: implement this",
+                    "expected_alias": "DIP",
+                    "route_id": "evil-route-id",
+                    "backend": "https://evil.invalid",
+                    "secret": "secret-from-browser",
+                },
+                env={"WBP_PROFILE_DIR": str(profile_dir)},
+                mcp_tool_called=True,
+            )
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_MCP_DELEGATE_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertFalse(packet["api_lane_adapter_called"])
+        self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["provider_response_proven"])
+        self.assertFalse(packet["live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertIn("forbidden_field:route_id", packet["blocking_reasons"])
+        self.assertIn("forbidden_field:backend", packet["blocking_reasons"])
+        self.assertIn("forbidden_field:secret", packet["blocking_reasons"])
+        self.assertNotIn("evil-route-id", serialized)
+        self.assertNotIn("https://evil.invalid", serialized)
+        self.assertNotIn("secret-from-browser", serialized)
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(packet),
+            [],
+        )
 
     def test_missing_stale_route_guard_blocks_delegate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -491,6 +725,9 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertFalse(packet["route_allowed"])
         self.assertFalse(packet["forbidden_stale_route_ids_enforced"])
+        self.assertFalse(packet["api_lane_adapter_called"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
         self.assertFalse(packet["product_ready"])
 
@@ -526,6 +763,8 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["delegate_to_dip_tool_called"])
         self.assertIn("mcp_tool_call_not_observed", packet["blocking_reasons"])
         self.assertFalse(packet["bounded_api_lane_mock_used"])
+        self.assertFalse(packet["route_bound_dispatch_attempted"])
+        self.assertFalse(packet["route_bound_dispatch_proven"])
         self.assertFalse(packet["product_ready"])
 
     def test_content_length_stdio_roundtrip_handles_tools_list(self) -> None:

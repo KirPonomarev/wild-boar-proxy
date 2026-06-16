@@ -35,6 +35,12 @@ API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_BLOCKED = (
     "WBP_API_LANE_ADAPTER_ADMISSION_BLOCKED"
 )
 API_LANE_ADAPTER_NOT_AVAILABLE = "WBP_API_LANE_ADAPTER_NOT_AVAILABLE"
+ROUTE_BOUND_DISPATCH_PACKET_KIND = "wbp_route_bound_controlled_dispatch"
+ROUTE_BOUND_DISPATCH_FINAL_STATUS_PROVEN = "WBP_ROUTE_BOUND_DISPATCH_PROVEN"
+ROUTE_BOUND_DISPATCH_FINAL_STATUS_BLOCKED = "WBP_ROUTE_BOUND_DISPATCH_BLOCKED"
+ROUTE_BOUND_DISPATCH_NOT_PROVEN = "WBP_ROUTE_BOUND_DISPATCH_NOT_PROVEN"
+CONTROLLED_PROVIDER_UNAVAILABLE = "WBP_CONTROLLED_PROVIDER_UNAVAILABLE"
+CONTROLLED_PROVIDER_ERROR = "WBP_CONTROLLED_PROVIDER_ERROR"
 CONFIG_PROBE_PACKET_KIND = "wbp_codex_mcp_config_probe"
 CONFIG_PROBE_FINAL_STATUS_LOADED = "WBP_CODEX_MCP_CONFIG_PROBE_LOADED"
 CONFIG_PROBE_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_CONFIG_PROBE_BLOCKED"
@@ -408,6 +414,152 @@ def build_api_lane_adapter_admission_packet(
             else API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_BLOCKED
         ),
         result_status="admitted" if ok else "blocked",
+    )
+
+
+def build_route_bound_controlled_dispatch_packet(
+    *,
+    task: str,
+    selected_alias: str,
+    selected_alias_lane: str,
+    route_id: str,
+    admission_packet: Mapping[str, Any] | None,
+    controlled_provider_available: bool = True,
+    controlled_provider_error_code: str = "",
+) -> dict[str, Any]:
+    safe_task = _safe_text(task, limit=4096)
+    safe_alias = _safe_text(selected_alias, limit=80)
+    safe_lane = _safe_text(selected_alias_lane, limit=32)
+    safe_route_id = _safe_text(route_id, limit=128)
+    safe_provider_error_code = _safe_text(controlled_provider_error_code, limit=96)
+    route_id_sha256 = _sha256_text(safe_route_id) if safe_route_id else ""
+    request_fingerprint = json.dumps(
+        {
+            "alias": safe_alias,
+            "alias_lane": safe_lane,
+            "route_id_sha256": route_id_sha256,
+            "task_sha256": _sha256_text(safe_task) if safe_task else "",
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    response_fingerprint = json.dumps(
+        {
+            "controlled_provider": "wbp_controlled_route_bound_provider",
+            "request_sha256": _sha256_text(request_fingerprint),
+            "route_id_sha256": route_id_sha256,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    admission = admission_packet if isinstance(admission_packet, Mapping) else {}
+    admission_ok = bool(
+        admission.get("status") == "ok"
+        and admission.get("api_lane_adapter_called") is True
+        and admission.get("api_lane_dispatch_admitted") is True
+        and admission.get("selected_api_route_id_sha256") == route_id_sha256
+        and admission.get("selected_api_route_id_recorded") is False
+        and admission.get("fallback_used") is False
+        and admission.get("local_imitation_used") is False
+    )
+    route_bound_dispatch_attempted = admission_ok
+    controlled_provider_called = bool(
+        route_bound_dispatch_attempted and controlled_provider_available
+    )
+    controlled_provider_error_observed = bool(
+        controlled_provider_called and safe_provider_error_code
+    )
+    route_bound_request_sent = bool(
+        controlled_provider_called and not controlled_provider_error_observed
+    )
+
+    blocking_reasons: list[str] = []
+    if not admission_ok:
+        blocking_reasons.append("api_lane_admission_packet_invalid")
+    if not safe_task:
+        blocking_reasons.append("task_required")
+    if safe_lane != API_ROUTE_LANE:
+        blocking_reasons.append("selected_alias_not_api_lane")
+    if not route_id_sha256:
+        blocking_reasons.append("selected_api_route_id_missing")
+    if route_bound_dispatch_attempted and not controlled_provider_available:
+        blocking_reasons.append("controlled_provider_unavailable")
+    if controlled_provider_error_observed:
+        blocking_reasons.append("controlled_provider_error")
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif route_bound_dispatch_attempted and not controlled_provider_available:
+        machine_error_code = CONTROLLED_PROVIDER_UNAVAILABLE
+    elif controlled_provider_error_observed:
+        machine_error_code = CONTROLLED_PROVIDER_ERROR
+    else:
+        machine_error_code = ROUTE_BOUND_DISPATCH_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP route-bound controlled dispatch is proven without live provider access."
+            if ok
+            else "WBP route-bound controlled dispatch is not proven."
+        ),
+        blocking_reasons=blocking_reasons,
+        extra={
+            "delegate_to_dip_tool_called": True,
+            "api_lane_adapter_called": admission.get("api_lane_adapter_called") is True,
+            "api_lane_dispatch_admitted": (
+                admission.get("api_lane_dispatch_admitted") is True
+            ),
+            "route_bound_dispatch_attempted": route_bound_dispatch_attempted,
+            "route_bound_dispatch_proven": ok,
+            "route_bound_request_sent": route_bound_request_sent,
+            "route_bound_request_sha256": _sha256_text(request_fingerprint)
+            if route_bound_dispatch_attempted
+            else "",
+            "dispatch_truth_source": (
+                "server_owned_controlled_provider_no_live_network" if ok else "not_proven"
+            ),
+            "selected_alias": safe_alias,
+            "selected_alias_lane": safe_lane,
+            "selected_api_route_id_present": bool(route_id_sha256),
+            "selected_api_route_id_sha256": route_id_sha256,
+            "selected_api_route_id_recorded": False,
+            "controlled_provider_called": controlled_provider_called,
+            "controlled_provider_available": controlled_provider_available,
+            "controlled_provider_error_observed": controlled_provider_error_observed,
+            "controlled_provider_error_code_recorded": bool(
+                controlled_provider_error_observed
+            ),
+            "controlled_provider_response_digest_present": ok,
+            "controlled_provider_response_sha256": (
+                _sha256_text(response_fingerprint) if ok else ""
+            ),
+            "controlled_provider_response_proven": ok,
+            "api_lane_provider_called": controlled_provider_called,
+            "provider_response_proven": ok,
+            "live_provider_response_proven": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "raw_provider_response_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=ROUTE_BOUND_DISPATCH_PACKET_KIND,
+        final_status=(
+            ROUTE_BOUND_DISPATCH_FINAL_STATUS_PROVEN
+            if ok
+            else ROUTE_BOUND_DISPATCH_FINAL_STATUS_BLOCKED
+        ),
+        result_status="proven" if ok else "blocked",
     )
 
 
@@ -1167,6 +1319,8 @@ def build_delegate_to_dip_packet(
     env: Mapping[str, str] | None = None,
     mcp_tool_called: bool = False,
     api_lane_adapter_available: bool = True,
+    controlled_provider_available: bool = True,
+    controlled_provider_error_code: str = "",
 ) -> dict[str, Any]:
     args = arguments if isinstance(arguments, Mapping) else {}
     task = _safe_text(args.get("task") or "", limit=4096)
@@ -1248,6 +1402,7 @@ def build_delegate_to_dip_packet(
         blocking_reasons.append("stale_route_guard_missing")
 
     api_lane_adapter_packet: dict[str, Any] = {}
+    route_bound_dispatch_packet: dict[str, Any] = {}
     if not blocking_reasons:
         api_lane_adapter_packet = build_api_lane_adapter_admission_packet(
             task=task,
@@ -1264,6 +1419,24 @@ def build_delegate_to_dip_packet(
                 for reason in api_lane_adapter_packet.get("blocking_reasons", [])
             ]
             blocking_reasons.extend(adapter_reasons or ["api_lane_dispatch_not_admitted"])
+    if not blocking_reasons:
+        route_bound_dispatch_packet = build_route_bound_controlled_dispatch_packet(
+            task=task,
+            selected_alias=selected_alias,
+            selected_alias_lane=selected_alias_lane,
+            route_id=route_id,
+            admission_packet=api_lane_adapter_packet,
+            controlled_provider_available=controlled_provider_available,
+            controlled_provider_error_code=controlled_provider_error_code,
+        )
+        if route_bound_dispatch_packet.get("status") != "ok":
+            dispatch_reasons = [
+                str(reason)
+                for reason in route_bound_dispatch_packet.get("blocking_reasons", [])
+            ]
+            blocking_reasons.extend(
+                dispatch_reasons or ["route_bound_dispatch_not_proven"]
+            )
 
     ok = not blocking_reasons
     if ok:
@@ -1274,7 +1447,12 @@ def build_delegate_to_dip_packet(
         machine_error_code = str(
             metadata.get("machine_error_code") or "FAIL_ALIAS_CONTEXT_MISSING"
         )
-    elif api_lane_adapter_packet.get("machine_error_code"):
+    elif route_bound_dispatch_packet.get("machine_error_code"):
+        machine_error_code = str(route_bound_dispatch_packet["machine_error_code"])
+    elif (
+        api_lane_adapter_packet.get("machine_error_code")
+        and api_lane_adapter_packet.get("machine_error_code") != "OK"
+    ):
         machine_error_code = str(api_lane_adapter_packet["machine_error_code"])
     else:
         machine_error_code = "WBP_MCP_DELEGATE_TO_DIP_NOT_PROVEN"
@@ -1282,14 +1460,29 @@ def build_delegate_to_dip_packet(
     api_lane_dispatch_admitted = (
         api_lane_adapter_packet.get("api_lane_dispatch_admitted") is True
     )
+    route_bound_dispatch_attempted = (
+        route_bound_dispatch_packet.get("route_bound_dispatch_attempted") is True
+    )
+    route_bound_dispatch_proven = (
+        route_bound_dispatch_packet.get("route_bound_dispatch_proven") is True
+    )
+    controlled_provider_called = (
+        route_bound_dispatch_packet.get("controlled_provider_called") is True
+    )
+    controlled_provider_response_proven = (
+        route_bound_dispatch_packet.get("controlled_provider_response_proven") is True
+    )
     selected_api_route_id_present = bool(route_id)
     return _command_packet(
         ok=ok,
         machine_error_code=machine_error_code,
         human_message=(
-            "WBP MCP delegate_to_dip tool call is admitted to the server-owned API-lane adapter boundary."
+            "WBP MCP delegate_to_dip tool call proved route-bound controlled API-lane dispatch."
             if ok
-            else "WBP MCP delegate_to_dip tool call is not admitted to the API-lane adapter boundary."
+            else (
+                "WBP MCP delegate_to_dip tool call did not prove route-bound "
+                "controlled API-lane dispatch."
+            )
         ),
         blocking_reasons=blocking_reasons,
         extra={
@@ -1338,13 +1531,63 @@ def build_delegate_to_dip_packet(
             "api_lane_adapter_machine_error_code": str(
                 api_lane_adapter_packet.get("machine_error_code") or ""
             ),
+            "route_bound_dispatch_packet_kind": str(
+                route_bound_dispatch_packet.get("packet_kind") or ""
+            ),
+            "route_bound_dispatch_result_status": str(
+                route_bound_dispatch_packet.get("result_status") or ""
+            ),
+            "route_bound_dispatch_machine_error_code": str(
+                route_bound_dispatch_packet.get("machine_error_code") or ""
+            ),
+            "route_bound_dispatch_attempted": route_bound_dispatch_attempted,
+            "route_bound_dispatch_proven": route_bound_dispatch_proven,
+            "route_bound_request_sent": (
+                route_bound_dispatch_packet.get("route_bound_request_sent") is True
+            ),
+            "route_bound_request_sha256": str(
+                route_bound_dispatch_packet.get("route_bound_request_sha256") or ""
+            ),
+            "dispatch_truth_source": str(
+                route_bound_dispatch_packet.get("dispatch_truth_source") or "not_proven"
+            ),
+            "controlled_provider_called": controlled_provider_called,
+            "controlled_provider_available": (
+                route_bound_dispatch_packet.get("controlled_provider_available") is True
+            ),
+            "controlled_provider_error_observed": (
+                route_bound_dispatch_packet.get("controlled_provider_error_observed")
+                is True
+            ),
+            "controlled_provider_error_code_recorded": (
+                route_bound_dispatch_packet.get(
+                    "controlled_provider_error_code_recorded"
+                )
+                is True
+            ),
+            "controlled_provider_response_digest_present": (
+                route_bound_dispatch_packet.get(
+                    "controlled_provider_response_digest_present"
+                )
+                is True
+            ),
+            "controlled_provider_response_sha256": str(
+                route_bound_dispatch_packet.get(
+                    "controlled_provider_response_sha256"
+                )
+                or ""
+            ),
+            "controlled_provider_response_proven": (
+                controlled_provider_response_proven
+            ),
             "api_lane_called": api_lane_dispatch_admitted,
-            "api_lane_provider_called": False,
-            "provider_response_proven": False,
+            "api_lane_provider_called": controlled_provider_called,
+            "provider_response_proven": controlled_provider_response_proven,
+            "live_provider_response_proven": False,
             "bounded_api_lane_mock_used": False,
             "api_lane_truth_source": (
-                "server_owned_adapter_admission_no_provider_call"
-                if api_lane_dispatch_admitted
+                "server_owned_controlled_route_bound_dispatch"
+                if route_bound_dispatch_proven
                 else "not_proven"
             ),
             "fallback_used": False,
@@ -1354,11 +1597,15 @@ def build_delegate_to_dip_packet(
             "universal_manual_chat_interception_proven": False,
             "does_not_prove_native_free_chat_router": True,
             "does_not_prove_universal_manual_chat_interception": True,
-            "does_not_prove_api_lane_provider_dispatch": True,
+            "does_not_prove_api_lane_provider_dispatch": (
+                not route_bound_dispatch_proven
+            ),
+            "does_not_prove_live_provider_dispatch": True,
             "browser_authority_contract_enforced": True,
             "browser_can_supply_prompt_authority": False,
             "browser_can_supply_route_authority": False,
             "browser_can_supply_model_authority": False,
+            "raw_provider_response_recorded": False,
             "raw_backend_details_exposed": False,
             "secret_value_exposed": False,
             "no_secret_exposed": True,
@@ -1586,13 +1833,29 @@ def build_reality_spike_proof_packet(
         and call_packet.get("forbidden_stale_route_ids_enforced") is True
         and call_packet.get("api_lane_adapter_called") is True
         and call_packet.get("api_lane_dispatch_admitted") is True
-        and call_packet.get("provider_response_proven") is False
+        and call_packet.get("route_bound_dispatch_attempted") is True
+        and call_packet.get("route_bound_dispatch_packet_kind")
+        == ROUTE_BOUND_DISPATCH_PACKET_KIND
+        and call_packet.get("route_bound_dispatch_proven") is True
+        and call_packet.get("route_bound_request_sent") is True
+        and bool(_hex_sha256(call_packet.get("route_bound_request_sha256") or ""))
+        and call_packet.get("dispatch_truth_source")
+        == "server_owned_controlled_provider_no_live_network"
+        and call_packet.get("controlled_provider_called") is True
+        and call_packet.get("controlled_provider_response_digest_present") is True
+        and bool(
+            _hex_sha256(call_packet.get("controlled_provider_response_sha256") or "")
+        )
+        and call_packet.get("controlled_provider_response_proven") is True
+        and call_packet.get("provider_response_proven") is True
+        and call_packet.get("live_provider_response_proven") is False
         and call_packet.get("task_digest_preserved") is True
         and (not prompt_digest_available or prompt_digest_bound_to_tool_packet)
         and (not call_digest_available or call_digest_bound_to_tool_packet)
         and call_packet.get("local_imitation_used") is False
         and call_packet.get("fallback_used") is False
         and call_packet.get("product_ready") is False
+        and call_packet.get("raw_provider_response_recorded") is False
     )
     blocking_reasons: list[str] = []
     if not codex_mcp_config_loaded:
@@ -1616,8 +1879,37 @@ def build_reality_spike_proof_packet(
     if call_packet and call_packet.get("api_lane_adapter_called") is True:
         if call_packet.get("api_lane_dispatch_admitted") is not True:
             blocking_reasons.append("api_lane_dispatch_not_admitted")
-        if call_packet.get("provider_response_proven") is not False:
-            blocking_reasons.append("provider_response_must_not_be_claimed")
+        if call_packet.get("route_bound_dispatch_attempted") is not True:
+            blocking_reasons.append("route_bound_dispatch_not_attempted")
+        if call_packet.get("route_bound_dispatch_packet_kind") != ROUTE_BOUND_DISPATCH_PACKET_KIND:
+            blocking_reasons.append("route_bound_dispatch_packet_kind_invalid")
+        if call_packet.get("route_bound_dispatch_proven") is not True:
+            blocking_reasons.append("route_bound_dispatch_not_proven")
+        if call_packet.get("route_bound_request_sent") is not True:
+            blocking_reasons.append("route_bound_request_not_sent")
+        if not _hex_sha256(call_packet.get("route_bound_request_sha256") or ""):
+            blocking_reasons.append("route_bound_request_digest_missing")
+        if (
+            call_packet.get("dispatch_truth_source")
+            != "server_owned_controlled_provider_no_live_network"
+        ):
+            blocking_reasons.append("dispatch_truth_source_invalid")
+        if call_packet.get("controlled_provider_called") is not True:
+            blocking_reasons.append("controlled_provider_not_called")
+        if call_packet.get("controlled_provider_response_digest_present") is not True:
+            blocking_reasons.append("controlled_provider_response_digest_missing")
+        if not _hex_sha256(
+            call_packet.get("controlled_provider_response_sha256") or ""
+        ):
+            blocking_reasons.append("controlled_provider_response_digest_invalid")
+        if call_packet.get("controlled_provider_response_proven") is not True:
+            blocking_reasons.append("controlled_provider_response_not_proven")
+        if call_packet.get("provider_response_proven") is not True:
+            blocking_reasons.append("provider_response_not_proven")
+        if call_packet.get("live_provider_response_proven") is not False:
+            blocking_reasons.append("live_provider_response_must_not_be_claimed")
+        if call_packet.get("raw_provider_response_recorded") is not False:
+            blocking_reasons.append("raw_provider_response_must_not_be_recorded")
     if not call_packet:
         blocking_reasons.append("delegate_to_dip_packet_missing")
 
@@ -1683,9 +1975,45 @@ def build_reality_spike_proof_packet(
             "api_lane_adapter_machine_error_code": str(
                 call_packet.get("api_lane_adapter_machine_error_code") or ""
             ),
+            "route_bound_dispatch_attempted": (
+                call_packet.get("route_bound_dispatch_attempted") is True
+            ),
+            "route_bound_dispatch_proven": (
+                call_packet.get("route_bound_dispatch_proven") is True
+            ),
+            "route_bound_dispatch_packet_kind": str(
+                call_packet.get("route_bound_dispatch_packet_kind") or ""
+            ),
+            "route_bound_dispatch_machine_error_code": str(
+                call_packet.get("route_bound_dispatch_machine_error_code") or ""
+            ),
+            "route_bound_request_sent": (
+                call_packet.get("route_bound_request_sent") is True
+            ),
+            "route_bound_request_sha256": str(
+                call_packet.get("route_bound_request_sha256") or ""
+            ),
+            "dispatch_truth_source": str(
+                call_packet.get("dispatch_truth_source") or ""
+            ),
+            "controlled_provider_called": (
+                call_packet.get("controlled_provider_called") is True
+            ),
+            "controlled_provider_response_digest_present": (
+                call_packet.get("controlled_provider_response_digest_present") is True
+            ),
+            "controlled_provider_response_sha256": str(
+                call_packet.get("controlled_provider_response_sha256") or ""
+            ),
+            "controlled_provider_response_proven": (
+                call_packet.get("controlled_provider_response_proven") is True
+            ),
             "api_lane_called": call_packet.get("api_lane_called") is True,
             "api_lane_provider_called": call_packet.get("api_lane_provider_called") is True,
             "provider_response_proven": call_packet.get("provider_response_proven") is True,
+            "live_provider_response_proven": (
+                call_packet.get("live_provider_response_proven") is True
+            ),
             "selected_api_route_id_present": (
                 call_packet.get("selected_api_route_id_present") is True
             ),
@@ -1701,6 +2029,9 @@ def build_reality_spike_proof_packet(
             ),
             "transcript_digest": _sha256_text(transcript_fingerprint),
             "raw_transcript_recorded": False,
+            "raw_provider_response_recorded": (
+                call_packet.get("raw_provider_response_recorded") is True
+            ),
             "raw_backend_details_exposed": False,
             "secret_value_exposed": False,
             "no_secret_exposed": True,
