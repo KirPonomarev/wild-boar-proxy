@@ -12,6 +12,7 @@ from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets as command_packets
 from .external_models import run_external_models_command
+from .controlled_api_dispatch import run_controlled_api_dispatch_command
 from .router_hook_entry import (
     ADMITTED_HOOK_SURFACES,
     HOOK_SURFACE_LOCAL_PROOF_COMMAND,
@@ -144,6 +145,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
     )
     router_hook_entry.add_argument("--json", action="store_true", required=True)
+    router_hook_dispatch = router_hook_subparsers.add_parser("dispatch")
+    router_hook_dispatch.add_argument("--prompt", required=True)
+    router_hook_dispatch.add_argument("--runtime-context-file")
+    router_hook_dispatch.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_dispatch.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -431,7 +441,10 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
-    if command == "router-hook" and getattr(args, "router_hook_command", None) == "entry":
+    if command == "router-hook" and getattr(args, "router_hook_command", None) in {
+        "entry",
+        "dispatch",
+    }:
         return EFFECT_PROBE
     if command == "mode":
         mode_command = getattr(args, "mode_command", None)
@@ -623,6 +636,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "router-hook" and args.router_hook_command == "entry":
             return emit_json(
                 run_router_hook_entry_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "dispatch":
+            return emit_json(
+                run_controlled_api_dispatch_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
