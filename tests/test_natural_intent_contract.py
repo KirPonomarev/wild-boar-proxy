@@ -77,6 +77,21 @@ def _packet(
     )
 
 
+def _parser_packet(
+    *,
+    prompt: str = "Codex, дай задачу DIP: верни короткий план.",
+    runtime_context: dict[str, object] | None = None,
+    source_surface: str = contract.SOURCE_SURFACE_TEST_FIXTURE,
+    secret_values: list[str] | None = None,
+) -> dict[str, object]:
+    return contract.build_natural_intent_parser_packet(
+        prompt_text=prompt,
+        runtime_context=_runtime_context() if runtime_context is None else runtime_context,
+        source_surface=source_surface,
+        secret_values=secret_values,
+    )
+
+
 def _assert_no_dispatch(testcase: unittest.TestCase, packet: dict[str, object]) -> None:
     testcase.assertEqual(packet["dispatch_status"], contract.DISPATCH_STATUS_NOT_ATTEMPTED)
     testcase.assertFalse(packet["api_lane_called"])
@@ -92,6 +107,239 @@ def _assert_no_dispatch(testcase: unittest.TestCase, packet: dict[str, object]) 
 
 
 class NaturalIntentContractTests(unittest.TestCase):
+    def test_parser_extracts_api_alias_from_codex_to_dip_phrase_without_dispatch(self) -> None:
+        raw_prompt = "Codex, дай задачу DIP: верни короткий план."
+        packet = _parser_packet(prompt=raw_prompt)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["parser_used"])
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(packet["alias_match_status"], contract.ALIAS_MATCH_STATUS_EXACT)
+        self.assertEqual(
+            packet["parser_target_selection_rule"],
+            "single_api_target_with_optional_primary_address",
+        )
+        self.assertTrue(packet["parser_primary_address_present"])
+        self.assertTrue(packet["parser_api_target_present"])
+        self.assertEqual(packet["alias_candidate"], "DIP")
+        self.assertEqual(packet["slot_candidate"], "dip")
+        self.assertEqual(packet["lane_candidate"], "api_route")
+        self.assertEqual(packet["intent_status"], contract.INTENT_PASS)
+        self.assertEqual(packet["contract_preflight_status"], contract.PREFLIGHT_PASS)
+        self.assertFalse(contract.packet_contains_text(packet, raw_prompt))
+        self.assertFalse(packet["parser_prompt_text_recorded"])
+        self.assertFalse(packet["parser_raw_prompt_recorded"])
+        self.assertTrue(packet["parser_does_not_dispatch"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_normalizes_case_whitespace_nfkc_and_contained_aliases(self) -> None:
+        cases = [
+            ("  codex , дай   задачу   aGeNt   2  ", "Agent 2"),
+            ("\uff23\uff4f\uff44\uff45\uff58, попроси \uff24\uff29\uff30 ответить.", "DIP"),
+            ("Agent 2, проверь контракт.", "Agent 2"),
+            (f"{'очень длинный контекст ' * 8}DIP, проверь контракт.", "DIP"),
+        ]
+
+        for prompt, expected_alias in cases:
+            with self.subTest(prompt=prompt):
+                packet = _parser_packet(prompt=prompt)
+
+                self.assertEqual(packet["status"], "ok")
+                self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+                self.assertEqual(packet["alias_candidate"], expected_alias)
+                self.assertEqual(packet["slot_candidate"], "dip")
+                self.assertEqual(packet["intent_status"], contract.INTENT_PASS)
+                self.assertFalse(packet["ambiguous_intent"])
+                _assert_no_dispatch(self, packet)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_accepts_custom_alias_from_runtime_context_only(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["agent_bindings"][1]["aliases"] = [
+            "DIP",
+            "Agent 2",
+            "Worker",
+            "Кодер",
+        ]
+        runtime_context["alias_to_agent_id"]["Кодер"] = "dip"
+
+        packet = _parser_packet(
+            prompt="Codex, передай Кодер короткую проверку.",
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(packet["alias_candidate"], "Кодер")
+        self.assertEqual(packet["slot_candidate"], "dip")
+        self.assertEqual(packet["intent_status"], contract.INTENT_PASS)
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_unknown_or_missing_alias_fails_closed_without_candidate_guessing(self) -> None:
+        for prompt in (
+            "Просто составь план без второго агента.",
+            "Ghost, проверь маршрут.",
+        ):
+            with self.subTest(prompt=prompt):
+                packet = _parser_packet(prompt=prompt)
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(packet["machine_error_code"], contract.NO_ALIAS_DETECTED)
+                self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_NO_ALIAS)
+                self.assertEqual(packet["alias_match_status"], contract.ALIAS_MATCH_STATUS_NONE)
+                self.assertFalse(packet["alias_candidate_present"])
+                self.assertFalse(packet["parser_selected_alias_from_runtime_context"])
+                self.assertIn("alias_not_detected", packet["parser_blocking_reasons"])
+                _assert_no_dispatch(self, packet)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_multiple_api_aliases_for_same_target_are_ambiguous(self) -> None:
+        packet = _parser_packet(prompt="Codex, пусть DIP и Worker проверят одно и то же.")
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.INTENT_AMBIGUOUS_NO_DISPATCH)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_AMBIGUOUS)
+        self.assertEqual(
+            packet["alias_match_status"],
+            contract.ALIAS_MATCH_STATUS_AMBIGUOUS,
+        )
+        self.assertTrue(packet["ambiguous_intent"])
+        self.assertIn(
+            "multiple_aliases_for_api_target",
+            packet["parser_blocking_reasons"],
+        )
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_multiple_api_targets_are_ambiguous(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["agent_bindings"].append(
+            {
+                "agent_id": "reviewer",
+                "display_name": "Reviewer",
+                "role": "coding_reviewer",
+                "aliases": ["Reviewer"],
+                "lane": "api_route",
+                "enabled": True,
+                "route_id": "wbp-reviewer-route",
+                "allowed_actions": ["code_review"],
+            }
+        )
+        runtime_context["alias_to_agent_id"]["Reviewer"] = "reviewer"
+        runtime_context["agent_id_to_route"]["reviewer"] = "wbp-reviewer-route"
+        runtime_context["allowed_api_route_ids"].append("wbp-reviewer-route")
+
+        packet = _parser_packet(
+            prompt="Codex, попроси DIP и Reviewer сравнить контракт.",
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.INTENT_AMBIGUOUS_NO_DISPATCH)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_AMBIGUOUS)
+        self.assertIn("multiple_api_targets", packet["parser_blocking_reasons"])
+        self.assertTrue(packet["ambiguous_intent"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_overlapping_aliases_for_different_agents_are_ambiguous(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["agent_bindings"][0]["aliases"].append("Agent")
+        runtime_context["alias_to_agent_id"]["Agent"] = "codex"
+
+        packet = _parser_packet(
+            prompt="Agent 2, проверь контракт.",
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.INTENT_AMBIGUOUS_NO_DISPATCH)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_AMBIGUOUS)
+        self.assertIn("overlapping_alias_conflict", packet["parser_blocking_reasons"])
+        self.assertTrue(packet["ambiguous_intent"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_multiple_non_api_aliases_are_ambiguous(self) -> None:
+        packet = _parser_packet(prompt="Codex и Agent 1, проверьте план.")
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.INTENT_AMBIGUOUS_NO_DISPATCH)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_AMBIGUOUS)
+        self.assertIn("multiple_non_api_aliases", packet["parser_blocking_reasons"])
+        self.assertTrue(packet["ambiguous_intent"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_primary_alias_only_is_recognized_but_not_api_lane(self) -> None:
+        packet = _parser_packet(prompt="Codex, проверь план.")
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.FAIL_ALIAS_NOT_API_LANE)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(packet["alias_candidate"], "Codex")
+        self.assertEqual(packet["slot_candidate"], "codex")
+        self.assertEqual(packet["lane_candidate"], "primary_chatgpt")
+        self.assertEqual(packet["intent_status"], contract.FAIL_ALIAS_NOT_API_LANE)
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_empty_or_invalid_context_remains_contract_blocked(self) -> None:
+        invalid_context = _runtime_context()
+        invalid_context["packet_kind"] = "wrong_kind"
+
+        for prompt, runtime_context, expected_parser_status in (
+            ("", _runtime_context(), contract.PARSER_STATUS_PROMPT_EMPTY),
+            ("Codex, дай задачу DIP.", {}, contract.PARSER_STATUS_CONTEXT_MISSING),
+            (
+                "Codex, дай задачу DIP.",
+                invalid_context,
+                contract.PARSER_STATUS_CONTEXT_MISSING,
+            ),
+        ):
+            with self.subTest(prompt=prompt, parser_status=expected_parser_status):
+                packet = _parser_packet(prompt=prompt, runtime_context=runtime_context)
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(packet["parser_status"], expected_parser_status)
+                self.assertNotEqual(packet["contract_preflight_status"], contract.PREFLIGHT_PASS)
+                _assert_no_dispatch(self, packet)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_redacts_raw_prompt_secret_and_backend_details(self) -> None:
+        sensitive_value = "owner-redaction-fixture-value"
+        raw_prompt = (
+            "Codex, дай задачу DIP: проверь Authorization: Bearer "
+            f"{sensitive_value} и backend=https://example.invalid/internal"
+        )
+        packet = _parser_packet(
+            prompt=raw_prompt,
+            secret_values=[sensitive_value],
+        )
+        encoded = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertFalse(contract.packet_contains_text(packet, raw_prompt))
+        self.assertNotIn(sensitive_value, encoded)
+        self.assertNotIn("Authorization: Bearer", encoded)
+        self.assertNotIn("https://example.invalid/internal", encoded)
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["parser_prompt_text_recorded"])
+        self.assertFalse(packet["parser_raw_prompt_recorded"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(
+                packet,
+                secret_values=[sensitive_value],
+            ),
+            [],
+        )
+
     def test_positive_fixture_builds_sanitized_preflight_packet_without_dispatch(self) -> None:
         raw_prompt = "Codex, дай задачу DIP: верни короткий план."
         packet = _packet(prompt=raw_prompt, alias="DIP")
