@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from typing import Any, BinaryIO, Mapping, TextIO
 import unicodedata
@@ -26,6 +27,13 @@ DELEGATE_TO_DIP_TOOL = "delegate_to_dip"
 DELEGATE_PACKET_KIND = "wbp_mcp_delegate_to_dip_reality"
 DELEGATE_FINAL_STATUS_WITH_LIMITS = "WBP_MCP_DELEGATE_TO_DIP_PROVEN_WITH_LIMITS"
 DELEGATE_FINAL_STATUS_NOT_PROVEN = "WBP_MCP_DELEGATE_TO_DIP_NOT_PROVEN"
+CONFIG_PROBE_PACKET_KIND = "wbp_codex_mcp_config_probe"
+CONFIG_PROBE_FINAL_STATUS_LOADED = "WBP_CODEX_MCP_CONFIG_PROBE_LOADED"
+CONFIG_PROBE_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_CONFIG_PROBE_BLOCKED"
+WIRING_PACKET_KIND = "wbp_codex_mcp_wiring_reality"
+WIRING_FINAL_STATUS_PROVEN = "WBP_CODEX_MCP_WIRING_PROVEN"
+WIRING_FINAL_STATUS_WORKS_WITH_LIMITS = "WBP_CODEX_MCP_WIRING_WORKS_WITH_LIMITS"
+WIRING_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_WIRING_BLOCKED"
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,39 @@ def _alias_key(value: object) -> str:
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _hex_sha256(value: object) -> str:
+    text = _safe_text(value, limit=128)
+    return text if re.fullmatch(r"[0-9a-f]{64}", text) else ""
+
+
+def _canonical_delegate_arguments(arguments: Mapping[str, Any] | None) -> dict[str, str]:
+    source = arguments if isinstance(arguments, Mapping) else {}
+    task = _safe_text(source.get("task") or "", limit=4096)
+    expected_alias = _safe_text(
+        source.get("expected_alias") or source.get("alias") or "",
+        limit=80,
+    )
+    return {
+        "task": task,
+        "expected_alias": expected_alias,
+    }
+
+
+def _delegate_call_sha256(arguments: Mapping[str, Any] | None) -> str:
+    canonical_arguments = _canonical_delegate_arguments(arguments)
+    return _sha256_text(
+        json.dumps(
+            {
+                "tool_name": DELEGATE_TO_DIP_TOOL,
+                "arguments": canonical_arguments,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
 
 
 def _runtime_context_path_from_env(env: Mapping[str, str] | None) -> Path | None:
@@ -154,7 +195,11 @@ def read_runtime_context_from_profile(
 def _aliases_for_lane(context: Mapping[str, Any], lane: str) -> list[str]:
     context_key = "coding_aliases" if lane == API_ROUTE_LANE else "primary_aliases"
     raw_aliases = context.get(context_key)
-    aliases = [_safe_text(alias, limit=80) for alias in raw_aliases] if isinstance(raw_aliases, list) else []
+    aliases = (
+        [_safe_text(alias, limit=80) for alias in raw_aliases]
+        if isinstance(raw_aliases, list)
+        else []
+    )
     aliases = [alias for alias in aliases if alias]
     if aliases:
         return aliases
@@ -193,13 +238,16 @@ def _select_alias(arguments: Mapping[str, Any], coding_aliases: list[str]) -> st
     return coding_aliases[0] if len(coding_aliases) == 1 else ""
 
 
-def _command_packet(
+def _command_packet_for_kind(
     *,
     ok: bool,
     machine_error_code: str,
     human_message: str,
     blocking_reasons: list[str],
     extra: dict[str, Any],
+    packet_kind: str,
+    final_status: str,
+    result_status: str,
 ) -> dict[str, Any]:
     operator_action = "none" if ok else "stop"
     return command_packets.build_command_packet(
@@ -213,17 +261,368 @@ def _command_packet(
         effect=EFFECT_PROBE,
         extra={
             "schema_version": 1,
-            "packet_kind": DELEGATE_PACKET_KIND,
+            "packet_kind": packet_kind,
             "captured_at_utc": utc_now(),
-            "final_status": (
-                DELEGATE_FINAL_STATUS_WITH_LIMITS
-                if ok
-                else DELEGATE_FINAL_STATUS_NOT_PROVEN
-            ),
-            "result_status": "with_limits" if ok else "blocked",
+            "final_status": final_status,
+            "result_status": result_status,
             "blocking_reasons": blocking_reasons,
             **extra,
         },
+    )
+
+
+def _command_packet(
+    *,
+    ok: bool,
+    machine_error_code: str,
+    human_message: str,
+    blocking_reasons: list[str],
+    extra: dict[str, Any],
+) -> dict[str, Any]:
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=human_message,
+        blocking_reasons=blocking_reasons,
+        extra=extra,
+        packet_kind=DELEGATE_PACKET_KIND,
+        final_status=(
+            DELEGATE_FINAL_STATUS_WITH_LIMITS
+            if ok
+            else DELEGATE_FINAL_STATUS_NOT_PROVEN
+        ),
+        result_status="with_limits" if ok else "blocked",
+    )
+
+
+def _mcp_get_field(stdout: str, field: str) -> str:
+    prefix = f"{field}:"
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(prefix):
+            return stripped[len(prefix) :].strip()
+    return ""
+
+
+def _mcp_list_server_line(stdout: str, server_name: str) -> str:
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{server_name} "):
+            return stripped
+    return ""
+
+
+def build_codex_mcp_config_probe_packet(
+    list_stdout: str,
+    get_stdout: str = "",
+    *,
+    list_exit_code: int = 0,
+    get_exit_code: int = 0,
+    expected_server_name: str = "wbp",
+) -> dict[str, Any]:
+    safe_server_name = _safe_text(expected_server_name, limit=80) or "wbp"
+    safe_list_stdout = _safe_text(list_stdout, limit=8192)
+    safe_get_stdout = _safe_text(get_stdout, limit=8192)
+    combined_stdout = f"{safe_list_stdout}\n{safe_get_stdout}"
+    server_line = _mcp_list_server_line(list_stdout, safe_server_name)
+    command = _mcp_get_field(get_stdout, "command")
+    args = _mcp_get_field(get_stdout, "args")
+    transport = _mcp_get_field(get_stdout, "transport")
+    enabled_field = _mcp_get_field(get_stdout, "enabled")
+    status_enabled = bool(
+        enabled_field.casefold() == "true"
+        or (" enabled " in f" {server_line} ".casefold())
+    )
+    args_match = args == "-m wild_boar_proxy.mcp_delegate" or (
+        "-m wild_boar_proxy.mcp_delegate" in server_line
+    )
+    command_present = bool(
+        "python" in command.casefold()
+        or re.search(r"\bpython(?:3)?\b", server_line.casefold())
+    )
+    env_redacted = "WBP_PROFILE_DIR=*****" in combined_stdout
+    config_commands_succeeded = list_exit_code == 0 and get_exit_code == 0
+    server_listed = bool(
+        server_line
+        or any(line.strip() == safe_server_name for line in get_stdout.splitlines())
+    )
+    global_config_error_observed = bool(
+        "failed to load configuration" in combined_stdout.casefold()
+        or "unknown variant" in combined_stdout.casefold()
+    )
+    config_loaded = bool(
+        config_commands_succeeded
+        and server_listed
+        and status_enabled
+        and command_present
+        and args_match
+        and env_redacted
+    )
+    blocking_reasons: list[str] = []
+    if not config_commands_succeeded:
+        blocking_reasons.append("codex_mcp_command_failed")
+    if global_config_error_observed:
+        blocking_reasons.append("codex_global_config_error_observed")
+    if not server_listed:
+        blocking_reasons.append("codex_mcp_server_not_listed")
+    if not status_enabled:
+        blocking_reasons.append("codex_mcp_server_not_enabled")
+    if not command_present:
+        blocking_reasons.append("codex_mcp_command_missing")
+    if not args_match:
+        blocking_reasons.append("codex_mcp_args_not_wbp_delegate")
+    if not env_redacted:
+        blocking_reasons.append("codex_mcp_env_not_redacted")
+
+    return _command_packet_for_kind(
+        ok=config_loaded,
+        machine_error_code="OK" if config_loaded else "WBP_CODEX_MCP_CONFIG_NOT_LOADED",
+        human_message=(
+            "Codex MCP config probe found a redacted WBP delegate server registration."
+            if config_loaded
+            else "Codex MCP config probe did not prove a usable WBP delegate registration."
+        ),
+        blocking_reasons=[] if config_loaded else blocking_reasons,
+        extra={
+            "config_loaded": config_loaded,
+            "codex_mcp_config_loaded": config_loaded,
+            "codex_mcp_config_command_succeeded": config_commands_succeeded,
+            "codex_mcp_server_name": safe_server_name,
+            "codex_mcp_server_listed": server_listed,
+            "codex_mcp_server_enabled": status_enabled,
+            "codex_mcp_transport_stdio": transport in {"", "stdio"},
+            "codex_mcp_command_present": command_present,
+            "codex_mcp_command": command,
+            "codex_mcp_args_match": args_match,
+            "codex_mcp_env_redacted": env_redacted,
+            "codex_mcp_original_profile_touched": False,
+            "original_profile_touched": False,
+            "global_config_error_observed": global_config_error_observed,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "raw_config_stdout_recorded": False,
+            "raw_config_stderr_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=CONFIG_PROBE_PACKET_KIND,
+        final_status=(
+            CONFIG_PROBE_FINAL_STATUS_LOADED
+            if config_loaded
+            else CONFIG_PROBE_FINAL_STATUS_BLOCKED
+        ),
+        result_status="loaded" if config_loaded else "blocked",
+    )
+
+
+def build_prompt_observation_packet(prompt_text: str, *, source: str = "manual") -> dict[str, Any]:
+    prompt = _safe_text(prompt_text, limit=4096)
+    return {
+        "packet_kind": "wbp_codex_prompt_observation",
+        "prompt_sha256": _sha256_text(prompt) if prompt else "",
+        "prompt_digest_present": bool(prompt),
+        "prompt_source": _safe_text(source, limit=80) or "manual",
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+    }
+
+
+def build_codex_mcp_wiring_reality_packet(
+    *,
+    config_packet: Mapping[str, Any] | None = None,
+    mcp_reality_packet: Mapping[str, Any] | None = None,
+    prompt_packet: Mapping[str, Any] | None = None,
+    hook_packet: Mapping[str, Any] | None = None,
+    codex_tool_call_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    config = dict(config_packet) if isinstance(config_packet, Mapping) else {}
+    mcp_reality = (
+        dict(mcp_reality_packet) if isinstance(mcp_reality_packet, Mapping) else {}
+    )
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    hook = dict(hook_packet) if isinstance(hook_packet, Mapping) else {}
+    codex_call = (
+        dict(codex_tool_call_packet)
+        if isinstance(codex_tool_call_packet, Mapping)
+        else {}
+    )
+
+    codex_mcp_config_loaded = bool(
+        config.get("config_loaded") is True
+        or config.get("codex_mcp_config_loaded") is True
+    )
+    codex_mcp_original_profile_touched = bool(
+        config.get("codex_mcp_original_profile_touched") is True
+        or config.get("original_profile_touched") is True
+    )
+    direct_mcp_server_visible = mcp_reality.get("mcp_server_visible") is True
+    direct_delegate_to_dip_tool_listed = bool(
+        mcp_reality.get("delegate_to_dip_tool_listed") is True
+        or mcp_reality.get("delegate_to_dip_tool_visible") is True
+    )
+    direct_delegate_to_dip_tool_called = (
+        mcp_reality.get("delegate_to_dip_tool_called") is True
+    )
+    direct_mcp_reality_ok = mcp_reality.get("status") == "ok"
+    delegate_to_dip_tool_visible_to_codex = bool(
+        codex_mcp_config_loaded and direct_delegate_to_dip_tool_listed
+    )
+    direct_mcp_proven_with_limits = bool(
+        codex_mcp_config_loaded
+        and not codex_mcp_original_profile_touched
+        and direct_mcp_reality_ok
+        and direct_mcp_server_visible
+        and direct_delegate_to_dip_tool_listed
+        and direct_delegate_to_dip_tool_called
+        and mcp_reality.get("local_imitation_used") is False
+        and mcp_reality.get("fallback_used") is False
+        and mcp_reality.get("product_ready") is False
+    )
+
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    codex_call_prompt_sha256 = _hex_sha256(
+        codex_call.get("prompt_sha256")
+        or codex_call.get("bound_prompt_sha256")
+        or ""
+    )
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    real_codex_prompt_executed = bool(
+        codex_call.get("real_codex_prompt_executed") is True
+        or codex_call.get("codex_prompt_executed") is True
+    )
+    codex_delegate_to_dip_tool_called = bool(
+        codex_call.get("delegate_to_dip_tool_called") is True
+        or codex_call.get("tool_name") == DELEGATE_TO_DIP_TOOL
+    )
+    prompt_to_mcp_call_bound = bool(
+        codex_call.get("prompt_to_mcp_call_bound") is True
+        and prompt_digest_present
+        and codex_call_prompt_sha256 == prompt_sha256
+    )
+    api_lane_called = codex_call.get("api_lane_called") is True
+    fallback_used = bool(
+        codex_call.get("fallback_used") is True
+        or mcp_reality.get("fallback_used") is True
+    )
+    local_imitation_used = bool(
+        codex_call.get("local_imitation_used") is True
+        or mcp_reality.get("local_imitation_used") is True
+    )
+    native_free_chat_router_proven = bool(
+        codex_call.get("native_free_chat_router_proven") is True
+        and api_lane_called
+        and not fallback_used
+        and not local_imitation_used
+    )
+    codex_mcp_wiring_proven = bool(
+        direct_mcp_proven_with_limits
+        and real_codex_prompt_executed
+        and codex_delegate_to_dip_tool_called
+        and prompt_to_mcp_call_bound
+        and not fallback_used
+        and not local_imitation_used
+    )
+
+    blocking_reasons: list[str] = []
+    if not codex_mcp_config_loaded:
+        blocking_reasons.append("codex_mcp_config_not_loaded")
+    if codex_mcp_original_profile_touched:
+        blocking_reasons.append("codex_mcp_original_profile_touched")
+    if not direct_mcp_server_visible:
+        blocking_reasons.append("direct_mcp_server_not_visible")
+    if not direct_delegate_to_dip_tool_listed:
+        blocking_reasons.append("direct_delegate_to_dip_tool_not_listed")
+    if not direct_delegate_to_dip_tool_called:
+        blocking_reasons.append("direct_delegate_to_dip_tool_not_called")
+    if not direct_mcp_reality_ok:
+        blocking_reasons.append("direct_mcp_reality_packet_not_ok")
+    if direct_mcp_proven_with_limits and not real_codex_prompt_executed:
+        blocking_reasons.append("real_codex_prompt_not_executed")
+    if direct_mcp_proven_with_limits and not codex_delegate_to_dip_tool_called:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    if direct_mcp_proven_with_limits and not prompt_to_mcp_call_bound:
+        blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if local_imitation_used:
+        blocking_reasons.append("local_imitation_used")
+
+    if codex_mcp_wiring_proven:
+        result_status = "proven"
+        final_status = WIRING_FINAL_STATUS_PROVEN
+    elif direct_mcp_proven_with_limits:
+        result_status = "works_with_limits"
+        final_status = WIRING_FINAL_STATUS_WORKS_WITH_LIMITS
+    else:
+        result_status = "blocked"
+        final_status = WIRING_FINAL_STATUS_BLOCKED
+    ok = result_status != "blocked"
+    limiting_reasons = blocking_reasons if result_status == "works_with_limits" else []
+    packet_blocking_reasons = blocking_reasons if result_status == "blocked" else []
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code="OK" if ok else "WBP_CODEX_MCP_WIRING_NOT_PROVEN",
+        human_message=(
+            "Codex MCP wiring is proven by a prompt-bound delegate_to_dip tool call."
+            if result_status == "proven"
+            else (
+                "Codex can load the WBP MCP server and the direct MCP proof works, "
+                "but no real Codex prompt-bound tool call is proven."
+            )
+            if result_status == "works_with_limits"
+            else "Codex MCP wiring is not proven by the supplied evidence."
+        ),
+        blocking_reasons=packet_blocking_reasons,
+        extra={
+            "codex_mcp_config_loaded": codex_mcp_config_loaded,
+            "codex_mcp_config_truth_source": (
+                "codex_mcp_config_probe" if config else "not_observed"
+            ),
+            "codex_mcp_original_profile_touched": codex_mcp_original_profile_touched,
+            "wbp_mcp_server_visible_to_codex": codex_mcp_config_loaded,
+            "delegate_to_dip_tool_visible_to_codex": delegate_to_dip_tool_visible_to_codex,
+            "direct_mcp_server_visible": direct_mcp_server_visible,
+            "direct_delegate_to_dip_tool_listed": direct_delegate_to_dip_tool_listed,
+            "direct_delegate_to_dip_tool_called": direct_delegate_to_dip_tool_called,
+            "direct_mcp_reality_packet_status": str(mcp_reality.get("status") or ""),
+            "direct_mcp_proven_with_limits": direct_mcp_proven_with_limits,
+            "real_codex_prompt_executed": real_codex_prompt_executed,
+            "codex_delegate_to_dip_tool_called": codex_delegate_to_dip_tool_called,
+            "prompt_digest_present": prompt_digest_present,
+            "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
+            "hook_observed_prompt": bool(
+                hook.get("hook_observed_prompt") is True
+                or hook.get("prompt_observed") is True
+            ),
+            "hook_can_enforce_router": hook.get("hook_can_enforce_router") is True,
+            "hook_can_route_delegate_to_dip": hook.get("hook_can_route_delegate_to_dip") is True,
+            "codex_mcp_wiring_proven": codex_mcp_wiring_proven,
+            "limiting_reasons": limiting_reasons,
+            "missing_evidence_reasons": blocking_reasons,
+            "api_lane_called": api_lane_called,
+            "fallback_used": fallback_used,
+            "local_imitation_used": local_imitation_used,
+            "product_ready": False,
+            "native_free_chat_router_proven": native_free_chat_router_proven,
+            "does_not_prove_native_free_chat_router": not native_free_chat_router_proven,
+            "does_not_prove_api_lane_provider_dispatch": not api_lane_called,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "raw_transcript_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=WIRING_PACKET_KIND,
+        final_status=final_status,
+        result_status=result_status,
     )
 
 
@@ -239,6 +638,7 @@ def build_delegate_to_dip_packet(
         args.get("expected_alias") or args.get("alias") or "",
         limit=80,
     )
+    tool_call_sha256 = _delegate_call_sha256(args)
     forbidden_fields = sorted(set(args) - {"task", "expected_alias", "alias"})
     context_read = read_runtime_context_from_profile(env)
     context = context_read.context
@@ -292,7 +692,9 @@ def build_delegate_to_dip_packet(
     if not task:
         blocking_reasons.append("task_required")
     if not metadata.get("alias_context_read"):
-        blocking_reasons.append(str(metadata.get("machine_error_code") or "FAIL_ALIAS_CONTEXT_MISSING"))
+        blocking_reasons.append(
+            str(metadata.get("machine_error_code") or "FAIL_ALIAS_CONTEXT_MISSING")
+        )
     elif not context_valid:
         blocking_reasons.append("alias_context_invalid_for_chatgpt_plus_api")
     if not coding_aliases:
@@ -329,6 +731,7 @@ def build_delegate_to_dip_packet(
         extra={
             "mcp_server_visible": bool(mcp_tool_called),
             "delegate_to_dip_tool_listed": bool(mcp_tool_called),
+            "delegate_to_dip_tool_visible": bool(mcp_tool_called),
             "delegate_to_dip_tool_called": bool(mcp_tool_called),
             "mcp_tool_truth_source": "mcp_tools_call" if mcp_tool_called else "not_observed",
             "alias_context_read": metadata.get("alias_context_read") is True,
@@ -340,6 +743,8 @@ def build_delegate_to_dip_packet(
             "custom_codex_agent_runtime_context_proven": context_valid,
             "task_digest_preserved": task_digest_preserved,
             "task_sha256": _sha256_text(task) if task else "",
+            "tool_call_digest_present": True,
+            "tool_call_sha256": tool_call_sha256,
             "prompt_text_recorded": False,
             "raw_prompt_recorded": False,
             "selected_alias": selected_alias,
@@ -477,6 +882,53 @@ def _tool_call_packet_from_response(response: Any) -> dict[str, Any]:
     return dict(structured) if isinstance(structured, Mapping) else {}
 
 
+def _config_probe_packet_from_item(response: Any) -> dict[str, Any]:
+    if not isinstance(response, Mapping):
+        return {}
+    packet_kind = str(response.get("packet_kind") or "")
+    if packet_kind == CONFIG_PROBE_PACKET_KIND:
+        return dict(response)
+    result = response.get("result")
+    if not isinstance(result, Mapping):
+        return {}
+    packet_kind = str(result.get("packet_kind") or "")
+    return dict(result) if packet_kind == CONFIG_PROBE_PACKET_KIND else {}
+
+
+def _delegate_tool_call_arguments_from_item(response: Any) -> dict[str, Any]:
+    if not isinstance(response, Mapping):
+        return {}
+    if str(response.get("method") or "") != "tools/call":
+        return {}
+    params = response.get("params")
+    if not isinstance(params, Mapping):
+        return {}
+    if str(params.get("name") or "") != DELEGATE_TO_DIP_TOOL:
+        return {}
+    arguments = params.get("arguments")
+    return dict(arguments) if isinstance(arguments, Mapping) else {}
+
+
+def _transcript_prompt_sha256(arguments: Mapping[str, Any] | None) -> str:
+    source = arguments if isinstance(arguments, Mapping) else {}
+    task = _safe_text(source.get("task") or "", limit=4096)
+    if task:
+        return _sha256_text(task)
+    return _hex_sha256(source.get("task_sha256") or source.get("prompt_sha256") or "")
+
+
+def _transcript_call_sha256(arguments: Mapping[str, Any] | None) -> str:
+    source = arguments if isinstance(arguments, Mapping) else {}
+    explicit_digest = _hex_sha256(
+        source.get("tool_call_sha256") or source.get("call_sha256") or ""
+    )
+    if explicit_digest:
+        return explicit_digest
+    if source:
+        return _delegate_call_sha256(source)
+    return ""
+
+
 def _server_name_from_response(response: Any) -> str:
     server_info = _response_result(response).get("serverInfo")
     if not isinstance(server_info, Mapping):
@@ -488,6 +940,18 @@ def build_reality_spike_proof_packet(
     transcript: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
 ) -> dict[str, Any]:
     transcript_items = [dict(item) for item in transcript if isinstance(item, Mapping)]
+    config_packets = [
+        packet
+        for packet in (_config_probe_packet_from_item(item) for item in transcript_items)
+        if packet
+    ]
+    call_requests = [
+        arguments
+        for arguments in (
+            _delegate_tool_call_arguments_from_item(item) for item in transcript_items
+        )
+        if arguments
+    ]
     mcp_server_visible = any(
         _server_name_from_response(item) == MCP_SERVER_NAME
         for item in transcript_items
@@ -505,9 +969,28 @@ def build_reality_spike_proof_packet(
         if packet.get("packet_kind") == DELEGATE_PACKET_KIND
     ]
     call_packet = call_packets[-1] if call_packets else {}
+    call_request_arguments = call_requests[-1] if call_requests else {}
+    codex_mcp_config_loaded = any(
+        packet.get("config_loaded") is True for packet in config_packets
+    )
+    prompt_digest = _transcript_prompt_sha256(call_request_arguments)
+    call_digest = _transcript_call_sha256(call_request_arguments)
+    prompt_digest_available = bool(prompt_digest and call_packet.get("task_sha256"))
+    call_digest_available = bool(call_digest and call_packet.get("tool_call_sha256"))
+    prompt_digest_bound_to_tool_packet = (
+        call_packet.get("task_sha256") == prompt_digest
+        if prompt_digest_available
+        else False
+    )
+    call_digest_bound_to_tool_packet = (
+        call_packet.get("tool_call_sha256") == call_digest
+        if call_digest_available
+        else False
+    )
     delegate_to_dip_tool_called = call_packet.get("delegate_to_dip_tool_called") is True
     ok = bool(
-        mcp_server_visible
+        codex_mcp_config_loaded
+        and mcp_server_visible
         and delegate_to_dip_tool_listed
         and delegate_to_dip_tool_called
         and call_packet.get("status") == "ok"
@@ -515,17 +998,25 @@ def build_reality_spike_proof_packet(
         and call_packet.get("allowed_api_route_ids_enforced") is True
         and call_packet.get("forbidden_stale_route_ids_enforced") is True
         and call_packet.get("task_digest_preserved") is True
+        and (not prompt_digest_available or prompt_digest_bound_to_tool_packet)
+        and (not call_digest_available or call_digest_bound_to_tool_packet)
         and call_packet.get("local_imitation_used") is False
         and call_packet.get("fallback_used") is False
         and call_packet.get("product_ready") is False
     )
     blocking_reasons: list[str] = []
+    if not codex_mcp_config_loaded:
+        blocking_reasons.append("codex_mcp_config_not_loaded")
     if not mcp_server_visible:
         blocking_reasons.append("mcp_server_not_visible")
     if not delegate_to_dip_tool_listed:
         blocking_reasons.append("delegate_to_dip_tool_not_listed")
     if not delegate_to_dip_tool_called:
         blocking_reasons.append("delegate_to_dip_tool_not_called")
+    if prompt_digest_available and not prompt_digest_bound_to_tool_packet:
+        blocking_reasons.append("prompt_digest_not_bound_to_tool_packet")
+    if call_digest_available and not call_digest_bound_to_tool_packet:
+        blocking_reasons.append("call_digest_not_bound_to_tool_packet")
     if call_packet and call_packet.get("status") != "ok":
         blocking_reasons.extend(
             str(reason) for reason in call_packet.get("blocking_reasons", [])
@@ -549,16 +1040,24 @@ def build_reality_spike_proof_packet(
         ok=ok,
         machine_error_code="OK"
         if ok
-        else str(call_packet.get("machine_error_code") or "WBP_MCP_REALITY_SPIKE_NOT_PROVEN"),
+        else str(
+            call_packet.get("machine_error_code") or "WBP_MCP_REALITY_SPIKE_NOT_PROVEN"
+        ),
         human_message=(
-            "WBP MCP delegate_to_dip reality spike is proven with tools/list and tools/call evidence."
+            "WBP MCP delegate_to_dip reality spike is proven with tools/list "
+            "and tools/call evidence."
             if ok
             else "WBP MCP delegate_to_dip reality spike is not proven by the supplied transcript."
         ),
         blocking_reasons=[] if ok else blocking_reasons,
         extra={
+            "codex_mcp_config_loaded": codex_mcp_config_loaded,
+            "codex_mcp_config_truth_source": (
+                "transcript_config_probe" if config_packets else "not_observed"
+            ),
             "mcp_server_visible": mcp_server_visible,
             "delegate_to_dip_tool_listed": delegate_to_dip_tool_listed,
+            "delegate_to_dip_tool_visible": delegate_to_dip_tool_listed,
             "delegate_to_dip_tool_called": delegate_to_dip_tool_called,
             "alias_context_read": call_packet.get("alias_context_read") is True,
             "allowed_api_route_ids_enforced": (
@@ -568,6 +1067,11 @@ def build_reality_spike_proof_packet(
                 call_packet.get("forbidden_stale_route_ids_enforced") is True
             ),
             "task_digest_preserved": call_packet.get("task_digest_preserved") is True,
+            "prompt_digest_available": prompt_digest_available,
+            "prompt_digest_bound_to_tool_packet": prompt_digest_bound_to_tool_packet,
+            "call_digest_available": call_digest_available,
+            "call_digest_bound_to_tool_packet": call_digest_bound_to_tool_packet,
+            "tool_call_digest_present": call_packet.get("tool_call_digest_present") is True,
             "fallback_used": call_packet.get("fallback_used") is True,
             "local_imitation_used": call_packet.get("local_imitation_used") is True,
             "product_ready": call_packet.get("product_ready") is True,
