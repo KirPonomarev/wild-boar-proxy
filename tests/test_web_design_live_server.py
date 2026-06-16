@@ -2488,7 +2488,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     self.assertTrue(packet["api_lane_exact_token_matched"])
                     self.assertFalse(packet["local_imitation_used"])
 
-    def test_custom_native_free_text_command_loop_requires_native_proof_file_and_api_loop(self) -> None:
+    def test_custom_native_free_text_command_loop_blocks_without_native_observer_proof(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             worker = live_server._CustomNativeFileBridgeWorker(
@@ -2583,8 +2583,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
 
-        self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
         self.assertTrue(packet["native_window_observed"])
         self.assertTrue(packet["input_capable_ui_observed"])
         self.assertTrue(packet["input_text_insert_succeeded"])
@@ -2593,13 +2596,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["native_agent_proof_file_valid"])
         self.assertTrue(packet["native_free_text_agent_context_sha_match"])
         self.assertTrue(packet["native_free_text_alias_routing_proven"])
-        self.assertTrue(packet["native_free_text_command_loop_proven"])
-        self.assertTrue(packet["native_free_text_tool_bridge_proven"])
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertFalse(packet["native_free_text_observability_proven"])
         self.assertTrue(packet["command_loop_proven"])
         self.assertTrue(packet["api_lane_exact_token_matched"])
         self.assertTrue(packet["bridge_or_file_bridge_used"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
         self.assertTrue(packet["native_activation_attempted"])
@@ -2616,6 +2622,130 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(str(proof_root), json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packet["command_loop_provider_call_count"], 1)
         self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(
+            packet["blocking_reasons"],
+            ["CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"],
+        )
+
+    def test_custom_native_free_text_command_loop_blocks_codex_subagent_dip_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Codex"],
+                coding_aliases=["DIP"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+
+            proof_root = root / "native-proof"
+
+            def submitter(*, prompt: str, request_id: str) -> dict[str, object]:
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": metadata["context_sha256"],
+                            "primary_aliases": context["primary_aliases"],
+                            "coding_aliases": context["coding_aliases"],
+                            "allowed_api_route_ids": context["allowed_api_route_ids"],
+                            "expected_token": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                            "native_free_text_agent_ack": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "raw_dom_exposed": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": True,
+                    "custom_codex_response_text_read_proven": True,
+                    "native_codex_subagent_used_as_dip": True,
+                    "native_codex_subagent_absence_proven": False,
+                }
+
+            with mock.patch.object(
+                live_server,
+                "proxyless_urlopen",
+                return_value=self._bridge_response(
+                    route_id="wbp-deepseek-chat",
+                    output_text="WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                ),
+            ):
+                packet = live_server._custom_native_free_text_command_loop_proof_packet(
+                    payload={
+                        "expected_text": "WBP_NATIVE_SUBAGENT_FAIL_GUARD",
+                        "request_id": "native-free-text-subagent-fail",
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    native_prompt_submitter=submitter,
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP",
+        )
+        self.assertFalse(packet["native_free_text_command_loop_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertFalse(packet["native_free_text_observability_proven"])
+        self.assertTrue(packet["native_agent_provider_call_directly_observed"])
+        self.assertTrue(packet["custom_codex_response_text_read_proven"])
+        self.assertTrue(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(
+            packet["blocking_reasons"],
+            ["CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"],
+        )
 
     def test_custom_native_free_text_command_loop_accepts_arbitrary_runtime_alias_variants(self) -> None:
         variants = [
@@ -2688,6 +2818,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "prompt_submitted": True,
                             "prompt_text_recorded": False,
                             "secret_value_exposed": False,
+                            "native_agent_provider_call_directly_observed": True,
+                            "custom_codex_response_text_read_proven": True,
+                            "native_codex_subagent_used_as_dip": False,
+                            "native_codex_subagent_absence_proven": True,
                         }
 
                     with mock.patch.object(
@@ -2730,6 +2864,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     self.assertEqual(packet["coding_alias"], coding_alias)
                     self.assertTrue(packet["native_free_text_alias_routing_proven"])
                     self.assertTrue(packet["native_free_text_command_loop_proven"])
+                    self.assertTrue(packet["native_free_text_tool_bridge_proven"])
+                    self.assertTrue(packet["native_free_text_observability_proven"])
+                    self.assertTrue(packet["native_agent_provider_call_directly_observed"])
+                    self.assertTrue(packet["custom_codex_response_text_read_proven"])
+                    self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+                    self.assertTrue(packet["native_codex_subagent_absence_proven"])
                     self.assertTrue(packet["api_lane_exact_token_matched"])
                     self.assertTrue(packet["allowed_api_route_ids_enforced"])
                     self.assertFalse(packet["local_imitation_used"])

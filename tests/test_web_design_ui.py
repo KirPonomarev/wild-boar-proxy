@@ -6470,10 +6470,13 @@ const sandbox = {
           native_free_text_alias_routing_proven: true,
           native_free_text_command_loop_proven: true,
           native_free_text_tool_bridge_proven: true,
+          native_free_text_observability_proven: true,
           native_free_text_activation_proven: true,
           native_free_text_tool_bridge_source: "native_agent_proof_file_plus_server_gpt_api_command_loop",
-          native_agent_provider_call_directly_observed: false,
-          custom_codex_response_text_read_proven: false,
+          native_agent_provider_call_directly_observed: true,
+          custom_codex_response_text_read_proven: true,
+          native_codex_subagent_used_as_dip: false,
+          native_codex_subagent_absence_proven: true,
           command_loop_proven: true,
           runtime_context_file_proven: true,
           custom_codex_agent_runtime_context_proven: true,
@@ -6542,6 +6545,7 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   if (
     rendered.native_free_text_command_loop_proven !== true ||
     rendered.native_free_text_tool_bridge_proven !== true ||
+    rendered.native_free_text_observability_proven !== true ||
     rendered.native_window_observed !== true ||
     rendered.input_capable_ui_observed !== true ||
     rendered.input_text_insert_succeeded !== true ||
@@ -6555,8 +6559,10 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.launch_attempted !== false ||
     rendered.native_launch_attempted !== false ||
     rendered.runtime_readiness_claimed !== false ||
-    rendered.native_agent_provider_call_directly_observed !== false ||
-    rendered.custom_codex_response_text_read_proven !== false ||
+    rendered.native_agent_provider_call_directly_observed !== true ||
+    rendered.custom_codex_response_text_read_proven !== true ||
+    rendered.native_codex_subagent_used_as_dip !== false ||
+    rendered.native_codex_subagent_absence_proven !== true ||
     rendered.prompt_text_recorded !== false ||
     rendered.nested_packets_redacted !== true ||
     rendered.secret_value_exposed !== false
@@ -6667,6 +6673,12 @@ if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_AU
 if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY" }) !== "resume ready") {
   throw new Error("resume ready blocker label missing");
 }
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN" }) !== "observer missing") {
+  throw new Error("observer missing blocker label missing");
+}
+if (quickStartNativeFreeTextBlockerLabel({ machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP" }) !== "sub-agent fail") {
+  throw new Error("sub-agent fail blocker label missing");
+}
 renderQuickStartNativeFreeTextCommandLoopProof({
   status: "blocked",
   machine_error_code: "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING",
@@ -6684,6 +6696,11 @@ renderQuickStartNativeFreeTextCommandLoopProof({
   native_free_text_alias_routing_proven: false,
   native_free_text_command_loop_proven: false,
   native_free_text_tool_bridge_proven: false,
+  native_free_text_observability_proven: false,
+  native_agent_provider_call_directly_observed: false,
+  custom_codex_response_text_read_proven: false,
+  native_codex_subagent_used_as_dip: false,
+  native_codex_subagent_absence_proven: false,
   command_loop_proven: false,
   runtime_context_file_proven: false,
   api_lane_exact_token_matched: false,
@@ -6711,7 +6728,12 @@ if (
   rendered.native_free_text_command_loop_packet !== true ||
   rendered.native_free_text_command_loop_proven !== false ||
   rendered.native_free_text_tool_bridge_proven !== false ||
+  rendered.native_free_text_observability_proven !== false ||
   rendered.native_agent_proof_file_valid !== false ||
+  rendered.native_agent_provider_call_directly_observed !== false ||
+  rendered.custom_codex_response_text_read_proven !== false ||
+  rendered.native_codex_subagent_used_as_dip !== false ||
+  rendered.native_codex_subagent_absence_proven !== false ||
   rendered.command_loop_proven !== false ||
   rendered.runtime_context_file_proven !== false ||
   rendered.prompt_submitted !== true ||

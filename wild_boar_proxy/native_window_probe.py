@@ -2566,6 +2566,12 @@ def _cdp_submit_prompt_to_app_page(
             "prompt_submitted": True,
             "submit_button_observed": submit_value.get("submitButtonObserved") is True,
             "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
+            "native_agent_provider_call_directly_observed": False,
+            "custom_codex_response_text_read_proven": False,
+            "native_codex_subagent_used_as_dip": False,
+            "native_codex_subagent_absence_proven": False,
+            "native_free_text_observer_source": "not_observable_by_prompt_submit",
+            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
             "secret_value_exposed": False,
             "next_action": "none",
         }
@@ -2616,6 +2622,12 @@ def submit_custom_native_window_prompt_packet(
         ) | {
             "native_window_observed": show_packet.get("custom_window_observed") is True,
             "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
+            "native_agent_provider_call_directly_observed": False,
+            "custom_codex_response_text_read_proven": False,
+            "native_codex_subagent_used_as_dip": False,
+            "native_codex_subagent_absence_proven": False,
+            "native_free_text_observer_source": "not_observable_by_prompt_submit",
+            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
             "show_window_packet": show_packet,
         }
     packet = _cdp_submit_prompt_to_app_page(
@@ -2629,6 +2641,15 @@ def submit_custom_native_window_prompt_packet(
     packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
     packet["native_app_usable"] = show_packet.get("native_app_usable") is True
+    packet.setdefault("native_agent_provider_call_directly_observed", False)
+    packet.setdefault("custom_codex_response_text_read_proven", False)
+    packet.setdefault("native_codex_subagent_used_as_dip", False)
+    packet.setdefault("native_codex_subagent_absence_proven", False)
+    packet.setdefault("native_free_text_observer_source", "not_observable_by_prompt_submit")
+    packet.setdefault(
+        "native_free_text_observer_machine_error_code",
+        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+    )
     packet["show_window_packet"] = show_packet
     return packet
 

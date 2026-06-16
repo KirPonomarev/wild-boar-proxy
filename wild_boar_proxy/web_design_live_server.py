@@ -5328,8 +5328,11 @@ def _custom_native_free_text_blocked_packet(
         "native_free_text_alias_routing_proven": False,
         "native_free_text_command_loop_proven": False,
         "native_free_text_tool_bridge_proven": False,
+        "native_free_text_observability_proven": False,
         "native_agent_provider_call_directly_observed": False,
         "custom_codex_response_text_read_proven": False,
+        "native_codex_subagent_used_as_dip": False,
+        "native_codex_subagent_absence_proven": False,
         "runtime_context_file_proven": context_file_proven,
         "custom_codex_agent_runtime_context_proven": context_file_proven,
         "command_loop_proven": command_loop.get("command_loop_proven") is True,
@@ -5965,6 +5968,34 @@ def _custom_native_free_text_command_loop_proof_packet(
             native_agent_proof_packet=native_agent_proof_packet,
             command_loop_packet=command_loop_packet,
         )
+    native_agent_provider_call_directly_observed = bool(
+        native_submit_packet.get("native_agent_provider_call_directly_observed") is True
+    )
+    custom_codex_response_text_read_proven = bool(
+        native_submit_packet.get("custom_codex_response_text_read_proven") is True
+    )
+    native_codex_subagent_used_as_dip = bool(
+        native_submit_packet.get("native_codex_subagent_used_as_dip") is True
+    )
+    native_codex_subagent_absence_proven = bool(
+        native_submit_packet.get("native_codex_subagent_absence_proven") is True
+    )
+    native_free_text_observability_proven = bool(
+        native_agent_provider_call_directly_observed
+        and custom_codex_response_text_read_proven
+        and native_codex_subagent_absence_proven
+        and not native_codex_subagent_used_as_dip
+    )
+    native_observability_machine_error_code = "OK"
+    if native_codex_subagent_used_as_dip:
+        native_observability_machine_error_code = (
+            "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"
+        )
+    elif not native_free_text_observability_proven:
+        native_observability_machine_error_code = (
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+        )
+
     native_free_text_command_loop_proven = bool(
         native_submit_packet.get("native_window_observed") is True
         and native_submit_packet.get("input_capable_ui_observed") is True
@@ -5977,6 +6008,12 @@ def _custom_native_free_text_command_loop_proof_packet(
         and command_loop_packet.get("fallback_used") is False
         and command_loop_packet.get("local_imitation_used") is False
         and command_loop_packet.get("secret_value_exposed") is False
+        and native_free_text_observability_proven
+    )
+    native_free_text_human_message = (
+        "Custom Codex native free-text prompt, agent proof file, observer evidence, and GPT+API alias command-loop proof passed."
+        if native_free_text_command_loop_proven
+        else "Custom Codex native free-text prompt is not proven as a native API-lane route; observer evidence is missing or indicates Codex sub-agent substitution."
     )
     return {
         "schema_version": 1,
@@ -5985,8 +6022,8 @@ def _custom_native_free_text_command_loop_proof_packet(
         "status": "ok" if native_free_text_command_loop_proven else "blocked",
         "machine_error_code": "OK"
         if native_free_text_command_loop_proven
-        else "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
-        "human_message": "Custom Codex native free-text prompt, agent proof file, and GPT+API alias command-loop proof passed.",
+        else native_observability_machine_error_code,
+        "human_message": native_free_text_human_message,
         "final_status": (
             "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PROVEN_WITH_LIMITS"
             if native_free_text_command_loop_proven
@@ -6067,9 +6104,12 @@ def _custom_native_free_text_command_loop_proof_packet(
         ),
         "native_free_text_command_loop_proven": native_free_text_command_loop_proven,
         "native_free_text_tool_bridge_proven": native_free_text_command_loop_proven,
+        "native_free_text_observability_proven": native_free_text_observability_proven,
         "native_free_text_tool_bridge_source": "native_agent_proof_file_plus_server_gpt_api_command_loop",
-        "native_agent_provider_call_directly_observed": False,
-        "custom_codex_response_text_read_proven": False,
+        "native_agent_provider_call_directly_observed": native_agent_provider_call_directly_observed,
+        "custom_codex_response_text_read_proven": custom_codex_response_text_read_proven,
+        "native_codex_subagent_used_as_dip": native_codex_subagent_used_as_dip,
+        "native_codex_subagent_absence_proven": native_codex_subagent_absence_proven,
         "runtime_context_file_proven": command_loop_packet.get("runtime_context_file_proven") is True,
         "custom_codex_agent_runtime_context_proven": command_loop_packet.get("custom_codex_agent_runtime_context_proven") is True,
         "command_loop_proven": command_loop_packet.get("command_loop_proven") is True,
@@ -6110,7 +6150,9 @@ def _custom_native_free_text_command_loop_proof_packet(
         "command_loop_packet": _native_free_text_public_nested_packet(
             command_loop_packet
         ),
-        "blocking_reasons": [] if native_free_text_command_loop_proven else ["native_free_text_command_loop_not_proven"],
+        "blocking_reasons": []
+        if native_free_text_command_loop_proven
+        else [native_observability_machine_error_code],
         "next_action": "none" if native_free_text_command_loop_proven else "stop_and_diagnose_native_free_text_command_loop",
     }
 

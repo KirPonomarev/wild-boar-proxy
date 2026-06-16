@@ -2348,6 +2348,12 @@ function quickStartNativeFreeTextBlockerLabel(packet) {
   if (machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID") {
     return "proof invalid";
   }
+  if (machineCode === "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP") {
+    return "sub-agent fail";
+  }
+  if (machineCode === "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN") {
+    return "observer missing";
+  }
   return machineCode ? quickStartNextActionLabel(machineCode) : "native blocked";
 }
 
@@ -4585,6 +4591,8 @@ function setQuickStartRouteResponse(packet) {
         packet?.command_loop_packet || {},
       native_free_text_tool_bridge_source:
         packet?.native_free_text_tool_bridge_source || "",
+      native_free_text_observability_proven:
+        packet?.native_free_text_observability_proven === true,
       native_agent_proof_file_observed:
         packet?.native_agent_proof_file_observed === true,
       native_agent_proof_file_valid:
@@ -4607,6 +4615,10 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_agent_provider_call_directly_observed === true,
       custom_codex_response_text_read_proven:
         packet?.custom_codex_response_text_read_proven === true,
+      native_codex_subagent_used_as_dip:
+        packet?.native_codex_subagent_used_as_dip === true,
+      native_codex_subagent_absence_proven:
+        packet?.native_codex_subagent_absence_proven === true,
       proof_file_path_redacted:
         packet?.proof_file_path_redacted === true,
       nested_packets_redacted:
@@ -5663,6 +5675,11 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     && packet?.runtime_context_file_proven === true
     && packet?.command_loop_proven === true
     && packet?.api_lane_exact_token_matched === true
+    && packet?.native_free_text_observability_proven === true
+    && packet?.native_agent_provider_call_directly_observed === true
+    && packet?.custom_codex_response_text_read_proven === true
+    && packet?.native_codex_subagent_absence_proven === true
+    && packet?.native_codex_subagent_used_as_dip !== true
     && packet?.fallback_used !== true
     && packet?.local_imitation_used !== true
     && packet?.prompt_text_recorded !== true
@@ -6010,6 +6027,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       execution_mode: payload?.execution_mode || "",
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
+      native_free_text_observability_proven: false,
       native_window_observed: false,
       input_capable_ui_observed: false,
       prompt_submitted: false,
@@ -6019,6 +6037,10 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       api_lane_exact_token_matched: false,
       fallback_used: false,
       local_imitation_used: false,
+      native_agent_provider_call_directly_observed: false,
+      custom_codex_response_text_read_proven: false,
+      native_codex_subagent_used_as_dip: false,
+      native_codex_subagent_absence_proven: false,
       secret_value_exposed: false,
       next_action: "select_chatgpt_plus_api"
     });
@@ -6045,12 +6067,17 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     native_free_text_command_loop_packet: false,
     native_free_text_command_loop_proven: false,
     native_free_text_tool_bridge_proven: false,
+    native_free_text_observability_proven: false,
     native_free_text_activation_proven: false,
     native_window_observed: false,
     input_capable_ui_observed: false,
     input_text_insert_attempted: false,
     input_text_insert_succeeded: false,
     prompt_submitted: false,
+    native_agent_provider_call_directly_observed: false,
+    custom_codex_response_text_read_proven: false,
+    native_codex_subagent_used_as_dip: false,
+    native_codex_subagent_absence_proven: false,
     native_agent_proof_file_observed: false,
     native_agent_proof_file_valid: false,
     native_free_text_agent_context_sha_match: false,
@@ -6081,6 +6108,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
         final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
         native_free_text_command_loop_proven: false,
         native_free_text_tool_bridge_proven: false,
+        native_free_text_observability_proven: false,
         native_window_observed: false,
         input_capable_ui_observed: false,
         prompt_submitted: false,
@@ -6094,6 +6122,10 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
         bridge_or_file_bridge_used: false,
         fallback_used: false,
         local_imitation_used: false,
+        native_agent_provider_call_directly_observed: false,
+        custom_codex_response_text_read_proven: false,
+        native_codex_subagent_used_as_dip: false,
+        native_codex_subagent_absence_proven: false,
         secret_value_exposed: false,
         next_action: runtimePacket?.next_action || "repair_agent_bindings"
       });
@@ -6125,6 +6157,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       coding_agent_model_id: payload.api_model_id || "",
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
+      native_free_text_observability_proven: false,
       native_window_observed: false,
       input_capable_ui_observed: false,
       prompt_submitted: false,
@@ -6138,6 +6171,10 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       bridge_or_file_bridge_used: false,
       fallback_used: false,
       local_imitation_used: false,
+      native_agent_provider_call_directly_observed: false,
+      custom_codex_response_text_read_proven: false,
+      native_codex_subagent_used_as_dip: false,
+      native_codex_subagent_absence_proven: false,
       secret_value_exposed: false,
       next_action: "stop_and_diagnose_native_free_text_command_loop"
     });

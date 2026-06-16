@@ -1418,6 +1418,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["submit_mechanism"], "cdp_button_click")
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["native_agent_provider_call_directly_observed"])
+        self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
         self.assertFalse(packet["secret_value_exposed"])
         self.assertEqual(cdp_command.call_count, 4)
 
@@ -1443,6 +1451,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["native_window_observed"])
         self.assertFalse(packet["input_capable_ui_observed"])
         self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["native_agent_provider_call_directly_observed"])
+        self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
 
     def test_submit_custom_native_window_prompt_passes_same_profile_candidate_pids_to_cdp(self) -> None:
         with (
@@ -1475,6 +1491,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["prompt_submitted"])
+        self.assertFalse(packet["native_agent_provider_call_directly_observed"])
+        self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(
+            packet["native_free_text_observer_machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        )
         submitter.assert_called_once_with(
             222,
             "Planner: do it",
