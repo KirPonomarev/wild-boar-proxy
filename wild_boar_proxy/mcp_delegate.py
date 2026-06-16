@@ -75,6 +75,28 @@ ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED = (
     "WBP_NATIVE_ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED"
 )
 ROUTER_HOOK_CODEX_SUBAGENT_USED = "WBP_NATIVE_ROUTER_HOOK_CODEX_SUBAGENT_USED"
+ROUTER_HOOK_SOURCE_ADMISSION_PACKET_KIND = "wbp_router_hook_source_admission"
+ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_ADMITTED = (
+    "WBP_ROUTER_HOOK_SOURCE_ADMITTED"
+)
+ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_BLOCKED = (
+    "WBP_ROUTER_HOOK_SOURCE_BLOCKED"
+)
+ROUTER_HOOK_SOURCE_NOT_ADMITTED = "WBP_ROUTER_HOOK_SOURCE_NOT_ADMITTED"
+ROUTER_HOOK_SOURCE_AUTHORITY_REJECTED = (
+    "WBP_ROUTER_HOOK_SOURCE_AUTHORITY_REJECTED"
+)
+ROUTER_HOOK_SOURCE_SIDE_EFFECT_REJECTED = (
+    "WBP_ROUTER_HOOK_SOURCE_SIDE_EFFECT_REJECTED"
+)
+ROUTER_HOOK_SOURCE_DIGEST_NOT_BOUND = "WBP_ROUTER_HOOK_SOURCE_DIGEST_NOT_BOUND"
+ROUTER_HOOK_SOURCE_ALLOWED_KINDS = frozenset(
+    {
+        "wbp_codex_exec_jsonl_observer",
+        "wbp_exec_wrapper",
+        "wbp_owned_router_hook_probe",
+    }
+)
 CODEX_EXEC_TOOL_CALL_PACKET_KIND = "wbp_codex_exec_tool_call_observation"
 CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED = (
     "WBP_CODEX_EXEC_TOOL_CALL_OBSERVED"
@@ -1387,6 +1409,230 @@ def build_codex_mcp_wiring_reality_packet(
     )
 
 
+def build_router_hook_source_admission_packet(
+    *,
+    prompt_packet: Mapping[str, Any] | None = None,
+    source_event_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    source = (
+        dict(source_event_packet)
+        if isinstance(source_event_packet, Mapping)
+        else {}
+    )
+
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    source_kind = _safe_text(source.get("source_kind") or "", limit=128)
+    source_event_packet_kind = _safe_text(source.get("packet_kind") or "", limit=128)
+    source_effect = _safe_text(
+        source.get("source_effect") or source.get("effect") or "",
+        limit=80,
+    )
+    source_prompt_sha256 = _hex_sha256(
+        source.get("source_prompt_sha256")
+        or source.get("prompt_sha256")
+        or ""
+    )
+    source_run_sha256 = _hex_sha256(
+        source.get("source_run_sha256")
+        or source.get("run_sha256")
+        or source.get("run_id_sha256")
+        or ""
+    )
+    source_present = bool(source)
+    changed_files = source.get("changed_files")
+    changed_files_empty = isinstance(changed_files, list) and not changed_files
+    source_wbp_owned = source.get("source_wbp_owned") is True
+    source_kind_admitted = source_kind in ROUTER_HOOK_SOURCE_ALLOWED_KINDS
+    source_effect_admitted = source_effect in {"probe", "read"}
+    source_prompt_digest_present = bool(source_prompt_sha256)
+    source_run_digest_present = bool(source_run_sha256)
+    source_prompt_digest_bound = bool(
+        prompt_digest_present
+        and source_prompt_digest_present
+        and source_prompt_sha256 == prompt_sha256
+    )
+    hook_observed_prompt = bool(
+        source.get("hook_observed_prompt") is True
+        or source.get("prompt_observed") is True
+    )
+    hook_can_enforce_router = source.get("hook_can_enforce_router") is True
+    hook_can_route_delegate_to_dip = (
+        source.get("hook_can_route_delegate_to_dip") is True
+    )
+    hook_logging_only = bool(
+        hook_observed_prompt
+        and (not hook_can_enforce_router or not hook_can_route_delegate_to_dip)
+    )
+    manual_hook_packet_used = bool(
+        source.get("manual_hook_packet_used") is True
+        or source_kind in {"manual", "manual_hook_packet"}
+    )
+    synthetic_hook_packet_used = bool(
+        source.get("synthetic_hook_packet_used") is True
+        or source_kind in {"synthetic", "test_only"}
+    )
+    prompt_supplied_hook_flags = bool(
+        source.get("prompt_supplied_hook_flags") is True
+        or source.get("browser_can_supply_prompt_authority") is True
+    )
+    browser_supplied_hook_flags = bool(
+        source.get("browser_supplied_hook_flags") is True
+        or source.get("browser_can_supply_route_authority") is True
+        or source.get("browser_can_supply_model_authority") is True
+    )
+    state_written = source.get("state_written") is True
+    profile_written = source.get("profile_written") is True
+    config_written = source.get("config_written") is True
+    route_registry_written = source.get("route_registry_written") is True
+    credential_written = source.get("credential_written") is True
+    runtime_state_written = source.get("runtime_state_written") is True
+    write_side_effect_observed = bool(
+        source_present
+        and (
+            state_written
+            or profile_written
+            or config_written
+            or route_registry_written
+            or credential_written
+            or runtime_state_written
+            or not changed_files_empty
+            or not source_effect_admitted
+        )
+    )
+    raw_prompt_recorded = bool(
+        source.get("raw_prompt_recorded") is True
+        or source.get("prompt_text_recorded") is True
+    )
+    raw_route_id_recorded = source.get("raw_route_id_recorded") is True
+    raw_backend_details_exposed = source.get("raw_backend_details_exposed") is True
+    secret_value_exposed = source.get("secret_value_exposed") is True
+    product_ready_claimed = source.get("product_ready") is True
+    native_free_chat_router_claimed = (
+        source.get("native_free_chat_router_proven") is True
+    )
+
+    blocking_reasons: list[str] = []
+    if not source_present:
+        blocking_reasons.append("router_hook_source_event_missing")
+    if not prompt_digest_present:
+        blocking_reasons.append("prompt_digest_missing")
+    if not source_wbp_owned:
+        blocking_reasons.append("router_hook_source_not_wbp_owned")
+    if not source_kind_admitted:
+        blocking_reasons.append("router_hook_source_kind_not_admitted")
+    if not source_run_digest_present:
+        blocking_reasons.append("router_hook_source_run_digest_missing")
+    if not source_prompt_digest_present:
+        blocking_reasons.append("router_hook_source_prompt_digest_missing")
+    if not source_prompt_digest_bound:
+        blocking_reasons.append("router_hook_source_prompt_digest_not_bound")
+    if not hook_observed_prompt:
+        blocking_reasons.append("hook_prompt_not_observed")
+    if not hook_can_enforce_router:
+        blocking_reasons.append("hook_cannot_enforce_router")
+    if not hook_can_route_delegate_to_dip:
+        blocking_reasons.append("hook_cannot_route_delegate_to_dip")
+    if hook_logging_only:
+        blocking_reasons.append("router_hook_source_logging_only")
+    if manual_hook_packet_used:
+        blocking_reasons.append("manual_hook_packet_not_admitted")
+    if synthetic_hook_packet_used:
+        blocking_reasons.append("synthetic_hook_packet_not_admitted")
+    if prompt_supplied_hook_flags:
+        blocking_reasons.append("prompt_supplied_hook_flags")
+    if browser_supplied_hook_flags:
+        blocking_reasons.append("browser_supplied_hook_flags")
+    if write_side_effect_observed:
+        blocking_reasons.append("router_hook_source_write_side_effect")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_route_id_recorded:
+        blocking_reasons.append("raw_route_id_must_not_be_recorded")
+    if raw_backend_details_exposed:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if secret_value_exposed:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+    if native_free_chat_router_claimed:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if product_ready_claimed:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif prompt_supplied_hook_flags or browser_supplied_hook_flags:
+        machine_error_code = ROUTER_HOOK_SOURCE_AUTHORITY_REJECTED
+    elif write_side_effect_observed:
+        machine_error_code = ROUTER_HOOK_SOURCE_SIDE_EFFECT_REJECTED
+    elif not source_run_digest_present or not source_prompt_digest_bound:
+        machine_error_code = ROUTER_HOOK_SOURCE_DIGEST_NOT_BOUND
+    else:
+        machine_error_code = ROUTER_HOOK_SOURCE_NOT_ADMITTED
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP router hook source evidence is admitted for observation."
+            if ok
+            else "WBP router hook source evidence is not admitted."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra={
+            "source_packet_kind": ROUTER_HOOK_SOURCE_ADMISSION_PACKET_KIND,
+            "source_event_packet_kind": source_event_packet_kind,
+            "source_status": "ok" if ok else "blocked",
+            "source_wbp_owned": source_wbp_owned,
+            "source_kind": source_kind if source_kind_admitted else "",
+            "source_effect": source_effect if source_effect_admitted else "",
+            "source_run_digest_present": source_run_digest_present,
+            "source_run_sha256": source_run_sha256,
+            "source_prompt_digest_present": source_prompt_digest_present,
+            "source_prompt_digest_bound": source_prompt_digest_bound,
+            "source_prompt_sha256": (
+                source_prompt_sha256 if source_prompt_digest_bound else ""
+            ),
+            "prompt_digest_present": prompt_digest_present,
+            "hook_observed_prompt": hook_observed_prompt,
+            "hook_can_enforce_router": hook_can_enforce_router,
+            "hook_can_route_delegate_to_dip": hook_can_route_delegate_to_dip,
+            "hook_logging_only": hook_logging_only,
+            "manual_hook_packet_used": manual_hook_packet_used,
+            "synthetic_hook_packet_used": synthetic_hook_packet_used,
+            "prompt_supplied_hook_flags": prompt_supplied_hook_flags,
+            "browser_supplied_hook_flags": browser_supplied_hook_flags,
+            "state_written": state_written,
+            "profile_written": profile_written,
+            "config_written": config_written,
+            "route_registry_written": route_registry_written,
+            "credential_written": credential_written,
+            "runtime_state_written": runtime_state_written,
+            "write_side_effect_observed": write_side_effect_observed,
+            "raw_prompt_recorded": raw_prompt_recorded,
+            "prompt_text_recorded": False,
+            "raw_route_id_recorded": raw_route_id_recorded,
+            "raw_backend_details_exposed": raw_backend_details_exposed,
+            "secret_value_exposed": secret_value_exposed,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_product_ready_free_chat": True,
+            "no_secret_exposed": not secret_value_exposed,
+        },
+        packet_kind=ROUTER_HOOK_SOURCE_ADMISSION_PACKET_KIND,
+        final_status=(
+            ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_ADMITTED
+            if ok
+            else ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_BLOCKED
+        ),
+        result_status="admitted" if ok else "blocked",
+    )
+
+
 def build_native_router_hook_observation_packet(
     *,
     config_packet: Mapping[str, Any] | None = None,
@@ -1394,6 +1640,7 @@ def build_native_router_hook_observation_packet(
     codex_tool_call_packet: Mapping[str, Any] | None = None,
     delegate_packet: Mapping[str, Any] | None = None,
     hook_packet: Mapping[str, Any] | None = None,
+    hook_source_packet: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     config = dict(config_packet) if isinstance(config_packet, Mapping) else {}
     prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
@@ -1404,6 +1651,11 @@ def build_native_router_hook_observation_packet(
     )
     delegate = dict(delegate_packet) if isinstance(delegate_packet, Mapping) else {}
     hook = dict(hook_packet) if isinstance(hook_packet, Mapping) else {}
+    hook_source = (
+        dict(hook_source_packet)
+        if isinstance(hook_source_packet, Mapping)
+        else {}
+    )
 
     codex_mcp_config_loaded = bool(
         config.get("config_loaded") is True
@@ -1437,13 +1689,43 @@ def build_native_router_hook_observation_packet(
     wbp_owned_surface_called = bool(
         codex_tool_call_observation_ok and delegate_to_dip_called
     )
-    hook_observed_prompt = bool(
-        hook.get("hook_observed_prompt") is True or hook.get("prompt_observed") is True
+    hook_source_admitted = bool(
+        hook_source.get("status") == "ok"
+        and hook_source.get("packet_kind") == ROUTER_HOOK_SOURCE_ADMISSION_PACKET_KIND
+        and hook_source.get("result_status") in {"", "admitted"}
+        and hook_source.get("source_status") == "ok"
     )
-    hook_can_enforce_router = hook.get("hook_can_enforce_router") is True
-    hook_can_route_delegate_to_dip = hook.get("hook_can_route_delegate_to_dip") is True
+    source_wbp_owned = hook_source.get("source_wbp_owned") is True
+    source_effect = _safe_text(hook_source.get("source_effect") or "", limit=80)
+    source_run_digest_present = hook_source.get("source_run_digest_present") is True
+    source_prompt_digest_present = (
+        hook_source.get("source_prompt_digest_present") is True
+    )
+    source_prompt_digest_bound = bool(
+        hook_source.get("source_prompt_digest_bound") is True
+        and hook_source.get("source_prompt_sha256") == prompt_sha256
+        and prompt_digest_present
+    )
+    hook_observed_prompt = bool(
+        hook_source_admitted
+        and (
+            hook_source.get("hook_observed_prompt") is True
+            or hook_source.get("prompt_observed") is True
+        )
+    )
+    hook_can_enforce_router = bool(
+        hook_source_admitted
+        and hook_source.get("hook_can_enforce_router") is True
+    )
+    hook_can_route_delegate_to_dip = bool(
+        hook_source_admitted
+        and hook_source.get("hook_can_route_delegate_to_dip") is True
+    )
     explicit_router_hook_evidence = bool(
-        hook_observed_prompt and hook_can_enforce_router and hook_can_route_delegate_to_dip
+        hook_source_admitted
+        and hook_observed_prompt
+        and hook_can_enforce_router
+        and hook_can_route_delegate_to_dip
     )
     prompt_digest_bound = bool(
         codex_call.get("prompt_to_mcp_call_bound") is True
@@ -1469,22 +1751,29 @@ def build_native_router_hook_observation_packet(
         or codex_call.get("codex_subagent_used_as_dip") is True
         or hook.get("local_codex_subagent_used_as_dip") is True
         or hook.get("native_codex_subagent_used_as_dip") is True
+        or hook_source.get("local_codex_subagent_used_as_dip") is True
+        or hook_source.get("native_codex_subagent_used_as_dip") is True
     )
     local_imitation_used = bool(
         local_codex_subagent_used
         or codex_call.get("local_imitation_used") is True
         or delegate.get("local_imitation_used") is True
         or hook.get("local_imitation_used") is True
+        or hook_source.get("local_imitation_used") is True
     )
     fallback_used = bool(
         codex_call.get("fallback_used") is True
         or delegate.get("fallback_used") is True
         or hook.get("fallback_used") is True
+        or hook_source.get("fallback_used") is True
     )
+    prompt_supplied_hook_flags = hook_source.get("prompt_supplied_hook_flags") is True
+    browser_supplied_hook_flags = hook_source.get("browser_supplied_hook_flags") is True
     browser_authority_rejected = bool(
         codex_call.get("browser_authority_fields_rejected") is True
         or delegate.get("machine_error_code")
         == "WBP_MCP_DELEGATE_BROWSER_AUTHORITY_REJECTED"
+        or hook_source.get("machine_error_code") == ROUTER_HOOK_SOURCE_AUTHORITY_REJECTED
         or any(
             str(reason).startswith("forbidden_field:")
             for reason in delegate.get("blocking_reasons", [])
@@ -1493,26 +1782,39 @@ def build_native_router_hook_observation_packet(
     browser_can_supply_route_authority = bool(
         delegate.get("browser_can_supply_route_authority") is True
         or hook.get("browser_can_supply_route_authority") is True
+        or browser_supplied_hook_flags
     )
     browser_can_supply_model_authority = bool(
         delegate.get("browser_can_supply_model_authority") is True
         or hook.get("browser_can_supply_model_authority") is True
+        or browser_supplied_hook_flags
+    )
+    manual_hook_packet_used = bool(
+        hook
+        or hook_source.get("manual_hook_packet_used") is True
+    )
+    synthetic_hook_packet_used = (
+        hook_source.get("synthetic_hook_packet_used") is True
     )
     raw_backend_details_exposed = bool(
         codex_call.get("raw_backend_details_exposed") is True
         or delegate.get("raw_backend_details_exposed") is True
         or hook.get("raw_backend_details_exposed") is True
+        or hook_source.get("raw_backend_details_exposed") is True
     )
     secret_value_exposed = bool(
         codex_call.get("secret_value_exposed") is True
         or delegate.get("secret_value_exposed") is True
         or hook.get("secret_value_exposed") is True
+        or hook_source.get("secret_value_exposed") is True
     )
     raw_prompt_recorded = bool(
         codex_call.get("raw_prompt_recorded") is True
         or delegate.get("raw_prompt_recorded") is True
         or prompt.get("raw_prompt_recorded") is True
+        or hook_source.get("raw_prompt_recorded") is True
     )
+    raw_route_id_recorded = hook_source.get("raw_route_id_recorded") is True
     raw_provider_response_recorded = bool(
         codex_call.get("raw_provider_response_recorded") is True
         or delegate.get("raw_provider_response_recorded") is True
@@ -1521,11 +1823,13 @@ def build_native_router_hook_observation_packet(
         codex_call.get("native_free_chat_router_proven") is True
         or delegate.get("native_free_chat_router_proven") is True
         or hook.get("native_free_chat_router_proven") is True
+        or hook_source.get("native_free_chat_router_proven") is True
     )
     product_ready_claimed = bool(
         codex_call.get("product_ready") is True
         or delegate.get("product_ready") is True
         or hook.get("product_ready") is True
+        or hook_source.get("product_ready") is True
     )
 
     blocking_reasons: list[str] = []
@@ -1541,12 +1845,34 @@ def build_native_router_hook_observation_packet(
         blocking_reasons.append("codex_tool_call_observation_packet_not_ok")
     if not wbp_owned_surface_called:
         blocking_reasons.append("router_hook_not_observed")
+    if not hook_source:
+        blocking_reasons.append("router_hook_source_packet_missing")
+    elif not hook_source_admitted:
+        blocking_reasons.append("router_hook_source_packet_not_admitted")
+    if not source_wbp_owned:
+        blocking_reasons.append("router_hook_source_not_wbp_owned")
+    if source_effect not in {"probe", "read"}:
+        blocking_reasons.append("router_hook_source_effect_not_admitted")
+    if not source_run_digest_present:
+        blocking_reasons.append("router_hook_source_run_digest_missing")
+    if not source_prompt_digest_present:
+        blocking_reasons.append("router_hook_source_prompt_digest_missing")
+    if not source_prompt_digest_bound:
+        blocking_reasons.append("router_hook_source_prompt_digest_not_bound")
     if not hook_observed_prompt:
         blocking_reasons.append("hook_prompt_not_observed")
     if not hook_can_enforce_router:
         blocking_reasons.append("hook_cannot_enforce_router")
     if not hook_can_route_delegate_to_dip:
         blocking_reasons.append("hook_cannot_route_delegate_to_dip")
+    if manual_hook_packet_used:
+        blocking_reasons.append("manual_hook_packet_not_admitted")
+    if synthetic_hook_packet_used:
+        blocking_reasons.append("synthetic_hook_packet_not_admitted")
+    if prompt_supplied_hook_flags:
+        blocking_reasons.append("prompt_supplied_hook_flags")
+    if browser_supplied_hook_flags:
+        blocking_reasons.append("browser_supplied_hook_flags")
     if not prompt_digest_bound:
         blocking_reasons.append("prompt_digest_not_bound_to_router_hook")
     if not tool_call_digest_bound:
@@ -1579,6 +1905,8 @@ def build_native_router_hook_observation_packet(
         blocking_reasons.append("product_ready_must_not_be_claimed")
     if raw_prompt_recorded:
         blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_route_id_recorded:
+        blocking_reasons.append("raw_route_id_must_not_be_recorded")
     if raw_provider_response_recorded:
         blocking_reasons.append("raw_provider_response_must_not_be_recorded")
     if raw_backend_details_exposed:
@@ -1615,6 +1943,17 @@ def build_native_router_hook_observation_packet(
             "router_hook_observed": ok,
             "native_router_hook_observed": ok,
             "explicit_router_hook_evidence": explicit_router_hook_evidence,
+            "source_packet_kind": str(hook_source.get("packet_kind") or ""),
+            "source_status": str(hook_source.get("source_status") or ""),
+            "source_wbp_owned": source_wbp_owned,
+            "source_effect": source_effect,
+            "source_run_digest_present": source_run_digest_present,
+            "source_prompt_digest_present": source_prompt_digest_present,
+            "source_prompt_digest_bound": source_prompt_digest_bound,
+            "manual_hook_packet_used": manual_hook_packet_used,
+            "synthetic_hook_packet_used": synthetic_hook_packet_used,
+            "prompt_supplied_hook_flags": prompt_supplied_hook_flags,
+            "browser_supplied_hook_flags": browser_supplied_hook_flags,
             "wbp_owned_surface_called": wbp_owned_surface_called,
             "wbp_owned_surface_kind": (
                 "mcp_tool_call:delegate_to_dip" if wbp_owned_surface_called else ""
@@ -1683,6 +2022,7 @@ def build_native_router_hook_observation_packet(
             "secret_value_exposed": secret_value_exposed,
             "raw_backend_details_exposed": raw_backend_details_exposed,
             "raw_prompt_recorded": raw_prompt_recorded,
+            "raw_route_id_recorded": raw_route_id_recorded,
             "prompt_text_recorded": False,
             "raw_transcript_recorded": False,
             "raw_provider_response_recorded": raw_provider_response_recorded,
