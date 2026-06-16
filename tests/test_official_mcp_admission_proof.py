@@ -46,11 +46,13 @@ def _jsonl_for_prompt_bound_tool_call(
     variant: proof.OfficialMcpAdmissionVariant,
     *,
     status: str = "completed",
+    arguments: dict[str, str] | None = None,
 ) -> str:
-    arguments = {
-        "task": variant.expected_task or variant.prompt,
-        "expected_alias": variant.expected_alias,
-    }
+    if arguments is None:
+        arguments = {
+            "task": variant.expected_task or variant.prompt,
+            "expected_alias": variant.expected_alias,
+        }
     return "\n".join(
         [
             json.dumps({"type": "thread.started", "thread_id": "thread-proof"}),
@@ -139,6 +141,104 @@ def _positive_case_packet(alias: str) -> dict[str, object]:
     )
 
 
+def _natural_variant(alias: str, prompt: str) -> proof.OfficialMcpAdmissionVariant:
+    return proof.OfficialMcpAdmissionVariant(
+        name=f"strict_natural_{alias.replace(' ', '_').casefold()}",
+        prompt=prompt,
+        expected_alias=alias,
+        coding_aliases=("DIP", "Agent 2", "Worker"),
+        expect_positive_proof=True,
+        intent_kind=proof.INTENT_STRICT_NATURAL,
+        bind_expected_delegate_arguments=False,
+    )
+
+
+def _natural_case_packet(
+    alias: str,
+    prompt: str,
+    *,
+    tool_arguments: dict[str, str] | None = None,
+) -> dict[str, object]:
+    variant = _natural_variant(alias, prompt)
+    arguments = tool_arguments if tool_arguments is not None else {"task": prompt}
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        profile_dir = root / "profile"
+        proof.write_runtime_context(profile_dir, variant)
+        delegate_packet = mcp_delegate.build_delegate_to_dip_packet(
+            arguments,
+            env={"WBP_PROFILE_DIR": str(profile_dir)},
+            mcp_tool_called=True,
+        )
+        evidence = mcp_delegate._entry_hook_evidence_packet(delegate_packet)
+    config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+        "",
+        MCP_GET_STDOUT,
+        list_exit_code=0,
+        get_exit_code=0,
+    )
+    prompt_packet = mcp_delegate.build_prompt_observation_packet(
+        variant.prompt,
+        source="codex_exec_json",
+        expected_delegate_arguments=proof._expected_delegate_arguments(variant),
+    )
+    codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+        _jsonl_for_prompt_bound_tool_call(variant, arguments=arguments),
+        prompt_packet=prompt_packet,
+    )
+    return proof.build_official_mcp_admission_case_packet(
+        variant=variant,
+        config_packet=config_packet,
+        prompt_packet=prompt_packet,
+        codex_tool_call_packet=codex_packet,
+        entry_hook_evidence=evidence,
+        codex_exec_exit_code=0,
+        codex_exec_machine_error_code="OK",
+        codex_mcp_get_exit_code=0,
+        uses_danger_full_access=False,
+        uses_dangerously_bypass=False,
+    )
+
+
+def _natural_negative_case_packet(name: str) -> dict[str, object]:
+    variant = proof.OfficialMcpAdmissionVariant(
+        name=name,
+        prompt="Сделай короткий план проверки.",
+        expected_alias="",
+        coding_aliases=("DIP", "Agent 2", "Worker"),
+        expect_positive_proof=False,
+        intent_kind=proof.INTENT_NO_ALIAS_NEGATIVE,
+        bind_expected_delegate_arguments=False,
+    )
+    config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+        "",
+        MCP_GET_STDOUT,
+        list_exit_code=0,
+        get_exit_code=0,
+    )
+    prompt_packet = mcp_delegate.build_prompt_observation_packet(
+        variant.prompt,
+        source="codex_exec_json",
+        expected_delegate_arguments=proof._expected_delegate_arguments(variant),
+    )
+    codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+        "",
+        prompt_packet=prompt_packet,
+    )
+    return proof.build_official_mcp_admission_case_packet(
+        variant=variant,
+        config_packet=config_packet,
+        prompt_packet=prompt_packet,
+        codex_tool_call_packet=codex_packet,
+        entry_hook_evidence={},
+        codex_exec_exit_code=0,
+        codex_exec_machine_error_code="OK",
+        codex_mcp_get_exit_code=0,
+        uses_danger_full_access=False,
+        uses_dangerously_bypass=False,
+    )
+
+
 class OfficialMcpAdmissionProofTests(unittest.TestCase):
     def test_codex_mcp_config_overrides_are_per_tool_and_bounded(self) -> None:
         overrides = proof.codex_mcp_config_overrides(
@@ -168,6 +268,24 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertNotIn("danger-full-access", joined)
         self.assertNotIn("dangerously-bypass", joined)
 
+    def test_natural_prompt_classifier_marks_explicit_tool_instructions(self) -> None:
+        self.assertFalse(
+            proof.explicit_tool_instruction_used(
+                "Codex, дай задачу DIP: верни короткий план."
+            )
+        )
+        self.assertTrue(
+            proof.explicit_tool_instruction_used(
+                "Call the WBP MCP tool delegate_to_dip exactly once."
+            )
+        )
+        self.assertTrue(
+            proof.prompt_has_expected_alias(
+                "Agent 2, проверь контракт допуска WBP.",
+                "Agent 2",
+            )
+        )
+
     def test_positive_case_requires_codex_tool_call_and_entry_hook_evidence(self) -> None:
         packet = _positive_case_packet("DIP")
 
@@ -195,6 +313,48 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["uses_dangerously_bypass"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_natural_case_routes_without_explicit_tool_instruction(self) -> None:
+        packet = _natural_case_packet(
+            "Worker",
+            "Worker, сделай короткий план проверки.",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["natural_prompt_used"])
+        self.assertTrue(packet["strict_natural_prompt"])
+        self.assertFalse(packet["explicit_tool_instruction_used"])
+        self.assertTrue(packet["expected_alias_present_in_prompt"])
+        self.assertTrue(packet["natural_alias_intent_routed"])
+        self.assertEqual(packet["natural_alias_intent_result"], "routed")
+        self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertEqual(packet["selected_alias"], "Worker")
+        self.assertTrue(packet["selected_alias_matches_expected"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_jsonl_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_natural_case_blocks_alias_collapse_to_dip(self) -> None:
+        packet = _natural_case_packet(
+            "Worker",
+            "Worker, сделай короткий план проверки.",
+            tool_arguments={
+                "task": "Worker, сделай короткий план проверки.",
+                "expected_alias": "DIP",
+            },
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["positive_proof"])
+        self.assertFalse(packet["natural_alias_intent_routed"])
+        self.assertEqual(packet["selected_alias"], "DIP")
+        self.assertFalse(packet["selected_alias_matches_expected"])
+        self.assertIn(
+            "selected_alias_did_not_match_expected_alias",
+            packet["proof_blocking_reasons"],
+        )
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_negative_case_without_approval_fails_closed_not_positive(self) -> None:
@@ -281,6 +441,95 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertTrue(packet["no_raw_recording"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_natural_matrix_reports_green_for_strict_aliases_and_fail_closed_negatives(self) -> None:
+        positives = [
+            _natural_case_packet("DIP", "Codex, дай задачу DIP: верни короткий план."),
+            _natural_case_packet("Agent 2", "Agent 2, проверь контракт допуска WBP."),
+            _natural_case_packet("Worker", "Worker, сделай короткий план проверки."),
+        ]
+        negatives = [
+            _natural_negative_case_packet("negative_no_approval"),
+            _natural_negative_case_packet("negative_missing_context"),
+            _natural_negative_case_packet("negative_route_outside_allowlist"),
+            _natural_negative_case_packet("negative_no_alias_prompt"),
+        ]
+
+        packet = proof.build_natural_alias_intent_matrix_packet(positives + negatives)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_status"],
+            "NATURAL_ALIAS_INTENT_CORE_PROOF_POSITIVE",
+        )
+        self.assertEqual(packet["natural_alias_intent_result"], "green")
+        self.assertEqual(packet["strict_success_count"], 3)
+        self.assertEqual(packet["negative_fail_closed_count"], 4)
+        self.assertTrue(packet["required_aliases_proven"])
+        self.assertEqual(packet["alias_mismatch_count"], 0)
+        self.assertTrue(packet["explicit_tool_instruction_absent_in_strict"])
+        self.assertTrue(packet["no_dangerous_modes"])
+        self.assertTrue(packet["no_raw_recording"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_natural_matrix_reports_partial_for_some_strict_routing(self) -> None:
+        routed = _natural_case_packet(
+            "DIP",
+            "Codex, дай задачу DIP: верни короткий план.",
+        )
+        failed_worker = dict(
+            _natural_negative_case_packet("strict_worker_not_routed")
+        )
+        failed_worker.update(
+            {
+                "intent_kind": proof.INTENT_STRICT_NATURAL,
+                "strict_natural_prompt": True,
+                "no_alias_negative_prompt": False,
+                "expect_positive_proof": True,
+                "expected_alias": "Worker",
+                "required_for_natural_matrix": True,
+            }
+        )
+        failed_agent = dict(failed_worker)
+        failed_agent.update({"variant": "strict_agent_2_not_routed", "expected_alias": "Agent 2"})
+        negatives = [_natural_negative_case_packet("negative_no_alias_prompt")]
+
+        packet = proof.build_natural_alias_intent_matrix_packet(
+            [routed, failed_worker, failed_agent, *negatives]
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["final_status"], "NATURAL_ALIAS_INTENT_PARTIAL")
+        self.assertEqual(packet["natural_alias_intent_result"], "partial")
+        self.assertEqual(packet["strict_success_count"], 1)
+        self.assertFalse(packet["required_aliases_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_natural_matrix_reports_red_when_no_strict_prompt_routes(self) -> None:
+        failed_cases = []
+        for alias in ("DIP", "Agent 2", "Worker"):
+            failed = dict(_natural_negative_case_packet(f"strict_{alias}_not_routed"))
+            failed.update(
+                {
+                    "intent_kind": proof.INTENT_STRICT_NATURAL,
+                    "strict_natural_prompt": True,
+                    "no_alias_negative_prompt": False,
+                    "expect_positive_proof": True,
+                    "expected_alias": alias,
+                    "required_for_natural_matrix": True,
+                }
+            )
+            failed_cases.append(failed)
+
+        packet = proof.build_natural_alias_intent_matrix_packet(failed_cases)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["final_status"], "NATURAL_ALIAS_INTENT_NOT_PROVEN")
+        self.assertEqual(packet["natural_alias_intent_result"], "red")
+        self.assertEqual(packet["strict_success_count"], 0)
+        self.assertEqual(packet["natural_tool_call_count"], 0)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_run_case_uses_per_tool_approval_and_sanitized_entry_hook_evidence(self) -> None:
