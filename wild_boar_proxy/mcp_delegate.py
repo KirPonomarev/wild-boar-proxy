@@ -552,6 +552,27 @@ def _codex_exec_mcp_tool_call_candidates(
     return candidates
 
 
+_CODEX_EXEC_AUTH_BLOCKER_PATTERN = re.compile(
+    r"(?i)\b("
+    r"auth|authentication|authorization|login|not authenticated|"
+    r"unauthenticated|unauthorized|api key|CODEX_API_KEY|401|bearer"
+    r")\b"
+)
+
+
+def _codex_exec_auth_blocker_from_events(events: list[dict[str, Any]]) -> bool:
+    for event in events:
+        if _safe_text(event.get("type") or "", limit=128) != "error":
+            continue
+        try:
+            encoded = json.dumps(event, ensure_ascii=True, sort_keys=True)
+        except (TypeError, ValueError):
+            encoded = repr(event)
+        if _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(encoded):
+            return True
+    return False
+
+
 def _select_codex_exec_tool_call_candidate(
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -607,7 +628,8 @@ def build_codex_exec_tool_call_observation_packet(
     )
     stderr_safe = _safe_text(stderr_text, limit=4096)
     auth_blocker_observed = bool(
-        re.search(r"(?i)\b(auth|login|not authenticated|api key|CODEX_API_KEY)\b", stderr_safe)
+        _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(stderr_safe)
+        or _codex_exec_auth_blocker_from_events(events)
     )
     blocking_reasons: list[str] = []
     if exec_exit_code != 0:

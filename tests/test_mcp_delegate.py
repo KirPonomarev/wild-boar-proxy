@@ -855,6 +855,46 @@ class McpDelegateToDipTests(unittest.TestCase):
         self.assertFalse(packet["raw_stderr_recorded"])
         self.assertFalse(packet["secret_value_exposed"])
 
+    def test_codex_exec_jsonl_observation_reports_auth_from_error_events(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        auth_messages = [
+            "Authentication required; run codex login.",
+            "401 Unauthorized",
+            "Bearer token missing",
+        ]
+
+        for message in auth_messages:
+            with self.subTest(message=message):
+                packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+                    "\n".join(
+                        [
+                            json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                            json.dumps({"type": "turn.started"}),
+                            json.dumps({"type": "error", "message": message}),
+                            json.dumps({"type": "turn.failed"}),
+                        ]
+                    ),
+                    prompt_packet=prompt_packet,
+                    exec_exit_code=1,
+                )
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(
+                    packet["machine_error_code"],
+                    "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED",
+                )
+                self.assertTrue(packet["codex_exec_auth_blocker_observed"])
+                self.assertIn(
+                    "codex_exec_auth_or_model_admission_required",
+                    packet["blocking_reasons"],
+                )
+                self.assertFalse(packet["raw_jsonl_recorded"])
+                self.assertFalse(packet["secret_value_exposed"])
+
     def test_codex_mcp_wiring_does_not_promote_blocked_codex_observation(self) -> None:
         config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
             CODEX_MCP_LIST_OUTPUT,
