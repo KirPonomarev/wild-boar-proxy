@@ -557,7 +557,8 @@ _CODEX_EXEC_AUTH_BLOCKER_PATTERN = re.compile(
     r"auth[a-z_-]*|oauth|login|log in|logged in|sign in|signed in|"
     r"not authenticated|not signed in|unauthenticated|unauthorized|"
     r"api key|CODEX_API_KEY|401|bearer|admission|subscription|"
-    r"plan required|account|access required|entitled|entitlement"
+    r"plan required|account access required|account required|access required|"
+    r"entitled|entitlement"
     r")\b"
 )
 
@@ -630,8 +631,11 @@ def build_codex_exec_tool_call_observation_packet(
     )
     stderr_safe = _safe_text(stderr_text, limit=4096)
     auth_blocker_observed = bool(
-        _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(stderr_safe)
-        or _codex_exec_auth_blocker_from_events(events)
+        exec_exit_code != 0
+        and (
+            _CODEX_EXEC_AUTH_BLOCKER_PATTERN.search(stderr_safe)
+            or _codex_exec_auth_blocker_from_events(events)
+        )
     )
     blocking_reasons: list[str] = []
     if exec_exit_code != 0:

@@ -900,6 +900,33 @@ class McpDelegateToDipTests(unittest.TestCase):
                 self.assertFalse(packet["raw_jsonl_recorded"])
                 self.assertFalse(packet["secret_value_exposed"])
 
+    def test_codex_exec_jsonl_observation_does_not_report_auth_on_success(self) -> None:
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "message",
+                                "text": "OK for this ChatGPT account.",
+                            },
+                        }
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            exec_exit_code=0,
+        )
+
+        self.assertFalse(packet["codex_exec_auth_blocker_observed"])
+        self.assertNotEqual(
+            packet["machine_error_code"],
+            "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED",
+        )
+
     def test_codex_mcp_wiring_does_not_promote_blocked_codex_observation(self) -> None:
         config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
             CODEX_MCP_LIST_OUTPUT,
