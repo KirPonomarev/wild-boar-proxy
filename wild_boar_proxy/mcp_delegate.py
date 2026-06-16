@@ -27,6 +27,14 @@ DELEGATE_TO_DIP_TOOL = "delegate_to_dip"
 DELEGATE_PACKET_KIND = "wbp_mcp_delegate_to_dip_reality"
 DELEGATE_FINAL_STATUS_WITH_LIMITS = "WBP_MCP_DELEGATE_TO_DIP_PROVEN_WITH_LIMITS"
 DELEGATE_FINAL_STATUS_NOT_PROVEN = "WBP_MCP_DELEGATE_TO_DIP_NOT_PROVEN"
+API_LANE_ADAPTER_ADMISSION_PACKET_KIND = "wbp_api_lane_adapter_admission"
+API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_ADMITTED = (
+    "WBP_API_LANE_ADAPTER_ADMISSION_ADMITTED"
+)
+API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_BLOCKED = (
+    "WBP_API_LANE_ADAPTER_ADMISSION_BLOCKED"
+)
+API_LANE_ADAPTER_NOT_AVAILABLE = "WBP_API_LANE_ADAPTER_NOT_AVAILABLE"
 CONFIG_PROBE_PACKET_KIND = "wbp_codex_mcp_config_probe"
 CONFIG_PROBE_FINAL_STATUS_LOADED = "WBP_CODEX_MCP_CONFIG_PROBE_LOADED"
 CONFIG_PROBE_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_CONFIG_PROBE_BLOCKED"
@@ -311,6 +319,95 @@ def _command_packet(
             else DELEGATE_FINAL_STATUS_NOT_PROVEN
         ),
         result_status="with_limits" if ok else "blocked",
+    )
+
+
+def build_api_lane_adapter_admission_packet(
+    *,
+    task: str,
+    selected_alias: str,
+    selected_alias_lane: str,
+    route_id: str,
+    allowed_api_route_ids_enforced: bool,
+    route_allowed: bool,
+    adapter_available: bool = True,
+) -> dict[str, Any]:
+    safe_task = _safe_text(task, limit=4096)
+    safe_alias = _safe_text(selected_alias, limit=80)
+    safe_lane = _safe_text(selected_alias_lane, limit=32)
+    safe_route_id = _safe_text(route_id, limit=128)
+    selected_api_route_id_present = bool(safe_route_id)
+    blocking_reasons: list[str] = []
+    if not adapter_available:
+        blocking_reasons.append("api_lane_adapter_unavailable")
+    if not safe_task:
+        blocking_reasons.append("task_required")
+    if not safe_alias:
+        blocking_reasons.append("coding_alias_not_selected")
+    if safe_lane != API_ROUTE_LANE:
+        blocking_reasons.append("selected_alias_not_api_lane")
+    if not selected_api_route_id_present:
+        blocking_reasons.append("selected_api_route_id_missing")
+    if not allowed_api_route_ids_enforced:
+        blocking_reasons.append("allowed_api_route_ids_not_enforced")
+    if not route_allowed:
+        blocking_reasons.append("selected_api_route_not_allowed")
+
+    ok = not blocking_reasons
+    machine_error_code = (
+        "OK"
+        if ok
+        else API_LANE_ADAPTER_NOT_AVAILABLE
+        if not adapter_available
+        else "WBP_API_LANE_DISPATCH_NOT_ADMITTED"
+    )
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP API-lane adapter admission accepted the server-owned route boundary."
+            if ok
+            else "WBP API-lane adapter admission rejected the route boundary."
+        ),
+        blocking_reasons=blocking_reasons,
+        extra={
+            "delegate_to_dip_tool_called": True,
+            "api_lane_adapter_called": True,
+            "api_lane_dispatch_admitted": ok,
+            "adapter_available": adapter_available,
+            "adapter_truth_source": "server_owned_api_lane_adapter_admission",
+            "selected_alias": safe_alias,
+            "selected_alias_lane": safe_lane,
+            "selected_api_route_id_present": selected_api_route_id_present,
+            "selected_api_route_id_sha256": (
+                _sha256_text(safe_route_id) if selected_api_route_id_present else ""
+            ),
+            "selected_api_route_id_recorded": False,
+            "allowed_api_route_ids_enforced": allowed_api_route_ids_enforced,
+            "route_allowed": route_allowed,
+            "task_digest_preserved": bool(safe_task),
+            "task_sha256": _sha256_text(safe_task) if safe_task else "",
+            "api_lane_called": ok,
+            "api_lane_provider_called": False,
+            "provider_response_proven": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "bounded_api_lane_mock_used": False,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": True,
+        },
+        packet_kind=API_LANE_ADAPTER_ADMISSION_PACKET_KIND,
+        final_status=(
+            API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_ADMITTED
+            if ok
+            else API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_BLOCKED
+        ),
+        result_status="admitted" if ok else "blocked",
     )
 
 
@@ -1069,6 +1166,7 @@ def build_delegate_to_dip_packet(
     *,
     env: Mapping[str, str] | None = None,
     mcp_tool_called: bool = False,
+    api_lane_adapter_available: bool = True,
 ) -> dict[str, Any]:
     args = arguments if isinstance(arguments, Mapping) else {}
     task = _safe_text(args.get("task") or "", limit=4096)
@@ -1101,6 +1199,7 @@ def build_delegate_to_dip_packet(
     selected_alias = _select_alias(args, coding_aliases)
     alias_binding = resolve_alias_binding(agent_bindings, selected_alias)
     route_id = _safe_text(alias_binding.get("route_id") or "", limit=128)
+    selected_alias_lane = _safe_text(alias_binding.get("lane") or "", limit=32)
 
     stale_route_guard_present = bool(forbidden_stale_route_ids)
     route_allowed = bool(
@@ -1112,7 +1211,7 @@ def build_delegate_to_dip_packet(
     binding_valid = bool(
         alias_binding
         and alias_binding.get("enabled") is True
-        and alias_binding.get("lane") == API_ROUTE_LANE
+        and selected_alias_lane == API_ROUTE_LANE
         and str(alias_binding.get("role") or "") == "coding_agent"
     )
     context_valid = bool(
@@ -1141,10 +1240,30 @@ def build_delegate_to_dip_packet(
         blocking_reasons.append("coding_alias_not_selected")
     if selected_alias and not binding_valid:
         blocking_reasons.append("coding_alias_binding_invalid")
-    if binding_valid and not route_allowed:
+    if binding_valid and not route_id:
+        blocking_reasons.append("coding_route_id_missing")
+    if binding_valid and route_id and not route_allowed:
         blocking_reasons.append("coding_route_not_allowed")
     if binding_valid and not stale_route_guard_present:
         blocking_reasons.append("stale_route_guard_missing")
+
+    api_lane_adapter_packet: dict[str, Any] = {}
+    if not blocking_reasons:
+        api_lane_adapter_packet = build_api_lane_adapter_admission_packet(
+            task=task,
+            selected_alias=selected_alias,
+            selected_alias_lane=selected_alias_lane,
+            route_id=route_id,
+            allowed_api_route_ids_enforced=bool(allowed_api_route_ids),
+            route_allowed=route_allowed,
+            adapter_available=api_lane_adapter_available,
+        )
+        if api_lane_adapter_packet.get("status") != "ok":
+            adapter_reasons = [
+                str(reason)
+                for reason in api_lane_adapter_packet.get("blocking_reasons", [])
+            ]
+            blocking_reasons.extend(adapter_reasons or ["api_lane_dispatch_not_admitted"])
 
     ok = not blocking_reasons
     if ok:
@@ -1155,15 +1274,22 @@ def build_delegate_to_dip_packet(
         machine_error_code = str(
             metadata.get("machine_error_code") or "FAIL_ALIAS_CONTEXT_MISSING"
         )
+    elif api_lane_adapter_packet.get("machine_error_code"):
+        machine_error_code = str(api_lane_adapter_packet["machine_error_code"])
     else:
         machine_error_code = "WBP_MCP_DELEGATE_TO_DIP_NOT_PROVEN"
+    api_lane_adapter_called = api_lane_adapter_packet.get("api_lane_adapter_called") is True
+    api_lane_dispatch_admitted = (
+        api_lane_adapter_packet.get("api_lane_dispatch_admitted") is True
+    )
+    selected_api_route_id_present = bool(route_id)
     return _command_packet(
         ok=ok,
         machine_error_code=machine_error_code,
         human_message=(
-            "WBP MCP delegate_to_dip tool call is proven with bounded route evidence."
+            "WBP MCP delegate_to_dip tool call is admitted to the server-owned API-lane adapter boundary."
             if ok
-            else "WBP MCP delegate_to_dip tool call is not proven or route evidence is blocked."
+            else "WBP MCP delegate_to_dip tool call is not admitted to the API-lane adapter boundary."
         ),
         blocking_reasons=blocking_reasons,
         extra={
@@ -1186,19 +1312,41 @@ def build_delegate_to_dip_packet(
             "prompt_text_recorded": False,
             "raw_prompt_recorded": False,
             "selected_alias": selected_alias,
+            "selected_alias_lane": selected_alias_lane,
             "expected_alias": expected_alias,
             "coding_aliases": coding_aliases,
             "coding_alias_bound_to_api_lane": binding_valid,
             "allowed_api_route_ids_enforced": bool(allowed_api_route_ids),
-            "allowed_api_route_ids": allowed_api_route_ids,
-            "selected_route_id": route_id if route_allowed else "",
+            "allowed_api_route_ids_count": len(allowed_api_route_ids),
+            "selected_api_route_id_present": selected_api_route_id_present,
+            "selected_api_route_id_sha256": (
+                _sha256_text(route_id) if selected_api_route_id_present else ""
+            ),
+            "selected_api_route_id_recorded": False,
             "route_allowed": route_allowed,
             "forbidden_stale_route_ids_enforced": bool(
                 stale_route_guard_present and route_id not in forbidden_stale_route_ids
             ),
-            "api_lane_called": False,
-            "bounded_api_lane_mock_used": ok,
-            "api_lane_truth_source": "bounded_mock_no_provider_call" if ok else "not_proven",
+            "api_lane_adapter_called": api_lane_adapter_called,
+            "api_lane_dispatch_admitted": api_lane_dispatch_admitted,
+            "api_lane_adapter_packet_kind": str(
+                api_lane_adapter_packet.get("packet_kind") or ""
+            ),
+            "api_lane_adapter_result_status": str(
+                api_lane_adapter_packet.get("result_status") or ""
+            ),
+            "api_lane_adapter_machine_error_code": str(
+                api_lane_adapter_packet.get("machine_error_code") or ""
+            ),
+            "api_lane_called": api_lane_dispatch_admitted,
+            "api_lane_provider_called": False,
+            "provider_response_proven": False,
+            "bounded_api_lane_mock_used": False,
+            "api_lane_truth_source": (
+                "server_owned_adapter_admission_no_provider_call"
+                if api_lane_dispatch_admitted
+                else "not_proven"
+            ),
             "fallback_used": False,
             "local_imitation_used": False,
             "product_ready": False,
@@ -1206,6 +1354,7 @@ def build_delegate_to_dip_packet(
             "universal_manual_chat_interception_proven": False,
             "does_not_prove_native_free_chat_router": True,
             "does_not_prove_universal_manual_chat_interception": True,
+            "does_not_prove_api_lane_provider_dispatch": True,
             "browser_authority_contract_enforced": True,
             "browser_can_supply_prompt_authority": False,
             "browser_can_supply_route_authority": False,
@@ -1435,6 +1584,9 @@ def build_reality_spike_proof_packet(
         and call_packet.get("alias_context_read") is True
         and call_packet.get("allowed_api_route_ids_enforced") is True
         and call_packet.get("forbidden_stale_route_ids_enforced") is True
+        and call_packet.get("api_lane_adapter_called") is True
+        and call_packet.get("api_lane_dispatch_admitted") is True
+        and call_packet.get("provider_response_proven") is False
         and call_packet.get("task_digest_preserved") is True
         and (not prompt_digest_available or prompt_digest_bound_to_tool_packet)
         and (not call_digest_available or call_digest_bound_to_tool_packet)
@@ -1459,6 +1611,13 @@ def build_reality_spike_proof_packet(
         blocking_reasons.extend(
             str(reason) for reason in call_packet.get("blocking_reasons", [])
         )
+    if call_packet and call_packet.get("api_lane_adapter_called") is not True:
+        blocking_reasons.append("api_lane_adapter_not_called")
+    if call_packet and call_packet.get("api_lane_adapter_called") is True:
+        if call_packet.get("api_lane_dispatch_admitted") is not True:
+            blocking_reasons.append("api_lane_dispatch_not_admitted")
+        if call_packet.get("provider_response_proven") is not False:
+            blocking_reasons.append("provider_response_must_not_be_claimed")
     if not call_packet:
         blocking_reasons.append("delegate_to_dip_packet_missing")
 
@@ -1514,7 +1673,28 @@ def build_reality_spike_proof_packet(
             "local_imitation_used": call_packet.get("local_imitation_used") is True,
             "product_ready": call_packet.get("product_ready") is True,
             "bounded_api_lane_mock_used": call_packet.get("bounded_api_lane_mock_used") is True,
+            "api_lane_adapter_called": call_packet.get("api_lane_adapter_called") is True,
+            "api_lane_dispatch_admitted": (
+                call_packet.get("api_lane_dispatch_admitted") is True
+            ),
+            "api_lane_adapter_packet_kind": str(
+                call_packet.get("api_lane_adapter_packet_kind") or ""
+            ),
+            "api_lane_adapter_machine_error_code": str(
+                call_packet.get("api_lane_adapter_machine_error_code") or ""
+            ),
             "api_lane_called": call_packet.get("api_lane_called") is True,
+            "api_lane_provider_called": call_packet.get("api_lane_provider_called") is True,
+            "provider_response_proven": call_packet.get("provider_response_proven") is True,
+            "selected_api_route_id_present": (
+                call_packet.get("selected_api_route_id_present") is True
+            ),
+            "selected_api_route_id_sha256": str(
+                call_packet.get("selected_api_route_id_sha256") or ""
+            ),
+            "selected_api_route_id_recorded": (
+                call_packet.get("selected_api_route_id_recorded") is True
+            ),
             "tool_packet_status": str(call_packet.get("status") or ""),
             "tool_packet_machine_error_code": str(
                 call_packet.get("machine_error_code") or ""
