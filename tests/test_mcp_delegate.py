@@ -667,6 +667,70 @@ class McpDelegateToDipTests(unittest.TestCase):
             [],
         )
 
+    def test_delegate_to_dip_can_write_sanitized_entry_hook_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir = root / "profile"
+            profile_dir.mkdir()
+            evidence_path = root / "entry-hook-evidence.json"
+            _write_context(profile_dir, _context_payload())
+            response = mcp_delegate.handle_jsonrpc_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 33,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "delegate_to_dip",
+                        "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                    },
+                },
+                env={
+                    "WBP_PROFILE_DIR": str(profile_dir),
+                    mcp_delegate.ENTRY_HOOK_EVIDENCE_ENV_PATH: str(evidence_path),
+                },
+            )
+
+            packet = _tool_packet(response)
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+
+        serialized = json.dumps(evidence, sort_keys=True)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            evidence["packet_kind"],
+            "wbp_entry_hook_tool_call_evidence",
+        )
+        self.assertEqual(evidence["status"], "ok")
+        self.assertEqual(evidence["machine_error_code"], "OK")
+        self.assertEqual(
+            evidence["delegate_packet_kind"],
+            "wbp_mcp_delegate_to_dip_reality",
+        )
+        self.assertTrue(evidence["delegate_packet_sha256"])
+        self.assertTrue(evidence["delegate_to_dip_tool_called"])
+        self.assertTrue(evidence["alias_context_read"])
+        self.assertEqual(evidence["selected_alias"], "DIP")
+        self.assertEqual(evidence["selected_alias_lane"], API_ROUTE_LANE)
+        self.assertTrue(evidence["allowed_api_route_ids_enforced"])
+        self.assertTrue(evidence["forbidden_stale_route_ids_enforced"])
+        self.assertTrue(evidence["route_allowed"])
+        self.assertTrue(evidence["api_lane_called"])
+        self.assertTrue(evidence["route_bound_dispatch_proven"])
+        self.assertTrue(evidence["controlled_provider_response_proven"])
+        self.assertTrue(evidence["provider_response_proven"])
+        self.assertFalse(evidence["live_provider_response_proven"])
+        self.assertFalse(evidence["fallback_used"])
+        self.assertFalse(evidence["local_imitation_used"])
+        self.assertFalse(evidence["raw_prompt_recorded"])
+        self.assertFalse(evidence["raw_jsonl_recorded"])
+        self.assertFalse(evidence["tool_call_arguments_recorded"])
+        self.assertFalse(evidence["raw_backend_details_exposed"])
+        self.assertFalse(evidence["secret_value_exposed"])
+        self.assertFalse(evidence["product_ready"])
+        self.assertFalse(evidence["native_free_chat_router_proven"])
+        self.assertNotIn(PROMPT_TEXT, serialized)
+        self.assertNotIn("wbp-deepseek-chat", serialized)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_live_route_bound_api_smoke_accepts_fake_transport_contract(self) -> None:
         packet = _live_smoke_packet(context_payload=_context_payload())
 
@@ -3015,8 +3079,11 @@ class McpDelegateToDipTests(unittest.TestCase):
             mcp_delegate.CONTROLLED_EXEC_CODEX_OBSERVATION_SEQUENCE,
         )
         self.assertTrue(packet["real_codex_prompt_executed"])
+        self.assertTrue(packet["codex_delegate_to_dip_tool_call_attempted"])
         self.assertTrue(packet["delegate_to_dip_tool_called"])
         self.assertTrue(packet["codex_delegate_to_dip_tool_called"])
+        self.assertTrue(packet["delegate_to_dip_tool_call_completed"])
+        self.assertFalse(packet["delegate_to_dip_tool_call_failed"])
         self.assertTrue(packet["expected_delegate_tool_call_matched"])
         self.assertTrue(packet["prompt_to_mcp_call_bound"])
         self.assertFalse(packet["api_lane_called"])
@@ -3029,6 +3096,61 @@ class McpDelegateToDipTests(unittest.TestCase):
             packets.inspect_command_packet_semantics(packet),
             [],
         )
+
+    def test_codex_exec_jsonl_observation_blocks_failed_mcp_call(self) -> None:
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "id": "item_2",
+                                "type": "mcp_tool_call",
+                                "server": "wbp",
+                                "name": "delegate_to_dip",
+                                "status": "failed",
+                                "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                                "error": {"message": "user cancelled MCP tool call"},
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["result_status"], "blocked")
+        self.assertTrue(packet["codex_delegate_to_dip_tool_call_attempted"])
+        self.assertFalse(packet["delegate_to_dip_tool_called"])
+        self.assertFalse(packet["codex_delegate_to_dip_tool_called"])
+        self.assertFalse(packet["delegate_to_dip_tool_call_completed"])
+        self.assertTrue(packet["delegate_to_dip_tool_call_failed"])
+        self.assertTrue(packet["expected_delegate_tool_call_matched"])
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertIn(
+            "codex_delegate_to_dip_tool_call_not_completed",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "codex_delegate_to_dip_tool_call_failed",
+            packet["blocking_reasons"],
+        )
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_CODEX_EXEC_TOOL_CALL_NOT_PROVEN",
+        )
+        self.assertFalse(packet["product_ready"])
 
     def test_codex_exec_jsonl_observation_ignores_agent_message_mentions(self) -> None:
         prompt_packet = mcp_delegate.build_prompt_observation_packet(

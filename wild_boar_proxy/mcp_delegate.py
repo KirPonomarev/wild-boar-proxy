@@ -465,6 +465,133 @@ def _command_packet(
     )
 
 
+ENTRY_HOOK_EVIDENCE_PACKET_KIND = "wbp_entry_hook_tool_call_evidence"
+ENTRY_HOOK_EVIDENCE_ENV_PATH = "WBP_ENTRY_HOOK_EVIDENCE_PATH"
+
+
+def _entry_hook_evidence_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
+    safe_packet = dict(packet)
+    return {
+        "schema_version": 1,
+        "packet_kind": ENTRY_HOOK_EVIDENCE_PACKET_KIND,
+        "status": "ok" if safe_packet.get("status") == "ok" else "blocked",
+        "machine_error_code": str(safe_packet.get("machine_error_code") or ""),
+        "delegate_packet_kind": str(safe_packet.get("packet_kind") or ""),
+        "delegate_packet_status": str(safe_packet.get("status") or ""),
+        "delegate_packet_sha256": _sha256_text(
+            json.dumps(
+                safe_packet,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        ),
+        "delegate_to_dip_tool_called": (
+            safe_packet.get("delegate_to_dip_tool_called") is True
+        ),
+        "alias_context_read": safe_packet.get("alias_context_read") is True,
+        "runtime_context_file_proven": (
+            safe_packet.get("runtime_context_file_proven") is True
+        ),
+        "custom_codex_agent_runtime_context_proven": (
+            safe_packet.get("custom_codex_agent_runtime_context_proven") is True
+        ),
+        "selected_alias": str(safe_packet.get("selected_alias") or ""),
+        "selected_alias_lane": str(safe_packet.get("selected_alias_lane") or ""),
+        "coding_alias_bound_to_api_lane": (
+            safe_packet.get("coding_alias_bound_to_api_lane") is True
+        ),
+        "allowed_api_route_ids_enforced": (
+            safe_packet.get("allowed_api_route_ids_enforced") is True
+        ),
+        "forbidden_stale_route_ids_enforced": (
+            safe_packet.get("forbidden_stale_route_ids_enforced") is True
+        ),
+        "route_allowed": safe_packet.get("route_allowed") is True,
+        "selected_api_route_id_present": (
+            safe_packet.get("selected_api_route_id_present") is True
+        ),
+        "selected_api_route_id_sha256": str(
+            safe_packet.get("selected_api_route_id_sha256") or ""
+        ),
+        "selected_api_route_id_recorded": (
+            safe_packet.get("selected_api_route_id_recorded") is True
+        ),
+        "api_lane_called": safe_packet.get("api_lane_called") is True,
+        "api_lane_adapter_called": (
+            safe_packet.get("api_lane_adapter_called") is True
+        ),
+        "api_lane_dispatch_admitted": (
+            safe_packet.get("api_lane_dispatch_admitted") is True
+        ),
+        "route_bound_dispatch_attempted": (
+            safe_packet.get("route_bound_dispatch_attempted") is True
+        ),
+        "route_bound_dispatch_proven": (
+            safe_packet.get("route_bound_dispatch_proven") is True
+        ),
+        "route_bound_request_sent": (
+            safe_packet.get("route_bound_request_sent") is True
+        ),
+        "route_bound_request_sha256": str(
+            safe_packet.get("route_bound_request_sha256") or ""
+        ),
+        "dispatch_truth_source": str(
+            safe_packet.get("dispatch_truth_source") or ""
+        ),
+        "controlled_provider_called": (
+            safe_packet.get("controlled_provider_called") is True
+        ),
+        "controlled_provider_response_proven": (
+            safe_packet.get("controlled_provider_response_proven") is True
+        ),
+        "provider_response_proven": (
+            safe_packet.get("provider_response_proven") is True
+        ),
+        "live_provider_response_proven": (
+            safe_packet.get("live_provider_response_proven") is True
+        ),
+        "fallback_used": safe_packet.get("fallback_used") is True,
+        "local_imitation_used": safe_packet.get("local_imitation_used") is True,
+        "bounded_api_lane_mock_used": (
+            safe_packet.get("bounded_api_lane_mock_used") is True
+        ),
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+        "does_not_prove_native_free_chat_router": True,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "raw_jsonl_recorded": False,
+        "tool_call_arguments_recorded": False,
+        "raw_provider_response_recorded": (
+            safe_packet.get("raw_provider_response_recorded") is True
+        ),
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "no_secret_exposed": True,
+    }
+
+
+def _write_entry_hook_evidence_if_requested(
+    packet: Mapping[str, Any],
+    env: Mapping[str, str] | None,
+) -> None:
+    source = env if isinstance(env, Mapping) else {}
+    raw_path = _safe_text(source.get(ENTRY_HOOK_EVIDENCE_ENV_PATH) or "", limit=2048)
+    if not raw_path:
+        return
+    evidence_path = Path(raw_path)
+    if not evidence_path.is_absolute() or not evidence_path.parent.exists():
+        return
+    evidence = _entry_hook_evidence_packet(packet)
+    tmp_path = evidence_path.with_suffix(evidence_path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(evidence, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    tmp_path.replace(evidence_path)
+
+
 def build_api_lane_adapter_admission_packet(
     *,
     task: str,
@@ -1475,16 +1602,37 @@ def _codex_exec_local_subagent_used_as_dip(events: list[dict[str, Any]]) -> bool
     return False
 
 
+_CODEX_EXEC_TOOL_CALL_SUCCESS_STATUSES = {
+    "completed",
+    "complete",
+    "succeeded",
+    "success",
+    "ok",
+}
+_CODEX_EXEC_TOOL_CALL_FAILED_STATUSES = {
+    "failed",
+    "failure",
+    "error",
+    "cancelled",
+    "canceled",
+    "rejected",
+}
+
+
+def _codex_exec_tool_call_completed(candidate: Mapping[str, Any]) -> bool:
+    status_key = str(candidate.get("status") or "").casefold()
+    if status_key in _CODEX_EXEC_TOOL_CALL_SUCCESS_STATUSES:
+        return True
+    if status_key in _CODEX_EXEC_TOOL_CALL_FAILED_STATUSES:
+        return False
+    return bool(candidate.get("event_type") == "item.completed" and not status_key)
+
+
 def _select_codex_exec_tool_call_candidate(
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    completed_statuses = {"completed", "complete", "succeeded", "success", "ok"}
     for candidate in reversed(candidates):
-        status_key = str(candidate.get("status") or "").casefold()
-        if (
-            candidate.get("event_type") == "item.completed"
-            or status_key in completed_statuses
-        ):
+        if _codex_exec_tool_call_completed(candidate):
             return candidate
     return candidates[-1] if candidates else {}
 
@@ -1501,8 +1649,11 @@ _CODEX_EXEC_TOOL_CALL_OBSERVATION_DIGEST_FIELDS = (
     "codex_exec_event_count",
     "codex_exec_event_digest",
     "real_codex_prompt_executed",
+    "codex_delegate_to_dip_tool_call_attempted",
     "delegate_to_dip_tool_called",
     "codex_delegate_to_dip_tool_called",
+    "delegate_to_dip_tool_call_completed",
+    "delegate_to_dip_tool_call_failed",
     "tool_name",
     "mcp_server_name_observed",
     "tool_call_status_observed",
@@ -1584,10 +1735,16 @@ def build_codex_exec_tool_call_observation_packet(
         expected_call_sha256 and actual_call_sha256 == expected_call_sha256
     )
     prompt_task_matches = bool(prompt_sha256 and task_sha256 == prompt_sha256)
-    prompt_to_mcp_call_bound = (
-        expected_call_matches if expected_call_sha256 else prompt_task_matches
+    tool_call_attempted = bool(selected_call)
+    tool_call_completed = bool(
+        selected_call and _codex_exec_tool_call_completed(selected_call)
     )
-    delegate_to_dip_tool_called = bool(selected_call)
+    tool_call_failed = bool(selected_call and not tool_call_completed)
+    prompt_to_mcp_call_bound = (
+        tool_call_completed
+        and (expected_call_matches if expected_call_sha256 else prompt_task_matches)
+    )
+    delegate_to_dip_tool_called = tool_call_completed
     events_observed = bool(events)
     real_codex_prompt_executed = any(
         event_type in {"thread.started", "turn.started", "turn.completed"}
@@ -1625,11 +1782,15 @@ def build_codex_exec_tool_call_observation_packet(
         blocking_reasons.append("real_codex_prompt_not_executed")
     if local_codex_subagent_used_as_dip:
         blocking_reasons.append("codex_subagent_used_as_dip")
-    if not delegate_to_dip_tool_called:
+    if not tool_call_attempted:
         blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    elif not tool_call_completed:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_completed")
+    if tool_call_failed:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_failed")
     if forbidden_authority_fields:
         blocking_reasons.append("codex_tool_call_forbidden_authority_field")
-    if delegate_to_dip_tool_called and not prompt_to_mcp_call_bound:
+    if tool_call_completed and not prompt_to_mcp_call_bound:
         blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
 
     ok = not blocking_reasons
@@ -1661,9 +1822,12 @@ def build_codex_exec_tool_call_observation_packet(
             json.dumps(event_types, sort_keys=True)
         ),
         "real_codex_prompt_executed": real_codex_prompt_executed,
+        "codex_delegate_to_dip_tool_call_attempted": tool_call_attempted,
         "delegate_to_dip_tool_called": delegate_to_dip_tool_called,
         "codex_delegate_to_dip_tool_called": delegate_to_dip_tool_called,
-        "tool_name": DELEGATE_TO_DIP_TOOL if delegate_to_dip_tool_called else "",
+        "delegate_to_dip_tool_call_completed": tool_call_completed,
+        "delegate_to_dip_tool_call_failed": tool_call_failed,
+        "tool_name": DELEGATE_TO_DIP_TOOL if tool_call_attempted else "",
         "mcp_server_name_observed": _safe_text(
             selected_call.get("server_name") or "", limit=128
         ),
@@ -4782,6 +4946,7 @@ def mcp_tools_call_result(
         env=env,
         mcp_tool_called=True,
     )
+    _write_entry_hook_evidence_if_requested(packet, env)
     return {
         "content": [{"type": "text", "text": json.dumps(packet, sort_keys=True)}],
         "structuredContent": packet,
