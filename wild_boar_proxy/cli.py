@@ -12,6 +12,11 @@ from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets as command_packets
 from .external_models import run_external_models_command
+from .router_hook_entry import (
+    ADMITTED_HOOK_SURFACES,
+    HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    run_router_hook_entry_command,
+)
 from .runtime_health import run_healthcheck_probe
 from .runtime_repair import run_healthcheck_repair
 from .runtime import (
@@ -124,6 +129,21 @@ def build_parser() -> argparse.ArgumentParser:
     codex_runner_smoke = codex_runner_subparsers.add_parser("smoke")
     codex_runner_smoke.add_argument("--prompt", required=True)
     codex_runner_smoke.add_argument("--json", action="store_true", required=True)
+
+    router_hook = subparsers.add_parser("router-hook")
+    router_hook_subparsers = router_hook.add_subparsers(
+        dest="router_hook_command",
+        required=True,
+    )
+    router_hook_entry = router_hook_subparsers.add_parser("entry")
+    router_hook_entry.add_argument("--prompt", required=True)
+    router_hook_entry.add_argument("--runtime-context-file")
+    router_hook_entry.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_entry.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -411,6 +431,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
+    if command == "router-hook" and getattr(args, "router_hook_command", None) == "entry":
+        return EFFECT_PROBE
     if command == "mode":
         mode_command = getattr(args, "mode_command", None)
         if mode_command == "get":
@@ -598,6 +620,15 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_launch_client(paths, args.client_path))
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
             return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
+        if args.command == "router-hook" and args.router_hook_command == "entry":
+            return emit_json(
+                run_router_hook_entry_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
