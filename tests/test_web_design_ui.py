@@ -6881,6 +6881,10 @@ const sandbox = {
         wbp_owned_router_hook_observed: false,
         router_hook_truth_source: "not_observable",
         router_hook_transcript_digest_present: false,
+        native_free_chat_hook_status: "not_observable",
+        native_free_chat_hook_machine_error_code: "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        native_free_chat_hook_observed: false,
+        native_free_chat_hook_truth_source: "not_observable",
         bridge_or_file_bridge_used: false,
         command_loop_provider_call_count: 0,
         api_lane_exact_token_matched: false,
@@ -6890,6 +6894,8 @@ const sandbox = {
         native_codex_subagent_used_as_dip: false,
         server_owned_proof_counts_as_manual_router: false,
         server_owned_natural_proof_counts_as_manual_router: false,
+        server_owned_proof_counts_as_native_free_chat_hook: false,
+        server_owned_natural_proof_counts_as_native_free_chat_hook: false,
         server_owned_natural_dip_command_proven: true,
         browser_authority_contract_enforced: true,
         browser_prompt_authority_rejected: true,
@@ -6927,7 +6933,7 @@ sandbox.runQuickStartManualFreeChatRouterReality().then(() => {
   if (nodes.quickStartRouteChip.lastElementChild.textContent !== "manual unseen") {
     throw new Error(`manual-router blocked label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartWindowState.lastElementChild.textContent !== "router absent") {
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "not observable") {
     throw new Error(`manual-router hook label missing: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
   }
   const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
@@ -6941,6 +6947,10 @@ sandbox.runQuickStartManualFreeChatRouterReality().then(() => {
     rendered.wbp_owned_router_hook_observed !== false ||
     rendered.router_hook_truth_source !== "not_observable" ||
     rendered.router_hook_transcript_digest_present !== false ||
+    rendered.native_free_chat_hook_status !== "not_observable" ||
+    rendered.native_free_chat_hook_machine_error_code !== "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE" ||
+    rendered.native_free_chat_hook_observed !== false ||
+    rendered.native_free_chat_hook_truth_source !== "not_observable" ||
     rendered.api_lane_proven !== false ||
     rendered.bridge_or_file_bridge_used !== false ||
     rendered.command_loop_provider_call_count !== 0 ||
@@ -6949,6 +6959,8 @@ sandbox.runQuickStartManualFreeChatRouterReality().then(() => {
     rendered.codex_subagent_used_as_dip !== false ||
     rendered.server_owned_proof_counts_as_manual_router !== false ||
     rendered.server_owned_natural_proof_counts_as_manual_router !== false ||
+    rendered.server_owned_proof_counts_as_native_free_chat_hook !== false ||
+    rendered.server_owned_natural_proof_counts_as_native_free_chat_hook !== false ||
 	    rendered.server_owned_natural_dip_command_proven !== true ||
 	    rendered.chatgpt_model_id !== "" ||
 	    rendered.api_model_id !== "" ||
@@ -6966,6 +6978,63 @@ sandbox.runQuickStartManualFreeChatRouterReality().then(() => {
     rendered.runtime_readiness_claimed !== false
   ) {
     throw new Error(`manual-router reality flags missing: ${nodes.quickStartRouteResponse.textContent}`);
+  }
+  sandbox.renderQuickStartManualFreeChatRouterReality({
+    status: "blocked",
+    machine_error_code: "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE",
+    packet_kind: "custom_codex_manual_free_chat_router_reality",
+    manual_free_chat_router_reality_proven: false,
+    manual_user_prompt_observed: true,
+    manual_user_prompt_source: "wbp_owned_router_hook",
+    manual_user_prompt_digest_present: true,
+    wbp_owned_router_hook_observed: true,
+    router_hook_truth_source: "wbp_owned_router_candidate",
+    router_hook_transcript_digest_present: false,
+    native_free_chat_hook_status: "with_limits",
+    native_free_chat_hook_machine_error_code: "NATIVE_FREE_CHAT_HOOK_WITH_LIMITS",
+    native_free_chat_hook_observed: false,
+    native_free_chat_hook_truth_source: "wbp_owned_router_candidate",
+    bridge_or_file_bridge_used: false,
+    command_loop_provider_call_count: 0,
+    api_lane_exact_token_matched: false,
+    allowed_api_route_ids_enforced: false,
+    api_lane_proven: false,
+    codex_subagent_used_as_dip: false,
+    native_codex_subagent_used_as_dip: false,
+    server_owned_proof_counts_as_manual_router: false,
+    server_owned_natural_proof_counts_as_manual_router: false,
+    server_owned_proof_counts_as_native_free_chat_hook: false,
+    server_owned_natural_proof_counts_as_native_free_chat_hook: false,
+    browser_authority_contract_enforced: true,
+    browser_prompt_authority_rejected: true,
+    browser_can_supply_prompt_authority: false,
+    browser_can_supply_route_authority: false,
+    browser_can_supply_reasoning_authority: false,
+    browser_model_authority: false,
+    does_not_prove_universal_manual_chat_interception: true,
+    universal_manual_chat_interception_proven: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    prompt_text_recorded: false,
+    raw_prompt_recorded: false,
+    raw_backend_details_exposed: false,
+    secret_value_exposed: false,
+    next_action: "manual_free_chat_router_not_observable"
+  });
+  if (!nodes.quickStartWindowState.className.includes("amber")) {
+    throw new Error(`limited hook must stay amber: ${nodes.quickStartWindowState.className}`);
+  }
+  if (nodes.quickStartWindowState.lastElementChild.textContent !== "hook limited") {
+    throw new Error(`limited hook label mismatch: ${nodes.quickStartWindowState.lastElementChild.textContent}`);
+  }
+  const limitedRendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+  if (
+    limitedRendered.native_free_chat_hook_status !== "with_limits" ||
+    limitedRendered.native_free_chat_hook_observed !== false ||
+    limitedRendered.server_owned_proof_counts_as_native_free_chat_hook !== false ||
+    limitedRendered.server_owned_natural_proof_counts_as_native_free_chat_hook !== false
+  ) {
+    throw new Error(`limited hook fields missing: ${nodes.quickStartRouteResponse.textContent}`);
   }
 }).catch((error) => {
   console.error(error);

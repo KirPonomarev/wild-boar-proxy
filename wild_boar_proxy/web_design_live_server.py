@@ -6369,6 +6369,11 @@ def _custom_native_free_chat_dip_command_proof_packet(
         "browser_can_supply_reasoning_authority": False,
         "universal_manual_chat_interception_proven": False,
         "does_not_prove_universal_manual_chat_interception": True,
+        "native_free_chat_hook_status": NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE,
+        "native_free_chat_hook_machine_error_code": "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        "native_free_chat_hook_observed": False,
+        "native_free_chat_hook_truth_source": "not_observable",
+        "server_owned_proof_counts_as_native_free_chat_hook": False,
         "runtime_readiness_claimed": False,
         "blocking_reasons": []
         if product_proven
@@ -6489,6 +6494,11 @@ def _custom_native_natural_dip_command_proof_packet(
         "custom_response_expected_sha256_match": packet.get("custom_response_expected_sha256_match") is True,
         "does_not_prove_universal_manual_chat_interception": True,
         "universal_manual_chat_interception_proven": False,
+        "native_free_chat_hook_status": NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE,
+        "native_free_chat_hook_machine_error_code": "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        "native_free_chat_hook_observed": False,
+        "native_free_chat_hook_truth_source": "not_observable",
+        "server_owned_natural_proof_counts_as_native_free_chat_hook": False,
         "browser_authority_contract_enforced": True,
         "browser_can_supply_prompt_authority": False,
         "browser_can_supply_route_authority": False,
@@ -6504,6 +6514,9 @@ def _custom_native_natural_dip_command_proof_packet(
 
 
 MANUAL_FREE_CHAT_ROUTER_REALITY_ALLOWED_FIELDS: set[str] = {"request_id"}
+NATIVE_FREE_CHAT_HOOK_OBSERVABLE = "observable"
+NATIVE_FREE_CHAT_HOOK_WITH_LIMITS = "with_limits"
+NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE = "not_observable"
 
 
 def _manual_free_chat_router_forbidden_payload_fields(payload: Any) -> list[str]:
@@ -6517,6 +6530,26 @@ def _manual_free_chat_router_safe_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _native_free_chat_hook_status_from_router_hook(
+    *,
+    wbp_owned_router_hook_observed: bool,
+    router_hook_transcript_digest_present: bool,
+) -> tuple[str, str, bool]:
+    if wbp_owned_router_hook_observed and router_hook_transcript_digest_present:
+        return (NATIVE_FREE_CHAT_HOOK_OBSERVABLE, "OK", True)
+    if wbp_owned_router_hook_observed or router_hook_transcript_digest_present:
+        return (
+            NATIVE_FREE_CHAT_HOOK_WITH_LIMITS,
+            "NATIVE_FREE_CHAT_HOOK_WITH_LIMITS",
+            False,
+        )
+    return (
+        NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE,
+        "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        False,
+    )
 
 
 def _custom_manual_free_chat_router_reality_packet(
@@ -6555,6 +6588,14 @@ def _custom_manual_free_chat_router_reality_packet(
     )
     router_hook_truth_source = str(
         router_hook.get("router_hook_truth_source") or "not_observable"
+    )
+    (
+        native_free_chat_hook_status,
+        native_free_chat_hook_machine_error_code,
+        native_free_chat_hook_observed,
+    ) = _native_free_chat_hook_status_from_router_hook(
+        wbp_owned_router_hook_observed=wbp_owned_router_hook_observed,
+        router_hook_transcript_digest_present=router_hook_transcript_digest_present,
     )
     bridge_or_file_bridge_used = bool(
         api_lane.get("bridge_or_file_bridge_used") is True
@@ -6616,6 +6657,9 @@ def _custom_manual_free_chat_router_reality_packet(
     elif not wbp_owned_router_hook_observed:
         machine_error_code = "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE"
         next_action = "manual_free_chat_router_not_observable"
+    elif native_free_chat_hook_status != NATIVE_FREE_CHAT_HOOK_OBSERVABLE:
+        machine_error_code = "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE"
+        next_action = "manual_free_chat_router_not_observable"
     elif not api_lane_proven:
         machine_error_code = "API_LANE_NOT_PROVEN"
         next_action = "prove_api_lane_before_manual_router_claim"
@@ -6651,6 +6695,10 @@ def _custom_manual_free_chat_router_reality_packet(
         "wbp_owned_router_hook_observed": wbp_owned_router_hook_observed,
         "router_hook_truth_source": router_hook_truth_source,
         "router_hook_transcript_digest_present": router_hook_transcript_digest_present,
+        "native_free_chat_hook_status": native_free_chat_hook_status,
+        "native_free_chat_hook_machine_error_code": native_free_chat_hook_machine_error_code,
+        "native_free_chat_hook_observed": native_free_chat_hook_observed,
+        "native_free_chat_hook_truth_source": router_hook_truth_source,
         "bridge_or_file_bridge_used": bridge_or_file_bridge_used,
         "command_loop_provider_call_count": command_loop_provider_call_count,
         "api_lane_exact_token_matched": api_lane_exact_token_matched,
@@ -6663,6 +6711,8 @@ def _custom_manual_free_chat_router_reality_packet(
         "server_owned_natural_dip_command_proven": server_owned_natural_dip_command_proven,
         "server_owned_proof_counts_as_manual_router": False,
         "server_owned_natural_proof_counts_as_manual_router": False,
+        "server_owned_proof_counts_as_native_free_chat_hook": False,
+        "server_owned_natural_proof_counts_as_native_free_chat_hook": False,
         "browser_authority_contract_enforced": True,
         "browser_prompt_authority_rejected": True,
         "browser_can_supply_prompt_authority": False,

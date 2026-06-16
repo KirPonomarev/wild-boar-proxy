@@ -4615,12 +4615,24 @@ function setQuickStartRouteResponse(packet) {
         packet?.router_hook_truth_source || "",
       router_hook_transcript_digest_present:
         packet?.router_hook_transcript_digest_present === true,
+      native_free_chat_hook_status:
+        packet?.native_free_chat_hook_status || "",
+      native_free_chat_hook_machine_error_code:
+        packet?.native_free_chat_hook_machine_error_code || "",
+      native_free_chat_hook_observed:
+        packet?.native_free_chat_hook_observed === true,
+      native_free_chat_hook_truth_source:
+        packet?.native_free_chat_hook_truth_source || "",
       codex_subagent_used_as_dip:
         packet?.codex_subagent_used_as_dip === true,
       server_owned_proof_counts_as_manual_router:
         packet?.server_owned_proof_counts_as_manual_router === true,
       server_owned_natural_proof_counts_as_manual_router:
         packet?.server_owned_natural_proof_counts_as_manual_router === true,
+      server_owned_proof_counts_as_native_free_chat_hook:
+        packet?.server_owned_proof_counts_as_native_free_chat_hook === true,
+      server_owned_natural_proof_counts_as_native_free_chat_hook:
+        packet?.server_owned_natural_proof_counts_as_native_free_chat_hook === true,
       api_lane_truth_source:
         packet?.api_lane_truth_source || "",
       native_free_text_tool_bridge_proven:
@@ -5935,6 +5947,8 @@ function renderQuickStartManualFreeChatRouterReality(packet) {
     && packet?.manual_user_prompt_digest_present === true
     && packet?.wbp_owned_router_hook_observed === true
     && packet?.router_hook_transcript_digest_present === true
+    && packet?.native_free_chat_hook_status === "observable"
+    && packet?.native_free_chat_hook_observed === true
     && packet?.bridge_or_file_bridge_used === true
     && Number(packet?.command_loop_provider_call_count || 0) > 0
     && packet?.api_lane_exact_token_matched === true
@@ -5981,8 +5995,12 @@ function renderQuickStartManualFreeChatRouterReality(packet) {
   );
   setQuickStartChip(
     "quickStartWindowState",
-    packet?.wbp_owned_router_hook_observed === true ? "green" : "amber",
-    packet?.wbp_owned_router_hook_observed === true ? "hook observed" : "router absent"
+    packet?.native_free_chat_hook_status === "observable" ? "green" : "amber",
+    packet?.native_free_chat_hook_status === "observable"
+      ? "hook observed"
+      : packet?.native_free_chat_hook_status === "with_limits"
+        ? "hook limited"
+        : "not observable"
   );
   setQuickStartChip(
     "quickStartConfigState",
@@ -6012,6 +6030,14 @@ function renderQuickStartManualFreeChatRouterReality(packet) {
     router_hook_truth_source: packet?.router_hook_truth_source || "",
     router_hook_transcript_digest_present:
       packet?.router_hook_transcript_digest_present === true,
+    native_free_chat_hook_status:
+      packet?.native_free_chat_hook_status || "not_observable",
+    native_free_chat_hook_machine_error_code:
+      packet?.native_free_chat_hook_machine_error_code || "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+    native_free_chat_hook_observed:
+      packet?.native_free_chat_hook_observed === true,
+    native_free_chat_hook_truth_source:
+      packet?.native_free_chat_hook_truth_source || "",
     bridge_or_file_bridge_used: packet?.bridge_or_file_bridge_used === true,
     command_loop_provider_call_count:
       Number(packet?.command_loop_provider_call_count || 0),
@@ -6029,6 +6055,10 @@ function renderQuickStartManualFreeChatRouterReality(packet) {
       packet?.server_owned_natural_proof_counts_as_manual_router === true,
     server_owned_natural_dip_command_proven:
       packet?.server_owned_natural_dip_command_proven === true,
+    server_owned_proof_counts_as_native_free_chat_hook:
+      packet?.server_owned_proof_counts_as_native_free_chat_hook === true,
+    server_owned_natural_proof_counts_as_native_free_chat_hook:
+      packet?.server_owned_natural_proof_counts_as_native_free_chat_hook === true,
     browser_authority_contract_enforced:
       packet?.browser_authority_contract_enforced === true,
     browser_prompt_authority_rejected:

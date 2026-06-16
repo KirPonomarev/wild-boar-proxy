@@ -3263,6 +3263,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["browser_model_authority"])
         self.assertFalse(packet["universal_manual_chat_interception_proven"])
         self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "not_observable")
+        self.assertEqual(
+            packet["native_free_chat_hook_machine_error_code"],
+            "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        )
+        self.assertFalse(packet["native_free_chat_hook_observed"])
+        self.assertEqual(packet["native_free_chat_hook_truth_source"], "not_observable")
+        self.assertFalse(packet["server_owned_proof_counts_as_native_free_chat_hook"])
         self.assertFalse(packet["runtime_readiness_claimed"])
         self.assertEqual(
             packet["api_lane_truth_source"],
@@ -3480,6 +3488,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["browser_model_authority"])
         self.assertFalse(packet["universal_manual_chat_interception_proven"])
         self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "not_observable")
+        self.assertEqual(
+            packet["native_free_chat_hook_machine_error_code"],
+            "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        )
+        self.assertFalse(packet["native_free_chat_hook_observed"])
+        self.assertEqual(packet["native_free_chat_hook_truth_source"], "not_observable")
+        self.assertFalse(packet["server_owned_natural_proof_counts_as_native_free_chat_hook"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertTrue(packet["native_codex_subagent_absence_proven"])
         self.assertFalse(packet["fallback_used"])
@@ -3586,6 +3602,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["wbp_owned_router_hook_observed"])
         self.assertEqual(packet["router_hook_truth_source"], "not_observable")
         self.assertFalse(packet["router_hook_transcript_digest_present"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "not_observable")
+        self.assertEqual(
+            packet["native_free_chat_hook_machine_error_code"],
+            "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+        )
+        self.assertFalse(packet["native_free_chat_hook_observed"])
+        self.assertEqual(packet["native_free_chat_hook_truth_source"], "not_observable")
         self.assertFalse(packet["bridge_or_file_bridge_used"])
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
         self.assertFalse(packet["api_lane_exact_token_matched"])
@@ -3599,6 +3622,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
         self.assertFalse(packet["server_owned_proof_counts_as_manual_router"])
         self.assertFalse(packet["server_owned_natural_proof_counts_as_manual_router"])
+        self.assertFalse(packet["server_owned_proof_counts_as_native_free_chat_hook"])
+        self.assertFalse(packet["server_owned_natural_proof_counts_as_native_free_chat_hook"])
         self.assertTrue(packet["browser_authority_contract_enforced"])
         self.assertTrue(packet["browser_prompt_authority_rejected"])
         self.assertFalse(packet["browser_can_supply_prompt_authority"])
@@ -3636,6 +3661,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["manual_free_chat_router_reality_proven"])
         self.assertFalse(packet["manual_user_prompt_observed"])
         self.assertFalse(packet["wbp_owned_router_hook_observed"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "not_observable")
+        self.assertFalse(packet["native_free_chat_hook_observed"])
         self.assertFalse(packet["api_lane_proven"])
         self.assertFalse(packet["browser_can_supply_prompt_authority"])
         self.assertFalse(packet["browser_can_supply_route_authority"])
@@ -3666,6 +3693,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["server_owned_natural_dip_command_proven"])
         self.assertFalse(packet["server_owned_proof_counts_as_manual_router"])
         self.assertFalse(packet["server_owned_natural_proof_counts_as_manual_router"])
+        self.assertFalse(packet["server_owned_proof_counts_as_native_free_chat_hook"])
+        self.assertFalse(packet["server_owned_natural_proof_counts_as_native_free_chat_hook"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "not_observable")
+        self.assertFalse(packet["native_free_chat_hook_observed"])
         self.assertFalse(packet["manual_user_prompt_observed"])
         self.assertFalse(packet["wbp_owned_router_hook_observed"])
         self.assertFalse(packet["manual_free_chat_router_reality_proven"])
@@ -3705,6 +3736,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["manual_user_prompt_digest_present"])
         self.assertTrue(packet["wbp_owned_router_hook_observed"])
         self.assertTrue(packet["router_hook_transcript_digest_present"])
+        self.assertEqual(packet["native_free_chat_hook_status"], "observable")
+        self.assertEqual(packet["native_free_chat_hook_machine_error_code"], "OK")
+        self.assertTrue(packet["native_free_chat_hook_observed"])
+        self.assertEqual(
+            packet["native_free_chat_hook_truth_source"],
+            "wbp_owned_router_transcript",
+        )
         self.assertTrue(packet["api_lane_proven"])
         self.assertTrue(packet["bridge_or_file_bridge_used"])
         self.assertEqual(packet["command_loop_provider_call_count"], 1)
@@ -3717,6 +3755,39 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertEqual(packet["next_action"], "none")
+
+    def test_custom_manual_free_chat_router_reality_marks_partial_hook_with_limits(self) -> None:
+        packet = live_server._custom_manual_free_chat_router_reality_packet(
+            payload={"request_id": "manual-router-hook-limited"},
+            manual_prompt_packet={
+                "manual_user_prompt_observed": True,
+                "manual_user_prompt_source": "wbp_owned_router_hook",
+                "manual_user_prompt_digest_present": True,
+            },
+            router_hook_packet={
+                "wbp_owned_router_hook_observed": True,
+                "router_hook_truth_source": "wbp_owned_router_candidate",
+                "router_hook_transcript_digest_present": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE",
+        )
+        self.assertEqual(packet["native_free_chat_hook_status"], "with_limits")
+        self.assertEqual(
+            packet["native_free_chat_hook_machine_error_code"],
+            "NATIVE_FREE_CHAT_HOOK_WITH_LIMITS",
+        )
+        self.assertFalse(packet["native_free_chat_hook_observed"])
+        self.assertEqual(
+            packet["native_free_chat_hook_truth_source"],
+            "wbp_owned_router_candidate",
+        )
+        self.assertFalse(packet["manual_free_chat_router_reality_proven"])
+        self.assertEqual(packet["next_action"], "manual_free_chat_router_not_observable")
 
     def test_custom_native_free_text_default_submitter_receives_expected_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
