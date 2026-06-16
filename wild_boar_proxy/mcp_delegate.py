@@ -27,6 +27,7 @@ DELEGATE_TO_DIP_TOOL = "delegate_to_dip"
 DELEGATE_PACKET_KIND = "wbp_mcp_delegate_to_dip_reality"
 DELEGATE_FINAL_STATUS_WITH_LIMITS = "WBP_MCP_DELEGATE_TO_DIP_PROVEN_WITH_LIMITS"
 DELEGATE_FINAL_STATUS_NOT_PROVEN = "WBP_MCP_DELEGATE_TO_DIP_NOT_PROVEN"
+PROMPT_OBSERVATION_PACKET_KIND = "wbp_codex_prompt_observation"
 API_LANE_ADAPTER_ADMISSION_PACKET_KIND = "wbp_api_lane_adapter_admission"
 API_LANE_ADAPTER_ADMISSION_FINAL_STATUS_ADMITTED = (
     "WBP_API_LANE_ADAPTER_ADMISSION_ADMITTED"
@@ -143,6 +144,32 @@ EXEC_WRAPPER_SUBMIT_BOUNDARY_SIDE_EFFECT_REJECTED = (
 EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_NOT_BOUND = (
     "WBP_EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_NOT_BOUND"
 )
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_PACKET_KIND = (
+    "wbp_controlled_exec_router_hook_chain"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_FINAL_STATUS_PROVEN = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_PROVEN"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_FINAL_STATUS_BLOCKED = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_BLOCKED"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_NOT_PROVEN = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_NOT_PROVEN"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SEQUENCE_INVALID = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SEQUENCE_INVALID"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_AUTHORITY_REJECTED = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_AUTHORITY_REJECTED"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SIDE_EFFECT_REJECTED = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SIDE_EFFECT_REJECTED"
+)
+CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_DIGEST_NOT_BOUND = (
+    "WBP_CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_DIGEST_NOT_BOUND"
+)
+CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE = "pre_process_start"
+CONTROLLED_EXEC_CODEX_OBSERVATION_SEQUENCE = "post_process_start"
 ROUTER_HOOK_CONTROL_BOUNDARY_ALLOWED_EVIDENCE_KINDS = frozenset(
     {
         EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND,
@@ -891,7 +918,7 @@ def build_prompt_observation_packet(
         else {}
     )
     return {
-        "packet_kind": "wbp_codex_prompt_observation",
+        "packet_kind": PROMPT_OBSERVATION_PACKET_KIND,
         "prompt_sha256": _sha256_text(prompt) if prompt else "",
         "prompt_digest_present": bool(prompt),
         "prompt_source": _safe_text(source, limit=80) or "manual",
@@ -934,6 +961,7 @@ _EXEC_WRAPPER_SUBMIT_BOUNDARY_DIGEST_FIELDS = (
     "command_workdir_is_temp",
     "command_output_file_is_temp",
     "current_codex_home_used",
+    "submit_boundary_sequence",
     "owned_temp_config_written",
     "owned_temp_output_file_reserved",
     "effective_config_written",
@@ -1006,8 +1034,16 @@ def build_exec_wrapper_submit_boundary_probe_packet(
         and entrypoint.get("prompt_digest_observed") is True
         and _hex_sha256(entrypoint.get("prompt_sha256") or "") == prompt_sha256
     )
-    control_boundary_pre_codex_decision = (
+    submit_boundary_sequence = _safe_text(
+        entrypoint.get("submit_boundary_sequence") or "",
+        limit=64,
+    )
+    submit_boundary_sequence_ok = (
+        submit_boundary_sequence == CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE
+    )
+    control_boundary_pre_codex_decision = bool(
         entrypoint.get("pre_codex_decision") is True
+        and submit_boundary_sequence_ok
     )
     control_boundary_post_factum_only = bool(
         entrypoint.get("post_factum_only") is True
@@ -1123,6 +1159,8 @@ def build_exec_wrapper_submit_boundary_probe_packet(
         blocking_reasons.append("control_boundary_prompt_not_observed")
     if not control_boundary_pre_codex_decision:
         blocking_reasons.append("control_boundary_pre_codex_decision_not_proven")
+    if not submit_boundary_sequence_ok:
+        blocking_reasons.append("submit_boundary_sequence_invalid")
     if control_boundary_post_factum_only:
         blocking_reasons.append("control_boundary_post_factum_only")
     if not stdin_prompt_used:
@@ -1203,6 +1241,8 @@ def build_exec_wrapper_submit_boundary_probe_packet(
         "command_workdir_is_temp": command_workdir_is_temp,
         "command_output_file_is_temp": command_output_file_is_temp,
         "current_codex_home_used": current_codex_home_used,
+        "submit_boundary_sequence": submit_boundary_sequence,
+        "submit_boundary_sequence_ok": submit_boundary_sequence_ok,
         "owned_temp_config_written": owned_temp_config_written,
         "owned_temp_output_file_reserved": owned_temp_output_file_reserved,
         "effective_config_written": effective_config_written,
@@ -1449,6 +1489,67 @@ def _select_codex_exec_tool_call_candidate(
     return candidates[-1] if candidates else {}
 
 
+_CODEX_EXEC_TOOL_CALL_OBSERVATION_DIGEST_FIELDS = (
+    "packet_kind",
+    "producer_built_by",
+    "codex_exec_json_events_observed",
+    "codex_observation_sequence",
+    "codex_exec_exit_code",
+    "codex_exec_unsupported_model_observed",
+    "codex_exec_auth_blocker_observed",
+    "codex_exec_jsonl_parse_error_count",
+    "codex_exec_event_count",
+    "codex_exec_event_digest",
+    "real_codex_prompt_executed",
+    "delegate_to_dip_tool_called",
+    "codex_delegate_to_dip_tool_called",
+    "tool_name",
+    "mcp_server_name_observed",
+    "tool_call_status_observed",
+    "tool_call_digest_present",
+    "tool_call_sha256",
+    "prompt_sha256",
+    "prompt_digest_present",
+    "expected_delegate_tool_call_digest_present",
+    "expected_delegate_tool_call_matched",
+    "prompt_task_digest_matched",
+    "prompt_to_mcp_call_bound",
+    "browser_authority_fields_rejected",
+    "browser_authority_field_count",
+    "local_codex_subagent_used_as_dip",
+    "codex_subagent_used_as_dip",
+    "api_lane_called",
+    "fallback_used",
+    "local_imitation_used",
+    "product_ready",
+    "native_free_chat_router_proven",
+    "raw_jsonl_recorded",
+    "raw_stderr_recorded",
+    "raw_prompt_recorded",
+    "prompt_text_recorded",
+    "tool_call_arguments_recorded",
+    "raw_backend_details_exposed",
+    "secret_value_exposed",
+)
+
+
+def _codex_exec_tool_call_observation_claim_sha256(
+    packet: Mapping[str, Any],
+) -> str:
+    payload = {
+        field: packet.get(field)
+        for field in _CODEX_EXEC_TOOL_CALL_OBSERVATION_DIGEST_FIELDS
+    }
+    return _sha256_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
 def build_codex_exec_tool_call_observation_packet(
     jsonl_text: str,
     *,
@@ -1547,6 +1648,65 @@ def build_codex_exec_tool_call_observation_packet(
     else:
         machine_error_code = "WBP_CODEX_EXEC_TOOL_CALL_NOT_PROVEN"
 
+    packet_extra = {
+        "producer_built_by": "build_codex_exec_tool_call_observation_packet",
+        "codex_exec_json_events_observed": events_observed,
+        "codex_observation_sequence": CONTROLLED_EXEC_CODEX_OBSERVATION_SEQUENCE,
+        "codex_exec_exit_code": int(exec_exit_code),
+        "codex_exec_unsupported_model_observed": unsupported_model_observed,
+        "codex_exec_auth_blocker_observed": auth_blocker_observed,
+        "codex_exec_jsonl_parse_error_count": len(parse_errors),
+        "codex_exec_event_count": len(events),
+        "codex_exec_event_digest": _sha256_text(
+            json.dumps(event_types, sort_keys=True)
+        ),
+        "real_codex_prompt_executed": real_codex_prompt_executed,
+        "delegate_to_dip_tool_called": delegate_to_dip_tool_called,
+        "codex_delegate_to_dip_tool_called": delegate_to_dip_tool_called,
+        "tool_name": DELEGATE_TO_DIP_TOOL if delegate_to_dip_tool_called else "",
+        "mcp_server_name_observed": _safe_text(
+            selected_call.get("server_name") or "", limit=128
+        ),
+        "tool_call_status_observed": _safe_text(
+            selected_call.get("status") or "", limit=80
+        ),
+        "tool_call_digest_present": bool(actual_call_sha256),
+        "tool_call_sha256": actual_call_sha256,
+        "prompt_sha256": prompt_sha256 if prompt_to_mcp_call_bound else "",
+        "prompt_digest_present": bool(prompt_sha256),
+        "expected_delegate_tool_call_digest_present": bool(expected_call_sha256),
+        "expected_delegate_tool_call_matched": expected_call_matches,
+        "prompt_task_digest_matched": prompt_task_matches,
+        "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
+        "browser_authority_fields_rejected": bool(forbidden_authority_fields),
+        "browser_authority_field_count": len(forbidden_authority_fields),
+        "local_codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
+        "codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
+        "api_lane_called": False,
+        "fallback_used": False,
+        "local_imitation_used": local_codex_subagent_used_as_dip,
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+        "does_not_prove_native_free_chat_router": True,
+        "does_not_prove_api_lane_provider_dispatch": True,
+        "raw_jsonl_recorded": False,
+        "raw_stderr_recorded": False,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "tool_call_arguments_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "no_secret_exposed": True,
+    }
+    digest_packet = {
+        "packet_kind": CODEX_EXEC_TOOL_CALL_PACKET_KIND,
+        **packet_extra,
+    }
+    packet_extra["codex_tool_call_claim_digest_present"] = True
+    packet_extra["codex_tool_call_claim_sha256"] = (
+        _codex_exec_tool_call_observation_claim_sha256(digest_packet)
+    )
+
     return _command_packet_for_kind(
         ok=ok,
         machine_error_code=machine_error_code,
@@ -1556,54 +1716,7 @@ def build_codex_exec_tool_call_observation_packet(
             else "Codex exec JSONL does not prove a prompt-bound delegate_to_dip MCP tool call."
         ),
         blocking_reasons=[] if ok else blocking_reasons,
-        extra={
-            "codex_exec_json_events_observed": events_observed,
-            "codex_exec_exit_code": int(exec_exit_code),
-            "codex_exec_unsupported_model_observed": unsupported_model_observed,
-            "codex_exec_auth_blocker_observed": auth_blocker_observed,
-            "codex_exec_jsonl_parse_error_count": len(parse_errors),
-            "codex_exec_event_count": len(events),
-            "codex_exec_event_digest": _sha256_text(
-                json.dumps(event_types, sort_keys=True)
-            ),
-            "real_codex_prompt_executed": real_codex_prompt_executed,
-            "delegate_to_dip_tool_called": delegate_to_dip_tool_called,
-            "codex_delegate_to_dip_tool_called": delegate_to_dip_tool_called,
-            "tool_name": DELEGATE_TO_DIP_TOOL if delegate_to_dip_tool_called else "",
-            "mcp_server_name_observed": _safe_text(
-                selected_call.get("server_name") or "", limit=128
-            ),
-            "tool_call_status_observed": _safe_text(
-                selected_call.get("status") or "", limit=80
-            ),
-            "tool_call_digest_present": bool(actual_call_sha256),
-            "tool_call_sha256": actual_call_sha256,
-            "prompt_sha256": prompt_sha256 if prompt_to_mcp_call_bound else "",
-            "prompt_digest_present": bool(prompt_sha256),
-            "expected_delegate_tool_call_digest_present": bool(expected_call_sha256),
-            "expected_delegate_tool_call_matched": expected_call_matches,
-            "prompt_task_digest_matched": prompt_task_matches,
-            "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
-            "browser_authority_fields_rejected": bool(forbidden_authority_fields),
-            "browser_authority_field_count": len(forbidden_authority_fields),
-            "local_codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
-            "codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
-            "api_lane_called": False,
-            "fallback_used": False,
-            "local_imitation_used": local_codex_subagent_used_as_dip,
-            "product_ready": False,
-            "native_free_chat_router_proven": False,
-            "does_not_prove_native_free_chat_router": True,
-            "does_not_prove_api_lane_provider_dispatch": True,
-            "raw_jsonl_recorded": False,
-            "raw_stderr_recorded": False,
-            "raw_prompt_recorded": False,
-            "prompt_text_recorded": False,
-            "tool_call_arguments_recorded": False,
-            "raw_backend_details_exposed": False,
-            "secret_value_exposed": False,
-            "no_secret_exposed": True,
-        },
+        extra=packet_extra,
         packet_kind=CODEX_EXEC_TOOL_CALL_PACKET_KIND,
         final_status=(
             CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED
@@ -2923,6 +3036,493 @@ def build_router_hook_source_admission_packet(
             else ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_BLOCKED
         ),
         result_status="admitted" if ok else "blocked",
+    )
+
+
+def build_controlled_exec_router_hook_chain_packet(
+    *,
+    prompt_packet: Mapping[str, Any] | None = None,
+    submit_boundary_probe_packet: Mapping[str, Any] | None = None,
+    codex_tool_call_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    submit_boundary = (
+        dict(submit_boundary_probe_packet)
+        if isinstance(submit_boundary_probe_packet, Mapping)
+        else {}
+    )
+    codex_call = (
+        dict(codex_tool_call_packet)
+        if isinstance(codex_tool_call_packet, Mapping)
+        else {}
+    )
+
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    prompt_packet_kind = _safe_text(prompt.get("packet_kind") or "", limit=128)
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    prompt_packet_ok = bool(
+        prompt_packet_kind == PROMPT_OBSERVATION_PACKET_KIND
+        and prompt_digest_present
+        and prompt.get("raw_prompt_recorded") is not True
+        and prompt.get("prompt_text_recorded") is not True
+        and prompt.get("expected_delegate_arguments_recorded") is not True
+        and prompt.get("secret_value_exposed") is not True
+        and prompt.get("raw_backend_details_exposed") is not True
+    )
+
+    submit_boundary_sequence = _safe_text(
+        submit_boundary.get("submit_boundary_sequence") or "",
+        limit=64,
+    )
+    submit_boundary_sequence_ok = (
+        submit_boundary_sequence == CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE
+    )
+    submit_boundary_claim_sha256 = _hex_sha256(
+        submit_boundary.get("submit_boundary_claim_sha256") or ""
+    )
+    submit_boundary_claim_digest_present = bool(
+        submit_boundary.get("submit_boundary_claim_digest_present") is True
+        and submit_boundary_claim_sha256
+    )
+    submit_boundary_claim_digest_matched = bool(
+        submit_boundary_claim_digest_present
+        and submit_boundary_claim_sha256
+        == _exec_wrapper_submit_boundary_claim_sha256(submit_boundary)
+    )
+    submit_boundary_producer_valid = (
+        submit_boundary.get("producer_built_by")
+        == "build_exec_wrapper_submit_boundary_probe_packet"
+    )
+    submit_boundary_prompt_sha256 = _hex_sha256(
+        submit_boundary.get("source_prompt_sha256")
+        or submit_boundary.get("prompt_sha256")
+        or ""
+    )
+    submit_boundary_packet_ok = bool(
+        submit_boundary.get("status") == "ok"
+        and submit_boundary.get("packet_kind")
+        == EXEC_WRAPPER_SUBMIT_BOUNDARY_PROBE_PACKET_KIND
+        and submit_boundary.get("result_status") in {"", "proven"}
+        and submit_boundary.get("final_status")
+        == EXEC_WRAPPER_SUBMIT_BOUNDARY_FINAL_STATUS_PROVEN
+        and submit_boundary.get("submit_boundary_status") == "ok"
+        and submit_boundary_producer_valid
+        and submit_boundary_sequence_ok
+        and submit_boundary_claim_digest_matched
+    )
+    prompt_to_submit_boundary_bound = bool(
+        prompt_packet_ok
+        and submit_boundary_prompt_sha256
+        and submit_boundary_prompt_sha256 == prompt_sha256
+        and submit_boundary.get("control_boundary_observed_prompt") is True
+    )
+
+    codex_observation_sequence = _safe_text(
+        codex_call.get("codex_observation_sequence") or "",
+        limit=64,
+    )
+    codex_observation_sequence_ok = (
+        codex_observation_sequence == CONTROLLED_EXEC_CODEX_OBSERVATION_SEQUENCE
+    )
+    codex_observation_producer_valid = (
+        codex_call.get("producer_built_by")
+        == "build_codex_exec_tool_call_observation_packet"
+    )
+    codex_observation_claim_sha256 = _hex_sha256(
+        codex_call.get("codex_tool_call_claim_sha256") or ""
+    )
+    codex_observation_claim_digest_present = bool(
+        codex_call.get("codex_tool_call_claim_digest_present") is True
+        and codex_observation_claim_sha256
+    )
+    codex_observation_claim_digest_matched = bool(
+        codex_observation_claim_digest_present
+        and codex_observation_claim_sha256
+        == _codex_exec_tool_call_observation_claim_sha256(codex_call)
+    )
+    codex_tool_call_observation_packet_ok = bool(
+        codex_call.get("status") == "ok"
+        and codex_call.get("packet_kind") == CODEX_EXEC_TOOL_CALL_PACKET_KIND
+        and codex_call.get("result_status") in {"", "observed"}
+        and codex_call.get("final_status") == CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED
+        and codex_observation_producer_valid
+        and codex_observation_claim_digest_matched
+        and codex_call.get("codex_exec_json_events_observed") is True
+        and codex_call.get("real_codex_prompt_executed") is True
+        and codex_observation_sequence_ok
+    )
+    prompt_to_mcp_call_bound = bool(
+        prompt_packet_ok
+        and codex_call.get("prompt_to_mcp_call_bound") is True
+        and codex_call.get("prompt_sha256") == prompt_sha256
+    )
+    delegate_to_dip_called = bool(
+        codex_call.get("delegate_to_dip_tool_called") is True
+        or codex_call.get("codex_delegate_to_dip_tool_called") is True
+        or codex_call.get("tool_name") == DELEGATE_TO_DIP_TOOL
+    )
+    controlled_exec_sequence_proven = bool(
+        submit_boundary_packet_ok
+        and codex_tool_call_observation_packet_ok
+        and submit_boundary_sequence_ok
+        and codex_observation_sequence_ok
+    )
+
+    control_boundary_packet = build_router_hook_control_boundary_packet(
+        prompt_packet=prompt,
+        boundary_evidence_packet=submit_boundary,
+    )
+    source_event_packet = build_router_hook_source_event_packet(
+        prompt_packet=prompt,
+        codex_tool_call_packet=codex_call,
+        control_boundary_packet=control_boundary_packet,
+    )
+    source_admission_packet = build_router_hook_source_admission_packet(
+        prompt_packet=prompt,
+        source_event_packet=source_event_packet,
+    )
+
+    control_boundary_proven = bool(
+        control_boundary_packet.get("status") == "ok"
+        and control_boundary_packet.get("packet_kind")
+        == ROUTER_HOOK_CONTROL_BOUNDARY_PACKET_KIND
+        and control_boundary_packet.get("result_status") in {"", "proven"}
+        and control_boundary_packet.get("final_status")
+        == ROUTER_HOOK_CONTROL_BOUNDARY_FINAL_STATUS_PROVEN
+        and control_boundary_packet.get("control_boundary_status") == "ok"
+    )
+    source_event_produced = bool(
+        source_event_packet.get("status") == "ok"
+        and source_event_packet.get("packet_kind") == ROUTER_HOOK_SOURCE_EVENT_PACKET_KIND
+        and source_event_packet.get("result_status") in {"", "produced"}
+        and source_event_packet.get("final_status")
+        == ROUTER_HOOK_SOURCE_EVENT_FINAL_STATUS_PRODUCED
+        and source_event_packet.get("source_status") == "ok"
+    )
+    source_admitted = bool(
+        source_admission_packet.get("status") == "ok"
+        and source_admission_packet.get("packet_kind")
+        == ROUTER_HOOK_SOURCE_ADMISSION_PACKET_KIND
+        and source_admission_packet.get("result_status") in {"", "admitted"}
+        and source_admission_packet.get("final_status")
+        == ROUTER_HOOK_SOURCE_ADMISSION_FINAL_STATUS_ADMITTED
+        and source_admission_packet.get("source_status") == "ok"
+    )
+    source_prompt_digest_bound = bool(
+        source_admission_packet.get("source_prompt_digest_bound") is True
+        and source_admission_packet.get("source_prompt_sha256") == prompt_sha256
+    )
+
+    packets_to_scan = (
+        prompt,
+        submit_boundary,
+        codex_call,
+        control_boundary_packet,
+        source_event_packet,
+        source_admission_packet,
+    )
+    prompt_supplied_hook_flags = any(
+        packet.get("prompt_supplied_hook_flags") is True
+        or packet.get("browser_can_supply_prompt_authority") is True
+        or packet.get("browser_authority_fields_rejected") is True
+        or packet.get("machine_error_code") == CODEX_EXEC_BROWSER_AUTHORITY_REJECTED
+        for packet in packets_to_scan
+    )
+    browser_supplied_hook_flags = any(
+        packet.get("browser_supplied_hook_flags") is True
+        or packet.get("browser_can_supply_route_authority") is True
+        or packet.get("browser_can_supply_model_authority") is True
+        for packet in packets_to_scan
+    )
+    state_written = any(packet.get("state_written") is True for packet in packets_to_scan)
+    profile_written = any(
+        packet.get("profile_written") is True for packet in packets_to_scan
+    )
+    config_written = any(packet.get("config_written") is True for packet in packets_to_scan)
+    route_registry_written = any(
+        packet.get("route_registry_written") is True for packet in packets_to_scan
+    )
+    credential_written = any(
+        packet.get("credential_written") is True for packet in packets_to_scan
+    )
+    runtime_state_written = any(
+        packet.get("runtime_state_written") is True for packet in packets_to_scan
+    )
+    changed_files_observed = any(
+        isinstance(packet.get("changed_files"), list) and bool(packet.get("changed_files"))
+        for packet in packets_to_scan
+    )
+    inadmissible_effect_observed = any(
+        _safe_text(
+            packet.get("source_effect") or packet.get("effect") or "",
+            limit=80,
+        )
+        not in {"", "probe", "read"}
+        for packet in packets_to_scan
+    )
+    write_side_effect_observed = bool(
+        state_written
+        or profile_written
+        or config_written
+        or route_registry_written
+        or credential_written
+        or runtime_state_written
+        or changed_files_observed
+        or inadmissible_effect_observed
+    )
+    raw_prompt_recorded = any(
+        packet.get("raw_prompt_recorded") is True
+        or packet.get("prompt_text_recorded") is True
+        or packet.get("expected_delegate_arguments_recorded") is True
+        for packet in packets_to_scan
+    )
+    raw_jsonl_recorded = any(
+        packet.get("raw_jsonl_recorded") is True for packet in packets_to_scan
+    )
+    tool_call_arguments_recorded = any(
+        packet.get("tool_call_arguments_recorded") is True
+        for packet in packets_to_scan
+    )
+    raw_route_id_recorded = any(
+        packet.get("raw_route_id_recorded") is True for packet in packets_to_scan
+    )
+    raw_backend_details_exposed = any(
+        packet.get("raw_backend_details_exposed") is True for packet in packets_to_scan
+    )
+    secret_value_exposed = any(
+        packet.get("secret_value_exposed") is True for packet in packets_to_scan
+    )
+    local_codex_subagent_used_as_dip = any(
+        packet.get("local_codex_subagent_used_as_dip") is True
+        or packet.get("codex_subagent_used_as_dip") is True
+        for packet in packets_to_scan
+    )
+    local_imitation_used = bool(
+        local_codex_subagent_used_as_dip
+        or any(packet.get("local_imitation_used") is True for packet in packets_to_scan)
+    )
+    fallback_used = any(packet.get("fallback_used") is True for packet in packets_to_scan)
+    product_ready_claimed = any(
+        packet.get("product_ready") is True for packet in packets_to_scan
+    )
+    native_free_chat_router_claimed = any(
+        packet.get("native_free_chat_router_proven") is True
+        for packet in packets_to_scan
+    )
+    api_lane_claimed = any(
+        packet.get("api_lane_called") is True for packet in packets_to_scan
+    )
+
+    blocking_reasons: list[str] = []
+    if not prompt_packet:
+        blocking_reasons.append("prompt_observation_packet_missing")
+    if prompt_packet_kind != PROMPT_OBSERVATION_PACKET_KIND:
+        blocking_reasons.append("prompt_observation_packet_kind_invalid")
+    if not prompt_digest_present:
+        blocking_reasons.append("prompt_digest_missing")
+    if not prompt_packet_ok:
+        blocking_reasons.append("prompt_observation_packet_not_ok")
+    if not submit_boundary:
+        blocking_reasons.append("submit_boundary_probe_missing")
+    elif not submit_boundary_packet_ok:
+        blocking_reasons.append("submit_boundary_packet_not_ok")
+    if submit_boundary and not submit_boundary_sequence_ok:
+        blocking_reasons.append("submit_boundary_sequence_invalid")
+    if submit_boundary and not submit_boundary_claim_digest_present:
+        blocking_reasons.append("submit_boundary_claim_digest_missing")
+    elif submit_boundary and not submit_boundary_claim_digest_matched:
+        blocking_reasons.append("submit_boundary_claim_digest_mismatch")
+    if submit_boundary and not prompt_to_submit_boundary_bound:
+        blocking_reasons.append("prompt_not_bound_to_submit_boundary")
+    if not codex_call:
+        blocking_reasons.append("codex_tool_call_observation_missing")
+    elif not codex_tool_call_observation_packet_ok:
+        blocking_reasons.append("codex_tool_call_observation_packet_not_ok")
+    if codex_call and not codex_observation_sequence_ok:
+        blocking_reasons.append("codex_observation_sequence_invalid")
+    if codex_call and not codex_observation_producer_valid:
+        blocking_reasons.append("codex_tool_call_observation_producer_invalid")
+    if codex_call and not codex_observation_claim_digest_present:
+        blocking_reasons.append("codex_tool_call_observation_claim_digest_missing")
+    elif codex_call and not codex_observation_claim_digest_matched:
+        blocking_reasons.append("codex_tool_call_observation_claim_digest_mismatch")
+    if not controlled_exec_sequence_proven:
+        blocking_reasons.append("controlled_exec_sequence_not_proven")
+    if not prompt_to_mcp_call_bound:
+        blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
+    if not delegate_to_dip_called:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    if not control_boundary_proven:
+        blocking_reasons.append("router_hook_control_boundary_not_proven")
+    if not source_event_produced:
+        blocking_reasons.append("router_hook_source_event_not_produced")
+    if not source_admitted:
+        blocking_reasons.append("router_hook_source_not_admitted")
+    if not source_prompt_digest_bound:
+        blocking_reasons.append("router_hook_source_prompt_digest_not_bound")
+    if prompt_supplied_hook_flags:
+        blocking_reasons.append("prompt_supplied_hook_flags")
+    if browser_supplied_hook_flags:
+        blocking_reasons.append("browser_supplied_hook_flags")
+    if write_side_effect_observed:
+        blocking_reasons.append("controlled_exec_chain_write_side_effect")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_jsonl_recorded:
+        blocking_reasons.append("raw_jsonl_must_not_be_recorded")
+    if tool_call_arguments_recorded:
+        blocking_reasons.append("tool_call_arguments_must_not_be_recorded")
+    if raw_route_id_recorded:
+        blocking_reasons.append("raw_route_id_must_not_be_recorded")
+    if raw_backend_details_exposed:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if secret_value_exposed:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+    if local_codex_subagent_used_as_dip:
+        blocking_reasons.append("local_codex_subagent_used_as_dip")
+    if local_imitation_used:
+        blocking_reasons.append("local_imitation_used")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if api_lane_claimed:
+        blocking_reasons.append("api_lane_call_must_not_be_claimed")
+    if native_free_chat_router_claimed:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if product_ready_claimed:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif prompt_supplied_hook_flags or browser_supplied_hook_flags:
+        machine_error_code = CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_AUTHORITY_REJECTED
+    elif write_side_effect_observed:
+        machine_error_code = CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SIDE_EFFECT_REJECTED
+    elif (
+        (submit_boundary_producer_valid and not submit_boundary_sequence_ok)
+        or (
+            codex_call.get("packet_kind") == CODEX_EXEC_TOOL_CALL_PACKET_KIND
+            and not codex_observation_sequence_ok
+        )
+    ):
+        machine_error_code = CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_SEQUENCE_INVALID
+    elif (
+        not prompt_digest_present
+        or (submit_boundary and not prompt_to_submit_boundary_bound)
+        or (codex_call and delegate_to_dip_called and not prompt_to_mcp_call_bound)
+        or (source_admission_packet and not source_prompt_digest_bound)
+    ):
+        machine_error_code = CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_DIGEST_NOT_BOUND
+    else:
+        machine_error_code = CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_NOT_PROVEN
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "WBP controlled exec router-hook chain is proven by normalized packets."
+            if ok
+            else "WBP controlled exec router-hook chain is not proven."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra={
+            "producer_built_by": "build_controlled_exec_router_hook_chain_packet",
+            "chain_status": "ok" if ok else "blocked",
+            "prompt_packet_kind": prompt_packet_kind,
+            "prompt_packet_ok": prompt_packet_ok,
+            "prompt_digest_present": prompt_digest_present,
+            "prompt_sha256": prompt_sha256 if prompt_digest_present else "",
+            "submit_boundary_packet_kind": _safe_text(
+                submit_boundary.get("packet_kind") or "",
+                limit=128,
+            ),
+            "submit_boundary_packet_ok": submit_boundary_packet_ok,
+            "submit_boundary_producer_valid": submit_boundary_producer_valid,
+            "submit_boundary_sequence": submit_boundary_sequence,
+            "submit_boundary_sequence_ok": submit_boundary_sequence_ok,
+            "submit_boundary_claim_digest_present": (
+                submit_boundary_claim_digest_present
+            ),
+            "submit_boundary_claim_digest_matched": (
+                submit_boundary_claim_digest_matched
+            ),
+            "prompt_to_submit_boundary_bound": prompt_to_submit_boundary_bound,
+            "codex_tool_call_observation_packet_kind": _safe_text(
+                codex_call.get("packet_kind") or "",
+                limit=128,
+            ),
+            "codex_tool_call_observation_packet_ok": (
+                codex_tool_call_observation_packet_ok
+            ),
+            "codex_tool_call_observation_producer_valid": (
+                codex_observation_producer_valid
+            ),
+            "codex_tool_call_observation_claim_digest_present": (
+                codex_observation_claim_digest_present
+            ),
+            "codex_tool_call_observation_claim_digest_matched": (
+                codex_observation_claim_digest_matched
+            ),
+            "codex_observation_sequence": codex_observation_sequence,
+            "codex_observation_sequence_ok": codex_observation_sequence_ok,
+            "controlled_exec_sequence_proven": controlled_exec_sequence_proven,
+            "real_codex_prompt_executed": (
+                codex_call.get("real_codex_prompt_executed") is True
+            ),
+            "delegate_to_dip_called": delegate_to_dip_called,
+            "codex_delegate_to_dip_tool_called": delegate_to_dip_called,
+            "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
+            "control_boundary_packet_kind": _safe_text(
+                control_boundary_packet.get("packet_kind") or "",
+                limit=128,
+            ),
+            "control_boundary_proven": control_boundary_proven,
+            "source_event_packet_kind": _safe_text(
+                source_event_packet.get("packet_kind") or "",
+                limit=128,
+            ),
+            "source_event_produced": source_event_produced,
+            "source_packet_kind": _safe_text(
+                source_admission_packet.get("packet_kind") or "",
+                limit=128,
+            ),
+            "source_admitted": source_admitted,
+            "source_prompt_digest_bound": source_prompt_digest_bound,
+            "prompt_supplied_hook_flags": prompt_supplied_hook_flags,
+            "browser_supplied_hook_flags": browser_supplied_hook_flags,
+            "state_written": state_written,
+            "profile_written": profile_written,
+            "config_written": config_written,
+            "route_registry_written": route_registry_written,
+            "credential_written": credential_written,
+            "runtime_state_written": runtime_state_written,
+            "write_side_effect_observed": write_side_effect_observed,
+            "raw_prompt_recorded": raw_prompt_recorded,
+            "raw_jsonl_recorded": raw_jsonl_recorded,
+            "tool_call_arguments_recorded": tool_call_arguments_recorded,
+            "raw_route_id_recorded": raw_route_id_recorded,
+            "raw_backend_details_exposed": raw_backend_details_exposed,
+            "secret_value_exposed": secret_value_exposed,
+            "local_codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
+            "local_imitation_used": local_imitation_used,
+            "fallback_used": fallback_used,
+            "api_lane_called": False,
+            "does_not_prove_api_lane_provider_dispatch": True,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_product_ready_free_chat": True,
+            "no_secret_exposed": not secret_value_exposed,
+        },
+        packet_kind=CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_PACKET_KIND,
+        final_status=(
+            CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_FINAL_STATUS_PROVEN
+            if ok
+            else CONTROLLED_EXEC_ROUTER_HOOK_CHAIN_FINAL_STATUS_BLOCKED
+        ),
+        result_status="proven" if ok else "blocked",
     )
 
 

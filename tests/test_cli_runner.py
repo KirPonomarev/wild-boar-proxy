@@ -503,6 +503,11 @@ class CliRunnerTests(unittest.TestCase):
         )
         self.assertEqual(boundary_evidence["status"], "error")
         self.assertTrue(boundary_evidence["control_boundary_can_enforce_router"])
+        self.assertEqual(
+            boundary_evidence["submit_boundary_sequence"],
+            mcp_delegate.CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE,
+        )
+        self.assertTrue(boundary_evidence["submit_boundary_sequence_ok"])
         self.assertFalse(
             boundary_evidence["control_boundary_can_route_delegate_to_dip"]
         )
@@ -613,6 +618,11 @@ class CliRunnerTests(unittest.TestCase):
         )
         self.assertTrue(boundary_evidence["submit_boundary_claim_digest_present"])
         self.assertTrue(boundary_evidence["control_boundary_pre_codex_decision"])
+        self.assertEqual(
+            boundary_evidence["submit_boundary_sequence"],
+            mcp_delegate.CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE,
+        )
+        self.assertTrue(boundary_evidence["submit_boundary_sequence_ok"])
         self.assertTrue(boundary_evidence["control_boundary_can_enforce_router"])
         self.assertTrue(
             boundary_evidence["control_boundary_can_route_delegate_to_dip"]

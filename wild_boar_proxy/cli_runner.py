@@ -179,6 +179,9 @@ def _run_wbp_cli_prompt(
                     "command_workdir_is_temp": True,
                     "command_output_file_is_temp": True,
                     "current_codex_home_used": False,
+                    "submit_boundary_sequence": (
+                        mcp_delegate.CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE
+                    ),
                     "owned_temp_config_written": True,
                     "owned_temp_output_file_reserved": True,
                     "effective_config_written": False,
