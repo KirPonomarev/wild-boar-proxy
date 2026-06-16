@@ -7963,7 +7963,7 @@ def build_quick_start_config_admission_packet(
             (
                 "Config admission is ok; ChatGPT runtime proof remains separate and is not claimed by this packet."
                 if runtime_health_gate_blocked
-                else "Config admission is ok; next contour may use existing launch preflight gate."
+                else "Config admission is ok; launch preflight remains the bounded control surface."
             )
             if admitted
             else (

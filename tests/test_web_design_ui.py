@@ -1478,8 +1478,13 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("overview-utility-strip", overview)
         self.assertIn("compact-action-panel", overview)
         self.assertIn('id="uiLaneExitSummary"', overview)
-        self.assertIn("STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION", overview + (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
-        self.assertNotIn('data-ui-action="STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION"', overview)
+        overview_js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        self.assertIn("NO_ACTIVE_REPO_FORWARD_PLAN", overview + overview_js)
+        forbidden_forward_pointer = "_".join(
+            ("STOP_AND_DIAGNOSE", "REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION")
+        )
+        self.assertNotIn(forbidden_forward_pointer, overview + overview_js)
+        self.assertNotIn('data-ui-action="NO_ACTIVE_REPO_FORWARD_PLAN"', overview)
         self.assertLess(overview.find('class="card system-card"'), overview.find('id="actionPanel"'))
         self.assertLess(overview.find('id="eventList"'), overview.find('id="actionPanel"'))
         self.assertIn(".secondary-action-tile", css)
@@ -15914,7 +15919,7 @@ const ids = [
   "uiLaneExitLiveChain",
   "uiLaneExitMetadataStatus",
   "uiLaneExitSafeSummary",
-  "uiLaneExitNextContour",
+  "uiLaneExitForwardPlan",
   "uiLaneExitBlockedList",
   "uiLaneExitSafeList",
   "uiLaneExitForbiddenList",
@@ -16004,8 +16009,8 @@ const forbiddenText = JSON.stringify(elements.uiLaneExitForbiddenList);
 if (elements.uiLaneExitChip.className.includes("green")) {
   throw new Error(`exit summary must not be green: ${elements.uiLaneExitChip.className}`);
 }
-if (!elements.uiLaneExitTruthNote.textContent.includes("runtime diagnosis")) {
-  throw new Error(`exit summary must hand off to runtime diagnosis: ${elements.uiLaneExitTruthNote.textContent}`);
+if (!elements.uiLaneExitTruthNote.textContent.includes("must not claim a forward repair route")) {
+  throw new Error(`exit summary must avoid forward repair claims: ${elements.uiLaneExitTruthNote.textContent}`);
 }
 if (elements.uiLaneExitCurrentSource.textContent !== "live-readonly") {
   throw new Error(`unexpected current source: ${elements.uiLaneExitCurrentSource.textContent}`);
@@ -16016,8 +16021,8 @@ if (!elements.uiLaneExitSnapshotState.textContent.includes("1 bounded summaries"
 if (!elements.uiLaneExitMetadataStatus.textContent.includes("3 live actions blocked")) {
   throw new Error(`unexpected metadata status: ${elements.uiLaneExitMetadataStatus.textContent}`);
 }
-if (elements.uiLaneExitNextContour.textContent !== "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION") {
-  throw new Error(`unexpected next contour: ${elements.uiLaneExitNextContour.textContent}`);
+if (elements.uiLaneExitForwardPlan.textContent !== "NO_ACTIVE_REPO_FORWARD_PLAN") {
+  throw new Error(`unexpected forward-plan claim: ${elements.uiLaneExitForwardPlan.textContent}`);
 }
 if (!blockedText.includes("LOCK_HELD") || !blockedText.includes("policy_drift_detected")) {
   throw new Error(`blocked list missing canon blockers: ${blockedText}`);

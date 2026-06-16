@@ -106,7 +106,7 @@ const QUICK_START_LEGACY_CHATGPT_DEFAULT_MODEL_IDS = new Set(["gpt-5.3-codex"]);
 const QUICK_START_PREFERRED_API_MODEL_ID = "wbp-deepseek-chat";
 const QUICK_START_PREFERRED_API_REASONING_OPTION_ID = "provider_declared_disabled";
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
-const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
+const UI_READONLY_LANE_FORWARD_PLAN_CLAIM = "NO_ACTIVE_REPO_FORWARD_PLAN";
 const UI_READONLY_LANE_BLOCKERS = [
   ["LOCK_HELD", "Повторный selector owner path не admitted до локализации lock contention."],
   ["claim_gate_blocked", "Runtime truth снова показывает blocked claim gate."],
@@ -13548,7 +13548,7 @@ function renderUiReadonlyLaneExitSummary() {
   text("uiLaneExitLiveChain", model.liveChain);
   text("uiLaneExitMetadataStatus", model.metadataStatus);
   text("uiLaneExitSafeSummary", model.safeSummary);
-  text("uiLaneExitNextContour", UI_READONLY_LANE_NEXT_CONTOUR);
+  text("uiLaneExitForwardPlan", UI_READONLY_LANE_FORWARD_PLAN_CLAIM);
   renderUiReadonlyLaneExitList("uiLaneExitBlockedList", model.blockedNow, "amber");
   renderUiReadonlyLaneExitList("uiLaneExitSafeList", model.safeNow, "blue");
   renderUiReadonlyLaneExitList("uiLaneExitForbiddenList", model.forbiddenNow, "red");
@@ -13576,8 +13576,8 @@ function uiReadonlyLaneExitSummaryModel() {
     chipLabel: snapshotCommandLedgerState.status === "integration_failure" ? "blocked truth" : "parked handoff",
     sourceLabel: `${screen} · ${source} · no new commands`,
     truthNote: snapshotCommandLedgerState.status === "integration_failure"
-      ? "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now, but current live snapshot truth is degraded and the next contour must return to runtime diagnosis."
-      : "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now and should stop here; the next contour must return to runtime diagnosis instead of another UI panel.",
+      ? "Runtime/live-action chain remains parked. Read-only UI lane may display the degraded snapshot, but it must not claim a forward repair route."
+      : "Runtime/live-action chain remains parked. Read-only UI lane may display bounded truth only and must not claim a forward repair route.",
     currentSource: source,
     snapshotState,
     liveChain: "parked by canon-backed runtime blockers",
