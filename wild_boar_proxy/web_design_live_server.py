@@ -1333,6 +1333,11 @@ WEB_DESIGN_LIVE_ROUTES = (
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
     _post_route(
+        "/api/codex/custom/native-free-chat-dip-command-proof",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
         "/api/codex/custom/reasoning-dispatch-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
@@ -5385,7 +5390,8 @@ def _custom_native_free_text_prompt(
     return "\n".join(
         [
             f"{primary_alias}: ты оркестратор. Проведи строго машинный native proof без свободного отчета.",
-            f"{coding_alias}: ты кодовый агент. Выполни только локальное создание proof JSON.",
+            f"{coding_alias}: ты API-lane coding-agent alias. Выполни только локальное создание proof JSON.",
+            "Не запускай и не называй обычный Codex sub-agent агентом DIP/API-lane.",
             "Прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
             "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
             f"Создай UTF-8 JSON файл ровно по этому пути: {proof_path}",
@@ -6208,6 +6214,149 @@ def _custom_native_free_text_command_loop_proof_packet(
         if native_free_text_command_loop_proven
         else [native_observability_machine_error_code],
         "next_action": "none" if native_free_text_command_loop_proven else "stop_and_diagnose_native_free_text_command_loop",
+    }
+
+
+def _custom_native_free_chat_dip_command_product_proven(
+    packet: dict[str, Any],
+) -> bool:
+    return bool(
+        packet.get("status") == "ok"
+        and packet.get("machine_error_code") == "OK"
+        and packet.get("native_free_text_command_loop_proven") is True
+        and packet.get("native_free_text_tool_bridge_proven") is True
+        and packet.get("native_free_text_observability_proven") is True
+        and packet.get("native_submitter_trust_boundary_proven") is True
+        and packet.get("custom_codex_response_text_read_proven") is True
+        and packet.get("custom_response_exact_token_observed") is True
+        and packet.get("custom_response_bound_to_request") is True
+        and packet.get("custom_response_expected_sha256_match") is True
+        and packet.get("native_codex_subagent_absence_proven") is True
+        and packet.get("native_codex_subagent_used_as_dip") is not True
+        and packet.get("runtime_context_file_proven") is True
+        and packet.get("custom_codex_agent_runtime_context_proven") is True
+        and packet.get("command_loop_proven") is True
+        and packet.get("api_lane_exact_token_matched") is True
+        and packet.get("allowed_api_route_ids_enforced") is True
+        and packet.get("forbidden_stale_route_ids_enforced") is True
+        and packet.get("fallback_used") is False
+        and packet.get("local_imitation_used") is False
+        and packet.get("prompt_text_recorded") is not True
+        and packet.get("raw_backend_details_exposed") is False
+        and packet.get("secret_value_exposed") is False
+    )
+
+
+def _custom_native_free_chat_dip_command_proof_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    context_metadata: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    proof_root: Path | None = None,
+    native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
+    native_activator: Callable[..., dict[str, Any]] | None = None,
+    reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    packet = _custom_native_free_text_command_loop_proof_packet(
+        payload=payload,
+        file_bridge_worker=file_bridge_worker,
+        agent_runtime_context=agent_runtime_context,
+        context_metadata=context_metadata,
+        last_launch_packet=last_launch_packet,
+        bridge_endpoint=bridge_endpoint,
+        proof_root=proof_root,
+        native_prompt_submitter=native_prompt_submitter,
+        native_activator=native_activator,
+        reasoning_matrix_builder=reasoning_matrix_builder,
+    )
+    product_proven = _custom_native_free_chat_dip_command_product_proven(packet)
+    source_machine_error_code = str(
+        packet.get("machine_error_code")
+        or "CUSTOM_NATIVE_FREE_CHAT_DIP_COMMAND_NOT_PROVEN"
+    )
+    machine_error_code = (
+        "OK"
+        if product_proven
+        else (
+            source_machine_error_code
+            if source_machine_error_code != "OK"
+            else "CUSTOM_NATIVE_FREE_CHAT_DIP_COMMAND_NOT_PROVEN"
+        )
+    )
+    return {
+        **packet,
+        "packet_kind": "custom_codex_native_free_chat_dip_command_proof",
+        "status": "ok" if product_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": (
+            "Server-owned Custom Codex free-chat DIP command path is proven with API-lane exact-token proof and Custom readback."
+            if product_proven
+            else "Server-owned Custom Codex free-chat DIP command path is not proven; base native free-text/API-lane proof did not satisfy product gates."
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_PROVEN_WITH_LIMITS"
+            if product_proven
+            else "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_NOT_PROVEN"
+        ),
+        "native_free_chat_dip_command_packet": True,
+        "native_free_chat_dip_command_proven": product_proven,
+        "server_owned_native_free_chat_command_path": True,
+        "native_free_text_command_loop_packet": (
+            packet.get("packet_kind")
+            == "custom_codex_native_free_text_command_loop_proof"
+        ),
+        "native_free_chat_scope": "server_owned_prompt_plus_custom_readback",
+        "api_lane_truth_source": "server_gpt_api_command_loop_plus_custom_readback",
+        "native_free_chat_orchestrator_alias": str(
+            packet.get("primary_alias") or ""
+        ),
+        "native_free_chat_dip_alias": str(packet.get("coding_alias") or ""),
+        "native_free_chat_alias_context_read": bool(
+            packet.get("runtime_context_file_proven") is True
+            and packet.get("custom_codex_agent_runtime_context_proven") is True
+        ),
+        "native_free_chat_api_lane_proven": bool(
+            packet.get("command_loop_proven") is True
+            and packet.get("api_lane_exact_token_matched") is True
+            and packet.get("allowed_api_route_ids_enforced") is True
+            and packet.get("forbidden_stale_route_ids_enforced") is True
+            and packet.get("fallback_used") is False
+            and packet.get("local_imitation_used") is False
+        ),
+        "native_free_chat_custom_response_observed": bool(
+            packet.get("custom_codex_response_text_read_proven") is True
+            and packet.get("custom_response_exact_token_observed") is True
+        ),
+        "native_free_chat_request_bound_digest_matched": bool(
+            packet.get("custom_response_bound_to_request") is True
+            and packet.get("custom_response_expected_sha256_match") is True
+        ),
+        "native_free_chat_subagent_substitution_blocked": bool(
+            packet.get("native_codex_subagent_absence_proven") is True
+            and packet.get("native_codex_subagent_used_as_dip") is not True
+        ),
+        "native_free_chat_dip_not_codex_subagent": bool(
+            packet.get("native_codex_subagent_absence_proven") is True
+            and packet.get("native_codex_subagent_used_as_dip") is not True
+        ),
+        "browser_authority_contract_enforced": True,
+        "browser_prompt_authority_rejected": True,
+        "browser_model_authority": False,
+        "browser_can_supply_prompt_authority": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "universal_manual_chat_interception_proven": False,
+        "does_not_prove_universal_manual_chat_interception": True,
+        "runtime_readiness_claimed": False,
+        "blocking_reasons": []
+        if product_proven
+        else list(packet.get("blocking_reasons") or [machine_error_code]),
+        "next_action": "none"
+        if product_proven
+        else "stop_and_diagnose_native_free_chat_dip_command",
     }
 
 
@@ -17824,6 +17973,115 @@ def build_handler(
             )
             self._send_json(
                 _custom_native_free_text_command_loop_proof_packet(
+                    payload=payload,
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    native_activator=native_free_text_activator,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_native_free_chat_dip_command_proof(self, actual_path: str) -> None:
+            def reasoning_matrix_builder() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                return _custom_reasoning_dispatch_matrix_live_packet(
+                    payload={},
+                    action_runner=action_runner,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+
+            def native_free_text_activator(
+                *,
+                context: dict[str, Any],
+                context_metadata: dict[str, Any],
+                request_id: str,
+                expected_text: str,
+            ) -> dict[str, Any]:
+                api_model_id = str(context.get("api_model_id") or "").strip()
+                if not api_model_id:
+                    return _custom_native_api_model_id_missing_activation_packet(
+                        request_id=request_id,
+                        expected_text=expected_text,
+                        context_metadata=context_metadata,
+                    )
+                launch_payload = {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": str(
+                        context.get("primary_model_id") or "gpt-5.5"
+                    ).strip(),
+                    "api_model_id": api_model_id,
+                    "api_reasoning_option_id": str(
+                        context.get("api_reasoning_option_id")
+                        or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                    ).strip(),
+                }
+                operator_status = None
+                api_snapshot = None
+                external_routes_packet = None
+                if codex_custom_live_prompt_authorized:
+                    resume_packet = show_custom_native_window_packet()
+                    resume_packet["native_free_text_activation_attempted"] = True
+                    resume_packet["native_free_text_activation_source"] = (
+                        "existing_window_resume_preflight"
+                    )
+                    resume_packet.update(
+                        _custom_native_auth_usability_fields(resume_packet)
+                    )
+                    if (
+                        resume_packet.get("machine_error_code")
+                        != "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+                    ):
+                        return resume_packet
+                    operator_status, _operator_status_timeout = (
+                        _bounded_operator_status_payload(operator_surface_session)
+                    )
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    external_routes_packet = _external_routes_packet()
+                packet = _launch_custom_native_codex_packet(
+                    launch_payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    commands={},
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    external_routes_packet=external_routes_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                    launch_trace_packet={
+                        "trace_source": "native_free_chat_dip_activation",
+                        "launch_trace_server_issued": False,
+                    },
+                )
+                packet["native_free_text_activation_attempted"] = True
+                packet["native_free_text_activation_source"] = (
+                    "server_runtime_context"
+                )
+                packet.update(_custom_native_auth_usability_fields(packet))
+                record_custom_native_launch_packet(packet)
+                return packet
+
+            payload = self._read_optional_json_body()
+            agent_runtime_context, context_metadata = (
+                _refresh_custom_agent_runtime_context_for_command_loop(
+                    payload=payload,
+                    operator_status=None,
+                    api_snapshot=None,
+                )
+            )
+            self._send_json(
+                _custom_native_free_chat_dip_command_proof_packet(
                     payload=payload,
                     file_bridge_worker=custom_native_file_bridge_worker,
                     agent_runtime_context=agent_runtime_context,

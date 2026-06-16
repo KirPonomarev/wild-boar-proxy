@@ -1626,7 +1626,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
         self.assertIn("async function runQuickStartNativeFreeTextCommandLoopProof()", js)
-        self.assertIn('fetch("api/codex/custom/native-free-text-command-loop-proof"', js)
+        self.assertIn('fetch("api/codex/custom/native-free-chat-dip-command-proof"', js)
         self.assertIn("async function runQuickStartModelReasoningAvailabilityMatrix()", js)
         self.assertIn('fetch("api/codex/custom/model-reasoning-availability-matrix"', js)
         self.assertIn("renderQuickStartModelReasoningAvailabilityMatrix", js)
@@ -6442,26 +6442,43 @@ const sandbox = {
         })
       });
     }
-    if (url === "api/codex/custom/native-free-text-command-loop-proof") {
+    if (url === "api/codex/custom/native-free-chat-dip-command-proof") {
       if (Object.prototype.hasOwnProperty.call(body, "prompt")) {
-        throw new Error(`native free-text endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
+        throw new Error(`native free-chat DIP endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
       }
-      if (!String(body.request_id || "").startsWith("ui-native-free-text-")) {
-        throw new Error(`native free-text request id missing: ${JSON.stringify(body)}`);
+      if (!String(body.request_id || "").startsWith("ui-native-free-chat-dip-")) {
+        throw new Error(`native free-chat DIP request id missing: ${JSON.stringify(body)}`);
       }
-      if (body.expected_coding_response !== `WBP_UI_NATIVE_FREE_TEXT_OK_${body.request_id}`) {
-        throw new Error(`native free-text expected token mismatch: ${JSON.stringify(body)}`);
+      if (body.expected_coding_response !== `WBP_UI_NATIVE_FREE_CHAT_DIP_OK_${body.request_id}`) {
+        throw new Error(`native free-chat DIP expected token mismatch: ${JSON.stringify(body)}`);
       }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
           status: "ok",
           machine_error_code: "OK",
-          final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PROVEN_WITH_LIMITS",
+          final_status: "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_PROVEN_WITH_LIMITS",
+          packet_kind: "custom_codex_native_free_chat_dip_command_proof",
           primary_alias: "Planner",
           coding_alias: "Builder",
           primary_binding: { lane: "primary_chatgpt", role: "orchestrator", model_id: "gpt-5.5" },
           coding_binding: { lane: "api_route", role: "coding_agent", route_id: "wbp-deepseek-chat" },
+          native_free_chat_dip_command_packet: true,
+          native_free_chat_dip_command_proven: true,
+          server_owned_native_free_chat_command_path: true,
+          native_free_chat_api_lane_proven: true,
+          native_free_chat_custom_response_observed: true,
+          native_free_chat_request_bound_digest_matched: true,
+          native_free_chat_subagent_substitution_blocked: true,
+          browser_authority_contract_enforced: true,
+          browser_prompt_authority_rejected: true,
+          browser_can_supply_prompt_authority: false,
+          browser_can_supply_route_authority: false,
+          browser_can_supply_reasoning_authority: false,
+          browser_model_authority: false,
+          does_not_prove_universal_manual_chat_interception: true,
+          universal_manual_chat_interception_proven: false,
+          api_lane_truth_source: "server_gpt_api_command_loop_plus_custom_readback",
           native_window_observed: true,
           input_capable_ui_observed: true,
           input_text_insert_attempted: true,
@@ -6500,6 +6517,7 @@ const sandbox = {
           fallback_used: false,
           local_imitation_used: false,
           prompt_text_recorded: false,
+          raw_backend_details_exposed: false,
           secret_value_exposed: false,
           proof_file_path_redacted: true,
           nested_packets_redacted: true,
@@ -6519,7 +6537,7 @@ vm.runInContext("actionMetadataLoaded = true;", sandbox);
 sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   const expected = [
     "/api/codex/custom/agent-bindings",
-    "api/codex/custom/native-free-text-command-loop-proof"
+    "api/codex/custom/native-free-chat-dip-command-proof"
   ];
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
     throw new Error(`unexpected native free-text fetches ${JSON.stringify(urls)}`);
@@ -6533,10 +6551,10 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   if (Object.prototype.hasOwnProperty.call(packets[1], "prompt")) {
     throw new Error(`native free-text body leaked browser prompt: ${JSON.stringify(packets[1])}`);
   }
-  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "native ok") {
+  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "DIP API ok") {
     throw new Error(`native route label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "native ok") {
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "DIP API ok") {
     throw new Error(`native launch label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartWindowState.lastElementChild.textContent !== "input ok") {
@@ -6549,6 +6567,22 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.chatgpt_model_id !== "gpt-5.5" ||
     rendered.api_model_id !== "wbp-deepseek-chat" ||
     rendered.native_free_text_command_loop_packet !== true ||
+    rendered.native_free_chat_dip_command_packet !== true ||
+    rendered.native_free_chat_dip_command_proven !== true ||
+    rendered.server_owned_native_free_chat_command_path !== true ||
+    rendered.native_free_chat_api_lane_proven !== true ||
+    rendered.native_free_chat_custom_response_observed !== true ||
+    rendered.native_free_chat_request_bound_digest_matched !== true ||
+    rendered.native_free_chat_subagent_substitution_blocked !== true ||
+    rendered.browser_authority_contract_enforced !== true ||
+    rendered.browser_prompt_authority_rejected !== true ||
+    rendered.browser_can_supply_prompt_authority !== false ||
+    rendered.browser_can_supply_route_authority !== false ||
+    rendered.browser_can_supply_reasoning_authority !== false ||
+    rendered.browser_model_authority !== false ||
+    rendered.does_not_prove_universal_manual_chat_interception !== true ||
+    rendered.universal_manual_chat_interception_proven !== false ||
+    rendered.api_lane_truth_source !== "server_gpt_api_command_loop_plus_custom_readback" ||
     rendered.gpt_api_alias_command_loop_packet !== true
   ) {
     throw new Error(`native free-text identity not rendered: ${nodes.quickStartRouteResponse.textContent}`);
@@ -6582,6 +6616,7 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.native_codex_subagent_used_as_dip !== false ||
     rendered.native_codex_subagent_absence_proven !== true ||
     rendered.prompt_text_recorded !== false ||
+    rendered.raw_backend_details_exposed !== false ||
     rendered.nested_packets_redacted !== true ||
     rendered.secret_value_exposed !== false
   ) {

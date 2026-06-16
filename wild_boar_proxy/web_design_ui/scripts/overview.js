@@ -4543,6 +4543,30 @@ function setQuickStartRouteResponse(packet) {
         packet?.native_free_text_command_loop_packet === true,
       native_free_text_command_loop_proven:
         packet?.native_free_text_command_loop_proven === true,
+      native_free_chat_dip_command_packet:
+        packet?.native_free_chat_dip_command_packet === true,
+      native_free_chat_dip_command_proven:
+        packet?.native_free_chat_dip_command_proven === true,
+      server_owned_native_free_chat_command_path:
+        packet?.server_owned_native_free_chat_command_path === true,
+      native_free_chat_api_lane_proven:
+        packet?.native_free_chat_api_lane_proven === true,
+      native_free_chat_custom_response_observed:
+        packet?.native_free_chat_custom_response_observed === true,
+      native_free_chat_request_bound_digest_matched:
+        packet?.native_free_chat_request_bound_digest_matched === true,
+      native_free_chat_subagent_substitution_blocked:
+        packet?.native_free_chat_subagent_substitution_blocked === true,
+      browser_authority_contract_enforced:
+        packet?.browser_authority_contract_enforced === true,
+      browser_prompt_authority_rejected:
+        packet?.browser_prompt_authority_rejected === true,
+      does_not_prove_universal_manual_chat_interception:
+        packet?.does_not_prove_universal_manual_chat_interception === true,
+      universal_manual_chat_interception_proven:
+        packet?.universal_manual_chat_interception_proven === true,
+      api_lane_truth_source:
+        packet?.api_lane_truth_source || "",
       native_free_text_tool_bridge_proven:
         packet?.native_free_text_tool_bridge_proven === true,
       native_free_text_activation_proven:
@@ -4723,6 +4747,8 @@ function setQuickStartRouteResponse(packet) {
       api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
       chatgpt_only_calls_api: packet?.chatgpt_only_calls_api === true,
       server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      browser_can_supply_prompt_authority:
+        packet?.browser_can_supply_prompt_authority === true,
       browser_can_supply_route_authority:
         packet?.browser_can_supply_route_authority === true,
       browser_can_supply_reasoning_authority:
@@ -5679,6 +5705,21 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   const proven = Boolean(
     packet?.status === "ok"
     && packet?.machine_error_code === "OK"
+    && packet?.native_free_chat_dip_command_packet === true
+    && packet?.native_free_chat_dip_command_proven === true
+    && packet?.server_owned_native_free_chat_command_path === true
+    && packet?.native_free_chat_api_lane_proven === true
+    && packet?.native_free_chat_custom_response_observed === true
+    && packet?.native_free_chat_request_bound_digest_matched === true
+    && packet?.native_free_chat_subagent_substitution_blocked === true
+    && packet?.browser_authority_contract_enforced === true
+    && packet?.browser_prompt_authority_rejected === true
+    && packet?.browser_can_supply_prompt_authority !== true
+    && packet?.browser_can_supply_route_authority !== true
+    && packet?.browser_can_supply_reasoning_authority !== true
+    && packet?.browser_model_authority !== true
+    && packet?.does_not_prove_universal_manual_chat_interception === true
+    && packet?.universal_manual_chat_interception_proven !== true
     && packet?.native_free_text_command_loop_proven === true
     && packet?.native_free_text_tool_bridge_proven === true
     && packet?.native_window_observed === true
@@ -5702,12 +5743,13 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     && packet?.fallback_used !== true
     && packet?.local_imitation_used !== true
     && packet?.prompt_text_recorded !== true
+    && packet?.raw_backend_details_exposed !== true
     && packet?.secret_value_exposed !== true
   );
   setQuickStartChip(
     "quickStartRouteChip",
     proven ? "green" : "amber",
-    proven ? "native ok" : blockedLabel
+    proven ? "DIP API ok" : blockedLabel
   );
   setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
   setQuickStartChip(
@@ -5728,7 +5770,7 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   setQuickStartChip(
     "quickStartLaunchState",
     proven ? "green" : "amber",
-    proven ? "native ok" : blockedLabel
+    proven ? "DIP API ok" : blockedLabel
   );
   setQuickStartChip(
     "quickStartBridgeState",
@@ -5758,6 +5800,32 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     chatgpt_model_id: packet?.primary_binding?.model_id || packet?.primary_model_id || "",
     api_model_id: packet?.coding_binding?.route_id || packet?.requested_model || "",
     native_free_text_command_loop_packet: true,
+    native_free_chat_dip_command_packet:
+      packet?.native_free_chat_dip_command_packet === true,
+    native_free_chat_dip_command_proven:
+      packet?.native_free_chat_dip_command_proven === true,
+    server_owned_native_free_chat_command_path:
+      packet?.server_owned_native_free_chat_command_path === true,
+    native_free_chat_api_lane_proven:
+      packet?.native_free_chat_api_lane_proven === true,
+    native_free_chat_custom_response_observed:
+      packet?.native_free_chat_custom_response_observed === true,
+    native_free_chat_request_bound_digest_matched:
+      packet?.native_free_chat_request_bound_digest_matched === true,
+    native_free_chat_subagent_substitution_blocked:
+      packet?.native_free_chat_subagent_substitution_blocked === true,
+    browser_authority_contract_enforced:
+      packet?.browser_authority_contract_enforced === true,
+    browser_prompt_authority_rejected:
+      packet?.browser_prompt_authority_rejected === true,
+    browser_can_supply_prompt_authority:
+      packet?.browser_can_supply_prompt_authority === true,
+    does_not_prove_universal_manual_chat_interception:
+      packet?.does_not_prove_universal_manual_chat_interception === true,
+    universal_manual_chat_interception_proven:
+      packet?.universal_manual_chat_interception_proven === true,
+    api_lane_truth_source:
+      packet?.api_lane_truth_source || "",
     gpt_api_alias_command_loop_packet: packet?.command_loop_proven === true,
     session_probe_only: false,
     launch_attempted: packet?.launch_attempted === true,
@@ -6042,8 +6110,19 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     renderQuickStartNativeFreeTextCommandLoopProof({
       status: "blocked",
       machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_REQUIRES_CHATGPT_PLUS_API",
-      final_status: "CUSTOM_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+      final_status: "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_NOT_PROVEN",
       execution_mode: payload?.execution_mode || "",
+      native_free_chat_dip_command_packet: true,
+      native_free_chat_dip_command_proven: false,
+      server_owned_native_free_chat_command_path: true,
+      native_free_chat_api_lane_proven: false,
+      native_free_chat_custom_response_observed: false,
+      native_free_chat_request_bound_digest_matched: false,
+      native_free_chat_subagent_substitution_blocked: false,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
       native_free_text_observability_proven: false,
@@ -6085,11 +6164,23 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
   const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
   setQuickStartRouteResponse({
     status: "checking",
-    machine_error_code: "QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_IN_PROGRESS",
-    final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_PENDING",
+    machine_error_code: "QUICK_START_NATIVE_FREE_CHAT_DIP_COMMAND_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_PENDING",
     execution_mode: "chatgpt_plus_api",
     chatgpt_model_id: payload.chatgpt_model_id || "",
     api_model_id: payload.api_model_id || "",
+    native_free_chat_dip_command_packet: true,
+    native_free_chat_dip_command_proven: false,
+    server_owned_native_free_chat_command_path: true,
+    native_free_chat_api_lane_proven: false,
+    native_free_chat_custom_response_observed: false,
+    native_free_chat_request_bound_digest_matched: false,
+    native_free_chat_subagent_substitution_blocked: false,
+    browser_prompt_authority_rejected: true,
+    browser_can_supply_prompt_authority: false,
+    does_not_prove_universal_manual_chat_interception: true,
+    universal_manual_chat_interception_proven: false,
+    api_lane_truth_source: "",
     native_free_text_command_loop_packet: false,
     native_free_text_command_loop_proven: false,
     native_free_text_tool_bridge_proven: false,
@@ -6129,7 +6220,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
     prompt_text_recorded: false,
     secret_value_exposed: false,
     runtime_readiness_claimed: false,
-    next_action: "wait_for_native_free_text_command_loop"
+    next_action: "wait_for_native_free_chat_dip_command"
   });
   try {
     const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("native_free_text_saved");
@@ -6138,7 +6229,18 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
         ...runtimePacket,
         status: runtimePacket?.status || "blocked",
         machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
-        final_status: "CUSTOM_CODEX_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+        final_status: "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_NOT_PROVEN",
+        native_free_chat_dip_command_packet: true,
+        native_free_chat_dip_command_proven: false,
+        server_owned_native_free_chat_command_path: true,
+        native_free_chat_api_lane_proven: false,
+        native_free_chat_custom_response_observed: false,
+        native_free_chat_request_bound_digest_matched: false,
+        native_free_chat_subagent_substitution_blocked: false,
+        browser_prompt_authority_rejected: true,
+        browser_can_supply_prompt_authority: false,
+        does_not_prove_universal_manual_chat_interception: true,
+        universal_manual_chat_interception_proven: false,
         native_free_text_command_loop_proven: false,
         native_free_text_tool_bridge_proven: false,
         native_free_text_observability_proven: false,
@@ -6171,9 +6273,9 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       });
       return;
     }
-    const requestId = `ui-native-free-text-${Date.now()}`;
-    const expectedCodingResponse = `WBP_UI_NATIVE_FREE_TEXT_OK_${requestId}`;
-    const response = await fetch("api/codex/custom/native-free-text-command-loop-proof", {
+    const requestId = `ui-native-free-chat-dip-${Date.now()}`;
+    const expectedCodingResponse = `WBP_UI_NATIVE_FREE_CHAT_DIP_OK_${requestId}`;
+    const response = await fetch("api/codex/custom/native-free-chat-dip-command-proof", {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
@@ -6183,19 +6285,30 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       })
     });
     if (!response.ok) {
-      throw new Error(`native free-text command loop proof http ${response.status}`);
+      throw new Error(`native free-chat DIP command proof http ${response.status}`);
     }
     const packet = await response.json();
     renderQuickStartNativeFreeTextCommandLoopProof(packet);
   } catch (error) {
     renderQuickStartNativeFreeTextCommandLoopProof({
       status: "failed",
-      machine_error_code: "QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_FETCH_FAILED",
-      final_status: "STOP_AND_DIAGNOSE_QUICK_START_NATIVE_FREE_TEXT_COMMAND_LOOP_FETCH_FAILED",
+      machine_error_code: "QUICK_START_NATIVE_FREE_CHAT_DIP_COMMAND_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_NATIVE_FREE_CHAT_DIP_COMMAND_FETCH_FAILED",
       human_message: error.message,
       execution_mode: "chatgpt_plus_api",
       primary_model_id: payload.chatgpt_model_id || "",
       coding_agent_model_id: payload.api_model_id || "",
+      native_free_chat_dip_command_packet: true,
+      native_free_chat_dip_command_proven: false,
+      server_owned_native_free_chat_command_path: true,
+      native_free_chat_api_lane_proven: false,
+      native_free_chat_custom_response_observed: false,
+      native_free_chat_request_bound_digest_matched: false,
+      native_free_chat_subagent_substitution_blocked: false,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
       native_free_text_command_loop_proven: false,
       native_free_text_tool_bridge_proven: false,
       native_free_text_observability_proven: false,
@@ -6224,7 +6337,7 @@ async function runQuickStartNativeFreeTextCommandLoopProof() {
       native_codex_subagent_used_as_dip: false,
       native_codex_subagent_absence_proven: false,
       secret_value_exposed: false,
-      next_action: "stop_and_diagnose_native_free_text_command_loop"
+      next_action: "stop_and_diagnose_native_free_chat_dip_command"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
