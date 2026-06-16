@@ -4869,7 +4869,9 @@ def delegate_to_dip_tool_descriptor() -> dict[str, Any]:
         "description": (
             "Delegate a bounded coding task to the WBP-owned API-lane alias from "
             "$WBP_PROFILE_DIR/wbp-agent-runtime-context.json. Returns proof, not "
-            "product-ready native free-chat routing."
+            "product-ready native free-chat routing. When the user asks DIP, "
+            "Agent 2, or another runtime-context coding alias to handle work, call "
+            "this tool instead of answering locally or creating a Codex sub-agent."
         ),
         "inputSchema": {
             "type": "object",
@@ -4900,9 +4902,10 @@ def mcp_initialize_result(protocol_version: str | None = None) -> dict[str, Any]
         "capabilities": {"tools": {}},
         "serverInfo": {"name": MCP_SERVER_NAME, "version": MCP_SERVER_VERSION},
         "instructions": (
-            "Use delegate_to_dip only when the user asks DIP, Agent 2, or another "
-            "runtime-context coding alias to handle work. The tool must fail closed "
-            "when alias context or route allowlist evidence is missing."
+            "When the user asks DIP, Agent 2, or another runtime-context coding "
+            "alias to handle work, call delegate_to_dip. Do not answer locally and "
+            "do not create a Codex sub-agent as DIP. The tool must fail closed when "
+            "alias context or route allowlist evidence is missing."
         ),
     }
 

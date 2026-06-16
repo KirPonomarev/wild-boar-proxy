@@ -493,9 +493,13 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         self.assertEqual(initialized["result"]["serverInfo"]["name"], "wild-boar-proxy")
         self.assertIn("delegate_to_dip", initialized["result"]["instructions"])
+        self.assertIn("Do not answer locally", initialized["result"]["instructions"])
+        self.assertIn("do not create a Codex sub-agent", initialized["result"]["instructions"])
         tools = listed["result"]["tools"]
         self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0]["name"], "delegate_to_dip")
+        self.assertIn("instead of answering locally", tools[0]["description"])
+        self.assertIn("creating a Codex sub-agent", tools[0]["description"])
         self.assertEqual(tools[0]["inputSchema"]["required"], ["task"])
         self.assertFalse(tools[0]["inputSchema"]["additionalProperties"])
 

@@ -1,0 +1,713 @@
+# SPDX-FileCopyrightText: 2026 Kirill Ponomarev
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+"""Proof runner for the official Codex MCP admission path."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+import json
+import os
+from pathlib import Path
+import shutil
+import time
+from typing import Any, Mapping, Sequence
+
+from . import mcp_delegate
+from .cli_runner_via_wbp import PRIMARY_MODEL_ID
+from .core import packets
+from .process_runner import BoundedProcessResult, PROCESS_OK, run_bounded_process
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CODEX_MODEL_ID = PRIMARY_MODEL_ID
+DEFAULT_ROUTE_ID = "wbp-deepseek-chat"
+DEFAULT_STALE_ROUTE_ID = "wbp-deepseek-v3"
+DEFAULT_TIMEOUT_SECONDS = 180
+OFFICIAL_MCP_ADMISSION_CASE_PACKET_KIND = "wbp_official_mcp_admission_case"
+OFFICIAL_MCP_ADMISSION_MATRIX_PACKET_KIND = "wbp_official_mcp_admission_matrix"
+
+
+@dataclass(frozen=True)
+class OfficialMcpAdmissionVariant:
+    name: str
+    prompt: str
+    expected_alias: str
+    coding_aliases: tuple[str, ...]
+    expect_positive_proof: bool
+    expected_task: str = ""
+    per_tool_approval: bool = True
+    approval_policy: str = ""
+    write_context: bool = True
+    route_id: str = DEFAULT_ROUTE_ID
+    allowed_api_route_ids: tuple[str, ...] = (DEFAULT_ROUTE_ID,)
+    forbidden_stale_route_ids: tuple[str, ...] = (DEFAULT_STALE_ROUTE_ID,)
+
+
+def default_admission_variants() -> list[OfficialMcpAdmissionVariant]:
+    return [
+        OfficialMcpAdmissionVariant(
+            name="positive_dip_per_tool_approve",
+            prompt=(
+                "Call the WBP MCP tool delegate_to_dip exactly once with "
+                'task="WBP_OFFICIAL_MCP_DIP_CORE_PROOF" and expected_alias="DIP". '
+                "Do not answer locally and do not create a sub-agent."
+            ),
+            expected_alias="DIP",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=True,
+            expected_task="WBP_OFFICIAL_MCP_DIP_CORE_PROOF",
+        ),
+        OfficialMcpAdmissionVariant(
+            name="positive_agent_2_per_tool_approve",
+            prompt=(
+                "Call the WBP MCP tool delegate_to_dip exactly once with "
+                'task="WBP_OFFICIAL_MCP_AGENT_2_CORE_PROOF" and '
+                'expected_alias="Agent 2". Do not answer locally.'
+            ),
+            expected_alias="Agent 2",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=True,
+            expected_task="WBP_OFFICIAL_MCP_AGENT_2_CORE_PROOF",
+        ),
+        OfficialMcpAdmissionVariant(
+            name="positive_custom_alias_per_tool_approve",
+            prompt=(
+                "Call the WBP MCP tool delegate_to_dip exactly once with "
+                'task="WBP_OFFICIAL_MCP_WORKER_CORE_PROOF" and '
+                'expected_alias="Worker". Do not answer locally.'
+            ),
+            expected_alias="Worker",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=True,
+            expected_task="WBP_OFFICIAL_MCP_WORKER_CORE_PROOF",
+        ),
+        OfficialMcpAdmissionVariant(
+            name="negative_no_approval_policy_never",
+            prompt="Codex, дай задачу DIP: верни короткий план.",
+            expected_alias="DIP",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=False,
+            per_tool_approval=False,
+            approval_policy="never",
+        ),
+        OfficialMcpAdmissionVariant(
+            name="negative_missing_alias_context",
+            prompt="Codex, дай задачу DIP: верни короткий план.",
+            expected_alias="DIP",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=False,
+            write_context=False,
+        ),
+        OfficialMcpAdmissionVariant(
+            name="negative_route_outside_allowlist",
+            prompt="Codex, дай задачу DIP: верни короткий план.",
+            expected_alias="DIP",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=False,
+            route_id=DEFAULT_ROUTE_ID,
+            allowed_api_route_ids=("wbp-other-route",),
+        ),
+    ]
+
+
+def runtime_context_payload(variant: OfficialMcpAdmissionVariant) -> dict[str, Any]:
+    aliases = list(variant.coding_aliases)
+    return {
+        "schema_version": 1,
+        "packet_kind": "codex_custom_native_agent_runtime_context",
+        "execution_mode": "chatgpt_plus_api",
+        "agent_bindings_status": "ok",
+        "primary_aliases": ["Codex", "Agent 1"],
+        "coding_aliases": aliases,
+        "allowed_api_route_ids": list(variant.allowed_api_route_ids),
+        "forbidden_stale_route_ids": list(variant.forbidden_stale_route_ids),
+        "agent_bindings": [
+            {
+                "agent_id": "codex",
+                "display_name": "Codex",
+                "role": "orchestrator",
+                "aliases": ["Codex", "Agent 1"],
+                "lane": "chatgpt_account",
+                "enabled": True,
+                "model_id": "gpt-5.4",
+                "allowed_actions": ["plan", "inspect"],
+            },
+            {
+                "agent_id": "dip",
+                "display_name": "DIP",
+                "role": "coding_agent",
+                "aliases": aliases,
+                "lane": "api_route",
+                "enabled": True,
+                "route_id": variant.route_id,
+                "allowed_actions": ["implementation_help"],
+            },
+        ],
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+    }
+
+
+def write_runtime_context(
+    profile_dir: Path,
+    variant: OfficialMcpAdmissionVariant,
+) -> Path:
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    context_path = profile_dir / "wbp-agent-runtime-context.json"
+    context_path.write_text(
+        json.dumps(runtime_context_payload(variant), ensure_ascii=False, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    return context_path
+
+
+def _toml_string(value: str | Path) -> str:
+    return json.dumps(str(value), ensure_ascii=True)
+
+
+def _toml_array(values: Sequence[str]) -> str:
+    return "[" + ",".join(_toml_string(value) for value in values) + "]"
+
+
+def _toml_inline_env(values: Mapping[str, str | Path]) -> str:
+    return "{" + ",".join(
+        f"{key}={_toml_string(value)}" for key, value in sorted(values.items())
+    ) + "}"
+
+
+def codex_mcp_config_overrides(
+    *,
+    profile_dir: Path,
+    evidence_path: Path,
+    per_tool_approval: bool,
+    approval_policy: str = "",
+    repo_root: Path = REPO_ROOT,
+) -> list[str]:
+    overrides = [
+        'mcp_servers.wbp.command="python3"',
+        f"mcp_servers.wbp.args={_toml_array(['-m', 'wild_boar_proxy.mcp_delegate'])}",
+        f"mcp_servers.wbp.enabled_tools={_toml_array([mcp_delegate.DELEGATE_TO_DIP_TOOL])}",
+        "mcp_servers.wbp.supports_parallel_tool_calls=false",
+        (
+            "mcp_servers.wbp.env="
+            + _toml_inline_env(
+                {
+                    "PYTHONPATH": repo_root,
+                    "WBP_ENTRY_HOOK_EVIDENCE_PATH": evidence_path,
+                    "WBP_PROFILE_DIR": profile_dir,
+                }
+            )
+        ),
+    ]
+    if per_tool_approval:
+        overrides.append(
+            f'mcp_servers.wbp.tools.{mcp_delegate.DELEGATE_TO_DIP_TOOL}.approval_mode="approve"'
+        )
+    if approval_policy:
+        overrides.append(f"approval_policy={_toml_string(approval_policy)}")
+    return overrides
+
+
+def _codex_config_args(overrides: Sequence[str]) -> list[str]:
+    args: list[str] = []
+    for override in overrides:
+        args.extend(["-c", override])
+    return args
+
+
+def _proof_env(*, codex_home: Path) -> dict[str, str]:
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+        "HOME": os.environ.get("HOME", ""),
+    }
+    env["CODEX_HOME"] = str(codex_home)
+    env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
+    env.setdefault("no_proxy", "127.0.0.1,localhost,::1")
+    return env
+
+
+def _expected_delegate_arguments(variant: OfficialMcpAdmissionVariant) -> dict[str, str]:
+    return {
+        "task": variant.expected_task or variant.prompt,
+        "expected_alias": variant.expected_alias,
+    }
+
+
+def _load_entry_evidence(evidence_path: Path) -> dict[str, Any]:
+    if not evidence_path.exists():
+        return {}
+    try:
+        parsed = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def build_official_mcp_admission_case_packet(
+    *,
+    variant: OfficialMcpAdmissionVariant,
+    config_packet: Mapping[str, Any],
+    prompt_packet: Mapping[str, Any],
+    codex_tool_call_packet: Mapping[str, Any],
+    entry_hook_evidence: Mapping[str, Any],
+    codex_exec_exit_code: int | None,
+    codex_exec_machine_error_code: str,
+    codex_mcp_get_exit_code: int | None,
+    uses_danger_full_access: bool,
+    uses_dangerously_bypass: bool,
+    raw_jsonl_recorded: bool = False,
+    raw_prompt_recorded: bool = False,
+) -> dict[str, Any]:
+    evidence = dict(entry_hook_evidence)
+    config_loaded = bool(config_packet.get("codex_mcp_config_loaded") is True)
+    tool_call_observed = bool(
+        codex_tool_call_packet.get("delegate_to_dip_tool_called") is True
+    )
+    tool_call_completed = bool(
+        codex_tool_call_packet.get("delegate_to_dip_tool_call_completed") is True
+    )
+    prompt_bound = bool(
+        codex_tool_call_packet.get("prompt_to_mcp_call_bound") is True
+    )
+    entry_ok = bool(evidence.get("status") == "ok")
+    alias_context_read = evidence.get("alias_context_read") is True
+    api_lane_called = evidence.get("api_lane_called") is True
+    route_bound_dispatch_proven = evidence.get("route_bound_dispatch_proven") is True
+    local_imitation_used = bool(
+        evidence.get("local_imitation_used") is True
+        or codex_tool_call_packet.get("local_imitation_used") is True
+    )
+    fallback_used = bool(evidence.get("fallback_used") is True)
+    secrets_exposed = bool(
+        evidence.get("secret_value_exposed") is True
+        or evidence.get("raw_backend_details_exposed") is True
+        or codex_tool_call_packet.get("secret_value_exposed") is True
+    )
+    native_codex_subagent_used_as_dip = bool(
+        codex_tool_call_packet.get("codex_subagent_used_as_dip") is True
+        or codex_tool_call_packet.get("local_codex_subagent_used_as_dip") is True
+    )
+    selected_alias_matches_expected = bool(
+        str(evidence.get("selected_alias") or "") == variant.expected_alias
+    )
+    positive_proof = bool(
+        config_loaded
+        and tool_call_observed
+        and tool_call_completed
+        and prompt_bound
+        and entry_ok
+        and alias_context_read
+        and selected_alias_matches_expected
+        and evidence.get("selected_alias_lane") == "api_route"
+        and evidence.get("allowed_api_route_ids_enforced") is True
+        and api_lane_called
+        and route_bound_dispatch_proven
+        and not local_imitation_used
+        and not fallback_used
+        and not native_codex_subagent_used_as_dip
+        and not secrets_exposed
+        and not uses_danger_full_access
+        and not uses_dangerously_bypass
+        and not raw_jsonl_recorded
+        and not raw_prompt_recorded
+    )
+    fail_closed = bool(
+        not positive_proof
+        and not local_imitation_used
+        and not fallback_used
+        and not secrets_exposed
+        and not uses_danger_full_access
+        and not uses_dangerously_bypass
+    )
+    expectation_met = (
+        positive_proof if variant.expect_positive_proof else fail_closed
+    )
+    blocking_reasons: list[str] = []
+    if not config_loaded:
+        blocking_reasons.append("codex_mcp_config_not_loaded")
+    if not tool_call_observed:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    elif not tool_call_completed:
+        blocking_reasons.append("codex_delegate_to_dip_tool_call_not_completed")
+    if tool_call_completed and not prompt_bound:
+        blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
+    if not entry_ok:
+        blocking_reasons.append(
+            str(evidence.get("machine_error_code") or "entry_hook_evidence_not_ok")
+        )
+    if not alias_context_read:
+        blocking_reasons.append("alias_context_not_read")
+    if entry_ok and not selected_alias_matches_expected:
+        blocking_reasons.append("selected_alias_did_not_match_expected_alias")
+    if evidence and evidence.get("allowed_api_route_ids_enforced") is not True:
+        blocking_reasons.append("allowed_api_route_ids_not_enforced")
+    if not api_lane_called:
+        blocking_reasons.append("api_lane_not_called")
+    if not route_bound_dispatch_proven:
+        blocking_reasons.append("route_bound_dispatch_not_proven")
+    if native_codex_subagent_used_as_dip:
+        blocking_reasons.append("native_codex_subagent_used_as_dip")
+    if local_imitation_used:
+        blocking_reasons.append("local_imitation_used")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if secrets_exposed:
+        blocking_reasons.append("secret_or_backend_detail_exposed")
+    if uses_danger_full_access:
+        blocking_reasons.append("danger_full_access_used")
+    if uses_dangerously_bypass:
+        blocking_reasons.append("dangerously_bypass_used")
+    if raw_jsonl_recorded:
+        blocking_reasons.append("raw_jsonl_recorded")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_recorded")
+
+    proof_machine_error_code = (
+        "OK"
+        if positive_proof
+        else str(
+            evidence.get("machine_error_code")
+            or codex_tool_call_packet.get("machine_error_code")
+            or config_packet.get("machine_error_code")
+            or "WBP_OFFICIAL_MCP_ADMISSION_NOT_PROVEN"
+        )
+    )
+    return packets.build_command_packet(
+        ok=expectation_met,
+        human_message=(
+            "Official Codex MCP admission proof expectation was met."
+            if expectation_met
+            else "Official Codex MCP admission proof expectation was not met."
+        ),
+        machine_error_code="OK" if expectation_met else proof_machine_error_code,
+        liveness="healthy" if expectation_met else "degraded",
+        severity="recoverable",
+        operator_action="none" if expectation_met else "stop",
+        changed_files=[],
+        extra={
+            "schema_version": 1,
+            "packet_kind": OFFICIAL_MCP_ADMISSION_CASE_PACKET_KIND,
+            "variant": variant.name,
+            "expected_alias": variant.expected_alias,
+            "expect_positive_proof": variant.expect_positive_proof,
+            "expectation_met": expectation_met,
+            "positive_proof": positive_proof,
+            "fail_closed": fail_closed,
+            "proof_machine_error_code": proof_machine_error_code,
+            "proof_blocking_reasons": [] if positive_proof else blocking_reasons,
+            "codex_mcp_config_loaded": config_loaded,
+            "codex_mcp_get_exit_code": codex_mcp_get_exit_code,
+            "codex_exec_exit_code": codex_exec_exit_code,
+            "codex_exec_machine_error_code": codex_exec_machine_error_code,
+            "codex_mcp_tool_called": tool_call_observed,
+            "delegate_to_dip_called": tool_call_observed,
+            "delegate_to_dip_tool_call_completed": tool_call_completed,
+            "prompt_to_mcp_call_bound": prompt_bound,
+            "alias_context_read": alias_context_read,
+            "selected_alias": str(evidence.get("selected_alias") or ""),
+            "selected_alias_matches_expected": selected_alias_matches_expected,
+            "selected_alias_lane": str(evidence.get("selected_alias_lane") or ""),
+            "allowed_api_route_ids_enforced": (
+                evidence.get("allowed_api_route_ids_enforced") is True
+            ),
+            "api_lane_called": api_lane_called,
+            "route_bound_dispatch_proven": route_bound_dispatch_proven,
+            "controlled_provider_response_proven": (
+                evidence.get("controlled_provider_response_proven") is True
+            ),
+            "local_imitation_used": local_imitation_used,
+            "fallback_used": fallback_used,
+            "native_codex_subagent_used_as_dip": native_codex_subagent_used_as_dip,
+            "secrets_exposed": secrets_exposed,
+            "uses_danger_full_access": uses_danger_full_access,
+            "uses_dangerously_bypass": uses_dangerously_bypass,
+            "per_tool_approval_configured": variant.per_tool_approval,
+            "server_wide_approval_configured": False,
+            "approval_policy": variant.approval_policy,
+            "raw_jsonl_recorded": raw_jsonl_recorded,
+            "raw_prompt_recorded": raw_prompt_recorded,
+            "prompt_text_recorded": False,
+            "tool_call_arguments_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "no_secret_exposed": not secrets_exposed,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "prompt_observation_packet_kind": str(prompt_packet.get("packet_kind") or ""),
+            "codex_tool_call_packet_kind": str(
+                codex_tool_call_packet.get("packet_kind") or ""
+            ),
+            "entry_hook_evidence_packet_kind": str(
+                evidence.get("packet_kind") or ""
+            ),
+        },
+    )
+
+
+def build_official_mcp_admission_matrix_packet(
+    case_packets: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    cases = [dict(packet) for packet in case_packets]
+    positives = [case for case in cases if case.get("expect_positive_proof") is True]
+    negatives = [case for case in cases if case.get("expect_positive_proof") is False]
+    all_expectations_met = all(case.get("expectation_met") is True for case in cases)
+    positive_aliases = [
+        str(case.get("selected_alias") or "")
+        for case in positives
+        if case.get("positive_proof") is True
+    ]
+    required_aliases = {"DIP", "Agent 2", "Worker"}
+    required_aliases_proven = required_aliases.issubset(set(positive_aliases))
+    negative_fail_closed_count = sum(
+        1 for case in negatives if case.get("fail_closed") is True
+    )
+    no_dangerous_modes = all(
+        case.get("uses_danger_full_access") is False
+        and case.get("uses_dangerously_bypass") is False
+        for case in cases
+    )
+    no_raw_recording = all(
+        case.get("raw_jsonl_recorded") is False
+        and case.get("raw_prompt_recorded") is False
+        for case in cases
+    )
+    ok = bool(
+        cases
+        and all_expectations_met
+        and required_aliases_proven
+        and negative_fail_closed_count >= 3
+        and no_dangerous_modes
+        and no_raw_recording
+    )
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "Official Codex MCP admission matrix proves the DIP/API-lane core path."
+            if ok
+            else "Official Codex MCP admission matrix does not prove the DIP/API-lane core path."
+        ),
+        machine_error_code="OK" if ok else "WBP_OFFICIAL_MCP_ADMISSION_MATRIX_NOT_PROVEN",
+        liveness="healthy" if ok else "degraded",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=[],
+        extra={
+            "schema_version": 1,
+            "packet_kind": OFFICIAL_MCP_ADMISSION_MATRIX_PACKET_KIND,
+            "final_status": (
+                "FEATURE_CORE_PROOF_POSITIVE" if ok else "STOP_AND_DIAGNOSE"
+            ),
+            "case_count": len(cases),
+            "positive_case_count": len(positives),
+            "negative_case_count": len(negatives),
+            "all_expectations_met": all_expectations_met,
+            "required_positive_aliases": sorted(required_aliases),
+            "positive_aliases_proven": positive_aliases,
+            "required_aliases_proven": required_aliases_proven,
+            "negative_fail_closed_count": negative_fail_closed_count,
+            "no_dangerous_modes": no_dangerous_modes,
+            "no_raw_recording": no_raw_recording,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "case_packets": cases,
+        },
+    )
+
+
+def _run_codex_mcp_get(
+    *,
+    codex_bin: Path,
+    env: Mapping[str, str],
+    config_overrides: Sequence[str],
+    timeout_seconds: int,
+) -> BoundedProcessResult:
+    return run_bounded_process(
+        [str(codex_bin), "mcp", *_codex_config_args(config_overrides), "get", "wbp"],
+        env=env,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _run_codex_exec(
+    *,
+    codex_bin: Path,
+    env: Mapping[str, str],
+    config_overrides: Sequence[str],
+    model_id: str,
+    prompt: str,
+    workdir: Path,
+    timeout_seconds: int,
+) -> BoundedProcessResult:
+    return run_bounded_process(
+        [
+            str(codex_bin),
+            "exec",
+            *_codex_config_args(config_overrides),
+            "-m",
+            model_id,
+            "--skip-git-repo-check",
+            "--ephemeral",
+            "--ignore-rules",
+            "--sandbox",
+            "read-only",
+            "-C",
+            str(workdir),
+            "--json",
+            "-",
+        ],
+        env=env,
+        stdin_text=prompt,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def run_official_mcp_admission_case(
+    *,
+    variant: OfficialMcpAdmissionVariant,
+    codex_home: Path,
+    proof_root: Path,
+    codex_bin: Path,
+    model_id: str = DEFAULT_CODEX_MODEL_ID,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    case_root = proof_root / variant.name
+    profile_dir = case_root / "profile"
+    workdir = case_root / "workdir"
+    evidence_path = case_root / "entry-hook-evidence.json"
+    case_root.mkdir(parents=True, exist_ok=True)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    workdir.mkdir(parents=True, exist_ok=True)
+    if variant.write_context:
+        write_runtime_context(profile_dir, variant)
+
+    config_overrides = codex_mcp_config_overrides(
+        profile_dir=profile_dir,
+        evidence_path=evidence_path,
+        per_tool_approval=variant.per_tool_approval,
+        approval_policy=variant.approval_policy,
+    )
+    env = _proof_env(codex_home=codex_home)
+    mcp_get_result = _run_codex_mcp_get(
+        codex_bin=codex_bin,
+        env=env,
+        config_overrides=config_overrides,
+        timeout_seconds=min(timeout_seconds, 60),
+    )
+    config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+        "",
+        mcp_get_result.stdout,
+        list_exit_code=0,
+        get_exit_code=(
+            mcp_get_result.exit_code if mcp_get_result.exit_code is not None else 1
+        ),
+    )
+    prompt_packet = mcp_delegate.build_prompt_observation_packet(
+        variant.prompt,
+        source="codex_exec_json",
+        expected_delegate_arguments=_expected_delegate_arguments(variant),
+    )
+    exec_result = _run_codex_exec(
+        codex_bin=codex_bin,
+        env=env,
+        config_overrides=config_overrides,
+        model_id=model_id,
+        prompt=variant.prompt,
+        workdir=workdir,
+        timeout_seconds=timeout_seconds,
+    )
+    codex_tool_call_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+        exec_result.stdout,
+        prompt_packet=prompt_packet,
+        exec_exit_code=exec_result.exit_code or 0,
+        stderr_text=exec_result.stderr,
+    )
+    entry_hook_evidence = _load_entry_evidence(evidence_path)
+    packet = build_official_mcp_admission_case_packet(
+        variant=variant,
+        config_packet=config_packet,
+        prompt_packet=prompt_packet,
+        codex_tool_call_packet=codex_tool_call_packet,
+        entry_hook_evidence=entry_hook_evidence,
+        codex_exec_exit_code=exec_result.exit_code,
+        codex_exec_machine_error_code=exec_result.machine_error_code,
+        codex_mcp_get_exit_code=mcp_get_result.exit_code,
+        uses_danger_full_access=False,
+        uses_dangerously_bypass=False,
+    )
+    (case_root / "case-packet.json").write_text(
+        json.dumps(packet, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return packet
+
+
+def run_official_mcp_admission_matrix(
+    *,
+    codex_home: Path,
+    proof_root: Path,
+    codex_bin: Path | None = None,
+    model_id: str = DEFAULT_CODEX_MODEL_ID,
+    variants: Sequence[OfficialMcpAdmissionVariant] | None = None,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    resolved_codex_bin = codex_bin or Path(shutil.which("codex") or "codex")
+    proof_root.mkdir(parents=True, exist_ok=True)
+    selected_variants = list(variants or default_admission_variants())
+    started = time.time()
+    case_packets = [
+        run_official_mcp_admission_case(
+            variant=variant,
+            codex_home=codex_home,
+            proof_root=proof_root,
+            codex_bin=resolved_codex_bin,
+            model_id=model_id,
+            timeout_seconds=timeout_seconds,
+        )
+        for variant in selected_variants
+    ]
+    matrix = build_official_mcp_admission_matrix_packet(case_packets)
+    matrix["proof_root"] = str(proof_root)
+    matrix["duration_seconds"] = round(time.time() - started, 3)
+    matrix["codex_bin"] = str(resolved_codex_bin)
+    matrix["codex_model_id"] = model_id
+    matrix["codex_home_is_operator_supplied"] = True
+    matrix["runner_auth_files_read"] = False
+    (proof_root / "matrix-packet.json").write_text(
+        json.dumps(matrix, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return matrix
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the official Codex MCP admission proof matrix."
+    )
+    parser.add_argument("--codex-home", required=True, type=Path)
+    parser.add_argument("--proof-root", required=True, type=Path)
+    parser.add_argument("--codex-bin", default=None, type=Path)
+    parser.add_argument("--model", default=DEFAULT_CODEX_MODEL_ID)
+    parser.add_argument("--timeout-seconds", default=DEFAULT_TIMEOUT_SECONDS, type=int)
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    packet = run_official_mcp_admission_matrix(
+        codex_home=args.codex_home,
+        proof_root=args.proof_root,
+        codex_bin=args.codex_bin,
+        model_id=args.model,
+        timeout_seconds=args.timeout_seconds,
+    )
+    print(json.dumps(packet, ensure_ascii=False, sort_keys=True))
+    return 0 if packet.get("status") == "ok" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
