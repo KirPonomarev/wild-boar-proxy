@@ -2437,6 +2437,85 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_quick_start_launch_preflight_explicit_runtime_not_ready_is_not_green(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.textContent = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async () => ({ ok: true, json: async () => ({ status: "ok" }) })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderQuickStartLaunchPreflight({
+  status: "ok",
+  machine_error_code: "OK",
+  execution_mode: "chatgpt_plus_api",
+  selected_model: "gpt-5.5",
+  owner_authorization_phrase_present: true,
+  bridge_required: true,
+  bridge_alive: true,
+  custom_process_observed: true,
+  config_status: "matches_last_launch",
+  runtime_readiness_claimed: false,
+  next_action: "launch_custom_codex"
+});
+
+if (node("quickStartLaunchState").className.includes("green")) {
+  throw new Error(`explicit runtime-not-ready preflight must not be green: ${node("quickStartLaunchState").className}`);
+}
+if (node("quickStartLaunchState").lastElementChild.textContent !== "preflight only") {
+  throw new Error(`wrong launch state: ${node("quickStartLaunchState").lastElementChild.textContent}`);
+}
+if (node("quickStartNextActionState").className.includes("green")) {
+  throw new Error(`explicit runtime-not-ready next action must not be green: ${node("quickStartNextActionState").className}`);
+}
+const packet = JSON.parse(node("quickStartRouteResponse").textContent);
+if (packet.runtime_readiness_claimed !== false) {
+  throw new Error(`runtime readiness false not preserved: ${JSON.stringify(packet)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_launch_preflight_renders_orphan_replace_as_ready_state(self) -> None:
         script = r"""
 const fs = require("fs");
@@ -4685,11 +4764,11 @@ const sandbox = {
       }) });
     }
     if (url === "api/codex/custom/gpt-api-alias-command-loop-proof") {
-      if (!String(body.prompt || "").includes("Planner") || !String(body.prompt || "").includes("Builder")) {
-        throw new Error(`command-loop prompt did not carry aliases: ${JSON.stringify(body)}`);
+      if ("prompt" in body || "expected_text" in body || "expected_coding_response" in body) {
+        throw new Error(`command-loop browser authority leaked: ${JSON.stringify(body)}`);
       }
-      if (body.expected_coding_response !== "WBP_UI_GPT_API_COMMAND_LOOP_OK") {
-        throw new Error(`command-loop expected token mismatch: ${JSON.stringify(body)}`);
+      if (!String(body.request_id || "").startsWith("ui-command-loop-")) {
+        throw new Error(`command-loop request id missing: ${JSON.stringify(body)}`);
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
         status: "ok",
@@ -6009,11 +6088,11 @@ const sandbox = {
     }
     if (url === "api/codex/custom/gpt-api-alias-command-loop-proof") {
       packets.push(body);
-      if (!String(body.prompt || "").includes("Planner") || !String(body.prompt || "").includes("Builder")) {
-        throw new Error(`command-loop prompt did not carry aliases: ${JSON.stringify(body)}`);
+      if ("prompt" in body || "expected_text" in body || "expected_coding_response" in body) {
+        throw new Error(`command-loop browser authority leaked: ${JSON.stringify(body)}`);
       }
-      if (body.expected_coding_response !== "WBP_UI_GPT_API_COMMAND_LOOP_OK") {
-        throw new Error(`command-loop expected token mismatch: ${JSON.stringify(body)}`);
+      if (!String(body.request_id || "").startsWith("ui-command-loop-")) {
+        throw new Error(`command-loop request id missing: ${JSON.stringify(body)}`);
       }
       return Promise.resolve({
         ok: true,

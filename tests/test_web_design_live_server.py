@@ -1428,7 +1428,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 captured["timeout"] = timeout
                 return self._bridge_response(
                     route_id="wbp-deepseek-chat",
-                    output_text="WBP_COMMAND_LOOP_OK",
+                    output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                 )
 
             with (
@@ -1440,14 +1440,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 mock.patch.object(live_server, "proxyless_urlopen", side_effect=fake_urlopen),
             ):
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": (
-                            "Planner: составь ТЗ и проверь результат. "
-                            "Builder: answer exactly one line."
-                        ),
-                        "expected_coding_response": "WBP_COMMAND_LOOP_OK",
-                        "request_id": "command-loop-ok",
-                    },
+                    payload={"request_id": "command-loop-ok"},
                     file_bridge_worker=worker,
                     last_launch_packet={},
                     timeout_seconds=0.1,
@@ -1482,6 +1475,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["native_coder_slot_dispatch_proven"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_expected_token_authority"])
         self.assertFalse(packet["browser_can_supply_route_authority"])
         self.assertFalse(packet["browser_can_supply_reasoning_authority"])
         self.assertFalse(packet["secret_value_exposed"])
@@ -1494,7 +1489,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             (
                 "Machine protocol check. The entire response must be exactly one "
                 "line and must contain only the token below.\n"
-                "WBP_COMMAND_LOOP_OK\n"
+                f"{live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT}\n"
                 "Do not add quotes, markdown, punctuation, explanation, prefix, "
                 "suffix, translation, or any other characters."
             ),
@@ -1534,7 +1529,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
                         route_id="wbp-deepseek-chat",
-                        output_text="WBP_ENDPOINT_LOOP_OK",
+                        output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                     ),
                 ) as urlopen,
             ):
@@ -1554,14 +1549,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     packet = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
-                            {
-                                "prompt": (
-                                    "Planner: inspect and assign. "
-                                    "Builder: answer exactly one line."
-                                ),
-                                "expected_text": "WBP_ENDPOINT_LOOP_OK",
-                                "request_id": "endpoint-command-loop-ok",
-                            },
+                            {"request_id": "endpoint-command-loop-ok"},
                         )
                     )
                 finally:
@@ -1647,7 +1635,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
                         route_id="wbp-deepseek-chat",
-                        output_text="WBP_ENDPOINT_LOOP_OK",
+                        output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                     ),
                 ) as urlopen,
             ):
@@ -1673,14 +1661,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     packet = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
-                            {
-                                "prompt": (
-                                    "Агент GPT: inspect and orchestrate. "
-                                    "Агент Дип: answer exactly one line."
-                                ),
-                                "expected_text": "WBP_ENDPOINT_LOOP_OK",
-                                "request_id": "endpoint-command-loop-russian-ok",
-                            },
+                            {"request_id": "endpoint-command-loop-russian-ok"},
                         )
                     )
                 finally:
@@ -1774,7 +1755,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
                         route_id=route_id,
-                        output_text="WBP_ENDPOINT_LOOP_V4_MAX_OK",
+                        output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                         thinking=max_thinking,
                         api_parameter_sent=True,
                     ),
@@ -1796,18 +1777,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     packet = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
-                            {
-                                "execution_mode": "chatgpt_plus_api",
-                                "chatgpt_model_id": "codex-auto-review",
-                                "api_model_id": route_id,
-                                "api_reasoning_option_id": "provider_declared_max",
-                                "prompt": (
-                                    "Codex: inspect and orchestrate. "
-                                    "DIP: answer exactly one line."
-                                ),
-                                "expected_text": "WBP_ENDPOINT_LOOP_V4_MAX_OK",
-                                "request_id": "endpoint-command-loop-v4-max-restart",
-                            },
+                            {"request_id": "endpoint-command-loop-v4-max-restart"},
                         )
                     )
                 finally:
@@ -1888,7 +1858,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
                         route_id=route_id,
-                        output_text="WBP_ENDPOINT_LOOP_V4_MAX_CONTEXT_OK",
+                        output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                         thinking=max_thinking,
                         api_parameter_sent=True,
                     ),
@@ -1910,14 +1880,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     packet = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/gpt-api-alias-command-loop-proof",
-                            {
-                                "prompt": (
-                                    "Codex: inspect and orchestrate. "
-                                    "DIP: answer exactly one line."
-                                ),
-                                "expected_text": "WBP_ENDPOINT_LOOP_V4_MAX_CONTEXT_OK",
-                                "request_id": "endpoint-command-loop-v4-max-context-only",
-                            },
+                            {"request_id": "endpoint-command-loop-v4-max-context-only"},
                         )
                     )
                 finally:
@@ -2463,19 +2426,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
                             "proxyless_urlopen",
                             return_value=self._bridge_response(
                                 route_id="wbp-deepseek-chat",
-                                output_text="WBP_VARIANT_OK",
+                                output_text=live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
                             ),
                         ),
                     ):
                         packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                            payload={
-                                "prompt": (
-                                    f"{primary_alias}: inspect and assign. "
-                                    f"{coding_alias}: answer exactly one line."
-                                ),
-                                "expected_text": "WBP_VARIANT_OK",
-                                "request_id": f"variant-{index}",
-                            },
+                            payload={"request_id": f"variant-{index}"},
                             file_bridge_worker=worker,
                             last_launch_packet={},
                             timeout_seconds=0.1,
@@ -2486,6 +2442,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     self.assertTrue(packet["command_loop_proven"])
                     self.assertEqual(packet["primary_alias"], primary_alias)
                     self.assertEqual(packet["coding_alias"], coding_alias)
+                    self.assertEqual(
+                        packet["prompt_source"],
+                        "server_default_from_context_aliases",
+                    )
+                    self.assertIn(primary_alias, packet["prompt"])
+                    self.assertIn(coding_alias, packet["prompt"])
                     self.assertTrue(packet["api_lane_exact_token_matched"])
                     self.assertFalse(packet["local_imitation_used"])
 
@@ -5078,6 +5040,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             with mock.patch.object(live_server, "proxyless_urlopen") as urlopen:
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
                     payload={
+                        "prompt": "Planner: browser-owned prompt must be rejected.",
+                        "expected_text": "BROWSER_TOKEN",
                         "route_id": "browser-route",
                         "api_key": "browser-secret",
                     },
@@ -5090,8 +5054,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
             packet["machine_error_code"],
             "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
         )
+        self.assertIn("prompt", packet["blocking_reasons"])
+        self.assertIn("expected_text", packet["blocking_reasons"])
         self.assertIn("route_id", packet["blocking_reasons"])
         self.assertIn("api_key", packet["blocking_reasons"])
+        self.assertEqual(
+            packet["expected_text"],
+            live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT,
+        )
+        self.assertEqual(packet["prompt"], "")
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_expected_token_authority"])
         self.assertFalse(called)
         self.assertEqual(packet["reasoning_provider_call_count"], 0)
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
@@ -5154,11 +5127,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
             ):
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
-                        "expected_text": "NO_PROVIDER_CALL",
-                        "request_id": "reasoning-blocked",
-                    },
+                    payload={"request_id": "reasoning-blocked"},
                     file_bridge_worker=worker,
                     last_launch_packet={},
                     reasoning_matrix_builder=self._reasoning_matrix_blocked_packet,
@@ -5207,11 +5176,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
             ):
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
-                        "expected_text": "NO_PROVIDER_CALL",
-                        "request_id": "short-reasoning-false-green",
-                    },
+                    payload={"request_id": "short-reasoning-false-green"},
                     file_bridge_worker=worker,
                     last_launch_packet={},
                     reasoning_matrix_builder=lambda: short_ok_packet,
@@ -5226,7 +5191,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
         urlopen.assert_not_called()
 
-    def test_custom_native_gpt_api_alias_command_loop_does_not_match_alias_inside_words(self) -> None:
+    def test_custom_native_gpt_api_alias_command_loop_rejects_browser_prompt_before_alias_matching(self) -> None:
         called = False
 
         def reasoning_builder() -> dict[str, object]:
@@ -5266,14 +5231,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertEqual(
             packet["machine_error_code"],
-            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_PROMPT_ALIAS_MISSING",
+            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
         )
-        self.assertIn("primary_alias_missing_from_prompt", packet["blocking_reasons"])
+        self.assertIn("prompt", packet["blocking_reasons"])
+        self.assertIn("expected_text", packet["blocking_reasons"])
         self.assertFalse(called)
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
         urlopen.assert_not_called()
 
-    def test_custom_native_gpt_api_alias_command_loop_blocks_ambiguous_and_swapped_aliases_before_provider(self) -> None:
+    def test_custom_native_gpt_api_alias_command_loop_blocks_ambiguous_aliases_before_provider(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             worker = live_server._CustomNativeFileBridgeWorker(
                 bridge_root=Path(temp_dir) / "file-bridge"
@@ -5293,36 +5259,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
             ):
                 ambiguous = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": "Agent: inspect. agent: answer.",
-                        "expected_text": "NO_PROVIDER_CALL",
-                        "request_id": "ambiguous-aliases",
-                    },
-                    file_bridge_worker=worker,
-                    last_launch_packet={},
-                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
-                )
-
-            swapped_context = self._write_command_loop_context(
-                temp_dir=temp_dir,
-                worker=worker,
-                primary_aliases=["Planner"],
-                coding_aliases=["Builder"],
-            )
-            with (
-                mock.patch.object(
-                    live_server,
-                    "_custom_native_agent_runtime_context_candidates",
-                    return_value=[swapped_context],
-                ),
-                mock.patch.object(live_server, "proxyless_urlopen") as swapped_urlopen,
-            ):
-                swapped = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": "Builder: start coding. Planner: inspect after.",
-                        "expected_text": "NO_PROVIDER_CALL",
-                        "request_id": "swapped-order",
-                    },
+                    payload={"request_id": "ambiguous-aliases"},
                     file_bridge_worker=worker,
                     last_launch_packet={},
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
@@ -5336,15 +5273,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("ambiguous_aliases", ambiguous["blocking_reasons"])
         self.assertEqual(ambiguous["command_loop_provider_call_count"], 0)
         urlopen.assert_not_called()
-
-        self.assertEqual(swapped["status"], "blocked")
-        self.assertEqual(
-            swapped["machine_error_code"],
-            "CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ROLE_ORDER_SWAPPED",
-        )
-        self.assertIn("primary_alias_after_coding_alias", swapped["blocking_reasons"])
-        self.assertEqual(swapped["command_loop_provider_call_count"], 0)
-        swapped_urlopen.assert_not_called()
 
     def test_custom_native_gpt_api_alias_command_loop_blocks_route_not_allowed_before_provider(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -5368,11 +5296,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 mock.patch.object(live_server, "proxyless_urlopen") as urlopen,
             ):
                 packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "prompt": "Planner: inspect. Builder: answer exactly one line.",
-                        "expected_text": "NO_PROVIDER_CALL",
-                        "request_id": "route-not-allowed",
-                    },
+                    payload={"request_id": "route-not-allowed"},
                     file_bridge_worker=worker,
                     last_launch_packet={},
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
@@ -20029,28 +19953,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["action_claim_scope"], "blocked")
         self.assertIn("route_id", rejected["result"]["human_message"])
 
-    def test_custom_native_launch_ui_action_passes_selected_execution_fields(self) -> None:
-        captured_payload: dict[str, object] = {}
-
-        def fake_launch(payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
-            captured_payload.update(payload)
-            return {
-                "schema_version": 1,
-                "status": "ok",
-                "machine_error_code": "OK",
-                "human_message": "Custom launch packet accepted.",
-                "next_action": "prompt",
-                "selected_model": payload.get("api_model_id"),
-                "browser_raw_backend_authority_widened": False,
-                "raw_backend_details_exposed": False,
-                "secret_value_exposed": False,
-            }
-
+    def test_custom_native_launch_ui_action_rejects_browser_selected_execution_fields(self) -> None:
         with mock.patch.object(
             live_server,
             "_launch_custom_native_codex_packet",
-            side_effect=fake_launch,
-        ):
+        ) as launch_native:
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
@@ -20063,7 +19970,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
             try:
-                accepted = json.loads(
+                rejected = json.loads(
                     post_json(
                         f"{base}/api/action",
                         {
@@ -20079,19 +19986,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 thread.join(timeout=2)
                 server.server_close()
 
-        self.assertEqual(accepted["status"], "ok")
-        self.assertEqual(accepted["result"]["status"], "ok")
-        self.assertEqual(
-            captured_payload,
-            {
-                "execution_mode": "api_only",
-                "api_model_id": "wbp-deepseek-v4-pro-max",
-                "api_reasoning_option_id": "provider_declared_max",
-            },
-        )
-        self.assertNotIn("base_url", captured_payload)
-        self.assertNotIn("api_key", captured_payload)
-        self.assertNotIn("secret_ref", captured_payload)
+        self.assertEqual(rejected["status"], "integration_failure")
+        self.assertEqual(rejected["disabled_reason_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(rejected["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertIn("execution_mode", rejected["result"]["human_message"])
+        self.assertIn("api_model_id", rejected["result"]["human_message"])
+        self.assertIn("api_reasoning_option_id", rejected["result"]["human_message"])
+        launch_native.assert_not_called()
 
     def test_show_custom_native_window_ui_action_returns_window_packet(self) -> None:
         with mock.patch.object(

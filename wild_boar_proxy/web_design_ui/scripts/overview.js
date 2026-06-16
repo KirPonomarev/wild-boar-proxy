@@ -6388,15 +6388,11 @@ async function runQuickStartGptApiAliasCommandLoopProof() {
       });
       return;
     }
-    const expectedCodingResponse = "WBP_UI_GPT_API_COMMAND_LOOP_OK";
-    const prompt = `${aliases.primary_model_slot}: inspect the request and orchestrate the check. ${aliases.coding_agent_model_slot}: answer exactly one line: ${expectedCodingResponse}`;
     const response = await fetch("api/codex/custom/gpt-api-alias-command-loop-proof", {
       method: "POST",
       cache: "no-store",
       headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
-        prompt,
-        expected_coding_response: expectedCodingResponse,
         request_id: `ui-command-loop-${Date.now()}`
       })
     });
@@ -7049,8 +7045,11 @@ function renderQuickStartLaunchPreflight(packet) {
   const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
   const ownerBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
   const runtimeProofPending = quickStartChatgptRuntimeProofPending(packet);
-  const okVisual = ok && !runtimeProofPending ? "green" : (ok ? "amber" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"));
-  const okLabel = runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : "preflight ok";
+  const explicitRuntimeNotReady = packet?.runtime_readiness_claimed === false;
+  const okVisual = ok && !runtimeProofPending && !explicitRuntimeNotReady ? "green" : (ok ? "amber" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"));
+  const okLabel = runtimeProofPending
+    ? quickStartRuntimeProofPendingLabel(packet)
+    : (explicitRuntimeNotReady ? "preflight only" : "preflight ok");
   const nextAction = packet?.next_action || "";
   const nextActionReady = ok && (
     !nextAction
@@ -7111,8 +7110,10 @@ function renderQuickStartLaunchPreflight(packet) {
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    nextActionReady && !runtimeProofPending ? "green" : "amber",
-    runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : quickStartNextActionLabel(nextAction)
+    nextActionReady && !runtimeProofPending && !explicitRuntimeNotReady ? "green" : "amber",
+    runtimeProofPending
+      ? quickStartRuntimeProofPendingLabel(packet)
+      : (explicitRuntimeNotReady ? "preflight only" : quickStartNextActionLabel(nextAction))
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",

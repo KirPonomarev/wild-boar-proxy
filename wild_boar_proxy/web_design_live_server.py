@@ -4211,13 +4211,6 @@ def _custom_reasoning_dispatch_matrix_live_packet(
 
 
 GPT_API_ALIAS_COMMAND_LOOP_ALLOWED_FIELDS: set[str] = {
-    "execution_mode",
-    "chatgpt_model_id",
-    "api_model_id",
-    "api_reasoning_option_id",
-    "prompt",
-    "expected_text",
-    "expected_coding_response",
     "request_id",
 }
 GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT = "WBP_GPT_API_ALIAS_COMMAND_LOOP_OK"
@@ -4319,6 +4312,7 @@ def _custom_native_gpt_api_command_loop_blocked_packet(
         "request_id": request_id,
         "expected_text": expected_text,
         "prompt": prompt,
+        "prompt_source": "server_default_from_context_aliases" if prompt else "none",
         "context_metadata": context_metadata or {},
         **_custom_native_context_readout_fields(context_metadata),
         "blocking_reasons": blocking_reasons or [machine_error_code],
@@ -4343,6 +4337,8 @@ def _custom_native_gpt_api_command_loop_blocked_packet(
         "chatgpt_provider_backed_reasoning_proven": False,
         "native_free_text_tool_bridge_proven": False,
         "native_coder_slot_dispatch_proven": False,
+        "browser_can_supply_prompt_authority": False,
+        "browser_can_supply_expected_token_authority": False,
         "browser_can_supply_route_authority": False,
         "browser_can_supply_reasoning_authority": False,
         "raw_backend_details_exposed": False,
@@ -4408,54 +4404,24 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
     timeout_seconds: float = 10.0,
     now: datetime | None = None,
     reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
+    server_expected_text: str = "",
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     forbidden_fields = sorted(set(payload) - GPT_API_ALIAS_COMMAND_LOOP_ALLOWED_FIELDS)
-    expected_text_payload = str(payload.get("expected_text") or "").strip()
-    expected_coding_response_payload = str(
-        payload.get("expected_coding_response") or ""
-    ).strip()
     expected_text = (
-        expected_coding_response_payload
-        or expected_text_payload
+        str(server_expected_text).strip()
         or GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT
     )
-    prompt_payload = str(payload.get("prompt") or "").strip()
     request_id = str(
         payload.get("request_id") or f"wbp-gpt-api-loop-{uuid.uuid4().hex}"
     ).strip()
     if forbidden_fields:
         return _custom_native_gpt_api_command_loop_blocked_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_FORBIDDEN_FIELD",
-            human_message=(
-                "Command-loop proof accepts only safe selection fields, prompt, "
-                "expected_text, expected_coding_response and request_id."
-            ),
+            human_message="Command-loop proof accepts only server-owned proof inputs plus request_id.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             blocking_reasons=forbidden_fields,
-        )
-    if (
-        expected_text_payload
-        and expected_coding_response_payload
-        and expected_text_payload != expected_coding_response_payload
-    ):
-        return _custom_native_gpt_api_command_loop_blocked_packet(
-            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXPECTED_TEXT_CONFLICT",
-            human_message="expected_text and expected_coding_response must match when both are supplied.",
-            expected_text=expected_text,
-            prompt=prompt_payload,
-            request_id=request_id,
-            blocking_reasons=["expected_text_conflict"],
-        )
-    if not expected_text:
-        return _custom_native_gpt_api_command_loop_blocked_packet(
-            machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXPECTED_TEXT_REQUIRED",
-            human_message="Command-loop proof expected text must be non-empty.",
-            prompt=prompt_payload,
-            request_id=request_id,
-            blocking_reasons=["expected_text_required"],
         )
     if not request_id or any(
         not (character.isalnum() or character in {"-", "_"})
@@ -4465,7 +4431,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_REQUEST_ID_INVALID",
             human_message="Command-loop proof request_id must contain only letters, numbers, '-' or '_'.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             blocking_reasons=["request_id_invalid"],
         )
@@ -4488,7 +4453,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             ),
             human_message="Custom Codex agent runtime context is missing or unreadable.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["agent_runtime_context_missing"],
@@ -4501,7 +4465,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_CONTEXT_NOT_READ",
             human_message="Command-loop proof requires the server-issued runtime context file.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["native_alias_context_not_read"],
@@ -4512,7 +4475,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_CONTEXT_KIND_MISMATCH",
             human_message="Runtime context packet kind does not match Custom Codex agent context.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["agent_runtime_context_kind_mismatch"],
@@ -4522,7 +4484,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_EXECUTION_MODE_MISMATCH",
             human_message="Command-loop proof requires chatgpt_plus_api execution mode.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["execution_mode_not_chatgpt_plus_api"],
@@ -4532,7 +4493,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_BINDINGS_NOT_OK",
             human_message="Runtime context agent bindings are not marked ok.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["agent_bindings_not_ok"],
@@ -4560,7 +4520,6 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_ALIASES_EMPTY",
             human_message="Command-loop proof requires primary and coding aliases from runtime context.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["primary_or_coding_aliases_empty"],
@@ -4570,17 +4529,16 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             machine_error_code="CUSTOM_CODEX_ALIAS_COMMAND_LOOP_AMBIGUOUS_ALIASES",
             human_message="Primary and coding aliases overlap after normalization.",
             expected_text=expected_text,
-            prompt=prompt_payload,
             request_id=request_id,
             context_metadata=resolved_context_metadata,
             blocking_reasons=["ambiguous_aliases"],
         ) | {"duplicate_alias_key_count": len(duplicate_alias_keys)}
 
-    prompt = prompt_payload or (
+    prompt = (
         f"{primary_aliases[0]}: orchestrate the implementation check. "
         f"{coding_aliases[0]}: answer exactly one line: {expected_text}"
     )
-    prompt_source = "browser_payload" if prompt_payload else "server_default_from_context_aliases"
+    prompt_source = "server_default_from_context_aliases"
     primary_alias, primary_position = _custom_native_prompt_alias_match(prompt, primary_aliases)
     coding_alias, coding_position = _custom_native_prompt_alias_match(prompt, coding_aliases)
     if not primary_alias or not coding_alias:
@@ -4843,6 +4801,8 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
         "chatgpt_provider_backed_reasoning_proven": False,
         "native_free_text_tool_bridge_proven": False,
         "native_coder_slot_dispatch_proven": False,
+        "browser_can_supply_prompt_authority": False,
+        "browser_can_supply_expected_token_authority": False,
         "browser_can_supply_route_authority": False,
         "browser_can_supply_reasoning_authority": False,
         "raw_backend_details_exposed": False,
@@ -6022,17 +5982,14 @@ def _custom_native_free_text_command_loop_proof_packet(
             native_agent_proof_packet=native_agent_proof_packet,
         )
     command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
-        payload={
-            "prompt": prompt,
-            "expected_text": expected_text,
-            "request_id": f"{request_id}-api",
-        },
+        payload={"request_id": f"{request_id}-api"},
         file_bridge_worker=file_bridge_worker,
         agent_runtime_context=context,
         context_metadata=resolved_context_metadata,
         last_launch_packet=last_launch_packet,
         bridge_endpoint=bridge_endpoint,
         reasoning_matrix_builder=reasoning_matrix_builder,
+        server_expected_text=expected_text,
     )
     if command_loop_packet.get("status") != "ok":
         return _custom_native_free_text_blocked_packet(
@@ -15527,8 +15484,6 @@ def run_ui_action(
         allowed_payload_keys.add("route_id")
     if ui_action in SESSION_ID_UI_ACTIONS:
         allowed_payload_keys.add("session_id")
-    if ui_action == "launch_custom_client_native":
-        allowed_payload_keys.update(CUSTOM_NATIVE_LAUNCH_ALLOWED_BROWSER_FIELDS)
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
         return _blocked_action(ui_action, f"Неподдерживаемые поля UI action: {', '.join(unsupported_keys)}.")
@@ -18934,16 +18889,14 @@ def build_handler(
                     return reasoning_packet
 
                 command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
-                    payload={
-                        "expected_text": "WBP_MODEL_REASONING_MATRIX_API_OK",
-                        "request_id": f"{request_id}-api",
-                    },
+                    payload={"request_id": f"{request_id}-api"},
                     file_bridge_worker=custom_native_file_bridge_worker,
                     agent_runtime_context=agent_runtime_context,
                     context_metadata=context_metadata,
                     last_launch_packet=custom_native_launch_state["last_packet"],
                     bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
                     reasoning_matrix_builder=reasoning_matrix_builder,
+                    server_expected_text="WBP_MODEL_REASONING_MATRIX_API_OK",
                 )
 
                 def native_free_text_activator(
