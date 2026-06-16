@@ -554,8 +554,10 @@ def _codex_exec_mcp_tool_call_candidates(
 
 _CODEX_EXEC_AUTH_BLOCKER_PATTERN = re.compile(
     r"(?i)\b("
-    r"auth|authentication|authorization|login|not authenticated|"
-    r"unauthenticated|unauthorized|api key|CODEX_API_KEY|401|bearer"
+    r"auth[a-z_-]*|oauth|login|log in|logged in|sign in|signed in|"
+    r"not authenticated|not signed in|unauthenticated|unauthorized|"
+    r"api key|CODEX_API_KEY|401|bearer|admission|subscription|"
+    r"plan required|account|access required|entitled|entitlement"
     r")\b"
 )
 

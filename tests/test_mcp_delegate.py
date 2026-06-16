@@ -863,6 +863,11 @@ class McpDelegateToDipTests(unittest.TestCase):
         )
         auth_messages = [
             "Authentication required; run codex login.",
+            "User is not currently authenticated.",
+            "OAuth session expired.",
+            "Sign in required before running Codex.",
+            "Subscription plan required for this model.",
+            "Account access required for this model.",
             "401 Unauthorized",
             "Bearer token missing",
         ]
