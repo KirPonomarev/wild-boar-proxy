@@ -613,6 +613,14 @@ class CliRunnerTests(unittest.TestCase):
             },
         )
 
+    def test_cli_runner_model_gate_blocks_empty_server_catalog_before_prompt(self) -> None:
+        operator_status = NoModelsOperatorSurfaceSession().status_payload()
+
+        self.assertEqual(
+            cli_runner_mod._cli_runner_model_gate_error(operator_status, None),
+            "NO_SERVER_MODELS_VISIBLE",
+        )
+
     def test_cli_main_dispatches_codex_runner_smoke(self) -> None:
         payload = {
             "status": "ok",

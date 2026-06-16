@@ -323,6 +323,40 @@ def _api_snapshot_from_commands(commands: dict[str, dict[str, Any]]) -> dict[str
     }
 
 
+def _api_snapshot_has_server_routes(api_snapshot: dict[str, Any] | None) -> bool:
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else None
+    return any(
+        isinstance(route, dict) and bool(str(route.get("route_id") or ""))
+        for route in (routes if isinstance(routes, list) else [])
+    )
+
+
+def _cli_runner_model_gate_error(
+    operator_status: dict[str, Any],
+    api_snapshot: dict[str, Any] | None,
+) -> str:
+    if _api_snapshot_has_server_routes(api_snapshot):
+        return ""
+    models = operator_status.get("models") if isinstance(operator_status, dict) else None
+    if not isinstance(models, dict):
+        return "SERVER_ISSUED_MODEL_REQUIRED"
+    raw_model_ids = models.get("model_ids")
+    model_ids = [
+        str(model_id)
+        for model_id in (raw_model_ids if isinstance(raw_model_ids, list) else [])
+        if str(model_id)
+    ]
+    if not model_ids:
+        return (
+            "NO_SERVER_MODELS_VISIBLE"
+            if models.get("server_issued") is True
+            else "SERVER_ISSUED_MODEL_REQUIRED"
+        )
+    if models.get("ok") is not True:
+        return "CUSTOM_MODELS_NOT_VISIBLE"
+    return ""
+
+
 def _selection_packet_for_external_route(
     model_id: str,
     operator_status: dict[str, Any],
@@ -471,7 +505,8 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
     operator_status = operator.status_payload()
     commands = _selection_commands(operator)
     api_snapshot = _api_snapshot_from_commands(commands)
-    model_id = _choose_server_model_id(operator_status, api_snapshot)
+    model_gate_error = _cli_runner_model_gate_error(operator_status, api_snapshot)
+    model_id = "" if model_gate_error else _choose_server_model_id(operator_status, api_snapshot)
     launch_packet: dict[str, Any]
     prompt_packet: dict[str, Any] = {}
     transcript_packet: dict[str, Any] = {}
@@ -490,7 +525,9 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
             ok=False,
             human_message="Codex CLI runner has no server-issued model to launch.",
             machine_error_code=str(
-                registry.get("machine_error_code") or "SERVER_ISSUED_MODEL_REQUIRED"
+                model_gate_error
+                or registry.get("machine_error_code")
+                or "SERVER_ISSUED_MODEL_REQUIRED"
             ),
             liveness="unknown",
             severity="recoverable",
