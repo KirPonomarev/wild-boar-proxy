@@ -1338,6 +1338,11 @@ WEB_DESIGN_LIVE_ROUTES = (
         body_kind=BODY_KIND_OPTIONAL_JSON,
     ),
     _post_route(
+        "/api/codex/custom/native-natural-dip-command-proof",
+        EFFECT_PROBE,
+        body_kind=BODY_KIND_OPTIONAL_JSON,
+    ),
+    _post_route(
         "/api/codex/custom/reasoning-dispatch-matrix",
         EFFECT_PROBE,
         body_kind=BODY_KIND_OPTIONAL_JSON,
@@ -4854,6 +4859,14 @@ NATIVE_FREE_TEXT_COMMAND_LOOP_ALLOWED_FIELDS: set[str] = {
     "request_id",
     "timeout_seconds",
 }
+
+
+def _native_free_text_forbidden_payload_fields(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    return sorted(set(payload) - NATIVE_FREE_TEXT_COMMAND_LOOP_ALLOWED_FIELDS)
+
+
 NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT = "WBP_NATIVE_FREE_TEXT_OK"
 NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_TIMEOUT_SECONDS = 45.0
 NATIVE_FREE_TEXT_COMMAND_LOOP_MAX_TIMEOUT_SECONDS = 120.0
@@ -5416,6 +5429,46 @@ def _custom_native_free_text_prompt(
     )
 
 
+def _custom_native_natural_dip_command_prompt(
+    *,
+    context: dict[str, Any],
+    proof_path: Path,
+    request_id: str,
+    expected_text: str,
+    primary_alias: str,
+    coding_alias: str,
+) -> str:
+    return "\n".join(
+        [
+            f"{primary_alias}, ты оркестратор. Дай короткую задачу агенту {coding_alias} и сверь его ответ.",
+            f"{coding_alias}, работай как API-lane coding agent и верни в видимом ответе ровно этот текст: {expected_text}",
+            "Это server-owned natural DIP command proof: команда похожа на обычную работу, но route/model authority остается только у WBP.",
+            "Не запускай и не называй обычный Codex sub-agent агентом DIP/API-lane.",
+            "Не используй локальную имитацию ответа DIP.",
+            "Для машинного доказательства прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
+            "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
+            f"После видимого ответа создай UTF-8 JSON файл ровно по этому пути: {proof_path}",
+            "Запиши один JSON object со следующими полями:",
+            "schema_version=1",
+            "packet_kind='custom_codex_native_free_text_agent_proof'",
+            f"request_id='{request_id}'",
+            "machine_error_code='OK'",
+            "alias_context_read=true",
+            "context_sha256=<посчитанный sha256 context-файла>",
+            "primary_aliases=<context.primary_aliases>",
+            "coding_aliases=<context.coding_aliases>",
+            "allowed_api_route_ids=<context.allowed_api_route_ids>",
+            f"expected_token='{expected_text}'",
+            f"native_free_text_agent_ack='{expected_text}'",
+            "no_secret_exposed=true",
+            "secret_value_exposed=false",
+            "Не записывай base_url, endpoint, token, secret, secret_ref, auth или backend.",
+            "Если context отсутствует, создай тот же файл с machine_error_code='FAIL_ALIAS_CONTEXT_MISSING'.",
+            "Не меняй исходники и не создавай другие файлы.",
+        ]
+    )
+
+
 def _validate_native_free_text_agent_proof(
     *,
     proof_path: Path,
@@ -5552,10 +5605,11 @@ def _custom_native_free_text_command_loop_proof_packet(
     proof_root: Path | None = None,
     native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
     native_activator: Callable[..., dict[str, Any]] | None = None,
+    native_prompt_builder: Callable[..., str] | None = None,
     reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
-    forbidden_fields = sorted(set(payload) - NATIVE_FREE_TEXT_COMMAND_LOOP_ALLOWED_FIELDS)
+    forbidden_fields = _native_free_text_forbidden_payload_fields(payload)
     expected_text_payload = str(payload.get("expected_text") or "").strip()
     expected_coding_response_payload = str(
         payload.get("expected_coding_response") or ""
@@ -5842,7 +5896,8 @@ def _custom_native_free_text_command_loop_proof_packet(
             coding_aliases=coding_aliases,
             allowed_api_route_ids=allowed_api_route_ids,
         )
-    prompt = _custom_native_free_text_prompt(
+    prompt_builder = native_prompt_builder or _custom_native_free_text_prompt
+    prompt = prompt_builder(
         context=context,
         proof_path=proof_path,
         request_id=request_id,
@@ -6258,6 +6313,7 @@ def _custom_native_free_chat_dip_command_proof_packet(
     proof_root: Path | None = None,
     native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
     native_activator: Callable[..., dict[str, Any]] | None = None,
+    native_prompt_builder: Callable[..., str] | None = None,
     reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     packet = _custom_native_free_text_command_loop_proof_packet(
@@ -6270,6 +6326,7 @@ def _custom_native_free_chat_dip_command_proof_packet(
         proof_root=proof_root,
         native_prompt_submitter=native_prompt_submitter,
         native_activator=native_activator,
+        native_prompt_builder=native_prompt_builder,
         reasoning_matrix_builder=reasoning_matrix_builder,
     )
     product_proven = _custom_native_free_chat_dip_command_product_proven(packet)
@@ -6357,6 +6414,130 @@ def _custom_native_free_chat_dip_command_proof_packet(
         "next_action": "none"
         if product_proven
         else "stop_and_diagnose_native_free_chat_dip_command",
+    }
+
+
+def _custom_native_natural_dip_command_api_bridge_observed(
+    packet: dict[str, Any],
+) -> bool:
+    try:
+        provider_call_count = int(packet.get("command_loop_provider_call_count") or 0)
+    except (TypeError, ValueError):
+        provider_call_count = 0
+    return bool(
+        packet.get("bridge_or_file_bridge_used") is True
+        and provider_call_count > 0
+        and packet.get("api_lane_exact_token_matched") is True
+    )
+
+
+def _custom_native_natural_dip_command_product_proven(
+    packet: dict[str, Any],
+) -> bool:
+    return bool(
+        packet.get("native_free_chat_dip_command_proven") is True
+        and _custom_native_natural_dip_command_api_bridge_observed(packet)
+        and packet.get("custom_codex_response_text_read_proven") is True
+        and packet.get("custom_response_bound_to_request") is True
+        and packet.get("custom_response_expected_sha256_match") is True
+        and packet.get("native_codex_subagent_used_as_dip") is not True
+        and packet.get("fallback_used") is False
+        and packet.get("local_imitation_used") is False
+        and packet.get("prompt_text_recorded") is not True
+        and packet.get("raw_backend_details_exposed") is False
+        and packet.get("secret_value_exposed") is False
+    )
+
+
+def _custom_native_natural_dip_command_proof_packet(
+    *,
+    payload: dict[str, Any] | None,
+    file_bridge_worker: _CustomNativeFileBridgeWorker,
+    agent_runtime_context: dict[str, Any] | None = None,
+    context_metadata: dict[str, Any] | None = None,
+    last_launch_packet: dict[str, Any] | None = None,
+    bridge_endpoint: str = "",
+    proof_root: Path | None = None,
+    native_prompt_submitter: Callable[..., dict[str, Any]] | None = None,
+    native_activator: Callable[..., dict[str, Any]] | None = None,
+    reasoning_matrix_builder: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    packet = _custom_native_free_chat_dip_command_proof_packet(
+        payload=payload,
+        file_bridge_worker=file_bridge_worker,
+        agent_runtime_context=agent_runtime_context,
+        context_metadata=context_metadata,
+        last_launch_packet=last_launch_packet,
+        bridge_endpoint=bridge_endpoint,
+        proof_root=proof_root,
+        native_prompt_submitter=native_prompt_submitter,
+        native_activator=native_activator,
+        native_prompt_builder=_custom_native_natural_dip_command_prompt,
+        reasoning_matrix_builder=reasoning_matrix_builder,
+    )
+    api_bridge_observed = _custom_native_natural_dip_command_api_bridge_observed(
+        packet
+    )
+    product_proven = _custom_native_natural_dip_command_product_proven(packet)
+    source_machine_error_code = str(
+        packet.get("machine_error_code")
+        or "CUSTOM_NATIVE_NATURAL_DIP_COMMAND_NOT_PROVEN"
+    )
+    machine_error_code = (
+        "OK"
+        if product_proven
+        else (
+            "CUSTOM_NATIVE_NATURAL_DIP_COMMAND_BRIDGE_TRANSCRIPT_NOT_PROVEN"
+            if source_machine_error_code == "OK" and not api_bridge_observed
+            else (
+                source_machine_error_code
+                if source_machine_error_code != "OK"
+                else "CUSTOM_NATIVE_NATURAL_DIP_COMMAND_NOT_PROVEN"
+            )
+        )
+    )
+    return {
+        **packet,
+        "packet_kind": "custom_codex_server_owned_natural_dip_command_proof",
+        "status": "ok" if product_proven else "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": (
+            "Server-owned natural DIP command path is proven with API-lane bridge evidence and Custom readback."
+            if product_proven
+            else "Server-owned natural DIP command path is not proven; natural command, bridge evidence, or Custom readback did not satisfy product gates."
+        ),
+        "final_status": (
+            "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_PROVEN_WITH_LIMITS"
+            if product_proven
+            else "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_NOT_PROVEN"
+        ),
+        "server_owned_natural_dip_command_packet": True,
+        "server_owned_natural_dip_command_proven": product_proven,
+        "server_owned_natural_dip_command_path": True,
+        "server_owned_natural_command_prompt_source": "server_owned_builder",
+        "natural_dip_prompt_browser_supplied": False,
+        "natural_dip_prompt_text_recorded": False,
+        "api_bridge_transcript_observed": api_bridge_observed,
+        "api_bridge_or_file_bridge_transcript_observed": api_bridge_observed,
+        "custom_response_observed": bool(
+            packet.get("custom_codex_response_text_read_proven") is True
+            and packet.get("custom_response_exact_token_observed") is True
+        ),
+        "custom_response_bound_to_request": packet.get("custom_response_bound_to_request") is True,
+        "custom_response_expected_sha256_match": packet.get("custom_response_expected_sha256_match") is True,
+        "does_not_prove_universal_manual_chat_interception": True,
+        "universal_manual_chat_interception_proven": False,
+        "browser_authority_contract_enforced": True,
+        "browser_can_supply_prompt_authority": False,
+        "browser_can_supply_route_authority": False,
+        "browser_can_supply_reasoning_authority": False,
+        "browser_model_authority": False,
+        "blocking_reasons": []
+        if product_proven
+        else list(packet.get("blocking_reasons") or [machine_error_code]),
+        "next_action": "none"
+        if product_proven
+        else "stop_and_diagnose_server_owned_natural_dip_command",
     }
 
 
@@ -17964,6 +18145,18 @@ def build_handler(
                 return packet
 
             payload = self._read_optional_json_body()
+            if _native_free_text_forbidden_payload_fields(payload):
+                self._send_json(
+                    _custom_native_free_text_command_loop_proof_packet(
+                        payload=payload,
+                        file_bridge_worker=custom_native_file_bridge_worker,
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                        native_activator=native_free_text_activator,
+                        reasoning_matrix_builder=reasoning_matrix_builder,
+                    )
+                )
+                return
             agent_runtime_context, context_metadata = (
                 _refresh_custom_agent_runtime_context_for_command_loop(
                     payload=payload,
@@ -18073,6 +18266,18 @@ def build_handler(
                 return packet
 
             payload = self._read_optional_json_body()
+            if _native_free_text_forbidden_payload_fields(payload):
+                self._send_json(
+                    _custom_native_free_chat_dip_command_proof_packet(
+                        payload=payload,
+                        file_bridge_worker=custom_native_file_bridge_worker,
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                        native_activator=native_free_text_activator,
+                        reasoning_matrix_builder=reasoning_matrix_builder,
+                    )
+                )
+                return
             agent_runtime_context, context_metadata = (
                 _refresh_custom_agent_runtime_context_for_command_loop(
                     payload=payload,
@@ -18082,6 +18287,127 @@ def build_handler(
             )
             self._send_json(
                 _custom_native_free_chat_dip_command_proof_packet(
+                    payload=payload,
+                    file_bridge_worker=custom_native_file_bridge_worker,
+                    agent_runtime_context=agent_runtime_context,
+                    context_metadata=context_metadata,
+                    last_launch_packet=custom_native_launch_state["last_packet"],
+                    bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                    native_activator=native_free_text_activator,
+                    reasoning_matrix_builder=reasoning_matrix_builder,
+                )
+            )
+            return
+
+        def _handle_post_api_codex_custom_native_natural_dip_command_proof(self, actual_path: str) -> None:
+            def reasoning_matrix_builder() -> dict[str, Any]:
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                operator_status = operator_surface_session.status_payload()
+                availability_lattice_packet = _build_live_native_availability_lattice_packet(
+                    operator_status,
+                    api_snapshot=api_snapshot,
+                )
+                return _custom_reasoning_dispatch_matrix_live_packet(
+                    payload={},
+                    action_runner=action_runner,
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    availability_lattice_packet=availability_lattice_packet,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                )
+
+            def native_free_text_activator(
+                *,
+                context: dict[str, Any],
+                context_metadata: dict[str, Any],
+                request_id: str,
+                expected_text: str,
+            ) -> dict[str, Any]:
+                api_model_id = str(context.get("api_model_id") or "").strip()
+                if not api_model_id:
+                    return _custom_native_api_model_id_missing_activation_packet(
+                        request_id=request_id,
+                        expected_text=expected_text,
+                        context_metadata=context_metadata,
+                    )
+                launch_payload = {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": str(
+                        context.get("primary_model_id") or "gpt-5.5"
+                    ).strip(),
+                    "api_model_id": api_model_id,
+                    "api_reasoning_option_id": str(
+                        context.get("api_reasoning_option_id")
+                        or CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+                    ).strip(),
+                }
+                operator_status = None
+                api_snapshot = None
+                external_routes_packet = None
+                if codex_custom_live_prompt_authorized:
+                    resume_packet = show_custom_native_window_packet()
+                    resume_packet["native_free_text_activation_attempted"] = True
+                    resume_packet["native_free_text_activation_source"] = (
+                        "existing_window_resume_preflight"
+                    )
+                    resume_packet.update(
+                        _custom_native_auth_usability_fields(resume_packet)
+                    )
+                    if (
+                        resume_packet.get("machine_error_code")
+                        != "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+                    ):
+                        return resume_packet
+                    operator_status, _operator_status_timeout = (
+                        _bounded_operator_status_payload(operator_surface_session)
+                    )
+                    api_snapshot = build_api_connections_readonly_snapshot(
+                        api_connections_readonly_runner
+                    )
+                    external_routes_packet = _external_routes_packet()
+                packet = _launch_custom_native_codex_packet(
+                    launch_payload,
+                    owner_authorized=codex_custom_live_prompt_authorized,
+                    commands={},
+                    operator_status=operator_status,
+                    api_snapshot=api_snapshot,
+                    external_routes_packet=external_routes_packet,
+                    native_bridge_lease=custom_native_bridge_lease,
+                    launch_trace_packet={
+                        "trace_source": "native_natural_dip_activation",
+                        "launch_trace_server_issued": False,
+                    },
+                )
+                packet["native_free_text_activation_attempted"] = True
+                packet["native_free_text_activation_source"] = (
+                    "server_runtime_context"
+                )
+                packet.update(_custom_native_auth_usability_fields(packet))
+                record_custom_native_launch_packet(packet)
+                return packet
+
+            payload = self._read_optional_json_body()
+            if _native_free_text_forbidden_payload_fields(payload):
+                self._send_json(
+                    _custom_native_natural_dip_command_proof_packet(
+                        payload=payload,
+                        file_bridge_worker=custom_native_file_bridge_worker,
+                        last_launch_packet=custom_native_launch_state["last_packet"],
+                        bridge_endpoint=custom_native_bridge_lease.stable_endpoint,
+                        native_activator=native_free_text_activator,
+                        reasoning_matrix_builder=reasoning_matrix_builder,
+                    )
+                )
+                return
+            agent_runtime_context, context_metadata = (
+                _refresh_custom_agent_runtime_context_for_command_loop(
+                    payload=payload,
+                    operator_status=None,
+                    api_snapshot=None,
+                )
+            )
+            self._send_json(
+                _custom_native_natural_dip_command_proof_packet(
                     payload=payload,
                     file_bridge_worker=custom_native_file_bridge_worker,
                     agent_runtime_context=agent_runtime_context,

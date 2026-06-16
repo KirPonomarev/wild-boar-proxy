@@ -1626,7 +1626,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         )
         self.assertIn("async function runQuickStartCustomLaunchAction()", js)
         self.assertIn("async function runQuickStartNativeFreeTextCommandLoopProof()", js)
-        self.assertIn('fetch("api/codex/custom/native-free-chat-dip-command-proof"', js)
+        self.assertIn('fetch("api/codex/custom/native-natural-dip-command-proof"', js)
         self.assertIn("async function runQuickStartModelReasoningAvailabilityMatrix()", js)
         self.assertIn('fetch("api/codex/custom/model-reasoning-availability-matrix"', js)
         self.assertIn("renderQuickStartModelReasoningAvailabilityMatrix", js)
@@ -6442,23 +6442,23 @@ const sandbox = {
         })
       });
     }
-    if (url === "api/codex/custom/native-free-chat-dip-command-proof") {
+    if (url === "api/codex/custom/native-natural-dip-command-proof") {
       if (Object.prototype.hasOwnProperty.call(body, "prompt")) {
-        throw new Error(`native free-chat DIP endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
+        throw new Error(`native natural DIP endpoint must not receive browser-authored prompt: ${JSON.stringify(body)}`);
       }
-      if (!String(body.request_id || "").startsWith("ui-native-free-chat-dip-")) {
-        throw new Error(`native free-chat DIP request id missing: ${JSON.stringify(body)}`);
+      if (!String(body.request_id || "").startsWith("ui-native-natural-dip-")) {
+        throw new Error(`native natural DIP request id missing: ${JSON.stringify(body)}`);
       }
-      if (body.expected_coding_response !== `WBP_UI_NATIVE_FREE_CHAT_DIP_OK_${body.request_id}`) {
-        throw new Error(`native free-chat DIP expected token mismatch: ${JSON.stringify(body)}`);
+      if (body.expected_coding_response !== `WBP_UI_NATURAL_DIP_OK_${body.request_id}`) {
+        throw new Error(`native natural DIP expected token mismatch: ${JSON.stringify(body)}`);
       }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({
           status: "ok",
           machine_error_code: "OK",
-          final_status: "CUSTOM_CODEX_NATIVE_FREE_CHAT_DIP_COMMAND_PROVEN_WITH_LIMITS",
-          packet_kind: "custom_codex_native_free_chat_dip_command_proof",
+          final_status: "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_PROVEN_WITH_LIMITS",
+          packet_kind: "custom_codex_server_owned_natural_dip_command_proof",
           primary_alias: "Planner",
           coding_alias: "Builder",
           primary_binding: { lane: "primary_chatgpt", role: "orchestrator", model_id: "gpt-5.5" },
@@ -6470,6 +6470,15 @@ const sandbox = {
           native_free_chat_custom_response_observed: true,
           native_free_chat_request_bound_digest_matched: true,
           native_free_chat_subagent_substitution_blocked: true,
+          server_owned_natural_dip_command_packet: true,
+          server_owned_natural_dip_command_proven: true,
+          server_owned_natural_dip_command_path: true,
+          server_owned_natural_command_prompt_source: "server_owned_builder",
+          natural_dip_prompt_browser_supplied: false,
+          natural_dip_prompt_text_recorded: false,
+          api_bridge_transcript_observed: true,
+          api_bridge_or_file_bridge_transcript_observed: true,
+          custom_response_observed: true,
           browser_authority_contract_enforced: true,
           browser_prompt_authority_rejected: true,
           browser_can_supply_prompt_authority: false,
@@ -6537,7 +6546,7 @@ vm.runInContext("actionMetadataLoaded = true;", sandbox);
 sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   const expected = [
     "/api/codex/custom/agent-bindings",
-    "api/codex/custom/native-free-chat-dip-command-proof"
+    "api/codex/custom/native-natural-dip-command-proof"
   ];
   if (JSON.stringify(urls) !== JSON.stringify(expected)) {
     throw new Error(`unexpected native free-text fetches ${JSON.stringify(urls)}`);
@@ -6551,10 +6560,10 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   if (Object.prototype.hasOwnProperty.call(packets[1], "prompt")) {
     throw new Error(`native free-text body leaked browser prompt: ${JSON.stringify(packets[1])}`);
   }
-  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "DIP API ok") {
+  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "natural DIP ok") {
     throw new Error(`native route label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "DIP API ok") {
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "natural DIP ok") {
     throw new Error(`native launch label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartWindowState.lastElementChild.textContent !== "input ok") {
@@ -6574,6 +6583,15 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
     rendered.native_free_chat_custom_response_observed !== true ||
     rendered.native_free_chat_request_bound_digest_matched !== true ||
     rendered.native_free_chat_subagent_substitution_blocked !== true ||
+    rendered.server_owned_natural_dip_command_packet !== true ||
+    rendered.server_owned_natural_dip_command_proven !== true ||
+    rendered.server_owned_natural_dip_command_path !== true ||
+    rendered.server_owned_natural_command_prompt_source !== "server_owned_builder" ||
+    rendered.natural_dip_prompt_browser_supplied !== false ||
+    rendered.natural_dip_prompt_text_recorded !== false ||
+    rendered.api_bridge_transcript_observed !== true ||
+    rendered.api_bridge_or_file_bridge_transcript_observed !== true ||
+    rendered.custom_response_observed !== true ||
     rendered.browser_authority_contract_enforced !== true ||
     rendered.browser_prompt_authority_rejected !== true ||
     rendered.browser_can_supply_prompt_authority !== false ||

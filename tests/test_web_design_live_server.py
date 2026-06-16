@@ -3365,6 +3365,244 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "stop_and_diagnose_native_free_chat_dip_command",
         )
 
+    def test_custom_native_natural_dip_command_proves_server_owned_bridge_and_readback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner", "Lead"],
+                coding_aliases=["DIP", "Worker"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            proof_root = root / "native-natural-dip-proof"
+            request_id = "native-natural-dip-ok"
+            expected_text = f"WBP_NATIVE_NATURAL_DIP_OK_{request_id}"
+
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
+                self.assertIn("Planner", prompt)
+                self.assertIn("Дай короткую задачу агенту DIP", prompt)
+                self.assertIn("API-lane coding agent", prompt)
+                self.assertIn("server-owned natural DIP command proof", prompt)
+                self.assertIn("Codex sub-agent", prompt)
+                self.assertIn(expected_text, prompt)
+                self.assertNotIn("browser-authored prompt", prompt)
+                proof_root.mkdir(parents=True, exist_ok=True)
+                (proof_root / f"{request_id}.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "custom_codex_native_free_text_agent_proof",
+                            "request_id": request_id,
+                            "machine_error_code": "OK",
+                            "alias_context_read": True,
+                            "context_sha256": metadata["context_sha256"],
+                            "primary_aliases": context["primary_aliases"],
+                            "coding_aliases": context["coding_aliases"],
+                            "allowed_api_route_ids": context["allowed_api_route_ids"],
+                            "expected_token": expected_text,
+                            "native_free_text_agent_ack": expected_text,
+                            "no_secret_exposed": True,
+                            "secret_value_exposed": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": hashlib.sha256(
+                        expected_text.encode("utf-8")
+                    ).hexdigest(),
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ) as urlopen,
+            ):
+                packet = live_server._custom_native_natural_dip_command_proof_packet(
+                    payload={
+                        "expected_coding_response": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0.1,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["packet_kind"],
+            "custom_codex_server_owned_natural_dip_command_proof",
+        )
+        self.assertEqual(
+            packet["final_status"],
+            "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(packet["server_owned_natural_dip_command_packet"])
+        self.assertTrue(packet["server_owned_natural_dip_command_proven"])
+        self.assertTrue(packet["server_owned_natural_dip_command_path"])
+        self.assertEqual(
+            packet["server_owned_natural_command_prompt_source"],
+            "server_owned_builder",
+        )
+        self.assertFalse(packet["natural_dip_prompt_browser_supplied"])
+        self.assertFalse(packet["natural_dip_prompt_text_recorded"])
+        self.assertTrue(packet["api_bridge_transcript_observed"])
+        self.assertTrue(packet["api_bridge_or_file_bridge_transcript_observed"])
+        self.assertTrue(packet["custom_response_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertTrue(packet["native_free_chat_dip_command_proven"])
+        self.assertTrue(packet["native_free_chat_api_lane_proven"])
+        self.assertTrue(packet["native_free_chat_custom_response_observed"])
+        self.assertTrue(packet["native_free_chat_request_bound_digest_matched"])
+        self.assertTrue(packet["native_free_chat_subagent_substitution_blocked"])
+        self.assertTrue(packet["browser_authority_contract_enforced"])
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["universal_manual_chat_interception_proven"])
+        self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["native_codex_subagent_absence_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertNotIn("prompt", packet)
+        self.assertNotIn(str(proof_root), json.dumps(packet, ensure_ascii=False))
+        self.assertEqual(packet["next_action"], "none")
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_natural_dip_command_rejects_browser_authority_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            packet = live_server._custom_native_natural_dip_command_proof_packet(
+                payload={
+                    "prompt": "browser-authored prompt must not be authority",
+                    "route_id": "wbp-untrusted-route",
+                    "model_id": "browser-model",
+                    "api_reasoning_option_id": "browser-reasoning",
+                    "expected_text": "WBP_FORBIDDEN_BROWSER_AUTHORITY",
+                    "request_id": "native-natural-dip-forbidden",
+                },
+                file_bridge_worker=worker,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["packet_kind"],
+            "custom_codex_server_owned_natural_dip_command_proof",
+        )
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_FREE_TEXT_FORBIDDEN_FIELD",
+        )
+        self.assertFalse(packet["server_owned_natural_dip_command_proven"])
+        self.assertTrue(packet["server_owned_natural_dip_command_path"])
+        self.assertFalse(packet["natural_dip_prompt_browser_supplied"])
+        self.assertFalse(packet["natural_dip_prompt_text_recorded"])
+        self.assertFalse(packet["api_bridge_transcript_observed"])
+        self.assertFalse(packet["api_bridge_or_file_bridge_transcript_observed"])
+        self.assertFalse(packet["custom_response_observed"])
+        self.assertTrue(packet["browser_authority_contract_enforced"])
+        self.assertFalse(packet["browser_can_supply_prompt_authority"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["universal_manual_chat_interception_proven"])
+        self.assertTrue(packet["does_not_prove_universal_manual_chat_interception"])
+        self.assertIn("prompt", packet["blocking_reasons"])
+        self.assertIn("route_id", packet["blocking_reasons"])
+        self.assertIn("model_id", packet["blocking_reasons"])
+        self.assertIn("api_reasoning_option_id", packet["blocking_reasons"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(
+            packet["next_action"],
+            "stop_and_diagnose_server_owned_natural_dip_command",
+        )
+
+    def test_custom_native_natural_dip_command_requires_bridge_transcript(self) -> None:
+        packet = {
+            "native_free_chat_dip_command_proven": True,
+            "bridge_or_file_bridge_used": True,
+            "command_loop_provider_call_count": "not-an-integer",
+            "api_lane_exact_token_matched": True,
+            "custom_codex_response_text_read_proven": True,
+            "custom_response_bound_to_request": True,
+            "custom_response_expected_sha256_match": True,
+            "native_codex_subagent_used_as_dip": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "prompt_text_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+        self.assertFalse(
+            live_server._custom_native_natural_dip_command_api_bridge_observed(packet)
+        )
+        self.assertFalse(
+            live_server._custom_native_natural_dip_command_product_proven(packet)
+        )
+
     def test_custom_native_free_text_default_submitter_receives_expected_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
