@@ -207,18 +207,59 @@ def _prompt_bound_codex_tool_call_packet(
     return prompt_packet, codex_packet
 
 
-def _router_hook_source_event(
+def _router_hook_control_boundary_packet(
+    prompt_packet: dict[str, object],
+    **overrides: object,
+) -> dict[str, object]:
+    packet: dict[str, object] = {
+        "packet_kind": "wbp_router_hook_control_boundary",
+        "status": "ok",
+        "result_status": "proven",
+        "machine_error_code": "OK",
+        "control_boundary_wbp_owned": True,
+        "control_boundary_can_enforce_router": True,
+        "control_boundary_can_route_delegate_to_dip": True,
+        "effect": "probe",
+        "changed_files": [],
+        "source_run_sha256": hashlib.sha256(b"router-control-run-1").hexdigest(),
+        "source_prompt_sha256": prompt_packet["prompt_sha256"],
+        "prompt_supplied_hook_flags": False,
+        "browser_supplied_hook_flags": False,
+        "state_written": False,
+        "profile_written": False,
+        "config_written": False,
+        "route_registry_written": False,
+        "credential_written": False,
+        "runtime_state_written": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "product_ready": False,
+        "native_free_chat_router_proven": False,
+    }
+    packet.update(overrides)
+    return packet
+
+
+def _manual_router_hook_source_event(
     prompt_packet: dict[str, object],
     **overrides: object,
 ) -> dict[str, object]:
     event: dict[str, object] = {
         "packet_kind": "wbp_router_hook_source_event",
+        "status": "ok",
+        "result_status": "produced",
+        "final_status": "WBP_ROUTER_HOOK_SOURCE_EVENT_PRODUCED",
+        "producer_built_by": "manual_test_fixture",
+        "source_status": "ok",
         "source_wbp_owned": True,
-        "source_kind": "wbp_codex_exec_jsonl_observer",
-        "effect": "probe",
+        "source_kind": "wbp_owned_router_hook_probe",
+        "source_effect": "probe",
         "changed_files": [],
-        "source_run_sha256": hashlib.sha256(b"codex-exec-run-1").hexdigest(),
+        "source_run_sha256": hashlib.sha256(b"manual-run").hexdigest(),
         "source_prompt_sha256": prompt_packet["prompt_sha256"],
+        "source_control_boundary_proven": True,
         "hook_observed_prompt": True,
         "hook_can_enforce_router": True,
         "hook_can_route_delegate_to_dip": True,
@@ -243,13 +284,43 @@ def _router_hook_source_event(
     return event
 
 
+def _router_hook_source_event_packet(
+    prompt_packet: dict[str, object],
+    codex_packet: dict[str, object],
+    *,
+    control_boundary_packet: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return mcp_delegate.build_router_hook_source_event_packet(
+        prompt_packet=prompt_packet,
+        codex_tool_call_packet=codex_packet,
+        control_boundary_packet=control_boundary_packet,
+    )
+
+
 def _router_hook_source_packet(
     prompt_packet: dict[str, object],
+    codex_packet: dict[str, object] | None = None,
+    *,
+    control_boundary_packet: dict[str, object] | None = None,
     **overrides: object,
 ) -> dict[str, object]:
+    if codex_packet is None:
+        _prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+    event_packet = _router_hook_source_event_packet(
+        prompt_packet,
+        codex_packet,
+        control_boundary_packet=(
+            control_boundary_packet
+            if control_boundary_packet is not None
+            else _router_hook_control_boundary_packet(prompt_packet)
+        ),
+    )
+    if overrides:
+        event_packet = dict(event_packet)
+        event_packet.update(overrides)
     return mcp_delegate.build_router_hook_source_admission_packet(
         prompt_packet=prompt_packet,
-        source_event_packet=_router_hook_source_event(prompt_packet, **overrides),
+        source_event_packet=event_packet,
     )
 
 
@@ -1316,21 +1387,86 @@ class McpDelegateToDipTests(unittest.TestCase):
             [],
         )
 
-    def test_router_hook_source_admission_accepts_wbp_owned_probe(self) -> None:
-        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+    def test_router_hook_source_event_produces_from_control_boundary(self) -> None:
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        control_boundary = _router_hook_control_boundary_packet(prompt_packet)
 
-        packet = _router_hook_source_packet(prompt_packet)
+        packet = _router_hook_source_event_packet(
+            prompt_packet,
+            codex_packet,
+            control_boundary_packet=control_boundary,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["packet_kind"], "wbp_router_hook_source_event")
+        self.assertEqual(packet["result_status"], "produced")
+        self.assertEqual(packet["source_status"], "ok")
+        self.assertEqual(packet["source_kind"], "wbp_owned_router_hook_probe")
+        self.assertTrue(packet["source_wbp_owned"])
+        self.assertTrue(packet["source_control_boundary_proven"])
+        self.assertTrue(packet["control_boundary_packet_ok"])
+        self.assertTrue(packet["source_event_claim_digest_present"])
+        self.assertTrue(packet["source_run_digest_present"])
+        self.assertTrue(packet["source_prompt_digest_bound"])
+        self.assertTrue(packet["hook_observed_prompt"])
+        self.assertTrue(packet["hook_can_enforce_router"])
+        self.assertTrue(packet["hook_can_route_delegate_to_dip"])
+        self.assertFalse(packet["hook_logging_only"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_router_hook_source_event_blocks_logging_only_codex_jsonl_observer(self) -> None:
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+
+        packet = _router_hook_source_event_packet(prompt_packet, codex_packet)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_ROUTER_HOOK_SOURCE_EVENT_CAPABILITY_NOT_PROVEN",
+        )
+        self.assertEqual(packet["packet_kind"], "wbp_router_hook_source_event")
+        self.assertEqual(packet["source_status"], "blocked")
+        self.assertEqual(packet["source_kind"], "wbp_codex_exec_jsonl_observer")
+        self.assertTrue(packet["source_wbp_owned"])
+        self.assertFalse(packet["source_control_boundary_proven"])
+        self.assertFalse(packet["control_boundary_packet_ok"])
+        self.assertTrue(packet["hook_observed_prompt"])
+        self.assertFalse(packet["hook_can_enforce_router"])
+        self.assertFalse(packet["hook_can_route_delegate_to_dip"])
+        self.assertTrue(packet["hook_logging_only"])
+        self.assertIn(
+            "router_hook_control_boundary_not_proven",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("router_hook_source_logging_only", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_router_hook_source_admission_accepts_wbp_owned_probe(self) -> None:
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+
+        packet = _router_hook_source_packet(prompt_packet, codex_packet)
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertEqual(packet["packet_kind"], "wbp_router_hook_source_admission")
         self.assertEqual(packet["result_status"], "admitted")
+        self.assertEqual(packet["source_event_packet_kind"], "wbp_router_hook_source_event")
+        self.assertTrue(packet["source_event_packet_ok"])
+        self.assertTrue(packet["source_event_producer_valid"])
+        self.assertTrue(packet["source_event_claim_digest_present"])
+        self.assertTrue(packet["source_event_claim_digest_matched"])
         self.assertEqual(packet["source_status"], "ok")
         self.assertTrue(packet["source_wbp_owned"])
         self.assertEqual(packet["source_effect"], "probe")
         self.assertTrue(packet["source_run_digest_present"])
         self.assertTrue(packet["source_prompt_digest_present"])
         self.assertTrue(packet["source_prompt_digest_bound"])
+        self.assertTrue(packet["source_control_boundary_proven"])
         self.assertTrue(packet["hook_observed_prompt"])
         self.assertTrue(packet["hook_can_enforce_router"])
         self.assertTrue(packet["hook_can_route_delegate_to_dip"])
@@ -1380,18 +1516,27 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         for name, overrides, reason, error_code in cases:
             with self.subTest(name=name):
-                packet = _router_hook_source_packet(prompt_packet, **overrides)
+                source_event = _manual_router_hook_source_event(
+                    prompt_packet,
+                    **overrides,
+                )
+                packet = mcp_delegate.build_router_hook_source_admission_packet(
+                    prompt_packet=prompt_packet,
+                    source_event_packet=source_event,
+                )
 
                 self.assertEqual(packet["status"], "error")
                 self.assertEqual(packet["machine_error_code"], error_code)
                 self.assertEqual(packet["result_status"], "blocked")
                 self.assertIn(reason, packet["blocking_reasons"])
+                self.assertFalse(packet["source_event_producer_valid"])
+                self.assertFalse(packet["source_event_claim_digest_present"])
                 self.assertFalse(packet["product_ready"])
                 self.assertFalse(packet["native_free_chat_router_proven"])
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_router_hook_source_admission_rejects_digest_and_side_effect_drift(self) -> None:
-        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
         cases = [
             (
                 "missing_run_digest",
@@ -1421,33 +1566,61 @@ class McpDelegateToDipTests(unittest.TestCase):
 
         for name, overrides, reason, error_code in cases:
             with self.subTest(name=name):
-                packet = _router_hook_source_packet(prompt_packet, **overrides)
+                source_event = _router_hook_source_event_packet(
+                    prompt_packet,
+                    codex_packet,
+                    control_boundary_packet=_router_hook_control_boundary_packet(
+                        prompt_packet
+                    ),
+                )
+                source_event = dict(source_event)
+                source_event.update(overrides)
+                packet = mcp_delegate.build_router_hook_source_admission_packet(
+                    prompt_packet=prompt_packet,
+                    source_event_packet=source_event,
+                )
 
                 self.assertEqual(packet["status"], "error")
                 self.assertEqual(packet["machine_error_code"], error_code)
                 self.assertIn(reason, packet["blocking_reasons"])
+                self.assertFalse(packet["source_event_claim_digest_matched"])
                 self.assertFalse(packet["product_ready"])
                 self.assertFalse(packet["native_free_chat_router_proven"])
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_router_hook_source_admission_rejects_logging_only_source(self) -> None:
-        prompt_packet, _codex_packet = _prompt_bound_codex_tool_call_packet()
-
-        packet = _router_hook_source_packet(
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        source_event = _router_hook_source_event_packet(
             prompt_packet,
-            hook_can_enforce_router=False,
-            hook_can_route_delegate_to_dip=False,
+            codex_packet,
+        )
+        packet = mcp_delegate.build_router_hook_source_admission_packet(
+            prompt_packet=prompt_packet,
+            source_event_packet=source_event,
         )
 
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
             packet["machine_error_code"],
-            "WBP_ROUTER_HOOK_SOURCE_NOT_ADMITTED",
+            "WBP_ROUTER_HOOK_SOURCE_EVENT_CAPABILITY_NOT_PROVEN",
         )
+        self.assertEqual(packet["source_event_packet_kind"], "wbp_router_hook_source_event")
+        self.assertFalse(packet["source_event_packet_ok"])
+        self.assertTrue(packet["source_event_producer_valid"])
+        self.assertTrue(packet["source_event_claim_digest_matched"])
+        self.assertFalse(packet["source_control_boundary_proven"])
         self.assertTrue(packet["hook_observed_prompt"])
         self.assertFalse(packet["hook_can_enforce_router"])
         self.assertFalse(packet["hook_can_route_delegate_to_dip"])
         self.assertTrue(packet["hook_logging_only"])
+        self.assertIn(
+            "router_hook_source_event_packet_not_ok",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "router_hook_control_boundary_not_proven",
+            packet["blocking_reasons"],
+        )
         self.assertIn("router_hook_source_logging_only", packet["blocking_reasons"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
@@ -1457,7 +1630,7 @@ class McpDelegateToDipTests(unittest.TestCase):
             CODEX_MCP_GET_OUTPUT,
         )
         prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
-        hook_source_packet = _router_hook_source_packet(prompt_packet)
+        hook_source_packet = _router_hook_source_packet(prompt_packet, codex_packet)
         delegate_packet = _delegate_packet(context_payload=_context_payload())
 
         packet = mcp_delegate.build_native_router_hook_observation_packet(
@@ -1596,10 +1769,13 @@ class McpDelegateToDipTests(unittest.TestCase):
             CODEX_MCP_GET_OUTPUT,
         )
         prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
-        hook_source_packet = _router_hook_source_packet(
+        source_event = _router_hook_source_event_packet(
             prompt_packet,
-            hook_can_enforce_router=False,
-            hook_can_route_delegate_to_dip=False,
+            codex_packet,
+        )
+        hook_source_packet = mcp_delegate.build_router_hook_source_admission_packet(
+            prompt_packet=prompt_packet,
+            source_event_packet=source_event,
         )
         delegate_packet = _delegate_packet(context_payload=_context_payload())
 
