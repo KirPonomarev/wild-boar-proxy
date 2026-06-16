@@ -63,11 +63,25 @@ WIRING_PACKET_KIND = "wbp_codex_mcp_wiring_reality"
 WIRING_FINAL_STATUS_PROVEN = "WBP_CODEX_MCP_WIRING_PROVEN"
 WIRING_FINAL_STATUS_WORKS_WITH_LIMITS = "WBP_CODEX_MCP_WIRING_WORKS_WITH_LIMITS"
 WIRING_FINAL_STATUS_BLOCKED = "WBP_CODEX_MCP_WIRING_BLOCKED"
+ROUTER_HOOK_OBSERVATION_PACKET_KIND = "wbp_native_router_hook_observation"
+ROUTER_HOOK_OBSERVATION_FINAL_STATUS_OBSERVED = (
+    "WBP_NATIVE_ROUTER_HOOK_OBSERVED"
+)
+ROUTER_HOOK_OBSERVATION_FINAL_STATUS_BLOCKED = (
+    "WBP_NATIVE_ROUTER_HOOK_BLOCKED"
+)
+ROUTER_HOOK_NOT_OBSERVED = "WBP_NATIVE_ROUTER_HOOK_NOT_OBSERVED"
+ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED = (
+    "WBP_NATIVE_ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED"
+)
+ROUTER_HOOK_CODEX_SUBAGENT_USED = "WBP_NATIVE_ROUTER_HOOK_CODEX_SUBAGENT_USED"
 CODEX_EXEC_TOOL_CALL_PACKET_KIND = "wbp_codex_exec_tool_call_observation"
 CODEX_EXEC_TOOL_CALL_FINAL_STATUS_OBSERVED = (
     "WBP_CODEX_EXEC_TOOL_CALL_OBSERVED"
 )
 CODEX_EXEC_TOOL_CALL_FINAL_STATUS_BLOCKED = "WBP_CODEX_EXEC_TOOL_CALL_BLOCKED"
+CODEX_EXEC_BROWSER_AUTHORITY_REJECTED = "WBP_CODEX_EXEC_BROWSER_AUTHORITY_REJECTED"
+CODEX_EXEC_SUBAGENT_USED_AS_DIP = "WBP_CODEX_EXEC_SUBAGENT_USED_AS_DIP"
 CODEX_EXEC_MODEL_GUARD_PACKET_KIND = "wbp_codex_exec_model_admission_guard"
 CODEX_EXEC_MODEL_GUARD_FINAL_STATUS_ADMITTED = (
     "WBP_CODEX_EXEC_MODEL_ADMISSION_GUARD_ADMITTED"
@@ -956,6 +970,34 @@ def _codex_exec_unsupported_model_from_events(events: list[dict[str, Any]]) -> b
     return False
 
 
+_CODEX_EXEC_SUBAGENT_MARKER_PATTERN = re.compile(
+    r"(?i)\b(subagent|sub-agent|sub agent|codex agent)\b"
+)
+_CODEX_EXEC_DIP_ALIAS_PATTERN = re.compile(r"(?i)\b(dip|agent\s*2)\b")
+
+
+def _codex_exec_local_subagent_used_as_dip(events: list[dict[str, Any]]) -> bool:
+    for event in events:
+        for mapping in _iter_mappings(event):
+            item_type = _first_text_field(
+                mapping,
+                ("type", "kind", "item_type", "itemType"),
+            )
+            name = _first_text_field(
+                mapping,
+                ("name", "agent_name", "agentName", "display_name", "displayName"),
+            )
+            text = _first_text_field(mapping, ("text", "message", "content", "title"))
+            combined = " ".join(part for part in (item_type, name, text) if part)
+            if not combined:
+                continue
+            if not _CODEX_EXEC_SUBAGENT_MARKER_PATTERN.search(combined):
+                continue
+            if _CODEX_EXEC_DIP_ALIAS_PATTERN.search(combined):
+                return True
+    return False
+
+
 def _select_codex_exec_tool_call_candidate(
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -994,6 +1036,10 @@ def build_codex_exec_tool_call_observation_packet(
         else {}
     )
     actual_call_sha256 = _delegate_call_sha256(arguments) if arguments else ""
+    forbidden_authority_fields = sorted(
+        _safe_text(field, limit=80)
+        for field in set(arguments) - {"task", "expected_alias", "alias"}
+    )
     task_text = _safe_text(arguments.get("task") or "", limit=4096)
     task_sha256 = _sha256_text(task_text) if task_text else ""
     expected_call_matches = bool(
@@ -1009,6 +1055,7 @@ def build_codex_exec_tool_call_observation_packet(
         event_type in {"thread.started", "turn.started", "turn.completed"}
         for event_type in event_types
     )
+    local_codex_subagent_used_as_dip = _codex_exec_local_subagent_used_as_dip(events)
     stderr_safe = _safe_text(stderr_text, limit=4096)
     unsupported_model_observed = bool(
         exec_exit_code != 0
@@ -1038,8 +1085,12 @@ def build_codex_exec_tool_call_observation_packet(
         blocking_reasons.append("codex_exec_json_events_not_observed")
     if not real_codex_prompt_executed:
         blocking_reasons.append("real_codex_prompt_not_executed")
+    if local_codex_subagent_used_as_dip:
+        blocking_reasons.append("codex_subagent_used_as_dip")
     if not delegate_to_dip_tool_called:
         blocking_reasons.append("codex_delegate_to_dip_tool_call_not_observed")
+    if forbidden_authority_fields:
+        blocking_reasons.append("codex_tool_call_forbidden_authority_field")
     if delegate_to_dip_tool_called and not prompt_to_mcp_call_bound:
         blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
 
@@ -1052,6 +1103,10 @@ def build_codex_exec_tool_call_observation_packet(
         machine_error_code = "WBP_CODEX_EXEC_AUTHORIZATION_REQUIRED"
     elif parse_errors and not events:
         machine_error_code = "WBP_CODEX_EXEC_JSONL_INVALID"
+    elif local_codex_subagent_used_as_dip:
+        machine_error_code = CODEX_EXEC_SUBAGENT_USED_AS_DIP
+    elif forbidden_authority_fields:
+        machine_error_code = CODEX_EXEC_BROWSER_AUTHORITY_REJECTED
     else:
         machine_error_code = "WBP_CODEX_EXEC_TOOL_CALL_NOT_PROVEN"
 
@@ -1092,9 +1147,13 @@ def build_codex_exec_tool_call_observation_packet(
             "expected_delegate_tool_call_matched": expected_call_matches,
             "prompt_task_digest_matched": prompt_task_matches,
             "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
+            "browser_authority_fields_rejected": bool(forbidden_authority_fields),
+            "browser_authority_field_count": len(forbidden_authority_fields),
+            "local_codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
+            "codex_subagent_used_as_dip": local_codex_subagent_used_as_dip,
             "api_lane_called": False,
             "fallback_used": False,
-            "local_imitation_used": False,
+            "local_imitation_used": local_codex_subagent_used_as_dip,
             "product_ready": False,
             "native_free_chat_router_proven": False,
             "does_not_prove_native_free_chat_router": True,
@@ -1325,6 +1384,322 @@ def build_codex_mcp_wiring_reality_packet(
         packet_kind=WIRING_PACKET_KIND,
         final_status=final_status,
         result_status=result_status,
+    )
+
+
+def build_native_router_hook_observation_packet(
+    *,
+    config_packet: Mapping[str, Any] | None = None,
+    prompt_packet: Mapping[str, Any] | None = None,
+    codex_tool_call_packet: Mapping[str, Any] | None = None,
+    delegate_packet: Mapping[str, Any] | None = None,
+    hook_packet: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    config = dict(config_packet) if isinstance(config_packet, Mapping) else {}
+    prompt = dict(prompt_packet) if isinstance(prompt_packet, Mapping) else {}
+    codex_call = (
+        dict(codex_tool_call_packet)
+        if isinstance(codex_tool_call_packet, Mapping)
+        else {}
+    )
+    delegate = dict(delegate_packet) if isinstance(delegate_packet, Mapping) else {}
+    hook = dict(hook_packet) if isinstance(hook_packet, Mapping) else {}
+
+    codex_mcp_config_loaded = bool(
+        config.get("config_loaded") is True
+        or config.get("codex_mcp_config_loaded") is True
+    )
+    prompt_sha256 = _hex_sha256(prompt.get("prompt_sha256") or "")
+    expected_call_sha256 = _hex_sha256(
+        prompt.get("expected_delegate_tool_call_sha256") or ""
+    )
+    prompt_digest_present = bool(
+        prompt.get("prompt_digest_present") is True and prompt_sha256
+    )
+    expected_call_digest_present = bool(
+        prompt.get("expected_delegate_tool_call_digest_present") is True
+        and expected_call_sha256
+    )
+    codex_tool_call_observation_ok = bool(
+        codex_call.get("status") == "ok"
+        and codex_call.get("packet_kind") == CODEX_EXEC_TOOL_CALL_PACKET_KIND
+        and codex_call.get("result_status") in {"", "observed"}
+    )
+    delegate_packet_ok = bool(
+        delegate.get("status") == "ok" and delegate.get("packet_kind") == DELEGATE_PACKET_KIND
+    )
+    codex_call_sha256 = _hex_sha256(codex_call.get("tool_call_sha256") or "")
+    delegate_call_sha256 = _hex_sha256(delegate.get("tool_call_sha256") or "")
+    delegate_to_dip_called = bool(
+        codex_call.get("delegate_to_dip_tool_called") is True
+        or codex_call.get("tool_name") == DELEGATE_TO_DIP_TOOL
+    )
+    wbp_owned_surface_called = bool(
+        codex_tool_call_observation_ok and delegate_to_dip_called
+    )
+    hook_observed_prompt = bool(
+        hook.get("hook_observed_prompt") is True or hook.get("prompt_observed") is True
+    )
+    hook_can_enforce_router = hook.get("hook_can_enforce_router") is True
+    hook_can_route_delegate_to_dip = hook.get("hook_can_route_delegate_to_dip") is True
+    explicit_router_hook_evidence = bool(
+        hook_observed_prompt and hook_can_enforce_router and hook_can_route_delegate_to_dip
+    )
+    prompt_digest_bound = bool(
+        codex_call.get("prompt_to_mcp_call_bound") is True
+        and codex_call.get("prompt_sha256") == prompt_sha256
+        and prompt_digest_present
+    )
+    tool_call_digest_bound = bool(
+        expected_call_digest_present
+        and codex_call_sha256 == expected_call_sha256
+        and delegate_call_sha256 == expected_call_sha256
+    )
+    alias_context_read = delegate.get("alias_context_read") is True
+    route_authority_enforced = bool(
+        delegate.get("allowed_api_route_ids_enforced") is True
+        and delegate.get("route_allowed") is True
+        and delegate.get("selected_api_route_id_recorded") is False
+    )
+    forbidden_stale_route_ids_enforced = (
+        delegate.get("forbidden_stale_route_ids_enforced") is True
+    )
+    local_codex_subagent_used = bool(
+        codex_call.get("local_codex_subagent_used_as_dip") is True
+        or codex_call.get("codex_subagent_used_as_dip") is True
+        or hook.get("local_codex_subagent_used_as_dip") is True
+        or hook.get("native_codex_subagent_used_as_dip") is True
+    )
+    local_imitation_used = bool(
+        local_codex_subagent_used
+        or codex_call.get("local_imitation_used") is True
+        or delegate.get("local_imitation_used") is True
+        or hook.get("local_imitation_used") is True
+    )
+    fallback_used = bool(
+        codex_call.get("fallback_used") is True
+        or delegate.get("fallback_used") is True
+        or hook.get("fallback_used") is True
+    )
+    browser_authority_rejected = bool(
+        codex_call.get("browser_authority_fields_rejected") is True
+        or delegate.get("machine_error_code")
+        == "WBP_MCP_DELEGATE_BROWSER_AUTHORITY_REJECTED"
+        or any(
+            str(reason).startswith("forbidden_field:")
+            for reason in delegate.get("blocking_reasons", [])
+        )
+    )
+    browser_can_supply_route_authority = bool(
+        delegate.get("browser_can_supply_route_authority") is True
+        or hook.get("browser_can_supply_route_authority") is True
+    )
+    browser_can_supply_model_authority = bool(
+        delegate.get("browser_can_supply_model_authority") is True
+        or hook.get("browser_can_supply_model_authority") is True
+    )
+    raw_backend_details_exposed = bool(
+        codex_call.get("raw_backend_details_exposed") is True
+        or delegate.get("raw_backend_details_exposed") is True
+        or hook.get("raw_backend_details_exposed") is True
+    )
+    secret_value_exposed = bool(
+        codex_call.get("secret_value_exposed") is True
+        or delegate.get("secret_value_exposed") is True
+        or hook.get("secret_value_exposed") is True
+    )
+    raw_prompt_recorded = bool(
+        codex_call.get("raw_prompt_recorded") is True
+        or delegate.get("raw_prompt_recorded") is True
+        or prompt.get("raw_prompt_recorded") is True
+    )
+    raw_provider_response_recorded = bool(
+        codex_call.get("raw_provider_response_recorded") is True
+        or delegate.get("raw_provider_response_recorded") is True
+    )
+    native_free_chat_router_claimed = bool(
+        codex_call.get("native_free_chat_router_proven") is True
+        or delegate.get("native_free_chat_router_proven") is True
+        or hook.get("native_free_chat_router_proven") is True
+    )
+    product_ready_claimed = bool(
+        codex_call.get("product_ready") is True
+        or delegate.get("product_ready") is True
+        or hook.get("product_ready") is True
+    )
+
+    blocking_reasons: list[str] = []
+    if not codex_mcp_config_loaded:
+        blocking_reasons.append("codex_mcp_config_not_loaded")
+    if not prompt_digest_present:
+        blocking_reasons.append("prompt_digest_missing")
+    if not expected_call_digest_present:
+        blocking_reasons.append("expected_delegate_tool_call_digest_missing")
+    if not codex_call:
+        blocking_reasons.append("codex_tool_call_observation_missing")
+    elif not codex_tool_call_observation_ok:
+        blocking_reasons.append("codex_tool_call_observation_packet_not_ok")
+    if not wbp_owned_surface_called:
+        blocking_reasons.append("router_hook_not_observed")
+    if not hook_observed_prompt:
+        blocking_reasons.append("hook_prompt_not_observed")
+    if not hook_can_enforce_router:
+        blocking_reasons.append("hook_cannot_enforce_router")
+    if not hook_can_route_delegate_to_dip:
+        blocking_reasons.append("hook_cannot_route_delegate_to_dip")
+    if not prompt_digest_bound:
+        blocking_reasons.append("prompt_digest_not_bound_to_router_hook")
+    if not tool_call_digest_bound:
+        blocking_reasons.append("tool_call_digest_not_bound_to_delegate_packet")
+    if not delegate:
+        blocking_reasons.append("delegate_packet_missing")
+    elif not delegate_packet_ok:
+        blocking_reasons.append("delegate_packet_not_ok")
+    if not alias_context_read:
+        blocking_reasons.append("alias_context_not_read")
+    if not route_authority_enforced:
+        blocking_reasons.append("route_authority_not_enforced")
+    if not forbidden_stale_route_ids_enforced:
+        blocking_reasons.append("stale_route_guard_missing")
+    if browser_authority_rejected:
+        blocking_reasons.append("browser_authority_rejected")
+    if browser_can_supply_route_authority:
+        blocking_reasons.append("browser_route_authority_allowed")
+    if browser_can_supply_model_authority:
+        blocking_reasons.append("browser_model_authority_allowed")
+    if local_codex_subagent_used:
+        blocking_reasons.append("local_codex_subagent_used_as_dip")
+    if local_imitation_used:
+        blocking_reasons.append("local_imitation_used")
+    if fallback_used:
+        blocking_reasons.append("fallback_used")
+    if native_free_chat_router_claimed:
+        blocking_reasons.append("native_free_chat_router_must_not_be_claimed")
+    if product_ready_claimed:
+        blocking_reasons.append("product_ready_must_not_be_claimed")
+    if raw_prompt_recorded:
+        blocking_reasons.append("raw_prompt_must_not_be_recorded")
+    if raw_provider_response_recorded:
+        blocking_reasons.append("raw_provider_response_must_not_be_recorded")
+    if raw_backend_details_exposed:
+        blocking_reasons.append("raw_backend_details_must_not_be_exposed")
+    if secret_value_exposed:
+        blocking_reasons.append("secret_value_must_not_be_exposed")
+
+    ok = not blocking_reasons
+    if ok:
+        machine_error_code = "OK"
+    elif (
+        browser_authority_rejected
+        or browser_can_supply_route_authority
+        or browser_can_supply_model_authority
+    ):
+        machine_error_code = ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED
+    elif local_codex_subagent_used or local_imitation_used:
+        machine_error_code = ROUTER_HOOK_CODEX_SUBAGENT_USED
+    elif delegate.get("machine_error_code") == "FAIL_ALIAS_CONTEXT_MISSING":
+        machine_error_code = "FAIL_ALIAS_CONTEXT_MISSING"
+    else:
+        machine_error_code = ROUTER_HOOK_NOT_OBSERVED
+
+    return _command_packet_for_kind(
+        ok=ok,
+        machine_error_code=machine_error_code,
+        human_message=(
+            "Native Codex router hook observation found a prompt-bound WBP-owned tool call."
+            if ok
+            else "Native Codex router hook observation did not prove a WBP-owned route."
+        ),
+        blocking_reasons=[] if ok else blocking_reasons,
+        extra={
+            "router_hook_observed": ok,
+            "native_router_hook_observed": ok,
+            "explicit_router_hook_evidence": explicit_router_hook_evidence,
+            "wbp_owned_surface_called": wbp_owned_surface_called,
+            "wbp_owned_surface_kind": (
+                "mcp_tool_call:delegate_to_dip" if wbp_owned_surface_called else ""
+            ),
+            "delegate_to_dip_called": delegate_to_dip_called,
+            "codex_mcp_config_loaded": codex_mcp_config_loaded,
+            "codex_tool_call_observation_packet_ok": codex_tool_call_observation_ok,
+            "real_codex_prompt_executed": (
+                codex_call.get("real_codex_prompt_executed") is True
+            ),
+            "prompt_digest_present": prompt_digest_present,
+            "prompt_digest_bound": prompt_digest_bound,
+            "prompt_to_mcp_call_bound": prompt_digest_bound,
+            "tool_call_digest_bound": tool_call_digest_bound,
+            "tool_call_sha256": codex_call_sha256 if tool_call_digest_bound else "",
+            "delegate_packet_status": str(delegate.get("status") or ""),
+            "delegate_packet_machine_error_code": str(
+                delegate.get("machine_error_code") or ""
+            ),
+            "alias_context_read": alias_context_read,
+            "runtime_context_file_proven": (
+                delegate.get("runtime_context_file_proven") is True
+            ),
+            "custom_codex_agent_runtime_context_proven": (
+                delegate.get("custom_codex_agent_runtime_context_proven") is True
+            ),
+            "expected_alias": str(delegate.get("expected_alias") or ""),
+            "selected_alias": str(delegate.get("selected_alias") or ""),
+            "selected_alias_lane": str(delegate.get("selected_alias_lane") or ""),
+            "coding_alias_bound_to_api_lane": (
+                delegate.get("coding_alias_bound_to_api_lane") is True
+            ),
+            "allowed_api_route_ids_enforced": (
+                delegate.get("allowed_api_route_ids_enforced") is True
+            ),
+            "forbidden_stale_route_ids_enforced": forbidden_stale_route_ids_enforced,
+            "route_allowed": delegate.get("route_allowed") is True,
+            "selected_api_route_id_present": (
+                delegate.get("selected_api_route_id_present") is True
+            ),
+            "selected_api_route_id_sha256": str(
+                delegate.get("selected_api_route_id_sha256") or ""
+            ),
+            "selected_api_route_id_recorded": (
+                delegate.get("selected_api_route_id_recorded") is True
+            ),
+            "route_bound_dispatch_proven": (
+                delegate.get("route_bound_dispatch_proven") is True
+            ),
+            "controlled_provider_response_proven": (
+                delegate.get("controlled_provider_response_proven") is True
+            ),
+            "lower_layer_delegate_packet_used": bool(delegate),
+            "hook_observed_prompt": hook_observed_prompt,
+            "hook_can_enforce_router": hook_can_enforce_router,
+            "hook_can_route_delegate_to_dip": hook_can_route_delegate_to_dip,
+            "local_codex_subagent_used": local_codex_subagent_used,
+            "local_codex_subagent_used_as_dip": local_codex_subagent_used,
+            "codex_subagent_used_as_dip": local_codex_subagent_used,
+            "local_imitation_used": local_imitation_used,
+            "fallback_used": fallback_used,
+            "browser_authority_rejected": browser_authority_rejected,
+            "browser_can_supply_prompt_authority": False,
+            "browser_can_supply_route_authority": browser_can_supply_route_authority,
+            "browser_can_supply_model_authority": browser_can_supply_model_authority,
+            "secret_value_exposed": secret_value_exposed,
+            "raw_backend_details_exposed": raw_backend_details_exposed,
+            "raw_prompt_recorded": raw_prompt_recorded,
+            "prompt_text_recorded": False,
+            "raw_transcript_recorded": False,
+            "raw_provider_response_recorded": raw_provider_response_recorded,
+            "tool_call_arguments_recorded": False,
+            "product_ready": False,
+            "native_free_chat_router_proven": False,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_product_ready_free_chat": True,
+            "no_secret_exposed": not secret_value_exposed,
+        },
+        packet_kind=ROUTER_HOOK_OBSERVATION_PACKET_KIND,
+        final_status=(
+            ROUTER_HOOK_OBSERVATION_FINAL_STATUS_OBSERVED
+            if ok
+            else ROUTER_HOOK_OBSERVATION_FINAL_STATUS_BLOCKED
+        ),
+        result_status="observed" if ok else "blocked",
     )
 
 

@@ -106,6 +106,11 @@ PROMPT_DELEGATE_ARGUMENTS = {
     "task": "Codex, дай задачу DIP: верни короткий план.",
     "expected_alias": "DIP",
 }
+ROUTER_HOOK_PACKET = {
+    "hook_observed_prompt": True,
+    "hook_can_enforce_router": True,
+    "hook_can_route_delegate_to_dip": True,
+}
 
 
 def _direct_mcp_reality_packet(
@@ -163,6 +168,64 @@ def _live_smoke_packet(
             args,
             env={"WBP_PROFILE_DIR": str(profile_dir)},
             **kwargs,
+        )
+
+
+def _prompt_bound_codex_tool_call_packet(
+    *,
+    arguments: dict[str, object] | None = None,
+    expected_arguments: dict[str, object] | None = None,
+    jsonl_events: list[dict[str, object]] | None = None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    args = arguments or PROMPT_DELEGATE_ARGUMENTS
+    expected = expected_arguments or args
+    prompt_packet = mcp_delegate.build_prompt_observation_packet(
+        PROMPT_TEXT,
+        source="codex_exec_json",
+        expected_delegate_arguments=expected,
+    )
+    events = jsonl_events or [
+        {"type": "thread.started", "thread_id": "t1"},
+        {"type": "turn.started"},
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "item_router_1",
+                "type": "mcp_tool_call",
+                "server_name": "wild-boar-proxy",
+                "tool_name": "delegate_to_dip",
+                "status": "completed",
+                "arguments": args,
+            },
+        },
+        {"type": "turn.completed"},
+    ]
+    codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+        "\n".join(json.dumps(event, ensure_ascii=False) for event in events),
+        prompt_packet=prompt_packet,
+    )
+    return prompt_packet, codex_packet
+
+
+def _delegate_packet(
+    *,
+    arguments: dict[str, object] | None = None,
+    context_payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    args = arguments or PROMPT_DELEGATE_ARGUMENTS
+    if context_payload is None:
+        return mcp_delegate.build_delegate_to_dip_packet(
+            args,
+            env={},
+            mcp_tool_called=True,
+        )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        profile_dir = Path(temp_dir)
+        _write_context(profile_dir, context_payload)
+        return mcp_delegate.build_delegate_to_dip_packet(
+            args,
+            env={"WBP_PROFILE_DIR": str(profile_dir)},
+            mcp_tool_called=True,
         )
 
 
@@ -1206,6 +1269,399 @@ class McpDelegateToDipTests(unittest.TestCase):
             packets.inspect_command_packet_semantics(packet),
             [],
         )
+
+    def test_native_router_hook_observation_accepts_prompt_bound_wbp_tool_call(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["packet_kind"], "wbp_native_router_hook_observation")
+        self.assertEqual(packet["result_status"], "observed")
+        self.assertTrue(packet["router_hook_observed"])
+        self.assertTrue(packet["native_router_hook_observed"])
+        self.assertTrue(packet["explicit_router_hook_evidence"])
+        self.assertTrue(packet["wbp_owned_surface_called"])
+        self.assertEqual(packet["wbp_owned_surface_kind"], "mcp_tool_call:delegate_to_dip")
+        self.assertTrue(packet["delegate_to_dip_called"])
+        self.assertTrue(packet["codex_mcp_config_loaded"])
+        self.assertTrue(packet["codex_tool_call_observation_packet_ok"])
+        self.assertTrue(packet["real_codex_prompt_executed"])
+        self.assertTrue(packet["prompt_digest_present"])
+        self.assertTrue(packet["prompt_digest_bound"])
+        self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertTrue(packet["tool_call_digest_bound"])
+        self.assertTrue(packet["alias_context_read"])
+        self.assertTrue(packet["runtime_context_file_proven"])
+        self.assertTrue(packet["custom_codex_agent_runtime_context_proven"])
+        self.assertTrue(packet["coding_alias_bound_to_api_lane"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertTrue(packet["route_allowed"])
+        self.assertEqual(
+            packet["selected_api_route_id_sha256"],
+            hashlib.sha256(b"wbp-deepseek-chat").hexdigest(),
+        )
+        self.assertFalse(packet["selected_api_route_id_recorded"])
+        self.assertNotIn("wbp-deepseek-chat", serialized)
+        self.assertFalse(packet["local_codex_subagent_used"])
+        self.assertFalse(packet["local_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["browser_authority_rejected"])
+        self.assertTrue(packet["hook_observed_prompt"])
+        self.assertTrue(packet["hook_can_enforce_router"])
+        self.assertTrue(packet["hook_can_route_delegate_to_dip"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_can_supply_model_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_provider_response_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertTrue(packet["does_not_prove_native_free_chat_router"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_requires_explicit_hook_evidence(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "WBP_NATIVE_ROUTER_HOOK_NOT_OBSERVED")
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertFalse(packet["explicit_router_hook_evidence"])
+        self.assertTrue(packet["wbp_owned_surface_called"])
+        self.assertIn("hook_prompt_not_observed", packet["blocking_reasons"])
+        self.assertIn("hook_cannot_enforce_router", packet["blocking_reasons"])
+        self.assertIn("hook_cannot_route_delegate_to_dip", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_rejects_hook_logging_only(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet={
+                "hook_observed_prompt": True,
+                "hook_can_enforce_router": False,
+                "hook_can_route_delegate_to_dip": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertTrue(packet["hook_observed_prompt"])
+        self.assertFalse(packet["hook_can_enforce_router"])
+        self.assertFalse(packet["hook_can_route_delegate_to_dip"])
+        self.assertIn("hook_cannot_enforce_router", packet["blocking_reasons"])
+        self.assertIn("hook_cannot_route_delegate_to_dip", packet["blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_rejects_text_imitation_without_tool_call(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet(
+            jsonl_events=[
+                {"type": "thread.started", "thread_id": "t1"},
+                {"type": "turn.started"},
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "item_text_1",
+                        "type": "agent_message",
+                        "text": "DIP says the answer is ready without a tool call.",
+                    },
+                },
+                {"type": "turn.completed"},
+            ],
+        )
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "WBP_NATIVE_ROUTER_HOOK_NOT_OBSERVED")
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertFalse(packet["wbp_owned_surface_called"])
+        self.assertIn("router_hook_not_observed", packet["blocking_reasons"])
+        self.assertIn("codex_tool_call_observation_packet_not_ok", packet["blocking_reasons"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_codex_exec_jsonl_observation_marks_subagent_substitution(self) -> None:
+        prompt_packet, packet = _prompt_bound_codex_tool_call_packet(
+            jsonl_events=[
+                {"type": "thread.started", "thread_id": "t1"},
+                {"type": "turn.started"},
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "item_subagent_1",
+                        "type": "codex_subagent",
+                        "name": "DIP",
+                        "status": "completed",
+                        "text": "Subagent DIP completed locally.",
+                    },
+                },
+                {"type": "turn.completed"},
+            ],
+        )
+
+        self.assertTrue(prompt_packet["prompt_digest_present"])
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "WBP_CODEX_EXEC_SUBAGENT_USED_AS_DIP")
+        self.assertTrue(packet["local_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["codex_subagent_used_as_dip"])
+        self.assertTrue(packet["local_imitation_used"])
+        self.assertFalse(packet["delegate_to_dip_tool_called"])
+        self.assertIn("codex_subagent_used_as_dip", packet["blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_rejects_codex_subagent_as_dip(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet(
+            jsonl_events=[
+                {"type": "thread.started", "thread_id": "t1"},
+                {"type": "turn.started"},
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "item_subagent_2",
+                        "type": "codex_subagent",
+                        "name": "Agent 2",
+                        "status": "completed",
+                        "text": "Local sub-agent Agent 2 produced a response.",
+                    },
+                },
+                {"type": "turn.completed"},
+            ],
+        )
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_NATIVE_ROUTER_HOOK_CODEX_SUBAGENT_USED",
+        )
+        self.assertTrue(packet["local_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["local_imitation_used"])
+        self.assertIn("local_codex_subagent_used_as_dip", packet["blocking_reasons"])
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_blocks_without_codex_tool_call_packet(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            PROMPT_TEXT,
+            source="codex_exec_json",
+            expected_delegate_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertIn("codex_tool_call_observation_missing", packet["blocking_reasons"])
+        self.assertIn("router_hook_not_observed", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_blocks_unbound_tool_call(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet(
+            arguments={"task": "Different task", "expected_alias": "DIP"},
+            expected_arguments=PROMPT_DELEGATE_ARGUMENTS,
+        )
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["prompt_digest_bound"])
+        self.assertFalse(packet["tool_call_digest_bound"])
+        self.assertIn("prompt_digest_not_bound_to_router_hook", packet["blocking_reasons"])
+        self.assertIn(
+            "tool_call_digest_not_bound_to_delegate_packet",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_rejects_prompt_supplied_authority(self) -> None:
+        forbidden_arguments = {
+            "task": "DIP: implement this",
+            "expected_alias": "DIP",
+            "route_id": "evil-route-id",
+            "backend": "https://evil.invalid",
+            "secret": "secret-from-browser",
+            "model": "evil-model",
+        }
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet(
+            arguments=forbidden_arguments,
+            expected_arguments=forbidden_arguments,
+        )
+        delegate_packet = _delegate_packet(
+            arguments=forbidden_arguments,
+            context_payload=_context_payload(),
+        )
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        serialized = json.dumps(packet, sort_keys=True)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_NATIVE_ROUTER_HOOK_BROWSER_AUTHORITY_REJECTED",
+        )
+        self.assertTrue(codex_packet["browser_authority_fields_rejected"])
+        self.assertTrue(packet["browser_authority_rejected"])
+        self.assertIn("browser_authority_rejected", packet["blocking_reasons"])
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertNotIn("evil-route-id", serialized)
+        self.assertNotIn("https://evil.invalid", serialized)
+        self.assertNotIn("secret-from-browser", serialized)
+        self.assertNotIn("evil-model", serialized)
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_requires_runtime_context(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        delegate_packet = _delegate_packet()
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "FAIL_ALIAS_CONTEXT_MISSING")
+        self.assertFalse(packet["alias_context_read"])
+        self.assertIn("alias_context_not_read", packet["blocking_reasons"])
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_native_router_hook_observation_rejects_product_ready_claims(self) -> None:
+        config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+            CODEX_MCP_LIST_OUTPUT,
+            CODEX_MCP_GET_OUTPUT,
+        )
+        prompt_packet, codex_packet = _prompt_bound_codex_tool_call_packet()
+        codex_packet = dict(codex_packet)
+        codex_packet["native_free_chat_router_proven"] = True
+        codex_packet["product_ready"] = True
+        delegate_packet = _delegate_packet(context_payload=_context_payload())
+
+        packet = mcp_delegate.build_native_router_hook_observation_packet(
+            config_packet=config_packet,
+            prompt_packet=prompt_packet,
+            codex_tool_call_packet=codex_packet,
+            delegate_packet=delegate_packet,
+            hook_packet=ROUTER_HOOK_PACKET,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertIn(
+            "native_free_chat_router_must_not_be_claimed",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("product_ready_must_not_be_claimed", packet["blocking_reasons"])
+        self.assertFalse(packet["router_hook_observed"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_codex_mcp_wiring_is_with_limits_without_codex_prompt_call(self) -> None:
         config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
