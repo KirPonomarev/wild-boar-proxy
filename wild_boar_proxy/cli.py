@@ -18,6 +18,10 @@ from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets as command_packets
 from .custom_codex_admission import run_custom_codex_admission_command
+from .interactive_custom_codex_proof import (
+    run_interactive_custom_codex_collect_command,
+    run_interactive_custom_codex_preflight_command,
+)
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
 from .controlled_dispatch_handoff_proof import (
@@ -197,6 +201,35 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_admission.add_argument("--json", action="store_true", required=True)
+    codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
+        "interactive-preflight"
+    )
+    codex_runner_interactive_preflight.add_argument("--prompt", required=True)
+    codex_runner_interactive_preflight.add_argument("--proof-dir")
+    codex_runner_interactive_preflight.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_interactive_collect = codex_runner_subparsers.add_parser(
+        "interactive-collect"
+    )
+    codex_runner_interactive_collect.add_argument("--prompt", required=True)
+    codex_runner_interactive_collect.add_argument(
+        "--preflight-packet-file",
+        required=True,
+    )
+    codex_runner_interactive_collect.add_argument("--proof-dir")
+    codex_runner_interactive_collect.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_interactive_collect.add_argument("--live-provider-proof-file")
+    codex_runner_interactive_collect.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
 
     router_hook = subparsers.add_parser("router-hook")
     router_hook_subparsers = router_hook.add_subparsers(
@@ -728,6 +761,11 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         return EFFECT_PROBE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "admission":
         return EFFECT_MUTATE
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
+        "interactive-preflight",
+        "interactive-collect",
+    }:
+        return EFFECT_MUTATE
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
         "entry",
         "dispatch",
@@ -948,6 +986,31 @@ def main(argv: list[str] | None = None) -> int:
                     expected_text=args.expected_text,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-preflight"
+        ):
+            return emit_json(
+                run_interactive_custom_codex_preflight_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-collect"
+        ):
+            return emit_json(
+                run_interactive_custom_codex_collect_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    preflight_packet_file=args.preflight_packet_file,
+                    proof_dir=args.proof_dir,
+                    expected_text=args.expected_text,
+                    live_provider_proof_file=args.live_provider_proof_file,
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "entry":
