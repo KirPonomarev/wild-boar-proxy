@@ -28,6 +28,9 @@ from .controlled_ingress_api_dispatch_proof import (
 from .codex_exec_assistant_continuation_proof import (
     run_codex_exec_assistant_continuation_proof_command,
 )
+from .codex_working_flow_delivery_proof import (
+    run_codex_working_flow_delivery_proof_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -306,6 +309,22 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_user_prompt_submit.add_argument("--live-provider-expected-text")
     router_hook_user_prompt_submit.add_argument("--live-provider-proof-file")
     router_hook_user_prompt_submit.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_working_flow_delivery = router_hook_subparsers.add_parser(
+        "working-flow-delivery-proof"
+    )
+    router_hook_working_flow_delivery.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    router_hook_working_flow_delivery.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_working_flow_delivery.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -630,6 +649,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "assistant-continuation-proof",
         "visible-source-observe",
         "user-prompt-submit-proof",
+        "working-flow-delivery-proof",
         "user-prompt-submit-readiness",
     }:
         return EFFECT_PROBE
@@ -936,6 +956,18 @@ def main(argv: list[str] | None = None) -> int:
                     runtime_context_file=args.runtime_context_file,
                     live_provider_expected_text=args.live_provider_expected_text,
                     live_provider_proof_file=args.live_provider_proof_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "working-flow-delivery-proof"
+        ):
+            return emit_json(
+                run_codex_working_flow_delivery_proof_command(
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
         if (

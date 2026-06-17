@@ -4385,6 +4385,18 @@ class CliTests(unittest.TestCase):
             (
                 [
                     "router-hook",
+                    "working-flow-delivery-proof",
+                    "--integrated-live-provider-proof-file",
+                    "/tmp/wbp-integrated-live-provider.json",
+                    "--codex-exec-jsonl-file",
+                    "/tmp/wbp-codex.jsonl",
+                    "--json",
+                ],
+                "probe",
+            ),
+            (
+                [
+                    "router-hook",
                     "user-prompt-submit-install",
                     "--dry-run",
                     "--json",
