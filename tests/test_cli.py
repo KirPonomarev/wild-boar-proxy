@@ -4298,6 +4298,18 @@ class CliTests(unittest.TestCase):
             (["router-hook", "dispatch", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "handoff", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "deliver", "--prompt", "hi", "--json"], "probe"),
+            (
+                [
+                    "router-hook",
+                    "ingress",
+                    "--prompt",
+                    "hi",
+                    "--codex-exec-jsonl-file",
+                    "/tmp/wbp-codex.jsonl",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),

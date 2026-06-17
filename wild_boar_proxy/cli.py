@@ -18,6 +18,7 @@ from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_RE
 from .core import packets as command_packets
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
+from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
     DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
@@ -26,6 +27,7 @@ from .observed_machine_handoff_delivery import (
 from .router_hook_entry import (
     ADMITTED_HOOK_SURFACES,
     HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    HOOK_SURFACE_PROMPT_PREPROCESSOR,
     run_router_hook_entry_command,
 )
 from .runtime_health import run_healthcheck_probe
@@ -192,6 +194,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
     )
     router_hook_deliver.add_argument("--json", action="store_true", required=True)
+    router_hook_ingress = router_hook_subparsers.add_parser("ingress")
+    router_hook_ingress.add_argument("--prompt", required=True)
+    router_hook_ingress.add_argument("--codex-exec-jsonl-file", required=True)
+    router_hook_ingress.add_argument("--runtime-context-file")
+    router_hook_ingress.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
+    )
+    router_hook_ingress.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -484,6 +496,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "dispatch",
         "handoff",
         "deliver",
+        "ingress",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -709,6 +722,16 @@ def main(argv: list[str] | None = None) -> int:
                     runtime_context_file=args.runtime_context_file,
                     hook_surface_kind=args.hook_surface_kind,
                     delivery_surface_kind=args.delivery_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "ingress":
+            return emit_json(
+                run_custom_codex_ingress_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
                 )
             )
         if args.command == "accounts" and args.accounts_command == "list":
