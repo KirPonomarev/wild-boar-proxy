@@ -173,6 +173,9 @@ def build_controlled_api_dispatch_packet(
                 or CONTROLLED_API_DISPATCH_HOOK_ENTRY_NOT_PROVEN
             )
         )
+        blocking_reasons.extend(
+            str(reason) for reason in hook_packet.get("blocking_reasons", [])
+        )
     blocking_reasons.extend(
         str(reason) for reason in admission_packet.get("blocking_reasons", [])
     )

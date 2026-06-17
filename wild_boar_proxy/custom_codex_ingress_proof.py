@@ -134,6 +134,8 @@ def _router_entry_failures(router_packet: Mapping[str, Any]) -> list[str]:
         failures.append("route_id_not_allowed")
     if router_packet.get("allowed_api_route_ids_enforced") is not True:
         failures.append("allowed_api_route_ids_not_enforced")
+    if int(router_packet.get("forbidden_stale_route_ids_count") or 0) <= 0:
+        failures.append("stale_route_guard_missing")
     if not _safe_text(router_packet.get("alias_candidate"), limit=80):
         failures.append("alias_candidate_missing")
     if not _safe_text(router_packet.get("slot_candidate"), limit=80):
@@ -310,6 +312,16 @@ def build_custom_codex_ingress_proof_packet(
         "route_id_allowed": router.get("route_id_allowed") is True,
         "allowed_api_route_ids_enforced": (
             router.get("allowed_api_route_ids_enforced") is True
+        ),
+        "allowed_api_route_ids_count": int(
+            router.get("allowed_api_route_ids_count") or 0
+        ),
+        "forbidden_stale_route_ids_enforced": int(
+            router.get("forbidden_stale_route_ids_count") or 0
+        )
+        > 0,
+        "forbidden_stale_route_ids_count": int(
+            router.get("forbidden_stale_route_ids_count") or 0
         ),
         "wbp_controlled_entry_called": ingress_proven,
         "router_hook_entry_preflight_passed": (

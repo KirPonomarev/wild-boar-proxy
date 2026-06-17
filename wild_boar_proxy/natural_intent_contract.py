@@ -504,12 +504,16 @@ def _resolve_intent(
     forbidden_stale_route_ids = _safe_list(
         runtime_context.get("forbidden_stale_route_ids")
     )
+    allowed_api_route_ids_enforced = bool(allowed_api_route_ids)
+    stale_route_guard_present = bool(forbidden_stale_route_ids)
     agent_id = projection["alias_to_agent_id"].get(alias_candidate_key, "")
     lane = projection["agent_id_to_lane"].get(agent_id, "")
     route_id = projection["agent_id_to_route"].get(agent_id, "")
     alias_bound = bool(agent_id)
     route_id_allowed = bool(
         route_id
+        and allowed_api_route_ids_enforced
+        and stale_route_guard_present
         and route_id in allowed_api_route_ids
         and route_id not in forbidden_stale_route_ids
     )
@@ -536,6 +540,9 @@ def _resolve_intent(
     elif lane != API_ROUTE_LANE:
         intent_status = FAIL_ALIAS_NOT_API_LANE
         blocking_reasons.append("alias_not_bound_to_api_lane")
+    elif not stale_route_guard_present:
+        intent_status = FAIL_ROUTE_NOT_ALLOWED
+        blocking_reasons.append("stale_route_guard_missing")
     elif not route_id_allowed:
         intent_status = FAIL_ROUTE_NOT_ALLOWED
         blocking_reasons.append("route_not_allowed_by_runtime_context")
@@ -561,6 +568,8 @@ def _resolve_intent(
         "lane_candidate": lane,
         "route_candidate": route_id,
         "route_id_allowed": route_id_allowed,
+        "allowed_api_route_ids_enforced": allowed_api_route_ids_enforced,
+        "stale_route_guard_present": stale_route_guard_present,
         "intent_status": intent_status,
         "contract_preflight_status": contract_preflight_status,
         "blocking_reasons": blocking_reasons,
@@ -628,8 +637,10 @@ def build_natural_intent_contract_packet(
         "runtime_context_kind_valid": resolved["runtime_context_kind_valid"],
         "runtime_context_file_required": True,
         "alias_context_read": resolved["runtime_context_kind_valid"],
-        "allowed_api_route_ids_enforced": resolved["route_id_allowed"],
+        "allowed_api_route_ids_enforced": resolved["allowed_api_route_ids_enforced"],
         "allowed_api_route_ids_count": len(resolved["allowed_api_route_ids"]),
+        "forbidden_stale_route_ids_enforced": resolved["stale_route_guard_present"],
+        "stale_route_guard_present": resolved["stale_route_guard_present"],
         "forbidden_stale_route_ids_count": len(
             resolved["forbidden_stale_route_ids"]
         ),

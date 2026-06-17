@@ -226,6 +226,26 @@ class RouterHookEntryTests(unittest.TestCase):
         _assert_no_dispatch(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_router_hook_entry_missing_stale_route_guard_fails_closed(self) -> None:
+        runtime_context = _runtime_context(allowed_routes=[ROUTE_ID])
+        runtime_context["forbidden_stale_route_ids"] = []
+        packet = hook_entry.build_router_hook_entry_packet(
+            prompt_text="Codex, дай задачу DIP.",
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], FAIL_ROUTE_NOT_ALLOWED)
+        self.assertTrue(packet["hook_entry_observed"])
+        self.assertFalse(packet["hook_entry_proven"])
+        self.assertFalse(packet["route_id_allowed"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertFalse(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["forbidden_stale_route_ids_count"], 0)
+        self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_router_hook_entry_cli_reads_context_file_and_emits_single_json(self) -> None:
         prompt = "Codex, дай задачу DIP: верни короткий план."
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -18,6 +18,9 @@ from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_RE
 from .core import packets as command_packets
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
+from .controlled_ingress_api_dispatch_proof import (
+    run_controlled_ingress_api_dispatch_proof_command,
+)
 from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
@@ -204,6 +207,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
     )
     router_hook_ingress.add_argument("--json", action="store_true", required=True)
+    router_hook_dispatch_proof = router_hook_subparsers.add_parser("dispatch-proof")
+    router_hook_dispatch_proof.add_argument("--ingress-proof-file", required=True)
+    router_hook_dispatch_proof.add_argument("--prompt", required=True)
+    router_hook_dispatch_proof.add_argument("--runtime-context-file")
+    router_hook_dispatch_proof.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
+    )
+    router_hook_dispatch_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -497,6 +510,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "handoff",
         "deliver",
         "ingress",
+        "dispatch-proof",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -730,6 +744,16 @@ def main(argv: list[str] | None = None) -> int:
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "dispatch-proof":
+            return emit_json(
+                run_controlled_ingress_api_dispatch_proof_command(
+                    paths=paths,
+                    ingress_proof_file=args.ingress_proof_file,
+                    prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
                     hook_surface_kind=args.hook_surface_kind,
                 )

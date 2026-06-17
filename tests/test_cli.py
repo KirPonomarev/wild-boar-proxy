@@ -4310,6 +4310,18 @@ class CliTests(unittest.TestCase):
                 ],
                 "probe",
             ),
+            (
+                [
+                    "router-hook",
+                    "dispatch-proof",
+                    "--ingress-proof-file",
+                    "/tmp/wbp-ingress.json",
+                    "--prompt",
+                    "hi",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),

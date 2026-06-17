@@ -249,6 +249,8 @@ class CustomCodexIngressProofTests(unittest.TestCase):
         self.assertEqual(packet["slot_candidate"], "dip")
         self.assertTrue(packet["route_id_allowed"])
         self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["forbidden_stale_route_ids_count"], 1)
         self.assertTrue(packet["wbp_controlled_entry_called"])
         self.assertTrue(packet["router_hook_entry_preflight_passed"])
         self.assertFalse(packet["codex_native_subagent_used_as_dip"])
@@ -326,6 +328,14 @@ class CustomCodexIngressProofTests(unittest.TestCase):
                 "route_not_allowed",
                 _runtime_context(allowed_routes=["other-route"]),
                 "route_id_not_allowed",
+            ),
+            (
+                "missing_stale_guard",
+                {
+                    **_runtime_context(),
+                    "forbidden_stale_route_ids": [],
+                },
+                "stale_route_guard_missing",
             ),
             (
                 "no_alias",

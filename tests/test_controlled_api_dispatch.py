@@ -227,6 +227,30 @@ class ControlledApiDispatchTests(unittest.TestCase):
         _assert_no_raw_prompt_route_or_provider_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_controlled_dispatch_rejects_missing_stale_route_guard(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["forbidden_stale_route_ids"] = []
+        packet = dispatch.build_controlled_api_dispatch_packet(
+            prompt_text=PROMPT,
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            dispatch.CONTROLLED_API_DISPATCH_HOOK_ENTRY_NOT_PROVEN,
+        )
+        self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
+        self.assertFalse(packet["route_id_allowed"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertEqual(packet["forbidden_stale_route_ids_count"], 0)
+        self.assertFalse(packet["api_lane_adapter_called"])
+        self.assertFalse(packet["controlled_provider_called"])
+        self.assertFalse(packet["dispatch_proven"])
+        _assert_no_live_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_controlled_dispatch_rejects_adapter_unavailable(self) -> None:
         packet = dispatch.build_controlled_api_dispatch_packet(
             prompt_text=PROMPT,

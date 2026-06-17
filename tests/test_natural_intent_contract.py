@@ -356,6 +356,9 @@ class NaturalIntentContractTests(unittest.TestCase):
         self.assertEqual(packet["lane_candidate"], "api_route")
         self.assertEqual(packet["route_candidate"], ROUTE_ID)
         self.assertTrue(packet["route_id_allowed"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["forbidden_stale_route_ids_count"], 1)
         self.assertEqual(packet["runtime_context_source"], "server_launch_selection_packet")
         self.assertTrue(packet["runtime_context_present"])
         self.assertTrue(packet["runtime_context_kind_valid"])
@@ -367,6 +370,22 @@ class NaturalIntentContractTests(unittest.TestCase):
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["natural_phrase_recorded"])
         self.assertFalse(contract.packet_contains_text(packet, raw_prompt))
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_missing_stale_route_guard_fails_closed(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["forbidden_stale_route_ids"] = []
+        packet = _packet(runtime_context=runtime_context)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.FAIL_ROUTE_NOT_ALLOWED)
+        self.assertEqual(packet["intent_status"], contract.FAIL_ROUTE_NOT_ALLOWED)
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertFalse(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["forbidden_stale_route_ids_count"], 0)
+        self.assertFalse(packet["route_id_allowed"])
+        self.assertIn("stale_route_guard_missing", packet["blocking_reasons"])
         _assert_no_dispatch(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
