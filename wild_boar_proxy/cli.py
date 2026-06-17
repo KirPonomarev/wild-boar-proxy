@@ -31,6 +31,9 @@ from .codex_exec_assistant_continuation_proof import (
 from .codex_working_flow_delivery_proof import (
     run_codex_working_flow_delivery_proof_command,
 )
+from .custom_codex_hook_origin_proof import (
+    run_custom_codex_hook_origin_proof_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -325,6 +328,22 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_working_flow_delivery.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin = router_hook_subparsers.add_parser(
+        "custom-origin-proof"
+    )
+    router_hook_custom_origin.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -968,6 +987,21 @@ def main(argv: list[str] | None = None) -> int:
                         args.integrated_live_provider_proof_file
                     ),
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-proof"
+        ):
+            return emit_json(
+                run_custom_codex_hook_origin_proof_command(
+                    paths=paths,
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
                 )
             )
         if (
