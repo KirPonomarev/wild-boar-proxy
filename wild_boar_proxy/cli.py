@@ -18,6 +18,7 @@ from .cli_runner import run_codex_cli_runner_smoke
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets as command_packets
 from .custom_codex_admission import run_custom_codex_admission_command
+from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .interactive_custom_codex_proof import (
     run_interactive_custom_codex_collect_command,
     run_interactive_custom_codex_preflight_command,
@@ -206,6 +207,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_admission.add_argument("--json", action="store_true", required=True)
+    codex_runner_operator = codex_runner_subparsers.add_parser("operator-proof")
+    codex_runner_operator.add_argument("--prompt", required=True)
+    codex_runner_operator.add_argument("--codex-bin")
+    codex_runner_operator.add_argument("--proof-dir")
+    codex_runner_operator.add_argument("--codex-cwd")
+    codex_runner_operator.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_operator.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_operator.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_operator.add_argument("--json", action="store_true", required=True)
     codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
         "interactive-preflight"
     )
@@ -790,7 +810,10 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
-    if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "admission":
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
+        "admission",
+        "operator-proof",
+    }:
         return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
         "interactive-preflight",
@@ -1010,6 +1033,22 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "codex-runner" and args.codex_runner_command == "admission":
             return emit_json(
                 run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "operator-proof"
+        ):
+            return emit_json(
+                run_repeatable_operator_proof_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_bin=args.codex_bin,
