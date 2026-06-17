@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 import hashlib
 import json
 from pathlib import Path
+import re
+from types import SimpleNamespace
 from typing import Any
 
 from .approved_handoff import (
@@ -20,6 +22,7 @@ from .controlled_api_dispatch import (
     build_controlled_api_dispatch_packet,
 )
 from .core import packets
+from .external_models import run_external_models_command
 from .observed_machine_handoff_delivery import (
     DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
     build_observed_machine_handoff_delivery_packet,
@@ -66,6 +69,9 @@ USER_PROMPT_SUBMIT_ORIGIN_NOT_CUSTOM_CODEX = (
 USER_PROMPT_SUBMIT_UNSAFE_CLAIM = "WBP_USER_PROMPT_SUBMIT_UNSAFE_CLAIM"
 USER_PROMPT_SUBMIT_DISPATCH_NOT_PROVEN = "WBP_USER_PROMPT_SUBMIT_DISPATCH_NOT_PROVEN"
 USER_PROMPT_SUBMIT_HANDOFF_NOT_PROVEN = "WBP_USER_PROMPT_SUBMIT_HANDOFF_NOT_PROVEN"
+USER_PROMPT_SUBMIT_LIVE_PROVIDER_NOT_PROVEN = (
+    "WBP_USER_PROMPT_SUBMIT_LIVE_PROVIDER_NOT_PROVEN"
+)
 
 _COMMAND_PACKET_CORE_FIELDS = frozenset(
     packets.COMMAND_PACKET_REQUIRED_FIELDS
@@ -80,6 +86,8 @@ _COMMAND_PACKET_CORE_FIELDS = frozenset(
         "operator_action",
     ]
 )
+
+_EXPECTED_TEXT_MARKER_RE = re.compile(r"^[A-Z0-9_]{1,128}$")
 
 
 def _sha256_text(value: str) -> str:
@@ -219,6 +227,37 @@ def _ledger_file_metadata(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         metadata["hook_ledger_file_error_code"] = "hook_ledger_file_not_mapping"
         return {}, metadata
     metadata["hook_ledger_file_mapping"] = True
+    return dict(parsed), metadata
+
+
+def _packet_file_metadata(
+    path: Path,
+    *,
+    prefix: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    metadata: dict[str, Any] = {
+        f"{prefix}_file_required": True,
+        f"{prefix}_file_present": path.exists(),
+        f"{prefix}_file_read": False,
+        f"{prefix}_file_valid_json": False,
+        f"{prefix}_file_mapping": False,
+        f"{prefix}_file_error_code": "",
+        f"{prefix}_file_path_recorded": False,
+    }
+    if not path.exists():
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_missing"
+        return {}, metadata
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_invalid"
+        return {}, metadata
+    metadata[f"{prefix}_file_read"] = True
+    metadata[f"{prefix}_file_valid_json"] = True
+    if not isinstance(parsed, Mapping):
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_not_mapping"
+        return {}, metadata
+    metadata[f"{prefix}_file_mapping"] = True
     return dict(parsed), metadata
 
 
@@ -427,6 +466,185 @@ def _handoff_failures(
     return sorted(set(failures))
 
 
+def _selected_route_id_from_context(
+    runtime_context: Mapping[str, Any],
+    dispatch_packet: Mapping[str, Any],
+) -> str:
+    slot = _safe_text(dispatch_packet.get("selected_slot"), limit=64)
+    agent_routes = runtime_context.get("agent_id_to_route")
+    if isinstance(agent_routes, Mapping):
+        route_id = agent_routes.get(slot)
+        if isinstance(route_id, str) and route_id:
+            return route_id
+    bindings = runtime_context.get("agent_bindings")
+    if isinstance(bindings, Sequence) and not isinstance(bindings, (str, bytes)):
+        for binding in bindings:
+            if not isinstance(binding, Mapping):
+                continue
+            if _safe_text(binding.get("agent_id"), limit=64) != slot:
+                continue
+            route_id = binding.get("route_id")
+            if isinstance(route_id, str) and route_id:
+                return route_id
+    return ""
+
+
+def _runtime_context_declares_live_cli(
+    runtime_context: Mapping[str, Any],
+    route_id: str,
+) -> tuple[bool, bool]:
+    command = runtime_context.get("deepseek_live_format_check_cli_command")
+    if not isinstance(command, Sequence) or isinstance(command, (str, bytes)):
+        return False, False
+    command_parts = [str(part) for part in command]
+    declared = bool(
+        "external-models" in command_parts
+        and "live-format-check" in command_parts
+        and "--json" in command_parts
+    )
+    route_bound = False
+    if declared and route_id:
+        for index, part in enumerate(command_parts[:-1]):
+            if part == "--route" and command_parts[index + 1] == route_id:
+                route_bound = True
+                break
+    return declared, route_bound
+
+
+def _is_safe_expected_text_marker(value: str) -> bool:
+    return bool(_EXPECTED_TEXT_MARKER_RE.fullmatch(value))
+
+
+def _live_provider_packet_unsafe_failures(
+    live_provider_packet: Mapping[str, Any],
+) -> list[str]:
+    data = live_provider_packet.get("data")
+    data_mapping = data if isinstance(data, Mapping) else {}
+    checks = {
+        "raw_prompt_recorded": "live_provider_raw_prompt_recorded",
+        "prompt_text_recorded": "live_provider_prompt_text_recorded",
+        "natural_phrase_recorded": "live_provider_natural_phrase_recorded",
+        "raw_route_id_recorded": "live_provider_raw_route_id_recorded",
+        "selected_api_route_id_recorded": "live_provider_selected_route_recorded",
+        "raw_provider_response_recorded": "live_provider_raw_response_recorded",
+        "provider_response_raw_recorded": "live_provider_raw_response_recorded",
+        "provider_response_text_recorded": "live_provider_response_text_recorded",
+        "raw_backend_details_exposed": "live_provider_raw_backend_details_exposed",
+        "secret_value_exposed": "live_provider_secret_value_exposed",
+        "fallback_used": "live_provider_fallback_used",
+        "local_imitation_used": "live_provider_local_imitation_used",
+        "native_codex_subagent_used_as_dip": (
+            "live_provider_native_codex_subagent_used_as_dip"
+        ),
+    }
+    failures = [
+        reason
+        for field, reason in checks.items()
+        if live_provider_packet.get(field) is True or data_mapping.get(field) is True
+    ]
+    return sorted(set(failures))
+
+
+def _live_provider_join_failures(
+    *,
+    live_provider_requested: bool,
+    live_provider_packet: Mapping[str, Any],
+    live_provider_file_metadata: Mapping[str, Any],
+    runtime_context: Mapping[str, Any],
+    dispatch_packet: Mapping[str, Any],
+    expected_text: str,
+) -> list[str]:
+    if not live_provider_requested:
+        return []
+    failures: list[str] = []
+    route_id = _selected_route_id_from_context(runtime_context, dispatch_packet)
+    allowed_routes = runtime_context.get("allowed_api_route_ids")
+    allowed_route_ids = (
+        {route for route in allowed_routes if isinstance(route, str)}
+        if isinstance(allowed_routes, Sequence)
+        and not isinstance(allowed_routes, (str, bytes))
+        else set()
+    )
+    cli_declared, cli_route_bound = _runtime_context_declares_live_cli(
+        runtime_context,
+        route_id,
+    )
+    if not expected_text:
+        failures.append("live_provider_expected_text_missing")
+    elif not _is_safe_expected_text_marker(expected_text):
+        failures.append("live_provider_expected_text_not_safe_marker")
+    if not route_id:
+        failures.append("live_provider_route_not_resolved")
+    if route_id and route_id not in allowed_route_ids:
+        failures.append("live_provider_route_not_allowed")
+    if not cli_declared:
+        failures.append("live_provider_cli_command_not_declared")
+    if not cli_route_bound:
+        failures.append("live_provider_cli_command_not_route_bound")
+    if live_provider_file_metadata:
+        if live_provider_file_metadata.get("live_provider_proof_file_read") is not True:
+            failures.append("live_provider_proof_file_not_read")
+        if (
+            live_provider_file_metadata.get("live_provider_proof_file_valid_json")
+            is not True
+        ):
+            failures.append("live_provider_proof_file_json_not_valid")
+        if live_provider_file_metadata.get("live_provider_proof_file_mapping") is not True:
+            failures.append("live_provider_proof_file_not_mapping")
+    if not live_provider_packet:
+        failures.append("live_provider_packet_missing")
+        return sorted(set(failures))
+    data = live_provider_packet.get("data")
+    data_mapping = data if isinstance(data, Mapping) else {}
+    if live_provider_packet.get("status") != "ok":
+        failures.append("live_provider_packet_not_ok")
+    if live_provider_packet.get("machine_error_code") != "OK":
+        failures.append("live_provider_machine_error_not_ok")
+    if live_provider_packet.get("changed_files") not in ([], ()):
+        failures.append("live_provider_changed_files_not_empty")
+    if live_provider_packet.get("effect") != EFFECT_PROBE:
+        failures.append("live_provider_effect_not_probe")
+    if not isinstance(data, Mapping):
+        failures.append("live_provider_data_not_mapping")
+    if data_mapping.get("check_kind") != "api_only_live_route_format":
+        failures.append("live_provider_check_kind_invalid")
+    if data_mapping.get("verification_scope") != "route_provider_only_no_write":
+        failures.append("live_provider_scope_invalid")
+    if data_mapping.get("route_state") != "live_response_observed_no_write":
+        failures.append("live_provider_route_state_not_live")
+    if data_mapping.get("network_dependent") is not True:
+        failures.append("live_provider_not_network_dependent")
+    if route_id and data_mapping.get("requested_model") != route_id:
+        failures.append("live_provider_route_mismatch")
+    if data_mapping.get("expected_text_observed") is not True:
+        failures.append("live_provider_expected_text_not_observed")
+    response_preview = _safe_text(data_mapping.get("response_preview_bounded"), limit=512)
+    if expected_text and response_preview != expected_text:
+        failures.append("live_provider_response_preview_mismatch")
+    try:
+        response_text_length = int(data_mapping.get("response_text_length"))
+    except (TypeError, ValueError):
+        response_text_length = -1
+    if expected_text and response_text_length != len(expected_text):
+        failures.append("live_provider_response_length_mismatch")
+    if data_mapping.get("fallback_used") is True:
+        failures.append("live_provider_fallback_used")
+    if data_mapping.get("request_count") != 1:
+        failures.append("live_provider_request_count_invalid")
+    for field, reason in (
+        ("state_written", "live_provider_state_written"),
+        ("evidence_written", "live_provider_evidence_written"),
+        ("file_mutation_attempted", "live_provider_file_mutation_attempted"),
+        ("commands_started_by_provider", "live_provider_commands_started"),
+        ("codex_history_sent", "live_provider_codex_history_sent"),
+        ("repo_context_sent", "live_provider_repo_context_sent"),
+    ):
+        if data_mapping.get(field) is not False:
+            failures.append(reason)
+    failures.extend(_live_provider_packet_unsafe_failures(live_provider_packet))
+    return sorted(set(failures))
+
+
 def _machine_error_code(
     *,
     ledger_metadata: Mapping[str, Any],
@@ -434,8 +652,14 @@ def _machine_error_code(
     unsafe_ledger_failures: Sequence[str],
     dispatch_failures: Sequence[str],
     handoff_failures: Sequence[str],
+    live_provider_failures: Sequence[str],
 ) -> str:
-    if not ledger_failures and not dispatch_failures and not handoff_failures:
+    if (
+        not ledger_failures
+        and not dispatch_failures
+        and not handoff_failures
+        and not live_provider_failures
+    ):
         return "OK"
     if ledger_metadata.get("hook_ledger_file_error_code") == "hook_ledger_file_missing":
         return USER_PROMPT_SUBMIT_LEDGER_MISSING
@@ -449,6 +673,8 @@ def _machine_error_code(
         return USER_PROMPT_SUBMIT_HOOK_NOT_PROVEN
     if dispatch_failures:
         return USER_PROMPT_SUBMIT_DISPATCH_NOT_PROVEN
+    if live_provider_failures:
+        return USER_PROMPT_SUBMIT_LIVE_PROVIDER_NOT_PROVEN
     return USER_PROMPT_SUBMIT_HANDOFF_NOT_PROVEN
 
 
@@ -459,6 +685,10 @@ def build_real_custom_codex_hook_proof_packet(
     hook_ledger: Mapping[str, Any] | None,
     context_file_metadata: Mapping[str, Any] | None = None,
     hook_ledger_file_metadata: Mapping[str, Any] | None = None,
+    live_provider_packet: Mapping[str, Any] | None = None,
+    live_provider_file_metadata: Mapping[str, Any] | None = None,
+    live_provider_expected_text: object = "",
+    live_provider_source_kind: str = "",
     secret_values: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     context = runtime_context if isinstance(runtime_context, Mapping) else {}
@@ -475,6 +705,9 @@ def build_real_custom_codex_hook_proof_packet(
     )
     secret_list = list(secret_values or []) + [str(prompt_text or "")]
     secret_list.extend(_runtime_secret_values(context))
+    expected_text = _safe_text(live_provider_expected_text, limit=512)
+    if expected_text:
+        secret_list.append(expected_text)
 
     entry_packet = build_router_hook_entry_packet(
         prompt_text=prompt_text,
@@ -501,12 +734,34 @@ def build_real_custom_codex_hook_proof_packet(
             secret_values=secret_list,
         )
     dispatch_failures = _dispatch_failures(dispatch_packet) if dispatch_attempted else []
+    live_packet = (
+        live_provider_packet if isinstance(live_provider_packet, Mapping) else {}
+    )
+    live_metadata = (
+        dict(live_provider_file_metadata)
+        if isinstance(live_provider_file_metadata, Mapping)
+        else {}
+    )
+    live_provider_requested = bool(
+        expected_text or live_packet or live_metadata or live_provider_source_kind
+    )
+    live_provider_attempted = bool(live_packet)
+    live_provider_failures: list[str] = []
+    if not ledger_failures and not dispatch_failures:
+        live_provider_failures = _live_provider_join_failures(
+            live_provider_requested=live_provider_requested,
+            live_provider_packet=live_packet,
+            live_provider_file_metadata=live_metadata,
+            runtime_context=context,
+            dispatch_packet=dispatch_packet,
+            expected_text=expected_text,
+        )
 
     approved_packet: Mapping[str, Any] = {}
     delivery_packet: Mapping[str, Any] = {}
     handoff_payload: Mapping[str, Any] = {}
     handoff_failures: list[str] = []
-    if not ledger_failures and not dispatch_failures:
+    if not ledger_failures and not dispatch_failures and not live_provider_failures:
         approved_packet = build_approved_handoff_packet(
             dispatch_packet,
             handoff_surface_kind=HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
@@ -526,7 +781,12 @@ def build_real_custom_codex_hook_proof_packet(
         handoff_failures = _handoff_failures(approved_packet, delivery_packet)
 
     blocking_reasons = sorted(
-        set(ledger_failures + dispatch_failures + handoff_failures)
+        set(
+            ledger_failures
+            + dispatch_failures
+            + live_provider_failures
+            + handoff_failures
+        )
     )
     ok = not blocking_reasons
     machine_error_code = _machine_error_code(
@@ -535,8 +795,9 @@ def build_real_custom_codex_hook_proof_packet(
         unsafe_ledger_failures=unsafe_ledger_failures,
         dispatch_failures=dispatch_failures,
         handoff_failures=handoff_failures,
+        live_provider_failures=live_provider_failures,
     )
-    hook_producer_ledger_proven = ok
+    hook_producer_ledger_proven = not ledger_failures
     # File-backed hook evidence is enough to admit bounded dispatch/handoff,
     # but not enough to claim native Custom Codex origin or UI visibility.
     custom_origin_proven = False
@@ -546,10 +807,37 @@ def build_real_custom_codex_hook_proof_packet(
         ledger.get("trusted_hook_config_sha256")
     )
     loaded_hook_config_sha256 = _hex_sha256(ledger.get("loaded_hook_config_sha256"))
+    live_data = (
+        live_packet.get("data") if isinstance(live_packet.get("data"), Mapping) else {}
+    )
+    selected_live_route_id = _selected_route_id_from_context(context, dispatch_packet)
+    live_cli_declared, live_cli_route_bound = _runtime_context_declares_live_cli(
+        context,
+        selected_live_route_id,
+    )
+    allowed_context_routes = context.get("allowed_api_route_ids")
+    allowed_context_route_ids = (
+        {route for route in allowed_context_routes if isinstance(route, str)}
+        if isinstance(allowed_context_routes, Sequence)
+        and not isinstance(allowed_context_routes, (str, bytes))
+        else set()
+    )
+    live_provider_response_proven = bool(
+        live_provider_requested
+        and not live_provider_failures
+        and live_packet.get("status") == "ok"
+        and live_data.get("expected_text_observed") is True
+    )
+    provider_route_fallback_used = live_data.get("fallback_used") is True
+    live_provider_response_preview = _safe_text(
+        live_data.get("response_preview_bounded"),
+        limit=512,
+    )
 
     extra = {
         **context_metadata,
         **ledger_metadata,
+        **live_metadata,
         "schema_version": 1,
         "packet_kind": REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND,
         "router_entry_packet_kind": _safe_text(entry_packet.get("packet_kind"), limit=80),
@@ -717,14 +1005,72 @@ def build_real_custom_codex_hook_proof_packet(
             if ok
             else "HOOK_DISPATCH_HANDOFF_NOT_PROVEN"
         ),
-        "live_provider_proven": False,
-        "live_provider_response_proven": False,
-        "external_live_provider_response_proven": False,
+        "live_provider_requested": live_provider_requested,
+        "live_provider_attempted": live_provider_attempted,
+        "live_provider_source_kind": _safe_text(live_provider_source_kind, limit=80),
+        "live_provider_packet_status": _safe_text(
+            live_packet.get("status"),
+            limit=32,
+        ),
+        "live_provider_packet_machine_error_code": _safe_text(
+            live_packet.get("machine_error_code"),
+            limit=96,
+        ),
+        "live_provider_cli_command_declared": live_cli_declared,
+        "live_provider_cli_command_route_bound": live_cli_route_bound,
+        "live_provider_route_bound_to_context": bool(
+            selected_live_route_id
+            and selected_live_route_id in allowed_context_route_ids
+        ),
+        "live_provider_route_id_sha256": _sha256_text(selected_live_route_id)
+        if selected_live_route_id
+        else "",
+        "live_provider_route_id_recorded": False,
+        "live_provider_check_kind": _safe_text(live_data.get("check_kind"), limit=80),
+        "live_provider_verification_scope": _safe_text(
+            live_data.get("verification_scope"),
+            limit=80,
+        ),
+        "live_provider_route_state": _safe_text(live_data.get("route_state"), limit=80),
+        "live_provider_network_dependent": live_data.get("network_dependent") is True,
+        "live_provider_request_count": int(live_data.get("request_count") or 0),
+        "live_provider_expected_text_digest": _sha256_text(expected_text)
+        if expected_text
+        else "",
+        "expected_text_observed": live_data.get("expected_text_observed") is True,
+        "expected_text_present": bool(expected_text),
+        "expected_text_recorded": False,
+        "raw_expected_text_recorded": False,
+        "provider_route_fallback_used": provider_route_fallback_used,
+        "live_provider_response_digest": _sha256_text(live_provider_response_preview)
+        if live_provider_response_preview
+        else "",
+        "live_provider_response_bound_to_expected_text": bool(
+            live_provider_response_proven and expected_text
+        ),
+        "live_provider_response_bound_to_route": bool(
+            live_provider_response_proven
+            and selected_live_route_id
+            and live_data.get("requested_model") == selected_live_route_id
+        ),
+        "live_provider_changed_files_empty": live_packet.get("changed_files")
+        in ([], ()),
+        "live_provider_state_written": live_data.get("state_written") is True,
+        "live_provider_evidence_written": live_data.get("evidence_written") is True,
+        "live_provider_file_mutation_attempted": (
+            live_data.get("file_mutation_attempted") is True
+        ),
+        "live_provider_codex_history_sent": live_data.get("codex_history_sent") is True,
+        "live_provider_repo_context_sent": live_data.get("repo_context_sent") is True,
+        "live_provider_failures": live_provider_failures,
+        "live_provider_proven": live_provider_response_proven,
+        "live_provider_response_proven": live_provider_response_proven,
+        "external_live_provider_response_proven": live_provider_response_proven,
         "product_ready": False,
         "does_not_prove_custom_codex_ui": True,
         "does_not_prove_custom_codex_origin": True,
         "does_not_prove_native_free_chat_router": True,
-        "does_not_prove_live_provider": True,
+        "does_not_prove_live_provider": not live_provider_response_proven,
         "does_not_prove_product_ready": True,
         "fallback_used": False,
         "local_imitation_used": False,
@@ -755,7 +1101,9 @@ def build_real_custom_codex_hook_proof_packet(
     return packets.build_command_packet(
         ok=ok,
         human_message=(
-            "WBP proved a UserPromptSubmit hook-produced ledger, controlled dispatch, and observed handoff."
+            "WBP proved a UserPromptSubmit hook-produced ledger, controlled dispatch, live provider response, and observed handoff."
+            if ok and live_provider_response_proven
+            else "WBP proved a UserPromptSubmit hook-produced ledger, controlled dispatch, and observed handoff."
             if ok
             else "WBP blocked UserPromptSubmit hook proof before bounded dispatch."
         ),
@@ -776,6 +1124,8 @@ def run_real_custom_codex_hook_proof_command(
     prompt_text: object,
     hook_ledger_file: str,
     runtime_context_file: str | None = None,
+    live_provider_expected_text: object = "",
+    live_provider_proof_file: str | None = None,
 ) -> dict[str, Any]:
     context_path = runtime_context_path(
         paths=paths,
@@ -784,10 +1134,59 @@ def run_real_custom_codex_hook_proof_command(
     runtime_context, context_metadata = load_runtime_context_packet(context_path)
     ledger_path = Path(hook_ledger_file).expanduser()
     hook_ledger, ledger_metadata = _ledger_file_metadata(ledger_path)
+    live_packet: Mapping[str, Any] = {}
+    live_metadata: Mapping[str, Any] = {}
+    live_source_kind = ""
+    expected_text = _safe_text(live_provider_expected_text, limit=512)
+    if live_provider_proof_file:
+        live_path = Path(live_provider_proof_file).expanduser()
+        live_packet, live_metadata = _packet_file_metadata(
+            live_path,
+            prefix="live_provider_proof",
+        )
+        live_source_kind = "file_backed_external_models_live_format_check"
+    elif expected_text:
+        preliminary = build_real_custom_codex_hook_proof_packet(
+            prompt_text=prompt_text,
+            runtime_context=runtime_context,
+            hook_ledger=hook_ledger,
+            context_file_metadata=context_metadata,
+            hook_ledger_file_metadata=ledger_metadata,
+        )
+        if preliminary.get("status") == "ok":
+            route_id = _selected_route_id_from_context(runtime_context, preliminary)
+            cli_declared, cli_route_bound = _runtime_context_declares_live_cli(
+                runtime_context,
+                route_id,
+            )
+            expected_marker_safe = _is_safe_expected_text_marker(expected_text)
+            live_source_kind = (
+                "runtime_context_allowed_cli_command"
+                if cli_declared and cli_route_bound and expected_marker_safe
+                else "live_provider_expected_text_not_safe_marker"
+                if not expected_marker_safe
+                else "runtime_context_cli_command_not_admitted"
+            )
+            if cli_declared and cli_route_bound and expected_marker_safe:
+                live_packet = run_external_models_command(
+                    SimpleNamespace(
+                        external_models_command="live-format-check",
+                        route=route_id,
+                        prompt=f"Answer exactly one line: {expected_text}",
+                        expected_text=expected_text,
+                        json=True,
+                    )
+                )
+        else:
+            live_source_kind = "base_hook_dispatch_not_proven"
     return build_real_custom_codex_hook_proof_packet(
         prompt_text=prompt_text,
         runtime_context=runtime_context,
         hook_ledger=hook_ledger,
         context_file_metadata=context_metadata,
         hook_ledger_file_metadata=ledger_metadata,
+        live_provider_packet=live_packet,
+        live_provider_file_metadata=live_metadata,
+        live_provider_expected_text=expected_text,
+        live_provider_source_kind=live_source_kind,
     )

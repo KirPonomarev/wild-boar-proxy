@@ -303,6 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_user_prompt_submit.add_argument("--prompt", required=True)
     router_hook_user_prompt_submit.add_argument("--hook-ledger-file", required=True)
     router_hook_user_prompt_submit.add_argument("--runtime-context-file")
+    router_hook_user_prompt_submit.add_argument("--live-provider-expected-text")
+    router_hook_user_prompt_submit.add_argument("--live-provider-proof-file")
     router_hook_user_prompt_submit.add_argument(
         "--json",
         action="store_true",
@@ -932,6 +934,8 @@ def main(argv: list[str] | None = None) -> int:
                     prompt_text=args.prompt,
                     hook_ledger_file=args.hook_ledger_file,
                     runtime_context_file=args.runtime_context_file,
+                    live_provider_expected_text=args.live_provider_expected_text,
+                    live_provider_proof_file=args.live_provider_proof_file,
                 )
             )
         if (
