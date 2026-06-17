@@ -288,6 +288,7 @@ class CodexTranscriptDeliveryObservationTests(unittest.TestCase):
             transcript.OBSERVATION_PATH_CODEX_EXEC_JSON_MCP_TOOL_RESULT,
         )
         self.assertTrue(packet["codex_exec_json_events_observed"])
+        self.assertTrue(packet["codex_exec_transcript_sha256"])
         self.assertTrue(packet["mcp_tool_result_observed"])
         self.assertTrue(packet["mcp_tool_result_structured_content_present"])
         self.assertEqual(packet["mcp_tool_result_event_type"], "item.completed")
@@ -443,6 +444,52 @@ class CodexTranscriptDeliveryObservationTests(unittest.TestCase):
         _assert_no_raw_payload_data(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_blocks_assistant_output_payload_as_tool_result_false_green(self) -> None:
+        dispatch_packet = _dispatch_packet()
+        handoff_packet = _handoff_packet(dispatch_packet=dispatch_packet)
+        structured = _delivery_payload_for_dispatch(dispatch_packet)
+        assistant_output_event = {
+            "type": "assistant/output",
+            "item": {
+                "id": "item-assistant-output",
+                "type": "output_text",
+                "role": "assistant",
+                "result": {
+                    "structuredContent": structured,
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                structured,
+                                ensure_ascii=True,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                        }
+                    ],
+                    "isError": False,
+                },
+            },
+        }
+
+        packet = transcript.build_codex_transcript_delivery_observation_packet(
+            handoff_packet,
+            [{"type": "turn.started"}, assistant_output_event, {"type": "turn.completed"}],
+            secret_values=[PROMPT, ROUTE_ID, RAW_PROVIDER_TEXT],
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            transcript.CODEX_TRANSCRIPT_DELIVERY_TRANSCRIPT_NOT_OBSERVED,
+        )
+        self.assertIn("mcp_tool_result_not_observed", packet["blocking_reasons"])
+        self.assertFalse(packet["mcp_tool_result_observed"])
+        self.assertFalse(packet["codex_transcript_delivery_observed"])
+        _assert_no_product_or_native_claim(self, packet)
+        _assert_no_raw_payload_data(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_selects_matching_result_instead_of_stale_result(self) -> None:
         dispatch_packet = _dispatch_packet()
         handoff_packet = _handoff_packet(dispatch_packet=dispatch_packet)
@@ -521,6 +568,7 @@ class CodexTranscriptDeliveryObservationTests(unittest.TestCase):
         self.assertTrue(packet["codex_exec_jsonl_file_present"])
         self.assertTrue(packet["codex_exec_jsonl_file_read"])
         self.assertFalse(packet["codex_exec_jsonl_file_path_recorded"])
+        self.assertTrue(packet["codex_exec_transcript_sha256"])
         self.assertTrue(packet["codex_transcript_delivery_observed"])
         _assert_no_product_or_native_claim(self, packet)
         _assert_no_raw_payload_data(self, packet)

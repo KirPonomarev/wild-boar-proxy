@@ -25,6 +25,9 @@ from .controlled_dispatch_handoff_proof import (
 from .controlled_ingress_api_dispatch_proof import (
     run_controlled_ingress_api_dispatch_proof_command,
 )
+from .codex_exec_assistant_continuation_proof import (
+    run_codex_exec_assistant_continuation_proof_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -241,6 +244,22 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_transcript_observe.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_assistant_continuation = router_hook_subparsers.add_parser(
+        "assistant-continuation-proof"
+    )
+    router_hook_assistant_continuation.add_argument(
+        "--transcript-observation-file",
+        required=True,
+    )
+    router_hook_assistant_continuation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_assistant_continuation.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -541,6 +560,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "dispatch-proof",
         "handoff-proof",
         "transcript-observe",
+        "assistant-continuation-proof",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -802,6 +822,16 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_codex_transcript_delivery_observation_command(
                     handoff_proof_file=args.handoff_proof_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "assistant-continuation-proof"
+        ):
+            return emit_json(
+                run_codex_exec_assistant_continuation_proof_command(
+                    transcript_observation_file=args.transcript_observation_file,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )

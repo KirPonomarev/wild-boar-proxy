@@ -269,14 +269,6 @@ def _codex_exec_mcp_tool_result_candidates(
             delivery_payload = (
                 structured.get("packet_kind") == MACHINE_HANDOFF_DELIVERY_PAYLOAD_KIND
             )
-            contextual_result = bool(
-                item_type
-                or tool_name
-                or server_name
-                or isinstance(mapping.get("result"), Mapping)
-                or isinstance(mapping.get("output"), Mapping)
-                or isinstance(mapping.get("response"), Mapping)
-            )
             structured_mcp_result = bool(
                 "mcp" in item_type_key
                 and "tool" in item_type_key
@@ -286,9 +278,14 @@ def _codex_exec_mcp_tool_result_candidates(
                     or delivery_payload
                 )
             )
+            tool_bound_result = bool(
+                delivery_payload
+                and (tool_name or server_name)
+                and ("tool" in item_type_key or "result" in item_type_key)
+            )
             if not delivery_payload and not structured_mcp_result:
                 continue
-            if delivery_payload and not structured_mcp_result and not contextual_result:
+            if delivery_payload and not structured_mcp_result and not tool_bound_result:
                 continue
             content_text = _content_text_from_mapping(mapping)
             content_mapping = _json_mapping_from_text(content_text)
@@ -333,6 +330,10 @@ def _unsafe_flag_failures(value: Any) -> list[str]:
             if mapping.get(field) is True:
                 failures.add(reason)
     return sorted(failures)
+
+
+def _codex_exec_transcript_digest(events: Sequence[Mapping[str, Any]]) -> str:
+    return _canonical_json_digest({"events": [dict(event) for event in events]})
 
 
 def _handoff_proof_failures(source: Mapping[str, Any]) -> list[str]:
@@ -443,9 +444,9 @@ def build_codex_transcript_delivery_observation_packet(
     if structured_content:
         server_name = _safe_text(selected.get("server_name"), limit=128)
         tool_name = _safe_text(selected.get("tool_name"), limit=128)
-        if server_name not in _ALLOWED_WBP_MCP_SERVER_NAMES:
+        if not server_name or server_name not in _ALLOWED_WBP_MCP_SERVER_NAMES:
             payload_failures.append("mcp_tool_result_server_not_wbp")
-        if tool_name and tool_name != DELEGATE_TO_DIP_TOOL:
+        if tool_name != DELEGATE_TO_DIP_TOOL:
             payload_failures.append("mcp_tool_result_tool_name_invalid")
         if selected.get("content_text_present") is True:
             if selected.get("content_text_json_mapping_present") is not True:
@@ -522,6 +523,9 @@ def build_codex_transcript_delivery_observation_packet(
         "handoff_payload_digest": expected_handoff_payload_digest,
         "observation_path": OBSERVATION_PATH_CODEX_EXEC_JSON_MCP_TOOL_RESULT,
         "codex_exec_json_events_observed": bool(events),
+        "codex_exec_transcript_sha256": (
+            _codex_exec_transcript_digest(events) if events else ""
+        ),
         "mcp_tool_result_observed": bool(candidates),
         "mcp_tool_result_structured_content_present": bool(structured_content),
         "mcp_tool_result_event_type": _safe_text(selected.get("event_type"), limit=128),
@@ -533,7 +537,7 @@ def build_codex_transcript_delivery_observation_packet(
             selected.get("tool_name"),
             limit=128,
         )
-        in {"", DELEGATE_TO_DIP_TOOL},
+        == DELEGATE_TO_DIP_TOOL,
         "mcp_tool_result_server_allowed": _safe_text(
             selected.get("server_name"),
             limit=128,
