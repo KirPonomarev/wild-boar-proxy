@@ -25,6 +25,9 @@ from .controlled_dispatch_handoff_proof import (
 from .controlled_ingress_api_dispatch_proof import (
     run_controlled_ingress_api_dispatch_proof_command,
 )
+from .codex_transcript_delivery_observation import (
+    run_codex_transcript_delivery_observation_command,
+)
 from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
@@ -229,6 +232,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
     )
     router_hook_handoff_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_transcript_observe = router_hook_subparsers.add_parser(
+        "transcript-observe"
+    )
+    router_hook_transcript_observe.add_argument("--handoff-proof-file", required=True)
+    router_hook_transcript_observe.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_transcript_observe.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -524,6 +540,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "ingress",
         "dispatch-proof",
         "handoff-proof",
+        "transcript-observe",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -776,6 +793,16 @@ def main(argv: list[str] | None = None) -> int:
                 run_controlled_dispatch_handoff_proof_command(
                     dispatch_proof_file=args.dispatch_proof_file,
                     handoff_surface_kind=args.handoff_surface_kind,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "transcript-observe"
+        ):
+            return emit_json(
+                run_codex_transcript_delivery_observation_command(
+                    handoff_proof_file=args.handoff_proof_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
         if args.command == "accounts" and args.accounts_command == "list":

@@ -4332,6 +4332,18 @@ class CliTests(unittest.TestCase):
                 ],
                 "probe",
             ),
+            (
+                [
+                    "router-hook",
+                    "transcript-observe",
+                    "--handoff-proof-file",
+                    "/tmp/wbp-handoff.json",
+                    "--codex-exec-jsonl-file",
+                    "/tmp/wbp-codex.jsonl",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),
