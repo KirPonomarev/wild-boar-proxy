@@ -60,6 +60,13 @@ def _normalized_path(path: Path) -> str:
     return str(path.expanduser().absolute())
 
 
+def _safe_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _readiness_failures(readiness: Mapping[str, Any]) -> list[str]:
     failures: list[str] = []
     if readiness.get("status") != "ok":
@@ -335,6 +342,53 @@ def build_real_user_prompt_submit_ledger_proof_packet(
         "thread_or_turn_digest_bound": bool(
             _hex_sha256(ledger.get("thread_digest"))
             or _hex_sha256(ledger.get("turn_digest"))
+        ),
+        "hook_parent_process_chain_observed": (
+            ledger.get("hook_parent_process_chain_observed") is True
+        ),
+        "hook_parent_process_chain_path_proven": (
+            ledger.get("hook_parent_process_chain_path_proven") is True
+        ),
+        "hook_parent_process_chain_exact_path_classified": (
+            ledger.get("hook_parent_process_chain_exact_path_classified") is True
+        ),
+        "hook_parent_process_chain_digest": _hex_sha256(
+            ledger.get("hook_parent_process_chain_digest")
+        ),
+        "hook_parent_process_chain_length": _safe_int(
+            ledger.get("hook_parent_process_chain_length")
+        ),
+        "hook_parent_process_chain_custom_wbp_clean_app": (
+            ledger.get("hook_parent_process_chain_custom_wbp_clean_app") is True
+        ),
+        "hook_parent_process_chain_app_server": (
+            ledger.get("hook_parent_process_chain_app_server") is True
+        ),
+        "hook_parent_process_chain_clean_root": (
+            ledger.get("hook_parent_process_chain_clean_root") is True
+        ),
+        "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound": (
+            ledger.get(
+                "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound"
+            )
+            is True
+        ),
+        "hook_parent_process_chain_app_server_executable_path_bound": (
+            ledger.get("hook_parent_process_chain_app_server_executable_path_bound")
+            is True
+        ),
+        "hook_parent_process_chain_clean_root_executable_path_bound": (
+            ledger.get("hook_parent_process_chain_clean_root_executable_path_bound")
+            is True
+        ),
+        "hook_parent_process_chain_stock_codex_app": (
+            ledger.get("hook_parent_process_chain_stock_codex_app") is True
+        ),
+        "hook_parent_process_chain_command_text_substring_only": (
+            ledger.get("hook_parent_process_chain_command_text_substring_only") is True
+        ),
+        "hook_parent_process_raw_lines_recorded": (
+            ledger.get("hook_parent_process_raw_lines_recorded") is True
         ),
         "readiness_failures": readiness_failures,
         "profile_failures": profile_failures,

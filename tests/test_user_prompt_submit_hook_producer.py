@@ -135,6 +135,27 @@ def _assert_no_prompt_route_or_secret(
 
 
 class UserPromptSubmitHookProducerTests(unittest.TestCase):
+    def test_parent_process_classification_uses_executable_path_not_spoofed_args(self) -> None:
+        spoofed_command = (
+            "/usr/bin/python3 -c 'print(\"Codex WBP Clean.app/Contents/Resources/"
+            "codex app-server\")'"
+        )
+
+        self.assertEqual(
+            producer._command_class("/usr/bin/python3", spoofed_command),
+            "python",
+        )
+
+    def test_parent_process_classification_accepts_clean_app_exact_paths(self) -> None:
+        root = "/Users/me/Applications/Codex WBP Clean.app/Contents/MacOS/Codex"
+        server = "/Users/me/Applications/Codex WBP Clean.app/Contents/Resources/codex"
+
+        self.assertEqual(producer._command_class(root, root), "wbp_clean_app_root")
+        self.assertEqual(
+            producer._command_class(server, f"{server} app-server --analytics-default-enabled"),
+            "wbp_clean_app_server",
+        )
+
     def test_install_apply_writes_profile_local_hooks_json_and_script_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))

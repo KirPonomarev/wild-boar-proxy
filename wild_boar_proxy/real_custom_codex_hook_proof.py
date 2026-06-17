@@ -155,6 +155,19 @@ def build_user_prompt_submit_hook_ledger(
     admission_run_id_digest: str = "",
     hook_trust_source: str = "",
     hook_event_transport: str = "",
+    hook_parent_process_chain_digest: str = "",
+    hook_parent_process_chain_length: int = 0,
+    hook_parent_process_chain_observed: bool = False,
+    hook_parent_process_chain_path_proven: bool = False,
+    hook_parent_process_chain_exact_path_classified: bool = False,
+    hook_parent_process_chain_custom_wbp_clean_app: bool = False,
+    hook_parent_process_chain_app_server: bool = False,
+    hook_parent_process_chain_clean_root: bool = False,
+    hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound: bool = False,
+    hook_parent_process_chain_app_server_executable_path_bound: bool = False,
+    hook_parent_process_chain_clean_root_executable_path_bound: bool = False,
+    hook_parent_process_chain_stock_codex_app: bool = False,
+    hook_parent_process_chain_command_text_substring_only: bool = False,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -175,6 +188,47 @@ def build_user_prompt_submit_hook_ledger(
         "session_digest": _hex_sha256(session_digest),
         "cwd_digest": _hex_sha256(cwd_digest),
         "admission_run_id_digest": _hex_sha256(admission_run_id_digest),
+        "hook_parent_process_chain_digest": _hex_sha256(
+            hook_parent_process_chain_digest
+        ),
+        "hook_parent_process_chain_length": max(
+            0,
+            int(hook_parent_process_chain_length or 0),
+        ),
+        "hook_parent_process_chain_observed": bool(
+            hook_parent_process_chain_observed
+        ),
+        "hook_parent_process_chain_path_proven": bool(
+            hook_parent_process_chain_path_proven
+        ),
+        "hook_parent_process_chain_exact_path_classified": bool(
+            hook_parent_process_chain_exact_path_classified
+        ),
+        "hook_parent_process_chain_custom_wbp_clean_app": bool(
+            hook_parent_process_chain_custom_wbp_clean_app
+        ),
+        "hook_parent_process_chain_app_server": bool(
+            hook_parent_process_chain_app_server
+        ),
+        "hook_parent_process_chain_clean_root": bool(
+            hook_parent_process_chain_clean_root
+        ),
+        "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound": bool(
+            hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound
+        ),
+        "hook_parent_process_chain_app_server_executable_path_bound": bool(
+            hook_parent_process_chain_app_server_executable_path_bound
+        ),
+        "hook_parent_process_chain_clean_root_executable_path_bound": bool(
+            hook_parent_process_chain_clean_root_executable_path_bound
+        ),
+        "hook_parent_process_chain_stock_codex_app": bool(
+            hook_parent_process_chain_stock_codex_app
+        ),
+        "hook_parent_process_chain_command_text_substring_only": bool(
+            hook_parent_process_chain_command_text_substring_only
+        ),
+        "hook_parent_process_raw_lines_recorded": False,
         "hook_trust_source": _safe_text(hook_trust_source, limit=80),
         "trusted_hook_config_sha256": _hex_sha256(trusted_hook_config_sha256),
         "loaded_hook_config_sha256": _hex_sha256(loaded_hook_config_sha256),

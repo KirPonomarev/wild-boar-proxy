@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import subprocess
 import sys
 import tomllib
 from typing import Any
@@ -557,6 +558,128 @@ def _event_transport(event_metadata: Mapping[str, Any]) -> str:
     return "unknown"
 
 
+def _ps_field(pid: int, field: str) -> str:
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", f"{field}="],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def _process_info(pid: int) -> tuple[int, str, str] | None:
+    parent_pid_text = _ps_field(pid, "ppid")
+    executable_path = _ps_field(pid, "comm")
+    command = _ps_field(pid, "args")
+    if not parent_pid_text or not executable_path:
+        return None
+    try:
+        parent_pid = int(parent_pid_text)
+    except ValueError:
+        return None
+    return parent_pid, executable_path, command
+
+
+def _path_has_suffix(path: str, suffix: str) -> bool:
+    return path == suffix or path.endswith("/" + suffix)
+
+
+def _command_class(executable_path: str, command: str = "") -> str:
+    if _path_has_suffix(
+        executable_path,
+        "Codex WBP Clean.app/Contents/Resources/codex",
+    ) and command.startswith(executable_path + " app-server"):
+        return "wbp_clean_app_server"
+    if _path_has_suffix(
+        executable_path,
+        "Codex WBP Clean.app/Contents/MacOS/Codex",
+    ):
+        return "wbp_clean_app_root"
+    if "/Codex WBP Clean.app/Contents/Frameworks/" in executable_path:
+        return "wbp_clean_app_helper"
+    if _path_has_suffix(executable_path, "Applications/Codex.app/Contents/MacOS/Codex"):
+        return "stock_codex_app_root"
+    if _path_has_suffix(
+        executable_path,
+        "Codex.app/Contents/Resources/codex",
+    ) and command.startswith(executable_path + " app-server"):
+        return "codex_app_server"
+    if "wild_boar_proxy.user_prompt_submit_hook_producer" in command:
+        return "wbp_hook_producer"
+    if "python" in executable_path:
+        return "python"
+    if "node" in executable_path:
+        return "node"
+    if (
+        executable_path.endswith("/zsh")
+        or executable_path.endswith("/bash")
+        or executable_path.endswith("/sh")
+    ):
+        return "shell"
+    return "other"
+
+
+def _hook_parent_process_observation() -> dict[str, Any]:
+    classes: list[str] = []
+    current_pid = os.getpid()
+    pid = current_pid
+    for _ in range(12):
+        info = _process_info(pid)
+        if info is None:
+            break
+        parent_pid, executable_path, command = info
+        classes.append(_command_class(executable_path, command))
+        if parent_pid <= 0 or parent_pid == pid:
+            break
+        pid = parent_pid
+    clean_app_class_present = any(item.startswith("wbp_clean_app_") for item in classes)
+    clean_app_server_present = "wbp_clean_app_server" in classes
+    clean_app_root_present = "wbp_clean_app_root" in classes
+    digest = _sha256_text(
+        json.dumps(
+            {
+                "start_pid": current_pid,
+                "classes": classes,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    ) if classes else ""
+    return {
+        "hook_parent_process_chain_observed": bool(classes),
+        "hook_parent_process_chain_digest": digest,
+        "hook_parent_process_chain_length": len(classes),
+        "hook_parent_process_chain_path_proven": bool(classes),
+        "hook_parent_process_chain_exact_path_classified": bool(classes),
+        "hook_parent_process_chain_custom_wbp_clean_app": clean_app_class_present,
+        "hook_parent_process_chain_app_server": clean_app_server_present,
+        "hook_parent_process_chain_clean_root": clean_app_root_present,
+        "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound": (
+            clean_app_class_present
+        ),
+        "hook_parent_process_chain_app_server_executable_path_bound": (
+            clean_app_server_present
+        ),
+        "hook_parent_process_chain_clean_root_executable_path_bound": (
+            clean_app_root_present
+        ),
+        "hook_parent_process_chain_stock_codex_app": "stock_codex_app_root" in classes,
+        "hook_parent_process_chain_classes_digest": _sha256_text(
+            ",".join(classes)
+        ) if classes else "",
+        "hook_parent_process_chain_command_text_substring_only": False,
+        "hook_parent_process_raw_lines_recorded": False,
+    }
+
+
 def _producer_state(*, event_name: str, turn_id: str, origin_state: str) -> str:
     if origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN:
         if event_name == "UserPromptSubmit" and turn_id:
@@ -593,6 +716,7 @@ def build_user_prompt_submit_run_packet(
     )
     runtime_context, context_metadata = load_runtime_context_packet(context_path)
     secret_values = _event_secret_values(event) + _runtime_secret_values(runtime_context)
+    parent_process = _hook_parent_process_observation()
 
     blocking_reasons: list[str] = []
     if event_name != "UserPromptSubmit":
@@ -661,6 +785,57 @@ def build_user_prompt_submit_run_packet(
             session_digest=_event_digest(session_id),
             cwd_digest=_event_digest(cwd),
             admission_run_id_digest=admission_run_id_digest,
+            hook_parent_process_chain_digest=str(
+                parent_process["hook_parent_process_chain_digest"]
+            ),
+            hook_parent_process_chain_length=int(
+                parent_process["hook_parent_process_chain_length"]
+            ),
+            hook_parent_process_chain_observed=(
+                parent_process["hook_parent_process_chain_observed"] is True
+            ),
+            hook_parent_process_chain_path_proven=(
+                parent_process["hook_parent_process_chain_path_proven"] is True
+            ),
+            hook_parent_process_chain_exact_path_classified=(
+                parent_process["hook_parent_process_chain_exact_path_classified"]
+                is True
+            ),
+            hook_parent_process_chain_custom_wbp_clean_app=(
+                parent_process["hook_parent_process_chain_custom_wbp_clean_app"]
+                is True
+            ),
+            hook_parent_process_chain_app_server=(
+                parent_process["hook_parent_process_chain_app_server"] is True
+            ),
+            hook_parent_process_chain_clean_root=(
+                parent_process["hook_parent_process_chain_clean_root"] is True
+            ),
+            hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound=(
+                parent_process[
+                    "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound"
+                ]
+                is True
+            ),
+            hook_parent_process_chain_app_server_executable_path_bound=(
+                parent_process[
+                    "hook_parent_process_chain_app_server_executable_path_bound"
+                ]
+                is True
+            ),
+            hook_parent_process_chain_clean_root_executable_path_bound=(
+                parent_process[
+                    "hook_parent_process_chain_clean_root_executable_path_bound"
+                ]
+                is True
+            ),
+            hook_parent_process_chain_stock_codex_app=(
+                parent_process["hook_parent_process_chain_stock_codex_app"] is True
+            ),
+            hook_parent_process_chain_command_text_substring_only=(
+                parent_process["hook_parent_process_chain_command_text_substring_only"]
+                is True
+            ),
             hook_trust_source=(
                 "codex_non_managed_hook_execution"
                 if origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN
@@ -698,6 +873,7 @@ def build_user_prompt_submit_run_packet(
         "turn_digest_present": bool(_event_digest(turn_id)),
         "thread_or_turn_digest_bound": bool(_event_digest(session_id) or _event_digest(turn_id)),
         "admission_run_id_digest_present": bool(admission_run_id_digest),
+        **parent_process,
         "hook_config_present": bool(_hex_sha256(trusted_hook_config_sha256)),
         "hook_enabled": True,
         "hook_config_digest_bound": bool(
