@@ -154,6 +154,7 @@ def build_user_prompt_submit_hook_ledger(
     cwd_digest: str = "",
     admission_run_id_digest: str = "",
     hook_trust_source: str = "",
+    hook_event_transport: str = "",
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -170,6 +171,7 @@ def build_user_prompt_submit_hook_ledger(
         "hook_ledger_written": bool(hook_ledger_written),
         "hook_producer_state": _safe_text(hook_producer_state, limit=80),
         "hook_event_digest": _hex_sha256(hook_event_digest),
+        "hook_event_transport": _safe_text(hook_event_transport, limit=80),
         "session_digest": _hex_sha256(session_digest),
         "cwd_digest": _hex_sha256(cwd_digest),
         "admission_run_id_digest": _hex_sha256(admission_run_id_digest),

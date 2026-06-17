@@ -42,6 +42,7 @@ HOOK_STATE_RAN_SYNTHETIC = "HOOK_RAN_SYNTHETIC"
 HOOK_STATE_RAN_CODEX_UNPROVEN = "HOOK_RAN_CODEX_UNPROVEN"
 HOOK_STATE_RAN_CUSTOM_CODEX_PROVEN = "HOOK_RAN_CUSTOM_CODEX_PROVEN"
 HOOK_STATE_BLOCKED_TRUST_REQUIRED = "HOOK_BLOCKED_TRUST_REQUIRED"
+HOOK_STATE_READY_TRUSTED = "HOOK_READY_TRUSTED"
 
 HOOK_CONFIG_OK = "OK"
 HOOK_CONFIG_NOT_INSTALLED = "WBP_USER_PROMPT_SUBMIT_HOOK_CONFIG_NOT_INSTALLED"
@@ -249,6 +250,64 @@ def _features_hooks_disabled(config_toml: Path) -> tuple[bool, dict[str, Any]]:
     return bool(metadata["hooks_feature_disabled"]), metadata
 
 
+def _codex_hook_trust_state(
+    *,
+    config_toml: Path,
+    hooks_json: Path,
+    hooks_document: Mapping[str, Any],
+    command: str,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "codex_hook_trust_state_present": False,
+        "codex_hook_trust_state_matches_hook_slot": False,
+        "codex_hook_trusted_hash_present": False,
+        "codex_hook_trusted_hash_valid": False,
+        "codex_hook_trusted_hash_recorded": False,
+        "codex_hook_trusted_by_profile_state": False,
+    }
+    try:
+        parsed = tomllib.loads(config_toml.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return metadata
+    hooks = parsed.get("hooks")
+    state = hooks.get("state") if isinstance(hooks, Mapping) else None
+    if not isinstance(state, Mapping):
+        return metadata
+    metadata["codex_hook_trust_state_present"] = True
+
+    hook_groups = hooks_document.get("hooks")
+    event_groups = hook_groups.get("UserPromptSubmit") if isinstance(hook_groups, Mapping) else None
+    if not isinstance(event_groups, list):
+        return metadata
+    for group_index, group in enumerate(event_groups):
+        if not isinstance(group, Mapping):
+            continue
+        handlers = group.get("hooks")
+        if not isinstance(handlers, list):
+            continue
+        for hook_index, handler in enumerate(handlers):
+            if not isinstance(handler, Mapping):
+                continue
+            if _safe_text(handler.get("command"), limit=2000) != command:
+                continue
+            trust_key = f"{hooks_json}:user_prompt_submit:{group_index}:{hook_index}"
+            trust_entry = state.get(trust_key)
+            if not isinstance(trust_entry, Mapping):
+                continue
+            metadata["codex_hook_trust_state_matches_hook_slot"] = True
+            trusted_hash = _safe_text(trust_entry.get("trusted_hash"), limit=80)
+            trusted_hash_valid = (
+                trusted_hash.startswith("sha256:")
+                and len(trusted_hash) == len("sha256:") + 64
+                and all(char in "0123456789abcdef" for char in trusted_hash.removeprefix("sha256:"))
+            )
+            metadata["codex_hook_trusted_hash_present"] = bool(trusted_hash)
+            metadata["codex_hook_trusted_hash_valid"] = trusted_hash_valid
+            metadata["codex_hook_trusted_by_profile_state"] = trusted_hash_valid
+            return metadata
+    return metadata
+
+
 def _find_hook_definition(document: Mapping[str, Any], *, command: str) -> dict[str, Any]:
     hooks = document.get("hooks")
     if not isinstance(hooks, Mapping):
@@ -348,6 +407,12 @@ def build_user_prompt_submit_readiness_packet(
     document, hooks_metadata = _read_hooks_json(hooks_json_path(paths))
     hooks_disabled, config_metadata = _features_hooks_disabled(paths.config_toml)
     hook_definition = _find_hook_definition(document, command=command)
+    trust_metadata = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+    )
     loaded_digest = (
         _canonical_json_digest(hook_definition) if hook_definition else ""
     )
@@ -372,7 +437,8 @@ def build_user_prompt_submit_readiness_packet(
         blocking_reasons.append("hook_script_missing")
     elif not script_executable:
         blocking_reasons.append("hook_script_not_executable")
-    if not blocking_reasons:
+    hook_trusted = trust_metadata["codex_hook_trusted_by_profile_state"] is True
+    if not blocking_reasons and not hook_trusted:
         blocking_reasons.append("hook_trust_review_required")
 
     if hooks_disabled:
@@ -381,12 +447,16 @@ def build_user_prompt_submit_readiness_packet(
         machine_error_code = HOOK_CONFIG_NOT_INSTALLED
     elif not digest_bound or not script_executable:
         machine_error_code = HOOK_CONFIG_MISMATCH
+    elif hook_trusted:
+        machine_error_code = HOOK_CONFIG_OK
     else:
         machine_error_code = HOOK_BLOCKED_TRUST_REQUIRED
+    ok = machine_error_code == HOOK_CONFIG_OK
 
     extra = {
         **hooks_metadata,
         **config_metadata,
+        **trust_metadata,
         "schema_version": 1,
         "packet_kind": HOOK_READINESS_PACKET_KIND,
         "hook_event_name": "UserPromptSubmit",
@@ -399,10 +469,12 @@ def build_user_prompt_submit_readiness_packet(
         "loaded_hook_definition_sha256": loaded_digest,
         "hook_config_digest_bound": digest_bound,
         "hook_trust_requirement_declared": True,
-        "hook_trusted": False,
-        "hook_requires_manual_review": hook_config_present,
+        "hook_trusted": hook_trusted,
+        "hook_requires_manual_review": bool(hook_config_present and not hook_trusted),
         "hook_readiness_state": (
-            HOOK_STATE_BLOCKED_TRUST_REQUIRED
+            HOOK_STATE_READY_TRUSTED
+            if ok
+            else HOOK_STATE_BLOCKED_TRUST_REQUIRED
             if machine_error_code == HOOK_BLOCKED_TRUST_REQUIRED
             else "HOOK_NOT_READY"
         ),
@@ -418,12 +490,16 @@ def build_user_prompt_submit_readiness_packet(
         "changed_files": [],
     }
     return packets.build_command_packet(
-        ok=False,
-        human_message="WBP UserPromptSubmit hook requires operator review/trust before green readiness.",
+        ok=ok,
+        human_message=(
+            "WBP UserPromptSubmit hook is installed and trusted by the Custom Codex profile."
+            if ok
+            else "WBP UserPromptSubmit hook requires operator review/trust before green readiness."
+        ),
         machine_error_code=machine_error_code,
         liveness="not_applicable",
         severity="recoverable",
-        operator_action="user_action",
+        operator_action="none" if ok else "user_action",
         changed_files=[],
         effect=EFFECT_PROBE,
         extra=extra,
@@ -471,6 +547,14 @@ def _runtime_secret_values(runtime_context: Mapping[str, Any]) -> list[str]:
 def _event_digest(value: object) -> str:
     text = _safe_text(value, limit=2048)
     return _sha256_text(text) if text else ""
+
+
+def _event_transport(event_metadata: Mapping[str, Any]) -> str:
+    if event_metadata.get("hook_event_stdin_read") is True:
+        return "stdin"
+    if event_metadata.get("hook_event_file_read") is True:
+        return "event_file"
+    return "unknown"
 
 
 def _producer_state(*, event_name: str, turn_id: str, origin_state: str) -> str:
@@ -570,8 +654,10 @@ def build_user_prompt_submit_run_packet(
                     "turn_id_digest": _event_digest(turn_id),
                     "cwd_digest": _event_digest(cwd),
                     "admission_run_id_digest": admission_run_id_digest,
+                    "hook_event_transport": _event_transport(metadata),
                 }
             ),
+            hook_event_transport=_event_transport(metadata),
             session_digest=_event_digest(session_id),
             cwd_digest=_event_digest(cwd),
             admission_run_id_digest=admission_run_id_digest,
@@ -591,6 +677,8 @@ def build_user_prompt_submit_run_packet(
         "packet_kind": HOOK_PRODUCER_RUN_PACKET_KIND,
         "hook_event_name": event_name,
         "hook_event_name_is_user_prompt_submit": event_name == "UserPromptSubmit",
+        "hook_event_transport": _event_transport(metadata),
+        "hook_event_transport_stdin": _event_transport(metadata) == "stdin",
         "hook_producer_state": producer_state,
         "origin_state": origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW,
         "prompt_digest": (
