@@ -94,6 +94,12 @@ def _dispatch_proof_failures(dispatch_packet: Mapping[str, Any]) -> list[str]:
         failures.append("dispatch_packet_kind_invalid")
     if dispatch_packet.get("status") != "ok":
         failures.append("dispatch_packet_not_ok")
+    if dispatch_packet.get("machine_error_code") != "OK":
+        failures.append("dispatch_machine_error_not_ok")
+    if dispatch_packet.get("dispatch_proven") is not True:
+        failures.append("dispatch_not_proven")
+    if dispatch_packet.get("dispatch_status") != "proven":
+        failures.append("dispatch_status_not_proven")
     if dispatch_packet.get("hook_entry_proven") is not True:
         failures.append("hook_entry_not_proven")
     if dispatch_packet.get("route_bound_dispatch_proven") is not True:
@@ -171,6 +177,7 @@ def _unsafe_source_claim_failures(dispatch_packet: Mapping[str, Any]) -> list[st
         "local_imitation_used": "local_imitation_used",
         "native_codex_subagent_used_as_dip": "native_codex_subagent_used_as_dip",
         "live_provider_response_proven": "live_provider_response_must_not_be_claimed",
+        "live_provider_proven": "live_provider_must_not_be_claimed",
         "external_live_provider_response_proven": (
             "external_live_provider_response_must_not_be_claimed"
         ),

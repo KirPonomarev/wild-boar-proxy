@@ -207,6 +207,9 @@ class ApprovedHandoffTests(unittest.TestCase):
             ("route_bound_request_sha256", "", "route_bound_request_digest_missing"),
             ("provider_response_digest", "", "provider_response_digest_missing"),
             ("provider_response_digest", "0" * 64, "provider_response_digest_not_bound"),
+            ("machine_error_code", "SPOOFED_OK", "dispatch_machine_error_not_ok"),
+            ("dispatch_proven", False, "dispatch_not_proven"),
+            ("dispatch_status", "blocked", "dispatch_status_not_proven"),
             (
                 "controlled_provider_response_sha256",
                 "",
@@ -331,6 +334,7 @@ class ApprovedHandoffTests(unittest.TestCase):
     def test_approved_handoff_blocks_live_native_or_product_overclaim(self) -> None:
         cases = [
             ("live_provider_response_proven", "live_provider_response_must_not_be_claimed"),
+            ("live_provider_proven", "live_provider_must_not_be_claimed"),
             ("product_ready", "product_ready_must_not_be_claimed"),
             ("native_free_chat_router_proven", "native_free_chat_router_must_not_be_claimed"),
             ("custom_codex_origin_proven", "custom_codex_origin_must_not_be_claimed"),

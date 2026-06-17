@@ -4322,6 +4322,16 @@ class CliTests(unittest.TestCase):
                 ],
                 "probe",
             ),
+            (
+                [
+                    "router-hook",
+                    "handoff-proof",
+                    "--dispatch-proof-file",
+                    "/tmp/wbp-dispatch.json",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),

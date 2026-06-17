@@ -11,6 +11,7 @@ from typing import Any
 from .approved_handoff import (
     APPROVED_HANDOFF_SURFACES,
     HANDOFF_SURFACE_LOCAL_PROOF_COMMAND,
+    HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
     run_approved_handoff_command,
 )
 from .cli_runner import run_codex_cli_runner_smoke
@@ -18,6 +19,9 @@ from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_RE
 from .core import packets as command_packets
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
+from .controlled_dispatch_handoff_proof import (
+    run_controlled_dispatch_handoff_proof_command,
+)
 from .controlled_ingress_api_dispatch_proof import (
     run_controlled_ingress_api_dispatch_proof_command,
 )
@@ -217,6 +221,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
     )
     router_hook_dispatch_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_handoff_proof = router_hook_subparsers.add_parser("handoff-proof")
+    router_hook_handoff_proof.add_argument("--dispatch-proof-file", required=True)
+    router_hook_handoff_proof.add_argument(
+        "--handoff-surface-kind",
+        choices=sorted(APPROVED_HANDOFF_SURFACES),
+        default=HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
+    )
+    router_hook_handoff_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -511,6 +523,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "deliver",
         "ingress",
         "dispatch-proof",
+        "handoff-proof",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -756,6 +769,13 @@ def main(argv: list[str] | None = None) -> int:
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
                     hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "handoff-proof":
+            return emit_json(
+                run_controlled_dispatch_handoff_proof_command(
+                    dispatch_proof_file=args.dispatch_proof_file,
+                    handoff_surface_kind=args.handoff_surface_kind,
                 )
             )
         if args.command == "accounts" and args.accounts_command == "list":
