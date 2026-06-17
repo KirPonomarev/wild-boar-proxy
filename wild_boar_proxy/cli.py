@@ -84,6 +84,9 @@ from .real_custom_codex_hook_proof import (
 from .real_user_prompt_submit_ledger_proof import (
     run_real_user_prompt_submit_ledger_proof_command,
 )
+from .real_ledger_bound_api_dispatch_proof import (
+    run_real_ledger_bound_api_dispatch_proof_command,
+)
 from .user_prompt_submit_hook_producer import (
     build_user_prompt_submit_install_packet,
     build_user_prompt_submit_readiness_packet,
@@ -464,6 +467,17 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_user_prompt_submit_ledger.add_argument("--hook-ledger-file")
     router_hook_user_prompt_submit_ledger.add_argument("--runtime-context-file")
     router_hook_user_prompt_submit_ledger.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_ledger_bound_dispatch = router_hook_subparsers.add_parser(
+        "ledger-bound-dispatch-proof"
+    )
+    router_hook_ledger_bound_dispatch.add_argument("--prompt", required=True)
+    router_hook_ledger_bound_dispatch.add_argument("--hook-ledger-file")
+    router_hook_ledger_bound_dispatch.add_argument("--runtime-context-file")
+    router_hook_ledger_bound_dispatch.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -911,6 +925,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "visible-source-observe",
         "user-prompt-submit-proof",
         "user-prompt-submit-ledger-proof",
+        "ledger-bound-dispatch-proof",
         "handoff-working-flow-join",
         "working-flow-delivery-proof",
         "user-prompt-submit-readiness",
@@ -1317,6 +1332,18 @@ def main(argv: list[str] | None = None) -> int:
         ):
             return emit_json(
                 run_real_user_prompt_submit_ledger_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "ledger-bound-dispatch-proof"
+        ):
+            return emit_json(
+                run_real_ledger_bound_api_dispatch_proof_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     hook_ledger_file=args.hook_ledger_file,
