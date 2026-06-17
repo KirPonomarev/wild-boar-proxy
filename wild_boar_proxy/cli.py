@@ -51,6 +51,9 @@ from .custom_codex_hook_origin_proof import (
 from .native_free_chat_router_dispatch_admission import (
     run_native_free_chat_router_dispatch_admission_command,
 )
+from .native_free_chat_router_handoff_working_flow_join import (
+    run_handoff_to_working_flow_join_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -459,6 +462,26 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_dispatch_admission.add_argument("--runtime-context-file")
     router_hook_dispatch_admission.add_argument("--handoff-file")
     router_hook_dispatch_admission.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join = router_hook_subparsers.add_parser(
+        "handoff-working-flow-join"
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--dispatch-admission-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--dispatch-handoff-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -873,6 +896,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "assistant-continuation-proof",
         "visible-source-observe",
         "user-prompt-submit-proof",
+        "handoff-working-flow-join",
         "working-flow-delivery-proof",
         "user-prompt-submit-readiness",
     }:
@@ -1283,6 +1307,17 @@ def main(argv: list[str] | None = None) -> int:
                     hook_ledger_file=args.hook_ledger_file,
                     runtime_context_file=args.runtime_context_file,
                     handoff_file=args.handoff_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "handoff-working-flow-join"
+        ):
+            return emit_json(
+                run_handoff_to_working_flow_join_command(
+                    dispatch_admission_file=args.dispatch_admission_file,
+                    dispatch_handoff_file=args.dispatch_handoff_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
         if (
