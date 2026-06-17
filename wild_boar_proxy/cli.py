@@ -48,6 +48,10 @@ from .observed_machine_handoff_delivery import (
     DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
     run_observed_machine_handoff_delivery_command,
 )
+from .proof_seal import (
+    run_proof_seal_create_command,
+    run_proof_seal_verify_command,
+)
 from .router_hook_entry import (
     ADMITTED_HOOK_SURFACES,
     HOOK_SURFACE_LOCAL_PROOF_COMMAND,
@@ -344,6 +348,52 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_custom_origin.add_argument(
+        "--strict-sealed-evidence",
+        action="store_true",
+    )
+    router_hook_custom_origin.add_argument(
+        "--integrated-live-provider-proof-seal-file",
+    )
+    router_hook_custom_origin.add_argument(
+        "--working-flow-delivery-proof-seal-file",
+    )
+    router_hook_custom_origin.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_proof_seal_create = router_hook_subparsers.add_parser(
+        "proof-seal-create"
+    )
+    router_hook_proof_seal_create.add_argument("--packet-file", required=True)
+    router_hook_proof_seal_create.add_argument("--seal-file")
+    router_hook_proof_seal_create.add_argument("--producer-kind", required=True)
+    router_hook_proof_seal_create.add_argument(
+        "--producer-command-digest",
+        required=True,
+    )
+    router_hook_proof_seal_create.add_argument("--producer-inputs-digest")
+    router_hook_proof_seal_create.add_argument(
+        "--input-packet-file",
+        action="append",
+        default=[],
+    )
+    router_hook_proof_seal_create.add_argument("--runtime-context-digest")
+    router_hook_proof_seal_create.add_argument("--hook-ledger-digest")
+    router_hook_proof_seal_create.add_argument("--profile-hook-config-digest")
+    router_hook_proof_seal_create.add_argument("--git-commit-sha")
+    router_hook_proof_seal_create.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_proof_seal_verify = router_hook_subparsers.add_parser(
+        "proof-seal-verify"
+    )
+    router_hook_proof_seal_verify.add_argument("--packet-file", required=True)
+    router_hook_proof_seal_verify.add_argument("--seal-file")
+    router_hook_proof_seal_verify.add_argument("--expected-packet-kind")
+    router_hook_proof_seal_verify.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1002,6 +1052,44 @@ def main(argv: list[str] | None = None) -> int:
                     working_flow_delivery_proof_file=(
                         args.working_flow_delivery_proof_file
                     ),
+                    strict_sealed_evidence=bool(args.strict_sealed_evidence),
+                    integrated_live_provider_proof_seal_file=(
+                        args.integrated_live_provider_proof_seal_file
+                    ),
+                    working_flow_delivery_proof_seal_file=(
+                        args.working_flow_delivery_proof_seal_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "proof-seal-create"
+        ):
+            return emit_json(
+                run_proof_seal_create_command(
+                    packet_file=args.packet_file,
+                    seal_file=args.seal_file,
+                    producer_kind=args.producer_kind,
+                    producer_command_digest=args.producer_command_digest,
+                    producer_inputs_digest=args.producer_inputs_digest or "",
+                    input_packet_files=args.input_packet_file,
+                    runtime_context_digest=args.runtime_context_digest or "",
+                    hook_ledger_digest=args.hook_ledger_digest or "",
+                    profile_hook_config_digest=(
+                        args.profile_hook_config_digest or ""
+                    ),
+                    git_commit_sha=args.git_commit_sha or "",
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "proof-seal-verify"
+        ):
+            return emit_json(
+                run_proof_seal_verify_command(
+                    packet_file=args.packet_file,
+                    seal_file=args.seal_file,
+                    expected_packet_kind=args.expected_packet_kind or "",
                 )
             )
         if (

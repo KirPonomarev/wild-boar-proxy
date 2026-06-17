@@ -15,6 +15,7 @@ import unittest
 
 from wild_boar_proxy import codex_working_flow_delivery_proof as working_flow
 from wild_boar_proxy import custom_codex_hook_origin_proof as origin_proof
+from wild_boar_proxy import proof_seal
 from wild_boar_proxy import real_custom_codex_hook_proof as integrated
 from wild_boar_proxy import router_hook_entry as hook_entry
 from wild_boar_proxy import user_prompt_submit_hook_producer as producer
@@ -31,6 +32,16 @@ RAW_PROVIDER_TEXT = "raw provider response must not be stored"
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _input_hashes_digest(input_hashes: dict[str, str]) -> str:
+    encoded = json.dumps(
+        {"input_packet_hashes": input_hashes},
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return _sha256(encoded)
 
 
 def _runtime_context(*, allowed_routes: list[str] | None = None) -> dict[str, object]:
@@ -313,11 +324,13 @@ def _run_cli(
     profile_dir: Path,
     source_path: Path,
     working_flow_path: Path,
+    strict_sealed_evidence: bool = False,
+    source_seal_path: Path | None = None,
+    working_flow_seal_path: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["WBP_PROFILE_DIR"] = str(profile_dir)
-    return subprocess.run(
-        [
+    args = [
             sys.executable,
             "-m",
             "wild_boar_proxy",
@@ -328,13 +341,94 @@ def _run_cli(
             "--working-flow-delivery-proof-file",
             str(working_flow_path),
             "--json",
-        ],
+    ]
+    if strict_sealed_evidence:
+        args.append("--strict-sealed-evidence")
+        if source_seal_path is not None:
+            args.extend(["--integrated-live-provider-proof-seal-file", str(source_seal_path)])
+        if working_flow_seal_path is not None:
+            args.extend(["--working-flow-delivery-proof-seal-file", str(working_flow_seal_path)])
+    return subprocess.run(
+        args,
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
         check=False,
     )
+
+
+def _seal_packet_cli(
+    *,
+    packet_path: Path,
+    producer_kind: str,
+    input_packet_files: list[Path] | None = None,
+    runtime_context_digest: str = "",
+    hook_ledger_digest: str = "",
+    profile_hook_config_digest: str = "",
+) -> Path:
+    seal_path = proof_seal.default_seal_path(packet_path)
+    args = [
+        sys.executable,
+        "-m",
+        "wild_boar_proxy",
+        "router-hook",
+        "proof-seal-create",
+        "--packet-file",
+        str(packet_path),
+        "--seal-file",
+        str(seal_path),
+        "--producer-kind",
+        producer_kind,
+        "--producer-command-digest",
+        _sha256(f"{producer_kind}:command"),
+        "--runtime-context-digest",
+        runtime_context_digest,
+        "--hook-ledger-digest",
+        hook_ledger_digest,
+        "--profile-hook-config-digest",
+        profile_hook_config_digest,
+        "--json",
+    ]
+    for input_path in input_packet_files or []:
+        args.extend(["--input-packet-file", str(input_path)])
+    result = subprocess.run(
+        args,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr or result.stdout)
+    return seal_path
+
+
+def _write_sealed_source_and_working(
+    root: Path,
+    *,
+    context: dict[str, object],
+    ledger: dict[str, object],
+) -> tuple[Path, Path, Path, Path]:
+    source = _source_packet(context, ledger)
+    source_path = _write_json(root / "source.packet.json", source)
+    working = _working_flow_packet(source)
+    working_path = _write_json(root / "working-flow.packet.json", working)
+    source_seal_path = _seal_packet_cli(
+        packet_path=source_path,
+        producer_kind="router_hook_user_prompt_submit_proof",
+        runtime_context_digest=str(source["runtime_context_digest"]),
+        hook_ledger_digest=proof_seal.sha256_file(
+            root / "profile" / producer.HOOK_LEDGER_RELATIVE_PATH
+        ),
+        profile_hook_config_digest=str(source["loaded_hook_config_sha256"]),
+    )
+    working_seal_path = _seal_packet_cli(
+        packet_path=working_path,
+        producer_kind="router_hook_working_flow_delivery_proof",
+        input_packet_files=[source_path],
+    )
+    return source_path, working_path, source_seal_path, working_seal_path
 
 
 def _assert_no_secret_or_raw_text(
@@ -426,6 +520,243 @@ class CustomCodexHookOriginProofTests(unittest.TestCase):
         self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_secret_or_raw_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_sealed_mode_proves_source_file_authenticity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, source_seal_path, working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=source_seal_path,
+                working_flow_seal_path=working_seal_path,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packet = json.loads(result.stdout)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["strict_sealed_evidence"])
+        self.assertTrue(packet["source_file_seal_verified"])
+        self.assertTrue(packet["working_flow_file_seal_verified"])
+        self.assertTrue(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["source_file_unforgeable"])
+        self.assertFalse(packet["cryptographic_authenticity_proven"])
+        self.assertTrue(packet["command_origin_proven"])
+        self.assertTrue(packet["custom_codex_flow_proven"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packet["seal_failures"], [])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_sealed_mode_blocks_missing_source_seal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, _source_seal_path, working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=root / "missing-source.seal.json",
+                working_flow_seal_path=working_seal_path,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertEqual(
+            packet["machine_error_code"],
+            origin_proof.CUSTOM_CODEX_HOOK_ORIGIN_SEAL_INVALID,
+        )
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn("source_proof_seal_not_verified", packet["seal_failures"])
+
+    def test_strict_sealed_mode_blocks_unexpected_source_seal_input_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, source_seal_path, working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            seal = json.loads(source_seal_path.read_text(encoding="utf-8"))
+            seal["input_packet_hashes"]["unexpected_kind"] = _sha256("unexpected")
+            seal["producer_inputs_digest"] = _input_hashes_digest(
+                dict(seal["input_packet_hashes"])
+            )
+            source_seal_path.write_text(json.dumps(seal) + "\n", encoding="utf-8")
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=source_seal_path,
+                working_flow_seal_path=working_seal_path,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn("source_proof_seal_not_ok", packet["seal_failures"])
+        self.assertIn(
+            "input_packet_hash_unexpected:unexpected_kind",
+            packet["source_proof_seal_failures"],
+        )
+
+    def test_strict_sealed_mode_blocks_modified_source_packet_after_seal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, source_seal_path, working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            source["provider_response_digest"] = _sha256("changed provider digest")
+            source_path.write_text(json.dumps(source) + "\n", encoding="utf-8")
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=source_seal_path,
+                working_flow_seal_path=working_seal_path,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn("source_proof_seal_not_ok", packet["seal_failures"])
+        self.assertIn(
+            "sealed_packet_sha256_mismatch",
+            packet["source_proof_seal_failures"],
+        )
+
+    def test_strict_sealed_mode_blocks_wrong_packet_kind_seal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, source_seal_path, _working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            wrong_working_seal = _seal_packet_cli(
+                packet_path=working_path,
+                producer_kind="wrong_kind_test",
+                input_packet_files=[],
+            )
+            seal = json.loads(wrong_working_seal.read_text(encoding="utf-8"))
+            seal["sealed_packet_kind"] = "wrong_packet_kind"
+            wrong_working_seal.write_text(json.dumps(seal) + "\n", encoding="utf-8")
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=source_seal_path,
+                working_flow_seal_path=wrong_working_seal,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn("working_flow_proof_seal_not_ok", packet["seal_failures"])
+        self.assertIn(
+            "sealed_packet_kind_mismatch",
+            packet["working_flow_proof_seal_failures"],
+        )
+
+    def test_strict_sealed_mode_blocks_cross_run_working_flow_input_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, source_seal_path, working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            seal = json.loads(working_seal_path.read_text(encoding="utf-8"))
+            seal["input_packet_hashes"][
+                integrated.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND
+            ] = _sha256("other source packet")
+            working_seal_path.write_text(json.dumps(seal) + "\n", encoding="utf-8")
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+                strict_sealed_evidence=True,
+                source_seal_path=source_seal_path,
+                working_flow_seal_path=working_seal_path,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn("working_flow_proof_seal_not_ok", packet["seal_failures"])
+        self.assertIn(
+            "input_packet_hash_mismatch:wbp_real_custom_codex_hook_proof",
+            packet["working_flow_proof_seal_failures"],
+        )
+
+    def test_legacy_mode_keeps_source_file_authenticity_unproven(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source_path, working_path, _source_seal_path, _working_seal_path = (
+                _write_sealed_source_and_working(
+                    root,
+                    context=context,
+                    ledger=ledger,
+                )
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_path,
+            )
+
+        self.assertEqual(result.returncode, 0)
+        packet = json.loads(result.stdout)
+        self.assertFalse(packet["strict_sealed_evidence"])
+        self.assertFalse(packet["source_file_authenticity_proven"])
+        self.assertFalse(packet["source_file_seal_verified"])
+        self.assertTrue(packet["command_origin_proven"])
 
     def test_blocks_tampered_profile_hook_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

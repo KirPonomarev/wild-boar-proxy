@@ -15,6 +15,11 @@ from .codex_working_flow_delivery_proof import (
 )
 from .command_effects import EFFECT_PROBE
 from .core import packets
+from .proof_seal import (
+    PROOF_SEAL_OK,
+    default_seal_path,
+    verify_proof_seal,
+)
 from .real_custom_codex_hook_proof import (
     COMMAND_ORIGIN_SURFACE_CUSTOM_CODEX_FLOW,
     HOOK_STATE_RAN_CUSTOM_CODEX_PROVEN,
@@ -49,6 +54,7 @@ CUSTOM_CODEX_HOOK_ORIGIN_PROFILE_INVALID = (
     "WBP_CUSTOM_CODEX_HOOK_ORIGIN_PROFILE_INVALID"
 )
 CUSTOM_CODEX_HOOK_ORIGIN_JOIN_INVALID = "WBP_CUSTOM_CODEX_HOOK_ORIGIN_JOIN_INVALID"
+CUSTOM_CODEX_HOOK_ORIGIN_SEAL_INVALID = "WBP_CUSTOM_CODEX_HOOK_ORIGIN_SEAL_INVALID"
 CUSTOM_CODEX_HOOK_ORIGIN_UNSAFE_CLAIM = "WBP_CUSTOM_CODEX_HOOK_ORIGIN_UNSAFE_CLAIM"
 
 CUSTOM_CODEX_HOOK_ORIGIN_TRUTH_SOURCE = (
@@ -642,6 +648,7 @@ def _machine_error_code(
     working_flow_failures: Sequence[str],
     profile_failures: Sequence[str],
     join_failures: Sequence[str],
+    seal_failures: Sequence[str],
     unsafe_failures: Sequence[str],
 ) -> str:
     if (
@@ -649,6 +656,7 @@ def _machine_error_code(
         and not working_flow_failures
         and not profile_failures
         and not join_failures
+        and not seal_failures
         and not unsafe_failures
     ):
         return "OK"
@@ -660,7 +668,90 @@ def _machine_error_code(
         return CUSTOM_CODEX_HOOK_ORIGIN_DELIVERY_INVALID
     if profile_failures:
         return CUSTOM_CODEX_HOOK_ORIGIN_PROFILE_INVALID
+    if seal_failures:
+        return CUSTOM_CODEX_HOOK_ORIGIN_SEAL_INVALID
     return CUSTOM_CODEX_HOOK_ORIGIN_JOIN_INVALID
+
+
+def _seal_failures(
+    *,
+    strict_sealed_evidence: bool,
+    source_seal_packet: Mapping[str, Any] | None,
+    working_flow_seal_packet: Mapping[str, Any] | None,
+) -> tuple[list[str], dict[str, Any]]:
+    if not strict_sealed_evidence:
+        return [], {
+            "strict_sealed_evidence": False,
+            "source_file_seal_verified": False,
+            "working_flow_file_seal_verified": False,
+            "source_file_authenticity_proven": False,
+            "source_file_unforgeable": False,
+            "cryptographic_authenticity_proven": False,
+        }
+    source_seal = source_seal_packet if isinstance(source_seal_packet, Mapping) else {}
+    working_seal = (
+        working_flow_seal_packet if isinstance(working_flow_seal_packet, Mapping) else {}
+    )
+    failures: list[str] = []
+    if source_seal.get("machine_error_code") != PROOF_SEAL_OK:
+        failures.append("source_proof_seal_not_ok")
+    if source_seal.get("proof_seal_verified") is not True:
+        failures.append("source_proof_seal_not_verified")
+    if working_seal.get("machine_error_code") != PROOF_SEAL_OK:
+        failures.append("working_flow_proof_seal_not_ok")
+    if working_seal.get("proof_seal_verified") is not True:
+        failures.append("working_flow_proof_seal_not_verified")
+    for field, reason in (
+        ("source_file_unforgeable", "seal_must_not_claim_source_unforgeable"),
+        (
+            "cryptographic_authenticity_proven",
+            "seal_must_not_claim_cryptographic_authenticity",
+        ),
+        ("product_ready", "seal_must_not_claim_product_ready"),
+        (
+            "custom_codex_ui_visibility_proven",
+            "seal_must_not_claim_custom_codex_ui",
+        ),
+        ("native_free_chat_router_proven", "seal_must_not_claim_native_router"),
+    ):
+        if source_seal.get(field) is True or working_seal.get(field) is True:
+            failures.append(reason)
+    source_seal_failures = source_seal.get("proof_seal_failures")
+    working_seal_failures = working_seal.get("proof_seal_failures")
+    if _sequence_not_empty(source_seal_failures):
+        failures.append("source_proof_seal_failures_not_empty")
+    if _sequence_not_empty(working_seal_failures):
+        failures.append("working_flow_proof_seal_failures_not_empty")
+    return sorted(set(failures)), {
+        "strict_sealed_evidence": True,
+        "source_file_seal_verified": source_seal.get("proof_seal_verified") is True,
+        "working_flow_file_seal_verified": (
+            working_seal.get("proof_seal_verified") is True
+        ),
+        "source_file_authenticity_proven": not failures,
+        "source_file_unforgeable": False,
+        "cryptographic_authenticity_proven": False,
+        "source_proof_seal_machine_error_code": _safe_text(
+            source_seal.get("machine_error_code"),
+            limit=96,
+        ),
+        "working_flow_proof_seal_machine_error_code": _safe_text(
+            working_seal.get("machine_error_code"),
+            limit=96,
+        ),
+        "source_proof_seal_failures": (
+            list(source_seal_failures)
+            if isinstance(source_seal_failures, Sequence)
+            and not isinstance(source_seal_failures, (str, bytes))
+            else []
+        ),
+        "working_flow_proof_seal_failures": (
+            list(working_seal_failures)
+            if isinstance(working_seal_failures, Sequence)
+            and not isinstance(working_seal_failures, (str, bytes))
+            else []
+        ),
+    }
 
 
 def build_custom_codex_hook_origin_proof_packet(
@@ -669,6 +760,9 @@ def build_custom_codex_hook_origin_proof_packet(
     integrated_live_provider_proof: Mapping[str, Any],
     working_flow_delivery_proof: Mapping[str, Any],
     file_metadata: Mapping[str, Any] | None = None,
+    strict_sealed_evidence: bool = False,
+    source_seal_packet: Mapping[str, Any] | None = None,
+    working_flow_seal_packet: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     metadata = dict(file_metadata or {})
     source = (
@@ -691,9 +785,20 @@ def build_custom_codex_hook_origin_proof_packet(
         source=source,
     )
     join_failures = _join_failures(source, working_flow)
+    seal_failures, seal_extra = _seal_failures(
+        strict_sealed_evidence=strict_sealed_evidence,
+        source_seal_packet=source_seal_packet,
+        working_flow_seal_packet=working_flow_seal_packet,
+    )
     unsafe_failures = sorted(set(source_unsafe + working_flow_unsafe + profile_unsafe))
     blocking_reasons = sorted(
-        set(source_failures + working_flow_failures + profile_failures + join_failures)
+        set(
+            source_failures
+            + working_flow_failures
+            + profile_failures
+            + join_failures
+            + seal_failures
+        )
     )
     ok = not blocking_reasons and not unsafe_failures
     machine_error_code = _machine_error_code(
@@ -701,6 +806,7 @@ def build_custom_codex_hook_origin_proof_packet(
         working_flow_failures=working_flow_failures,
         profile_failures=profile_failures,
         join_failures=join_failures,
+        seal_failures=seal_failures,
         unsafe_failures=unsafe_failures,
     )
     prompt_digest = _hex_sha256(source.get("prompt_digest"))
@@ -712,6 +818,7 @@ def build_custom_codex_hook_origin_proof_packet(
     extra = {
         **metadata,
         **profile_extra,
+        **seal_extra,
         "schema_version": 1,
         "packet_kind": CUSTOM_CODEX_HOOK_ORIGIN_PROOF_PACKET_KIND,
         "hook_origin_truth_source": (
@@ -743,9 +850,13 @@ def build_custom_codex_hook_origin_proof_packet(
         ),
         "custom_profile_identity_bound": ok,
         "custom_profile_identity_inputs_valid": not profile_failures,
-        "source_file_authenticity_proven": False,
+        "source_file_authenticity_proven": bool(
+            strict_sealed_evidence and not seal_failures
+        ),
         "source_file_authentication_scope": (
-            "file_backed_command_packet_semantics_and_profile_digest_join_no_signature"
+            "sealed_file_backed_command_packet_semantics_and_profile_digest_join_no_signature"
+            if strict_sealed_evidence
+            else "file_backed_command_packet_semantics_and_profile_digest_join_no_signature"
         ),
         "does_not_prove_source_file_unforgeable": True,
         "command_origin_surface": (
@@ -882,6 +993,7 @@ def build_custom_codex_hook_origin_proof_packet(
         "working_flow_failures": working_flow_failures,
         "profile_failures": profile_failures,
         "join_failures": join_failures,
+        "seal_failures": seal_failures,
         "unsafe_claim_failures": unsafe_failures,
         "blocking_reasons": blocking_reasons,
         "changed_files": [],
@@ -909,6 +1021,9 @@ def run_custom_codex_hook_origin_proof_command(
     paths: RuntimePaths,
     integrated_live_provider_proof_file: str,
     working_flow_delivery_proof_file: str,
+    strict_sealed_evidence: bool = False,
+    integrated_live_provider_proof_seal_file: str | None = None,
+    working_flow_delivery_proof_seal_file: str | None = None,
 ) -> dict[str, Any]:
     source_path = Path(integrated_live_provider_proof_file).expanduser()
     working_flow_path = Path(working_flow_delivery_proof_file).expanduser()
@@ -920,9 +1035,42 @@ def run_custom_codex_hook_origin_proof_command(
         working_flow_path,
         prefix="working_flow_delivery_proof",
     )
+    source_seal_packet: Mapping[str, Any] = {}
+    working_flow_seal_packet: Mapping[str, Any] = {}
+    if strict_sealed_evidence:
+        source_expected_inputs: dict[str, str] = {}
+        working_expected_inputs = {
+            _safe_text(source_packet.get("packet_kind"), limit=120): _hex_sha256(
+                source_metadata.get("integrated_live_provider_proof_file_sha256")
+            )
+        }
+        source_seal_packet, _ = verify_proof_seal(
+            packet_file=source_path,
+            seal_file=integrated_live_provider_proof_seal_file
+            or default_seal_path(source_path),
+            expected_packet_kind=REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND,
+            expected_input_packet_hashes=source_expected_inputs,
+            expected_runtime_context_digest=_hex_sha256(
+                source_packet.get("runtime_context_digest")
+            ),
+            expected_hook_ledger_digest=_path_sha256(hook_ledger_path(paths)),
+            expected_profile_hook_config_digest=_hex_sha256(
+                source_packet.get("loaded_hook_config_sha256")
+            ),
+        )
+        working_flow_seal_packet, _ = verify_proof_seal(
+            packet_file=working_flow_path,
+            seal_file=working_flow_delivery_proof_seal_file
+            or default_seal_path(working_flow_path),
+            expected_packet_kind=CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND,
+            expected_input_packet_hashes=working_expected_inputs,
+        )
     return build_custom_codex_hook_origin_proof_packet(
         paths=paths,
         integrated_live_provider_proof=source_packet,
         working_flow_delivery_proof=working_flow_packet,
         file_metadata={**source_metadata, **working_flow_metadata},
+        strict_sealed_evidence=strict_sealed_evidence,
+        source_seal_packet=source_seal_packet,
+        working_flow_seal_packet=working_flow_seal_packet,
     )
