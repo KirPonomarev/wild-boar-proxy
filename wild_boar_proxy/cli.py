@@ -22,6 +22,11 @@ from .interactive_custom_codex_proof import (
     run_interactive_custom_codex_collect_command,
     run_interactive_custom_codex_preflight_command,
 )
+from .interactive_codex_working_flow_delivery import (
+    APPROVED_DELIVERY_SOURCE_KINDS,
+    DELIVERY_SOURCE_CODEX_EXEC_JSONL,
+    run_interactive_codex_working_flow_delivery_command,
+)
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
 from .controlled_dispatch_handoff_proof import (
@@ -226,6 +231,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_interactive_collect.add_argument("--live-provider-proof-file")
     codex_runner_interactive_collect.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_interactive_working_flow = codex_runner_subparsers.add_parser(
+        "interactive-working-flow-delivery"
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--interactive-proof-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument("--proof-dir")
+    codex_runner_interactive_working_flow.add_argument(
+        "--delivery-source-kind",
+        choices=sorted(APPROVED_DELIVERY_SOURCE_KINDS),
+        default=DELIVERY_SOURCE_CODEX_EXEC_JSONL,
+    )
+    codex_runner_interactive_working_flow.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -764,6 +795,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
         "interactive-preflight",
         "interactive-collect",
+        "interactive-working-flow-delivery",
     }:
         return EFFECT_MUTATE
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
@@ -1011,6 +1043,21 @@ def main(argv: list[str] | None = None) -> int:
                     proof_dir=args.proof_dir,
                     expected_text=args.expected_text,
                     live_provider_proof_file=args.live_provider_proof_file,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-working-flow-delivery"
+        ):
+            return emit_json(
+                run_interactive_codex_working_flow_delivery_command(
+                    interactive_proof_file=args.interactive_proof_file,
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    proof_dir=args.proof_dir,
+                    delivery_source_kind=args.delivery_source_kind,
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "entry":
