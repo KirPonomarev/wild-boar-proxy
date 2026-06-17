@@ -78,6 +78,15 @@ _UNSAFE_TRUE_FIELDS = {
         "native_custom_codex_flow_must_not_be_claimed"
     ),
     "native_router_hook_observed": "native_router_hook_must_not_be_claimed",
+    "custom_codex_ui_visibility_proven": (
+        "custom_codex_ui_visibility_must_not_be_claimed"
+    ),
+    "codex_working_flow_delivery_proven": (
+        "codex_working_flow_delivery_must_not_be_claimed"
+    ),
+    "delivery_counts_as_custom_codex_ui": (
+        "delivery_counts_as_custom_codex_ui_must_not_be_claimed"
+    ),
 }
 
 

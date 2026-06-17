@@ -31,6 +31,11 @@ from .codex_exec_assistant_continuation_proof import (
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
+from .custom_codex_approved_visible_source_observation import (
+    APPROVED_VISIBLE_SOURCE_KINDS,
+    VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    run_custom_codex_approved_visible_source_observation_command,
+)
 from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
@@ -260,6 +265,27 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_assistant_continuation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_visible_source = router_hook_subparsers.add_parser(
+        "visible-source-observe"
+    )
+    router_hook_visible_source.add_argument(
+        "--assistant-continuation-proof-file",
+        required=True,
+    )
+    router_hook_visible_source.add_argument(
+        "--visible-source-kind",
+        choices=sorted(APPROVED_VISIBLE_SOURCE_KINDS),
+        default=VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    )
+    router_hook_visible_source.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_visible_source.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -561,6 +587,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "handoff-proof",
         "transcript-observe",
         "assistant-continuation-proof",
+        "visible-source-observe",
     }:
         return EFFECT_PROBE
     if command == "mode":
@@ -832,6 +859,19 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_codex_exec_assistant_continuation_proof_command(
                     transcript_observation_file=args.transcript_observation_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "visible-source-observe"
+        ):
+            return emit_json(
+                run_custom_codex_approved_visible_source_observation_command(
+                    assistant_continuation_proof_file=(
+                        args.assistant_continuation_proof_file
+                    ),
+                    visible_source_kind=args.visible_source_kind,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
