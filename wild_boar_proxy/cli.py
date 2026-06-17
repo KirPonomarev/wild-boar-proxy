@@ -48,6 +48,9 @@ from .codex_working_flow_delivery_proof import (
 from .custom_codex_hook_origin_proof import (
     run_custom_codex_hook_origin_proof_command,
 )
+from .native_free_chat_router_dispatch_admission import (
+    run_native_free_chat_router_dispatch_admission_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -444,6 +447,18 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_user_prompt_submit.add_argument("--live-provider-expected-text")
     router_hook_user_prompt_submit.add_argument("--live-provider-proof-file")
     router_hook_user_prompt_submit.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_dispatch_admission = router_hook_subparsers.add_parser(
+        "dispatch-admission"
+    )
+    router_hook_dispatch_admission.add_argument("--prompt", required=True)
+    router_hook_dispatch_admission.add_argument("--hook-ledger-file", required=True)
+    router_hook_dispatch_admission.add_argument("--runtime-context-file")
+    router_hook_dispatch_admission.add_argument("--handoff-file")
+    router_hook_dispatch_admission.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -864,6 +879,11 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         return EFFECT_PROBE
     if (
         command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "dispatch-admission"
+    ):
+        return EFFECT_MUTATE
+    if (
+        command == "router-hook"
         and getattr(args, "router_hook_command", None)
         == "user-prompt-submit-install"
     ):
@@ -1250,6 +1270,19 @@ def main(argv: list[str] | None = None) -> int:
                     runtime_context_file=args.runtime_context_file,
                     live_provider_expected_text=args.live_provider_expected_text,
                     live_provider_proof_file=args.live_provider_proof_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "dispatch-admission"
+        ):
+            return emit_json(
+                run_native_free_chat_router_dispatch_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    handoff_file=args.handoff_file,
                 )
             )
         if (
