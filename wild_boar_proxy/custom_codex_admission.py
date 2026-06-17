@@ -9,12 +9,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import shlex
 import shutil
 import subprocess
 from typing import Any
 
-from .codex_transcript_delivery_observation import _read_jsonl_events_file
+from .codex_transcript_delivery_observation import (
+    _codex_exec_transcript_digest,
+    _read_jsonl_events_file,
+)
 from .codex_working_flow_delivery_proof import (
     CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND,
     run_codex_working_flow_delivery_proof_command,
@@ -28,7 +32,7 @@ from .custom_codex_hook_origin_proof import (
 from .proof_seal import (
     sha256_file,
     run_proof_seal_create_command,
-    run_proof_seal_verify_command,
+    verify_proof_seal,
 )
 from .real_custom_codex_hook_proof import (
     REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND,
@@ -57,6 +61,9 @@ ADMISSION_HOOK_PROOF_FAILED = "WBP_CUSTOM_CODEX_ADMISSION_HOOK_PROOF_FAILED"
 ADMISSION_WORKING_FLOW_FAILED = "WBP_CUSTOM_CODEX_ADMISSION_WORKING_FLOW_FAILED"
 ADMISSION_SEAL_FAILED = "WBP_CUSTOM_CODEX_ADMISSION_SEAL_FAILED"
 ADMISSION_ORIGIN_FAILED = "WBP_CUSTOM_CODEX_ADMISSION_ORIGIN_FAILED"
+ADMISSION_SAME_TURN_BINDING_FAILED = (
+    "WBP_CUSTOM_CODEX_ADMISSION_SAME_TURN_BINDING_FAILED"
+)
 ADMISSION_RUNTIME_TRUTH_MUTATED = "WBP_CUSTOM_CODEX_ADMISSION_RUNTIME_TRUTH_MUTATED"
 ADMISSION_UNSAFE_PACKET = "WBP_CUSTOM_CODEX_ADMISSION_UNSAFE_PACKET"
 
@@ -338,10 +345,14 @@ def _create_and_verify_seal(
         profile_hook_config_digest=profile_hook_config_digest,
         git_commit_sha="",
     )
-    verify_packet = run_proof_seal_verify_command(
+    verify_packet, _seal = verify_proof_seal(
         packet_file=str(packet_file),
         seal_file=str(seal_file),
         expected_packet_kind=expected_packet_kind,
+        expected_input_packet_hashes=input_hashes,
+        expected_runtime_context_digest=runtime_context_digest,
+        expected_hook_ledger_digest=hook_ledger_digest,
+        expected_profile_hook_config_digest=profile_hook_config_digest,
     )
     changed_files = []
     changed_files.extend(create_packet.get("changed_files", []))
@@ -357,6 +368,7 @@ def _machine_error_code(
     source_seal_ok: bool,
     working_seal_ok: bool,
     origin_ok: bool,
+    same_turn_ok: bool,
     runtime_truth_ok: bool,
     unsafe: bool,
 ) -> str:
@@ -368,6 +380,7 @@ def _machine_error_code(
         and source_seal_ok
         and working_seal_ok
         and origin_ok
+        and same_turn_ok
         and runtime_truth_ok
         and not unsafe
     ):
@@ -386,7 +399,11 @@ def _machine_error_code(
         return ADMISSION_WORKING_FLOW_FAILED
     if not source_seal_ok or not working_seal_ok:
         return ADMISSION_SEAL_FAILED
-    return ADMISSION_ORIGIN_FAILED if not origin_ok else ADMISSION_UNSAFE_PACKET
+    if not origin_ok:
+        return ADMISSION_ORIGIN_FAILED
+    if not same_turn_ok:
+        return ADMISSION_SAME_TURN_BINDING_FAILED
+    return ADMISSION_UNSAFE_PACKET
 
 
 def run_custom_codex_admission_command(
@@ -424,6 +441,8 @@ def run_custom_codex_admission_command(
     except OSError:
         ledger_was_cleared = False
 
+    admission_run_id = secrets.token_urlsafe(32)
+    admission_run_id_digest = _sha256_text(admission_run_id)
     command = _codex_exec_command(
         codex_bin=codex_bin_value,
         codex_cwd=cwd,
@@ -436,10 +455,12 @@ def run_custom_codex_admission_command(
     process_timeout = False
     process_error = ""
     try:
+        runner_env = _runner_env(paths, runtime_context)
+        runner_env["WBP_ADMISSION_RUN_ID"] = admission_run_id
         result = subprocess.run(
             command,
             cwd=cwd,
-            env=_runner_env(paths, runtime_context),
+            env=runner_env,
             text=True,
             capture_output=True,
             timeout=max(1, int(timeout_seconds)),
@@ -547,6 +568,178 @@ def run_custom_codex_admission_command(
     source_seal_ok = source_seal_verify.get("status") == "ok"
     working_seal_ok = working_seal_verify.get("status") == "ok"
     origin_ok = origin_packet.get("status") == "ok"
+
+    hook_ledger_sha256 = sha256_file(ledger_path)
+    source_proof_sha256 = sha256_file(source_packet_path)
+    working_flow_proof_sha256 = sha256_file(working_flow_packet_path)
+    origin_proof_sha256 = sha256_file(origin_packet_path)
+    ledger_packet = _read_json_mapping(ledger_path)
+    prompt_digest = _sha256_text(prompt)
+    source_prompt_digest = _safe_text(source_packet.get("prompt_digest"), limit=80)
+    ledger_prompt_digest = _safe_text(ledger_packet.get("prompt_digest"), limit=80)
+    source_runtime_digest = _safe_text(
+        source_packet.get("runtime_context_digest"),
+        limit=80,
+    )
+    ledger_runtime_digest = _safe_text(
+        ledger_packet.get("runtime_context_digest"),
+        limit=80,
+    )
+    session_digest = _safe_text(ledger_packet.get("session_digest"), limit=80)
+    thread_digest = _safe_text(ledger_packet.get("thread_digest"), limit=80)
+    turn_digest = _safe_text(ledger_packet.get("turn_digest"), limit=80)
+    ledger_admission_run_id_digest = _safe_text(
+        ledger_packet.get("admission_run_id_digest"),
+        limit=80,
+    )
+    source_admission_run_id_digest = _safe_text(
+        source_packet.get("hook_admission_run_id_digest"),
+        limit=80,
+    )
+    source_session_digest = _safe_text(source_packet.get("hook_session_digest"), limit=80)
+    source_thread_digest = _safe_text(source_packet.get("hook_thread_digest"), limit=80)
+    source_turn_digest = _safe_text(source_packet.get("hook_turn_digest"), limit=80)
+    recomputed_codex_exec_transcript_digest = (
+        _codex_exec_transcript_digest(events) if events else ""
+    )
+    working_flow_transcript_digest = _safe_text(
+        working_flow_packet.get("codex_exec_transcript_sha256"),
+        limit=80,
+    )
+    source_seal_expected_input_hashes: dict[str, str] = {}
+    working_seal_expected_input_hashes = {
+        REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND: source_proof_sha256,
+    }
+    source_seal_expected_input_digest = _canonical_digest(
+        source_seal_expected_input_hashes
+    )
+    working_seal_expected_input_digest = _canonical_digest(
+        working_seal_expected_input_hashes
+    )
+    source_seal_input_hashes_bound = bool(
+        source_seal_verify.get("status") == "ok"
+        and _safe_text(
+            source_seal_verify.get("seal_input_packet_hashes_digest"),
+            limit=80,
+        )
+        == source_seal_expected_input_digest
+    )
+    source_seal_declared_input_packet_hashes_empty = source_seal_input_hashes_bound
+    source_seal_runtime_context_digest_bound = bool(
+        source_seal_verify.get("status") == "ok"
+        and _safe_text(source_seal_verify.get("runtime_context_digest"), limit=80)
+        == runtime_digest
+        and bool(runtime_digest)
+    )
+    source_seal_hook_ledger_digest_bound = bool(
+        source_seal_verify.get("status") == "ok"
+        and _safe_text(source_seal_verify.get("hook_ledger_digest"), limit=80)
+        == hook_digest
+        and bool(hook_digest)
+    )
+    source_seal_profile_hook_config_digest_bound = bool(
+        source_seal_verify.get("status") == "ok"
+        and _safe_text(source_seal_verify.get("profile_hook_config_digest"), limit=80)
+        == hook_config_digest
+        and bool(hook_config_digest)
+    )
+    working_flow_seal_input_hashes_bound = bool(
+        working_seal_verify.get("status") == "ok"
+        and _safe_text(
+            working_seal_verify.get("seal_input_packet_hashes_digest"),
+            limit=80,
+        )
+        == working_seal_expected_input_digest
+    )
+    prompt_digest_bound = bool(
+        prompt_digest
+        and source_prompt_digest == prompt_digest
+        and ledger_prompt_digest == prompt_digest
+    )
+    runtime_context_digest_bound = bool(
+        source_runtime_digest
+        and ledger_runtime_digest == source_runtime_digest
+        and source_packet.get("hook_runtime_context_digest_bound") is True
+    )
+    admission_run_id_digest_bound = bool(
+        admission_run_id_digest
+        and ledger_admission_run_id_digest == admission_run_id_digest
+        and source_admission_run_id_digest == admission_run_id_digest
+    )
+    session_or_turn_digest_bound = bool(
+        source_packet.get("thread_or_turn_digest_bound") is True
+        and (session_digest or thread_digest or turn_digest)
+        and (thread_digest or turn_digest)
+        and source_session_digest == session_digest
+        and source_thread_digest == thread_digest
+        and source_turn_digest == turn_digest
+    )
+    codex_exec_transcript_bound = bool(
+        jsonl_metadata.get("codex_exec_jsonl_file_read") is True
+        and jsonl_metadata.get("codex_exec_jsonl_file_valid_jsonl") is True
+        and sha256_file(stdout_path)
+        and recomputed_codex_exec_transcript_digest
+        and working_flow_transcript_digest == recomputed_codex_exec_transcript_digest
+    )
+    run_graph_digest = _canonical_digest(
+        {
+            "hook_ledger_sha256": hook_ledger_sha256,
+            "source_proof_sha256": source_proof_sha256,
+            "working_flow_proof_sha256": working_flow_proof_sha256,
+            "origin_proof_sha256": origin_proof_sha256,
+            "codex_exec_jsonl_sha256": sha256_file(stdout_path),
+            "codex_exec_transcript_sha256": _safe_text(
+                working_flow_packet.get("codex_exec_transcript_sha256"),
+                limit=80,
+            ),
+            "prompt_digest": prompt_digest,
+            "runtime_context_digest": source_runtime_digest,
+            "admission_run_id_digest": admission_run_id_digest,
+        }
+    )
+    run_id_bound = bool(
+        admission_run_id_digest_bound
+        and hook_ledger_sha256
+        and source_proof_sha256
+        and working_flow_proof_sha256
+        and origin_proof_sha256
+        and run_graph_digest
+    )
+    same_turn_binding_failures: list[str] = []
+    if not run_id_bound:
+        same_turn_binding_failures.append("run_id_not_bound")
+    if not admission_run_id_digest_bound:
+        same_turn_binding_failures.append("admission_run_id_digest_not_bound")
+    if not ledger_was_cleared:
+        same_turn_binding_failures.append("hook_ledger_not_cleared_before_run")
+    if not hook_ledger_sha256:
+        same_turn_binding_failures.append("hook_ledger_sha256_missing")
+    if not prompt_digest_bound:
+        same_turn_binding_failures.append("prompt_digest_not_bound")
+    if not runtime_context_digest_bound:
+        same_turn_binding_failures.append("runtime_context_digest_not_bound")
+    if not session_or_turn_digest_bound:
+        same_turn_binding_failures.append("session_or_turn_digest_not_bound")
+    if not codex_exec_transcript_bound:
+        same_turn_binding_failures.append("codex_exec_transcript_not_bound")
+    if not source_proof_sha256:
+        same_turn_binding_failures.append("source_proof_sha256_missing")
+    if not working_flow_proof_sha256:
+        same_turn_binding_failures.append("working_flow_proof_sha256_missing")
+    if not source_seal_input_hashes_bound:
+        same_turn_binding_failures.append("source_seal_input_hashes_not_declared_empty")
+    if not source_seal_runtime_context_digest_bound:
+        same_turn_binding_failures.append("source_seal_runtime_context_digest_not_bound")
+    if not source_seal_hook_ledger_digest_bound:
+        same_turn_binding_failures.append("source_seal_hook_ledger_digest_not_bound")
+    if not source_seal_profile_hook_config_digest_bound:
+        same_turn_binding_failures.append(
+            "source_seal_profile_hook_config_digest_not_bound"
+        )
+    if not working_flow_seal_input_hashes_bound:
+        same_turn_binding_failures.append("working_flow_seal_input_hashes_not_bound")
+    same_turn_ok = not same_turn_binding_failures
+
     admission_proven = bool(
         codex_exit_ok
         and provider_observed
@@ -555,6 +748,7 @@ def run_custom_codex_admission_command(
         and source_seal_ok
         and working_seal_ok
         and origin_ok
+        and same_turn_ok
         and runtime_truth_ok
     )
     blocking_reasons: list[str] = []
@@ -572,6 +766,7 @@ def run_custom_codex_admission_command(
         blocking_reasons.append("working_flow_proof_seal_not_ok")
     if not origin_ok:
         blocking_reasons.append("custom_origin_proof_not_ok")
+    blocking_reasons.extend(same_turn_binding_failures)
     for truth_key in mutated_truth:
         blocking_reasons.append(f"runtime_truth_mutated:{truth_key}")
 
@@ -591,6 +786,7 @@ def run_custom_codex_admission_command(
         source_seal_ok=source_seal_ok,
         working_seal_ok=working_seal_ok,
         origin_ok=origin_ok,
+        same_turn_ok=same_turn_ok,
         runtime_truth_ok=runtime_truth_ok,
         unsafe=unsafe,
     )
@@ -607,10 +803,76 @@ def run_custom_codex_admission_command(
         "admission_scope": "repeatable_custom_codex_runtime_proof",
         "admission_proven": admission_proven,
         "repeatable_custom_codex_admission_proven": admission_proven,
+        "same_turn_proof_runner_v1": True,
+        "same_turn_custom_codex_flow_proven": admission_proven,
+        "same_turn_claim_ceiling": (
+            "custom_codex_exec_working_flow_only_no_ui_no_native_router_no_product"
+        ),
+        "run_id_bound": run_id_bound,
+        "admission_run_id_digest_bound": admission_run_id_digest_bound,
+        "admission_run_id_digest": admission_run_id_digest,
+        "admission_run_id_recorded": False,
+        "run_graph_digest": run_graph_digest,
+        "session_or_turn_digest_bound": session_or_turn_digest_bound,
+        "session_digest_present": bool(session_digest),
+        "thread_digest_present": bool(thread_digest),
+        "turn_digest_present": bool(turn_digest),
+        "session_digest_bound_to_source": bool(
+            source_session_digest == session_digest and bool(session_digest)
+        ),
+        "thread_digest_bound_to_source": bool(
+            source_thread_digest == thread_digest and bool(thread_digest)
+        ),
+        "turn_digest_bound_to_source": bool(
+            source_turn_digest == turn_digest and bool(turn_digest)
+        ),
+        "prompt_digest_bound": prompt_digest_bound,
+        "runtime_context_digest_bound": runtime_context_digest_bound,
+        "hook_ledger_fresh": bool(
+            ledger_was_cleared
+            and source_packet.get("hook_producer_ledger_proven") is True
+        ),
+        "hook_ledger_sha256": hook_ledger_sha256,
+        "source_proof_sha256": source_proof_sha256,
+        "working_flow_proof_sha256": working_flow_proof_sha256,
+        "origin_proof_sha256": origin_proof_sha256,
+        "codex_exec_transcript_bound": codex_exec_transcript_bound,
+        "recomputed_codex_exec_transcript_sha256": (
+            recomputed_codex_exec_transcript_digest
+        ),
+        "working_flow_codex_exec_transcript_sha256": working_flow_transcript_digest,
+        "source_seal_input_hashes_bound": source_seal_input_hashes_bound,
+        "source_seal_declared_input_packet_hashes_empty": (
+            source_seal_declared_input_packet_hashes_empty
+        ),
+        "source_seal_runtime_context_digest_bound": (
+            source_seal_runtime_context_digest_bound
+        ),
+        "source_seal_hook_ledger_digest_bound": source_seal_hook_ledger_digest_bound,
+        "source_seal_profile_hook_config_digest_bound": (
+            source_seal_profile_hook_config_digest_bound
+        ),
+        "source_seal_input_hashes_digest": _safe_text(
+            source_seal_verify.get("seal_input_packet_hashes_digest"),
+            limit=80,
+        ),
+        "source_seal_expected_input_hashes_digest": source_seal_expected_input_digest,
+        "working_flow_seal_input_hashes_bound": (
+            working_flow_seal_input_hashes_bound
+        ),
+        "working_flow_seal_input_hashes_digest": _safe_text(
+            working_seal_verify.get("seal_input_packet_hashes_digest"),
+            limit=80,
+        ),
+        "working_flow_expected_seal_input_hashes_digest": (
+            working_seal_expected_input_digest
+        ),
+        "same_turn_binding_failures": same_turn_binding_failures,
         "product_ready": False,
         "does_not_prove_product_ready": True,
         "custom_codex_ui_visibility_proven": False,
         "does_not_prove_custom_codex_ui": True,
+        "delivery_counts_as_custom_codex_ui": False,
         "native_free_chat_router_proven": False,
         "does_not_prove_native_free_chat_router": True,
         "custom_codex_profile_env_present": True,
@@ -624,10 +886,17 @@ def run_custom_codex_admission_command(
         "codex_exec_returncode_zero": process_returncode == 0,
         "codex_exec_jsonl_sha256": sha256_file(stdout_path),
         "codex_exec_stderr_sha256": sha256_file(stderr_path),
+        "codex_exec_jsonl_file_read": jsonl_metadata.get("codex_exec_jsonl_file_read")
+        is True,
         "codex_exec_jsonl_file_valid_jsonl": jsonl_metadata.get(
             "codex_exec_jsonl_file_valid_jsonl"
         )
         is True,
+        "codex_exec_transcript_sha256": _safe_text(
+            working_flow_packet.get("codex_exec_transcript_sha256"),
+            limit=80,
+        ),
+        "same_codex_exec_jsonl_bound": codex_exec_transcript_bound,
         "codex_exec_event_count": int(jsonl_metadata.get("codex_exec_event_count") or 0),
         "codex_bin_source": _safe_text(codex_bin_source, limit=80),
         "codex_bin_path_recorded": False,
@@ -696,6 +965,16 @@ def run_custom_codex_admission_command(
             and working_flow_packet.get("external_live_provider_response_proven")
             is True
         ),
+        "approved_handoff_proven": bool(
+            source_packet.get("approved_handoff_ready") is True
+            and working_flow_packet.get("approved_handoff_ready") is True
+            and working_flow_packet.get("handoff_delivered") is True
+        ),
+        "approved_delivery_surface_proven": working_flow_packet.get(
+            "approved_delivery_surface_proven"
+        )
+        is True,
+        "handoff_delivered": working_flow_packet.get("handoff_delivered") is True,
         "working_flow_delivery_proof_packet_kind": _safe_text(
             working_flow_packet.get("packet_kind"),
             limit=80,
@@ -708,6 +987,24 @@ def run_custom_codex_admission_command(
             "codex_exec_assistant_continuation_proven"
         )
         is True,
+        "assistant_response_after_tool_result": working_flow_packet.get(
+            "assistant_response_after_tool_result"
+        )
+        is True,
+        "assistant_response_bound_to_handoff_digest": working_flow_packet.get(
+            "assistant_response_bound_to_handoff_digest"
+        )
+        is True,
+        "command_assistant_response_after_command": working_flow_packet.get(
+            "command_assistant_response_after_command"
+        )
+        is True,
+        "command_assistant_response_bound_to_live_provider_digest": (
+            working_flow_packet.get(
+                "command_assistant_response_bound_to_live_provider_digest"
+            )
+            is True
+        ),
         "custom_codex_hook_origin_proof_packet_kind": _safe_text(
             origin_packet.get("packet_kind"),
             limit=80,

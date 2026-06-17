@@ -152,6 +152,7 @@ def build_user_prompt_submit_hook_ledger(
     hook_event_digest: str = "",
     session_digest: str = "",
     cwd_digest: str = "",
+    admission_run_id_digest: str = "",
     hook_trust_source: str = "",
 ) -> dict[str, Any]:
     return {
@@ -171,6 +172,7 @@ def build_user_prompt_submit_hook_ledger(
         "hook_event_digest": _hex_sha256(hook_event_digest),
         "session_digest": _hex_sha256(session_digest),
         "cwd_digest": _hex_sha256(cwd_digest),
+        "admission_run_id_digest": _hex_sha256(admission_run_id_digest),
         "hook_trust_source": _safe_text(hook_trust_source, limit=80),
         "trusted_hook_config_sha256": _hex_sha256(trusted_hook_config_sha256),
         "loaded_hook_config_sha256": _hex_sha256(loaded_hook_config_sha256),
@@ -874,6 +876,13 @@ def build_real_custom_codex_hook_proof_packet(
             limit=80,
         ),
         "hook_event_digest": _hex_sha256(ledger.get("hook_event_digest")),
+        "hook_session_digest": _hex_sha256(ledger.get("session_digest")),
+        "hook_thread_digest": _hex_sha256(ledger.get("thread_digest")),
+        "hook_turn_digest": _hex_sha256(ledger.get("turn_digest")),
+        "hook_cwd_digest": _hex_sha256(ledger.get("cwd_digest")),
+        "hook_admission_run_id_digest": _hex_sha256(
+            ledger.get("admission_run_id_digest")
+        ),
         "hook_trust_source": _safe_text(ledger.get("hook_trust_source"), limit=80),
         "hook_ledger_failures": ledger_failures,
         "hook_ledger_unsafe_claim_failures": unsafe_ledger_failures,

@@ -207,12 +207,16 @@ def _write_fake_codex(path: Path) -> Path:
                 "permission_mode": "never",
                 "prompt": event_prompt,
             }
+            hook_env = os.environ.copy()
+            if mode == "missing_run_id":
+                hook_env.pop("WBP_ADMISSION_RUN_ID", None)
             hook_result = subprocess.run(
                 hook_command,
                 input=json.dumps(event),
                 shell=True,
                 text=True,
                 capture_output=True,
+                env=hook_env,
                 check=False,
             )
             if hook_result.returncode != 0:
@@ -432,18 +436,49 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertTrue(packet["admission_proven"])
         self.assertTrue(packet["custom_codex_flow_proven"])
+        self.assertTrue(packet["same_turn_proof_runner_v1"])
+        self.assertTrue(packet["same_turn_custom_codex_flow_proven"])
+        self.assertTrue(packet["run_id_bound"])
+        self.assertTrue(packet["admission_run_id_digest_bound"])
+        self.assertFalse(packet["admission_run_id_recorded"])
+        self.assertTrue(packet["session_or_turn_digest_bound"])
+        self.assertTrue(packet["session_digest_bound_to_source"])
+        self.assertTrue(packet["thread_digest_bound_to_source"])
+        self.assertTrue(packet["turn_digest_bound_to_source"])
+        self.assertTrue(packet["prompt_digest_bound"])
+        self.assertTrue(packet["runtime_context_digest_bound"])
+        self.assertTrue(packet["hook_ledger_fresh"])
+        self.assertTrue(packet["hook_ledger_sha256"])
+        self.assertTrue(packet["source_proof_sha256"])
+        self.assertTrue(packet["working_flow_proof_sha256"])
+        self.assertTrue(packet["origin_proof_sha256"])
+        self.assertTrue(packet["codex_exec_transcript_bound"])
+        self.assertTrue(packet["same_codex_exec_jsonl_bound"])
+        self.assertTrue(packet["source_seal_input_hashes_bound"])
+        self.assertTrue(packet["source_seal_declared_input_packet_hashes_empty"])
+        self.assertTrue(packet["source_seal_runtime_context_digest_bound"])
+        self.assertTrue(packet["source_seal_hook_ledger_digest_bound"])
+        self.assertTrue(packet["source_seal_profile_hook_config_digest_bound"])
+        self.assertTrue(packet["working_flow_seal_input_hashes_bound"])
         self.assertTrue(packet["user_prompt_submit_hook_ran"])
         self.assertTrue(packet["hook_ledger_bound"])
         self.assertTrue(packet["runtime_context_bound"])
         self.assertTrue(packet["server_issued_cli_command_bound"])
         self.assertTrue(packet["api_lane_called"])
         self.assertTrue(packet["live_provider_response_proven"])
+        self.assertTrue(packet["approved_handoff_proven"])
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertTrue(packet["handoff_delivered"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
         self.assertTrue(packet["strict_sealed_evidence"])
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
         self.assertEqual(packet["blocking_reasons"], [])
+        self.assertEqual(packet["same_turn_binding_failures"], [])
         changed_names = {Path(path).name for path in packet["changed_files"]}
         self.assertIn("codex-exec.jsonl", changed_names)
         self.assertIn("custom-codex-admission.packet.json", changed_names)
@@ -456,6 +491,42 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_missing_admission_run_id_digest_blocks_same_turn_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_CODEX_MODE": "missing_run_id",
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertFalse(packet["admission_run_id_digest_bound"])
+        self.assertIn("admission_run_id_digest_not_bound", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
 
     def test_echo_provider_command_does_not_get_false_green(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -487,8 +558,56 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             admission.ADMISSION_LIVE_PROVIDER_NOT_OBSERVED,
         )
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["api_lane_called"])
         self.assertIn("live_provider_packet_not_observed", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_transcript_digest_mismatch_blocks_same_turn_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            original_working_flow = admission.run_codex_working_flow_delivery_proof_command
+
+            def forged_working_flow(*args: object, **kwargs: object) -> dict[str, object]:
+                packet = dict(original_working_flow(*args, **kwargs))
+                packet["codex_exec_transcript_sha256"] = "f" * 64
+                return packet
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ), mock.patch.object(
+                admission,
+                "run_codex_working_flow_delivery_proof_command",
+                side_effect=forged_working_flow,
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertFalse(packet["codex_exec_transcript_bound"])
+        self.assertFalse(packet["same_codex_exec_jsonl_bound"])
+        self.assertIn("codex_exec_transcript_not_bound", packet["blocking_reasons"])
         self.assertFalse(packet["product_ready"])
         _assert_no_raw_sensitive_text(self, packet)
 
@@ -522,6 +641,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             admission.ADMISSION_RUNTIME_TRUTH_MUTATED,
         )
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["runtime_effective_truth_unchanged"])
         self.assertIn(
             "runtime_truth_mutated:runtime_effective_mode",
@@ -559,6 +679,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             admission.ADMISSION_HOOK_PROOF_FAILED,
         )
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["hook_prompt_digest_bound"])
         self.assertIn("user_prompt_submit_proof_not_ok", packet["blocking_reasons"])
         self.assertFalse(packet["api_lane_called"])
@@ -595,6 +716,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             admission.ADMISSION_WORKING_FLOW_FAILED,
         )
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["codex_working_flow_delivery_proven"])
         self.assertIn("working_flow_delivery_proof_not_ok", packet["blocking_reasons"])
         self.assertFalse(packet["api_lane_called"])
@@ -607,11 +729,17 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             paths = _paths(root)
             _write_profile(paths)
             fake_codex = _write_fake_codex(root / "fake-codex")
-            original_verify = admission.run_proof_seal_verify_command
+            original_verify = admission.verify_proof_seal
 
-            def fail_first_seal_verify(*args: object, **kwargs: object) -> dict[str, object]:
-                packet = original_verify(*args, **kwargs)
-                if kwargs.get("expected_packet_kind") == admission.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND:
+            def fail_first_seal_verify(
+                *args: object,
+                **kwargs: object,
+            ) -> tuple[dict[str, object], dict[str, object]]:
+                packet, seal = original_verify(*args, **kwargs)
+                if (
+                    kwargs.get("expected_packet_kind")
+                    == admission.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND
+                ):
                     packet = dict(packet)
                     packet.update(
                         {
@@ -619,7 +747,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
                             "machine_error_code": "WBP_TEST_SEAL_VERIFY_FAILED",
                         }
                     )
-                return packet
+                return packet, seal
 
             with mock.patch.dict(
                 os.environ,
@@ -629,7 +757,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
                 },
             ), mock.patch.object(
                 admission,
-                "run_proof_seal_verify_command",
+                "verify_proof_seal",
                 side_effect=fail_first_seal_verify,
             ):
                 packet = admission.run_custom_codex_admission_command(
@@ -645,8 +773,281 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], admission.ADMISSION_SEAL_FAILED)
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["proof_seal_verified"])
         self.assertIn("source_proof_seal_not_ok", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_same_turn_input_hash_mismatch_blocks_admission_even_when_seal_status_is_ok(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            original_verify = admission.verify_proof_seal
+
+            def forge_working_input_digest(
+                *args: object,
+                **kwargs: object,
+            ) -> tuple[dict[str, object], dict[str, object]]:
+                packet, seal = original_verify(*args, **kwargs)
+                if (
+                    kwargs.get("expected_packet_kind")
+                    == admission.CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND
+                ):
+                    packet = dict(packet)
+                    packet.update(
+                        {
+                            "status": "ok",
+                            "proof_seal_verified": True,
+                            "machine_error_code": "OK",
+                            "seal_input_packet_hashes_digest": "f" * 64,
+                        }
+                    )
+                return packet, seal
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ), mock.patch.object(
+                admission,
+                "verify_proof_seal",
+                side_effect=forge_working_input_digest,
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertTrue(packet["proof_seal_verified"])
+        self.assertFalse(packet["working_flow_seal_input_hashes_bound"])
+        self.assertIn(
+            "working_flow_seal_input_hashes_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "working_flow_seal_input_hashes_not_bound",
+            packet["same_turn_binding_failures"],
+        )
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_source_seal_runtime_digest_mismatch_blocks_same_turn_admission(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            original_verify = admission.verify_proof_seal
+
+            def forge_source_runtime_digest(
+                *args: object,
+                **kwargs: object,
+            ) -> tuple[dict[str, object], dict[str, object]]:
+                packet, seal = original_verify(*args, **kwargs)
+                if (
+                    kwargs.get("expected_packet_kind")
+                    == admission.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND
+                ):
+                    packet = dict(packet)
+                    packet.update(
+                        {
+                            "status": "ok",
+                            "proof_seal_verified": True,
+                            "machine_error_code": "OK",
+                            "runtime_context_digest": "f" * 64,
+                        }
+                    )
+                return packet, seal
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ), mock.patch.object(
+                admission,
+                "verify_proof_seal",
+                side_effect=forge_source_runtime_digest,
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertTrue(packet["proof_seal_verified"])
+        self.assertFalse(packet["source_seal_runtime_context_digest_bound"])
+        self.assertIn(
+            "source_seal_runtime_context_digest_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_source_seal_hook_ledger_digest_mismatch_blocks_same_turn_admission(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            original_verify = admission.verify_proof_seal
+
+            def forge_source_hook_ledger_digest(
+                *args: object,
+                **kwargs: object,
+            ) -> tuple[dict[str, object], dict[str, object]]:
+                packet, seal = original_verify(*args, **kwargs)
+                if (
+                    kwargs.get("expected_packet_kind")
+                    == admission.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND
+                ):
+                    packet = dict(packet)
+                    packet.update(
+                        {
+                            "status": "ok",
+                            "proof_seal_verified": True,
+                            "machine_error_code": "OK",
+                            "hook_ledger_digest": "f" * 64,
+                        }
+                    )
+                return packet, seal
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ), mock.patch.object(
+                admission,
+                "verify_proof_seal",
+                side_effect=forge_source_hook_ledger_digest,
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertTrue(packet["proof_seal_verified"])
+        self.assertFalse(packet["source_seal_hook_ledger_digest_bound"])
+        self.assertIn(
+            "source_seal_hook_ledger_digest_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_source_seal_profile_hook_config_digest_mismatch_blocks_same_turn_admission(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            original_verify = admission.verify_proof_seal
+
+            def forge_source_profile_hook_config_digest(
+                *args: object,
+                **kwargs: object,
+            ) -> tuple[dict[str, object], dict[str, object]]:
+                packet, seal = original_verify(*args, **kwargs)
+                if (
+                    kwargs.get("expected_packet_kind")
+                    == admission.REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND
+                ):
+                    packet = dict(packet)
+                    packet.update(
+                        {
+                            "status": "ok",
+                            "proof_seal_verified": True,
+                            "machine_error_code": "OK",
+                            "profile_hook_config_digest": "f" * 64,
+                        }
+                    )
+                return packet, seal
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ), mock.patch.object(
+                admission,
+                "verify_proof_seal",
+                side_effect=forge_source_profile_hook_config_digest,
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_SAME_TURN_BINDING_FAILED,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
+        self.assertTrue(packet["proof_seal_verified"])
+        self.assertFalse(packet["source_seal_profile_hook_config_digest_bound"])
+        self.assertIn(
+            "source_seal_profile_hook_config_digest_not_bound",
+            packet["blocking_reasons"],
+        )
         self.assertFalse(packet["product_ready"])
         _assert_no_raw_sensitive_text(self, packet)
 
@@ -696,6 +1097,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], admission.ADMISSION_ORIGIN_FAILED)
         self.assertFalse(packet["admission_proven"])
+        self.assertFalse(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["custom_codex_flow_proven"])
         self.assertIn("custom_origin_proof_not_ok", packet["blocking_reasons"])
         self.assertFalse(packet["product_ready"])
@@ -710,6 +1112,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             "source_seal_ok": True,
             "working_seal_ok": True,
             "origin_ok": True,
+            "same_turn_ok": True,
             "runtime_truth_ok": True,
             "unsafe": False,
         }
@@ -725,6 +1128,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             ("source_seal_ok", admission.ADMISSION_SEAL_FAILED),
             ("working_seal_ok", admission.ADMISSION_SEAL_FAILED),
             ("origin_ok", admission.ADMISSION_ORIGIN_FAILED),
+            ("same_turn_ok", admission.ADMISSION_SAME_TURN_BINDING_FAILED),
         ]
         for key, expected in cases:
             values = dict(base)
@@ -786,6 +1190,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertEqual(packet["packet_kind"], admission.CUSTOM_CODEX_ADMISSION_PACKET_KIND)
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["admission_proven"])
+        self.assertTrue(packet["same_turn_custom_codex_flow_proven"])
         self.assertFalse(packet["product_ready"])
         _assert_no_raw_sensitive_text(self, packet)
         self.assertEqual(

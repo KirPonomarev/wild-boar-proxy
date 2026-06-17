@@ -501,6 +501,8 @@ def build_user_prompt_submit_run_packet(
     turn_id = _safe_text(event.get("turn_id"), limit=160)
     session_id = _safe_text(event.get("session_id"), limit=160)
     cwd = _safe_text(event.get("cwd"), limit=512)
+    admission_run_id = _safe_text(os.environ.get("WBP_ADMISSION_RUN_ID"), limit=512)
+    admission_run_id_digest = _event_digest(admission_run_id)
     context_path = runtime_context_path(
         paths=paths,
         runtime_context_file=runtime_context_file,
@@ -567,10 +569,12 @@ def build_user_prompt_submit_run_packet(
                     "session_id_digest": _event_digest(session_id),
                     "turn_id_digest": _event_digest(turn_id),
                     "cwd_digest": _event_digest(cwd),
+                    "admission_run_id_digest": admission_run_id_digest,
                 }
             ),
             session_digest=_event_digest(session_id),
             cwd_digest=_event_digest(cwd),
+            admission_run_id_digest=admission_run_id_digest,
             hook_trust_source=(
                 "codex_non_managed_hook_execution"
                 if origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN
@@ -605,6 +609,7 @@ def build_user_prompt_submit_run_packet(
         "session_digest_present": bool(_event_digest(session_id)),
         "turn_digest_present": bool(_event_digest(turn_id)),
         "thread_or_turn_digest_bound": bool(_event_digest(session_id) or _event_digest(turn_id)),
+        "admission_run_id_digest_present": bool(admission_run_id_digest),
         "hook_config_present": bool(_hex_sha256(trusted_hook_config_sha256)),
         "hook_enabled": True,
         "hook_config_digest_bound": bool(
