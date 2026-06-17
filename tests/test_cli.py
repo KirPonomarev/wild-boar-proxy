@@ -4370,6 +4370,44 @@ class CliTests(unittest.TestCase):
                 ],
                 "probe",
             ),
+            (
+                [
+                    "router-hook",
+                    "user-prompt-submit-proof",
+                    "--prompt",
+                    "hi",
+                    "--hook-ledger-file",
+                    "/tmp/wbp-hook-ledger.json",
+                    "--json",
+                ],
+                "probe",
+            ),
+            (
+                [
+                    "router-hook",
+                    "user-prompt-submit-install",
+                    "--dry-run",
+                    "--json",
+                ],
+                "read",
+            ),
+            (
+                [
+                    "router-hook",
+                    "user-prompt-submit-install",
+                    "--apply",
+                    "--json",
+                ],
+                "mutate",
+            ),
+            (
+                [
+                    "router-hook",
+                    "user-prompt-submit-readiness",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),

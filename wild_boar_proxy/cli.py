@@ -48,6 +48,13 @@ from .router_hook_entry import (
     HOOK_SURFACE_PROMPT_PREPROCESSOR,
     run_router_hook_entry_command,
 )
+from .real_custom_codex_hook_proof import (
+    run_real_custom_codex_hook_proof_command,
+)
+from .user_prompt_submit_hook_producer import (
+    build_user_prompt_submit_install_packet,
+    build_user_prompt_submit_readiness_packet,
+)
 from .runtime_health import run_healthcheck_probe
 from .runtime_repair import run_healthcheck_repair
 from .runtime import (
@@ -286,6 +293,38 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_visible_source.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit = router_hook_subparsers.add_parser(
+        "user-prompt-submit-proof"
+    )
+    router_hook_user_prompt_submit.add_argument("--prompt", required=True)
+    router_hook_user_prompt_submit.add_argument("--hook-ledger-file", required=True)
+    router_hook_user_prompt_submit.add_argument("--runtime-context-file")
+    router_hook_user_prompt_submit.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_install = router_hook_subparsers.add_parser(
+        "user-prompt-submit-install"
+    )
+    install_mode = router_hook_user_prompt_submit_install.add_mutually_exclusive_group(
+        required=True
+    )
+    install_mode.add_argument("--dry-run", action="store_true")
+    install_mode.add_argument("--apply", action="store_true")
+    router_hook_user_prompt_submit_install.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_readiness = router_hook_subparsers.add_parser(
+        "user-prompt-submit-readiness"
+    )
+    router_hook_user_prompt_submit_readiness.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -588,8 +627,16 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "transcript-observe",
         "assistant-continuation-proof",
         "visible-source-observe",
+        "user-prompt-submit-proof",
+        "user-prompt-submit-readiness",
     }:
         return EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        == "user-prompt-submit-install"
+    ):
+        return EFFECT_MUTATE if getattr(args, "apply", False) else EFFECT_READ
     if command == "mode":
         mode_command = getattr(args, "mode_command", None)
         if mode_command == "get":
@@ -875,6 +922,33 @@ def main(argv: list[str] | None = None) -> int:
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-proof"
+        ):
+            return emit_json(
+                run_real_custom_codex_hook_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-install"
+        ):
+            return emit_json(
+                build_user_prompt_submit_install_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-readiness"
+        ):
+            return emit_json(build_user_prompt_submit_readiness_packet(paths=paths))
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
