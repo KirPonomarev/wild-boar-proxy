@@ -4298,6 +4298,16 @@ class CliTests(unittest.TestCase):
                 ["codex-runner", "operator-proof", "--prompt", "hi", "--json"],
                 "mutate",
             ),
+            (
+                [
+                    "codex-runner",
+                    "working-flow-visible-source-proof",
+                    "--prompt",
+                    "hi",
+                    "--json",
+                ],
+                "mutate",
+            ),
             (["router-hook", "entry", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "dispatch", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "handoff", "--prompt", "hi", "--json"], "probe"),
