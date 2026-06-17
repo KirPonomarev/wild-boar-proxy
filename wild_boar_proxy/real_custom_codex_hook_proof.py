@@ -493,10 +493,9 @@ def _runtime_context_declares_live_cli(
     runtime_context: Mapping[str, Any],
     route_id: str,
 ) -> tuple[bool, bool]:
-    command = runtime_context.get("deepseek_live_format_check_cli_command")
-    if not isinstance(command, Sequence) or isinstance(command, (str, bytes)):
+    command_parts = _runtime_context_live_cli_command_parts(runtime_context)
+    if not command_parts:
         return False, False
-    command_parts = [str(part) for part in command]
     declared = bool(
         "external-models" in command_parts
         and "live-format-check" in command_parts
@@ -509,6 +508,26 @@ def _runtime_context_declares_live_cli(
                 route_bound = True
                 break
     return declared, route_bound
+
+
+def _runtime_context_live_cli_command_parts(
+    runtime_context: Mapping[str, Any],
+) -> list[str]:
+    command = runtime_context.get("deepseek_live_format_check_cli_command")
+    if not isinstance(command, Sequence) or isinstance(command, (str, bytes)):
+        return []
+    return [str(part) for part in command]
+
+
+def _command_parts_sha256(command_parts: Sequence[str]) -> str:
+    if not command_parts:
+        return ""
+    payload = json.dumps(
+        list(command_parts),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return _sha256_text(payload)
 
 
 def _is_safe_expected_text_marker(value: str) -> bool:
@@ -815,6 +834,7 @@ def build_real_custom_codex_hook_proof_packet(
         context,
         selected_live_route_id,
     )
+    live_cli_command_parts = _runtime_context_live_cli_command_parts(context)
     allowed_context_routes = context.get("allowed_api_route_ids")
     allowed_context_route_ids = (
         {route for route in allowed_context_routes if isinstance(route, str)}
@@ -1018,6 +1038,9 @@ def build_real_custom_codex_hook_proof_packet(
         ),
         "live_provider_cli_command_declared": live_cli_declared,
         "live_provider_cli_command_route_bound": live_cli_route_bound,
+        "live_provider_cli_command_sha256": _command_parts_sha256(
+            live_cli_command_parts
+        ),
         "live_provider_route_bound_to_context": bool(
             selected_live_route_id
             and selected_live_route_id in allowed_context_route_ids

@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import hashlib
 import json
 from pathlib import Path
+import shlex
 from typing import Any
 
 from .codex_exec_assistant_continuation_proof import (
@@ -22,6 +24,7 @@ from .codex_transcript_delivery_observation import (
     _ALLOWED_WBP_MCP_SERVER_NAMES,
     _codex_exec_transcript_digest,
     _hex_sha256,
+    _iter_mappings,
     _mapping,
     _read_jsonl_events_file,
     _unsafe_flag_failures,
@@ -53,6 +56,24 @@ WORKING_FLOW_DELIVERY_TRUTH_SOURCE = (
     "file_backed_integrated_live_provider_plus_codex_exec_continuation"
 )
 LIVE_PROVIDER_HANDOFF_TRUTH_SOURCE = "server_owned_external_live_provider_response"
+DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK = (
+    "codex_command_execution_external_models_live_format_check"
+)
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _command_parts_sha256(command_parts: Sequence[str]) -> str:
+    if not command_parts:
+        return ""
+    payload = json.dumps(
+        list(command_parts),
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return _sha256_text(payload)
 
 
 def _read_json_mapping_file(
@@ -416,6 +437,351 @@ def _transcript_delivery_failures(
     return sorted(set(failures)), details
 
 
+def _json_mapping_from_text(text: str) -> Mapping[str, Any]:
+    try:
+        parsed = json.loads(text.strip())
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, Mapping) else {}
+
+
+def _split_command_tokens(command: str) -> tuple[list[str], bool]:
+    try:
+        outer_tokens = shlex.split(command)
+    except ValueError:
+        return [], False
+    if len(outer_tokens) >= 3:
+        shell_name = Path(outer_tokens[0]).name
+        if shell_name in {"sh", "bash", "zsh"} and outer_tokens[1] == "-lc":
+            try:
+                return shlex.split(outer_tokens[2]), True
+            except ValueError:
+                return [], True
+    return outer_tokens, False
+
+
+def _allowed_live_format_extra_args(tokens: Sequence[str]) -> bool:
+    if not tokens:
+        return True
+    allowed_value_flags = {"--prompt", "--expected-text"}
+    index = 0
+    seen: set[str] = set()
+    while index < len(tokens):
+        flag = tokens[index]
+        if flag not in allowed_value_flags:
+            return False
+        if flag in seen:
+            return False
+        if index + 1 >= len(tokens):
+            return False
+        seen.add(flag)
+        index += 2
+    return True
+
+
+def _normalized_live_format_cli_parts(
+    tokens: Sequence[str],
+) -> tuple[list[str], set[int]]:
+    consumed: set[int] = set()
+    if len(tokens) < 8:
+        return [], consumed
+    if tokens[1] != "-m":
+        return [], consumed
+    module = tokens[2]
+    if module not in {"wild_boar_proxy", "wild_boar_proxy.cli"}:
+        return [], consumed
+    if list(tokens[3:7]) != [
+        "external-models",
+        "live-format-check",
+        "--route",
+        tokens[6],
+    ]:
+        return [], consumed
+    route_value = tokens[6]
+    if not route_value or tokens[-1] != "--json":
+        return [], consumed
+    consumed.update({0, 1, 2, 3, 4, 5, 6, len(tokens) - 1})
+    return [
+        tokens[0],
+        "-m",
+        module,
+        "external-models",
+        "live-format-check",
+        "--route",
+        route_value,
+        "--json",
+    ], consumed
+
+
+def _live_format_command_invocation_details(
+    command: str,
+    *,
+    expected_route_digest: str,
+    declared_cli_command_digest: str,
+) -> dict[str, Any]:
+    tokens, shell_wrapped = _split_command_tokens(command)
+    normalized_parts, consumed_indices = _normalized_live_format_cli_parts(tokens)
+    normalized_digest = _command_parts_sha256(normalized_parts)
+    extra_tokens = [
+        token for index, token in enumerate(tokens) if index not in consumed_indices
+    ]
+    route_digest = ""
+    for index, token in enumerate(tokens[:-1]):
+        if token == "--route":
+            route_digest = _sha256_text(tokens[index + 1])
+            break
+    extra_args_valid = _allowed_live_format_extra_args(extra_tokens)
+    return {
+        "command_tokens_present": bool(tokens),
+        "command_shell_wrapped": shell_wrapped,
+        "command_prefix_digest": normalized_digest,
+        "command_shape_exact": bool(normalized_parts and shell_wrapped),
+        "command_prefix_digest_bound_to_source": bool(
+            declared_cli_command_digest
+            and normalized_digest == declared_cli_command_digest
+            and shell_wrapped
+        ),
+        "command_route_digest": route_digest,
+        "command_route_digest_bound_to_source": bool(
+            expected_route_digest and route_digest == expected_route_digest
+        ),
+        "command_extra_args_allowed": extra_args_valid,
+    }
+
+
+def _codex_exec_live_format_command_candidates(
+    events: Sequence[Mapping[str, Any]],
+    *,
+    expected_route_digest: str,
+    declared_cli_command_digest: str,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for index, event in enumerate(events):
+        event_type = _safe_text(event.get("type"), limit=128)
+        item = event.get("item")
+        if not isinstance(item, Mapping):
+            continue
+        item_type = _safe_text(item.get("type"), limit=128)
+        if item_type != "command_execution":
+            continue
+        command = _safe_text(item.get("command"), limit=65536)
+        if "external-models" not in command or "live-format-check" not in command:
+            continue
+        aggregated_output = _safe_text(item.get("aggregated_output"), limit=65536)
+        provider_packet = _json_mapping_from_text(aggregated_output)
+        invocation = _live_format_command_invocation_details(
+            command,
+            expected_route_digest=expected_route_digest,
+            declared_cli_command_digest=declared_cli_command_digest,
+        )
+        candidates.append(
+            {
+                "event_index": index,
+                "event_type": event_type,
+                "item_type": item_type,
+                "command_digest": _sha256_text(command) if command else "",
+                **invocation,
+                "status": _safe_text(item.get("status"), limit=64),
+                "exit_code": item.get("exit_code"),
+                "provider_packet": dict(provider_packet),
+            }
+        )
+    return candidates
+
+
+def _live_format_command_failures(
+    *,
+    events: Sequence[Mapping[str, Any]],
+    source: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    expected_live_provider_response_digest: str,
+) -> tuple[list[str], dict[str, Any]]:
+    failures: list[str] = []
+    if metadata.get("codex_exec_jsonl_file_read") is not True:
+        failures.append("codex_exec_jsonl_file_not_read")
+    if metadata.get("codex_exec_jsonl_file_valid_jsonl") is not True:
+        failures.append("codex_exec_jsonl_file_not_valid_jsonl")
+    if metadata.get("codex_exec_jsonl_parse_error_count"):
+        failures.append("codex_exec_jsonl_parse_error")
+    if not events:
+        failures.append("codex_exec_json_events_not_observed")
+
+    route_digest = _hex_sha256(
+        source.get("live_provider_route_id_sha256")
+        or source.get("selected_api_route_id_sha256")
+    )
+    declared_cli_command_digest = _hex_sha256(
+        source.get("live_provider_cli_command_sha256")
+    )
+    if source.get("live_provider_cli_command_declared") is not True:
+        failures.append("live_format_source_cli_command_not_declared")
+    if not declared_cli_command_digest:
+        failures.append("live_format_source_cli_command_digest_missing")
+    candidates = _codex_exec_live_format_command_candidates(
+        events,
+        expected_route_digest=route_digest,
+        declared_cli_command_digest=declared_cli_command_digest,
+    )
+    selected: Mapping[str, Any] = {}
+    selected_packet: Mapping[str, Any] = {}
+    selected_response_digest = ""
+    selected_route_digest = ""
+    for candidate in candidates:
+        packet = _mapping(candidate.get("provider_packet"))
+        data = _mapping(packet.get("data"))
+        response_text = _safe_text(
+            data.get("response_preview_bounded"),
+            limit=512,
+        )
+        response_digest = _sha256_text(response_text) if response_text else ""
+        requested_route = _safe_text(data.get("requested_model"), limit=256)
+        candidate_route_digest = _sha256_text(requested_route) if requested_route else ""
+        if (
+            packet.get("status") == "ok"
+            and packet.get("machine_error_code") == "OK"
+            and candidate.get("exit_code") == 0
+            and candidate.get("status") == "completed"
+            and candidate.get("command_prefix_digest_bound_to_source") is True
+            and candidate.get("command_route_digest_bound_to_source") is True
+            and candidate.get("command_extra_args_allowed") is True
+            and response_digest == expected_live_provider_response_digest
+            and (not route_digest or candidate_route_digest == route_digest)
+        ):
+            selected = candidate
+            selected_packet = packet
+            selected_response_digest = response_digest
+            selected_route_digest = candidate_route_digest
+            break
+    if not candidates:
+        failures.append("live_format_command_execution_not_observed")
+    if candidates and not selected:
+        failures.append("live_format_command_execution_not_bound")
+
+    data = _mapping(selected_packet.get("data"))
+    if selected:
+        if selected.get("command_prefix_digest_bound_to_source") is not True:
+            failures.append("live_format_command_prefix_not_bound_to_source")
+        if selected.get("command_route_digest_bound_to_source") is not True:
+            failures.append("live_format_command_route_not_bound_to_source")
+        if selected.get("command_extra_args_allowed") is not True:
+            failures.append("live_format_command_extra_args_not_allowed")
+        if selected_packet.get("effect") != EFFECT_PROBE:
+            failures.append("live_format_packet_effect_not_probe")
+        if selected_packet.get("changed_files") not in ([], ()):
+            failures.append("live_format_packet_changed_files_not_empty")
+        for field, reason in (
+            ("expected_text_observed", "live_format_expected_text_not_observed"),
+            ("network_dependent", "live_format_not_network_dependent"),
+        ):
+            if data.get(field) is not True:
+                failures.append(reason)
+        for field, reason in (
+            ("fallback_used", "live_format_fallback_used"),
+            ("state_written", "live_format_state_written"),
+            ("evidence_written", "live_format_evidence_written"),
+            ("file_mutation_attempted", "live_format_file_mutation_attempted"),
+            ("commands_started_by_provider", "live_format_provider_started_commands"),
+            ("codex_history_sent", "live_format_codex_history_sent"),
+            ("repo_context_sent", "live_format_repo_context_sent"),
+        ):
+            if data.get(field) is True:
+                failures.append(reason)
+        if selected_response_digest != expected_live_provider_response_digest:
+            failures.append("live_format_response_digest_mismatch")
+        if route_digest and selected_route_digest != route_digest:
+            failures.append("live_format_route_digest_mismatch")
+
+    return sorted(set(failures)), {
+        "command_execution_live_format_observed": bool(candidates),
+        "command_execution_live_format_event_index_present": bool(selected),
+        "command_execution_live_format_command_digest": _hex_sha256(
+            selected.get("command_digest")
+        ),
+        "command_execution_live_format_cli_command_digest_bound": (
+            selected.get("command_prefix_digest_bound_to_source") is True
+        ),
+        "command_execution_live_format_route_digest_bound": (
+            selected.get("command_route_digest_bound_to_source") is True
+        ),
+        "command_execution_live_format_extra_args_allowed": (
+            selected.get("command_extra_args_allowed") is True
+        ),
+        "command_execution_live_format_exit_code_zero": (
+            selected.get("exit_code") == 0
+        ),
+        "command_execution_live_format_status_completed": (
+            selected.get("status") == "completed"
+        ),
+        "command_execution_live_format_packet_status": _safe_text(
+            selected_packet.get("status"),
+            limit=32,
+        ),
+        "command_execution_live_format_machine_error_code": _safe_text(
+            selected_packet.get("machine_error_code"),
+            limit=96,
+        ),
+        "command_execution_live_format_route_digest": _hex_sha256(selected_route_digest),
+        "command_execution_live_format_response_digest": _hex_sha256(
+            selected_response_digest
+        ),
+        "command_execution_live_format_expected_text_observed": (
+            data.get("expected_text_observed") is True
+        ),
+        "command_execution_live_format_fallback_used": (
+            data.get("fallback_used") is True
+        ),
+    }
+
+
+def _assistant_text_digest_candidates_after(
+    events: Sequence[Mapping[str, Any]],
+    *,
+    after_index: int | None,
+    expected_digest: str,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    if after_index is None:
+        return candidates
+    for index, event in enumerate(events):
+        if index <= after_index:
+            continue
+        event_type = _safe_text(event.get("type"), limit=128)
+        for mapping in _iter_mappings(event):
+            item_type = _safe_text(
+                mapping.get("type") or mapping.get("kind") or mapping.get("item_type"),
+                limit=128,
+            )
+            role = _safe_text(mapping.get("role"), limit=64)
+            if item_type not in {"agent_message", "assistant_message"} and role != "assistant":
+                continue
+            if "subagent" in item_type:
+                continue
+            text = _safe_text(mapping.get("text") or mapping.get("output_text"), limit=4096)
+            if not text:
+                continue
+            text_digest = _sha256_text(text.strip())
+            candidates.append(
+                {
+                    "event_index": index,
+                    "event_type": event_type,
+                    "item_type": item_type,
+                    "role": role,
+                    "text_digest": text_digest,
+                    "text_digest_matches_expected": text_digest == expected_digest,
+                }
+            )
+    return candidates
+
+
+def _select_bound_text_digest_candidate(
+    candidates: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    for candidate in candidates:
+        if candidate.get("text_digest_matches_expected") is True:
+            return candidate
+    return candidates[0] if candidates else {}
+
+
 def _machine_error_code(
     *,
     source_failures: Sequence[str],
@@ -475,6 +841,12 @@ def build_codex_working_flow_delivery_proof_packet(
         selected_tool_result=tool_result,
         tool_result_index=tool_result_index,
     )
+    command_failures, command_details = _live_format_command_failures(
+        events=events,
+        source=source,
+        metadata=metadata,
+        expected_live_provider_response_digest=live_provider_response_digest,
+    )
     assistant_candidates = _assistant_output_candidates_after(
         events,
         after_index=tool_result_index,
@@ -516,6 +888,88 @@ def build_codex_working_flow_delivery_proof_packet(
     }:
         binding_failures.append("assistant_response_binding_method_invalid")
 
+    command_event_index = None
+    if command_details.get("command_execution_live_format_event_index_present") is True:
+        for candidate in _codex_exec_live_format_command_candidates(
+            events,
+            expected_route_digest=_hex_sha256(
+                source.get("live_provider_route_id_sha256")
+                or source.get("selected_api_route_id_sha256")
+            ),
+            declared_cli_command_digest=_hex_sha256(
+                source.get("live_provider_cli_command_sha256")
+            ),
+        ):
+            if _hex_sha256(candidate.get("command_digest")) == command_details.get(
+                "command_execution_live_format_command_digest"
+            ):
+                raw_index = candidate.get("event_index")
+                if isinstance(raw_index, int):
+                    command_event_index = raw_index
+                break
+    command_assistant_candidates = _assistant_text_digest_candidates_after(
+        events,
+        after_index=command_event_index,
+        expected_digest=live_provider_response_digest,
+    )
+    selected_command_assistant = _select_bound_text_digest_candidate(
+        command_assistant_candidates
+    )
+    command_assistant_response_observed = bool(command_assistant_candidates)
+    command_assistant_response_after_command = bool(
+        command_event_index is not None and command_assistant_candidates
+    )
+    command_assistant_response_bound_to_live_provider_digest = (
+        selected_command_assistant.get("text_digest_matches_expected") is True
+    )
+    command_binding_failures: list[str] = []
+    if not command_assistant_response_observed:
+        command_binding_failures.append("command_assistant_response_not_observed")
+    if command_assistant_response_observed and not command_assistant_response_after_command:
+        command_binding_failures.append("command_assistant_response_not_after_command")
+    if (
+        command_assistant_response_observed
+        and not command_assistant_response_bound_to_live_provider_digest
+    ):
+        command_binding_failures.append(
+            "command_assistant_response_not_bound_to_live_provider_digest"
+        )
+
+    mcp_delivery_surface_proven = bool(
+        not transcript_failures
+        and not binding_failures
+        and transcript_details.get("structured_content_matches_handoff") is True
+        and assistant_response_bound_to_handoff_digest
+    )
+    command_delivery_surface_proven = bool(
+        not command_failures
+        and not command_binding_failures
+        and command_details.get("command_execution_live_format_event_index_present") is True
+        and command_assistant_response_bound_to_live_provider_digest
+    )
+    approved_delivery_surface_proven = bool(
+        mcp_delivery_surface_proven or command_delivery_surface_proven
+    )
+    working_flow_delivery_surface_kind = (
+        DELIVERY_SURFACE_MCP_TOOL_RESPONSE
+        if mcp_delivery_surface_proven
+        else DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK
+        if command_delivery_surface_proven
+        else "not_proven"
+    )
+    if approved_delivery_surface_proven:
+        effective_transcript_failures: list[str] = []
+        effective_binding_failures: list[str] = []
+    elif tool_result_index is not None:
+        effective_transcript_failures = list(transcript_failures)
+        effective_binding_failures = list(binding_failures)
+    elif command_details.get("command_execution_live_format_observed") is True:
+        effective_transcript_failures = list(command_failures)
+        effective_binding_failures = list(command_binding_failures)
+    else:
+        effective_transcript_failures = sorted(set(transcript_failures + command_failures))
+        effective_binding_failures = sorted(set(binding_failures + command_binding_failures))
+
     local_subagent_used_as_dip = _local_subagent_used_as_dip(events)
     transcript_secret_value_present = _contains_secret_value(events, secret_values)
     transcript_unsafe_failures = _unsafe_flag_failures(events)
@@ -528,8 +982,8 @@ def build_codex_working_flow_delivery_proof_packet(
     )
 
     source_failures = sorted(set(source_failures))
-    transcript_failures = sorted(set(transcript_failures))
-    binding_failures = sorted(set(binding_failures))
+    transcript_failures = sorted(set(effective_transcript_failures))
+    binding_failures = sorted(set(effective_binding_failures))
     blocking_reasons = sorted(
         set(source_failures + transcript_failures + binding_failures + unsafe_failures)
     )
@@ -537,8 +991,7 @@ def build_codex_working_flow_delivery_proof_packet(
         not blocking_reasons
         and source.get("external_live_provider_response_proven") is True
         and live_provider_response_digest
-        and transcript_details.get("structured_content_matches_handoff") is True
-        and assistant_response_bound_to_handoff_digest
+        and approved_delivery_surface_proven
     )
     machine_error_code = _machine_error_code(
         source_failures=source_failures,
@@ -663,17 +1116,49 @@ def build_codex_working_flow_delivery_proof_packet(
         "live_provider_response_digest": live_provider_response_digest,
         "controlled_provider_response_digest": controlled_provider_response_digest,
         "live_provider_response_digest_bound_to_handoff": (
-            transcript_details.get("observed_live_provider_response_digest")
-            == live_provider_response_digest
-            and transcript_details.get("observed_provider_response_digest")
-            == live_provider_response_digest
+            (
+                transcript_details.get("observed_live_provider_response_digest")
+                == live_provider_response_digest
+                and transcript_details.get("observed_provider_response_digest")
+                == live_provider_response_digest
+            )
+            or (
+                command_details.get("command_execution_live_format_response_digest")
+                == live_provider_response_digest
+            )
+        ),
+        "live_provider_response_digest_bound_to_delivery": (
+            (
+                transcript_details.get("observed_live_provider_response_digest")
+                == live_provider_response_digest
+                and transcript_details.get("observed_provider_response_digest")
+                == live_provider_response_digest
+            )
+            or (
+                command_details.get("command_execution_live_format_response_digest")
+                == live_provider_response_digest
+            )
         ),
         "controlled_provider_response_digest_bound_to_handoff": (
-            transcript_details.get("observed_controlled_provider_response_digest")
-            == controlled_provider_response_digest
+            (
+                transcript_details.get("observed_controlled_provider_response_digest")
+                == controlled_provider_response_digest
+            )
+            or command_delivery_surface_proven
+        ),
+        "controlled_provider_response_digest_bound_to_delivery": (
+            (
+                transcript_details.get("observed_controlled_provider_response_digest")
+                == controlled_provider_response_digest
+            )
+            or command_delivery_surface_proven
         ),
         "codex_exec_json_events_observed": bool(events),
         "codex_exec_transcript_sha256": codex_exec_transcript_sha256,
+        "working_flow_delivery_surface_kind": working_flow_delivery_surface_kind,
+        "approved_delivery_surface_proven": approved_delivery_surface_proven,
+        "mcp_delivery_surface_proven": mcp_delivery_surface_proven,
+        "command_execution_delivery_surface_proven": command_delivery_surface_proven,
         "matching_mcp_tool_result_observed": tool_result_index is not None,
         "matching_mcp_tool_result_event_index_present": tool_result_index is not None,
         "mcp_tool_result_event_type": _safe_text(tool_result.get("event_type"), limit=128),
@@ -728,7 +1213,63 @@ def build_codex_working_flow_delivery_proof_packet(
         "structured_content_matches_handoff": (
             transcript_details.get("structured_content_matches_handoff") is True
         ),
-        "assistant_response_observed": assistant_response_observed,
+        "mcp_transcript_delivery_failures": transcript_failures
+        if not approved_delivery_surface_proven
+        else [],
+        "command_execution_live_format_observed": (
+            command_details.get("command_execution_live_format_observed") is True
+        ),
+        "command_execution_live_format_event_index_present": (
+            command_details.get("command_execution_live_format_event_index_present") is True
+        ),
+        "command_execution_live_format_command_digest": _hex_sha256(
+            command_details.get("command_execution_live_format_command_digest")
+        ),
+        "command_execution_live_format_cli_command_digest_bound": (
+            command_details.get("command_execution_live_format_cli_command_digest_bound")
+            is True
+        ),
+        "command_execution_live_format_route_digest_bound": (
+            command_details.get("command_execution_live_format_route_digest_bound")
+            is True
+        ),
+        "command_execution_live_format_extra_args_allowed": (
+            command_details.get("command_execution_live_format_extra_args_allowed")
+            is True
+        ),
+        "command_execution_live_format_exit_code_zero": (
+            command_details.get("command_execution_live_format_exit_code_zero") is True
+        ),
+        "command_execution_live_format_status_completed": (
+            command_details.get("command_execution_live_format_status_completed") is True
+        ),
+        "command_execution_live_format_packet_status": _safe_text(
+            command_details.get("command_execution_live_format_packet_status"),
+            limit=32,
+        ),
+        "command_execution_live_format_machine_error_code": _safe_text(
+            command_details.get("command_execution_live_format_machine_error_code"),
+            limit=96,
+        ),
+        "command_execution_live_format_route_digest": _hex_sha256(
+            command_details.get("command_execution_live_format_route_digest")
+        ),
+        "command_execution_live_format_response_digest": _hex_sha256(
+            command_details.get("command_execution_live_format_response_digest")
+        ),
+        "command_execution_live_format_expected_text_observed": (
+            command_details.get("command_execution_live_format_expected_text_observed")
+            is True
+        ),
+        "command_execution_live_format_fallback_used": (
+            command_details.get("command_execution_live_format_fallback_used") is True
+        ),
+        "command_execution_delivery_failures": (
+            command_failures if not approved_delivery_surface_proven else []
+        ),
+        "assistant_response_observed": bool(
+            assistant_response_observed or command_assistant_response_observed
+        ),
         "assistant_response_after_tool_result": assistant_response_after_tool_result,
         "assistant_response_event_index_present": bool(selected_assistant),
         "assistant_response_event_type": _safe_text(
@@ -750,10 +1291,28 @@ def build_codex_working_flow_delivery_proof_packet(
         ),
         "binding_method": binding_method,
         "assistant_binding_digest": assistant_binding_digest,
+        "command_assistant_response_observed": command_assistant_response_observed,
+        "command_assistant_response_after_command": (
+            command_assistant_response_after_command
+        ),
+        "command_assistant_response_bound_to_live_provider_digest": (
+            command_assistant_response_bound_to_live_provider_digest
+        ),
+        "command_assistant_binding_digest": _hex_sha256(
+            selected_command_assistant.get("text_digest")
+        ),
+        "command_assistant_binding_failures": (
+            command_binding_failures if not approved_delivery_surface_proven else []
+        ),
         "codex_exec_assistant_continuation_proven": bool(
-            assistant_response_after_tool_result
-            and assistant_response_bound_to_handoff_digest
-            and not binding_failures
+            (
+                assistant_response_after_tool_result
+                and assistant_response_bound_to_handoff_digest
+            )
+            or (
+                command_assistant_response_after_command
+                and command_assistant_response_bound_to_live_provider_digest
+            )
         ),
         "codex_working_flow_delivery_proven": ok,
         "custom_codex_ui_visibility_proven": False,

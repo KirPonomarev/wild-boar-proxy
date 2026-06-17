@@ -314,6 +314,75 @@ def _working_flow_packet(source: dict[str, object]) -> dict[str, object]:
     return packet
 
 
+def _command_execution_event(
+    source: dict[str, object],
+    *,
+    expected_text: str = EXPECTED_TEXT,
+) -> dict[str, object]:
+    provider_packet = _live_provider_packet(expected_text=expected_text)
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-live-format-check",
+            "type": "command_execution",
+            "command": (
+                "/bin/zsh -lc "
+                + shlex.quote(
+                    f"{sys.executable} -m wild_boar_proxy external-models "
+                    f"live-format-check --route {ROUTE_ID} --json"
+                )
+            ),
+            "aggregated_output": json.dumps(provider_packet),
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }
+
+
+def _command_assistant_event(text: str = EXPECTED_TEXT) -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-command-assistant",
+            "type": "agent_message",
+            "text": text,
+        },
+    }
+
+
+def _working_flow_command_packet(source: dict[str, object]) -> dict[str, object]:
+    events = [
+        {"type": "thread.started", "thread_id": "thread-working-flow-command"},
+        {"type": "turn.started"},
+        _command_execution_event(source),
+        _command_assistant_event(),
+        {"type": "turn.completed"},
+    ]
+    packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+        source,
+        events,
+        file_metadata={
+            "integrated_live_provider_proof_file_required": True,
+            "integrated_live_provider_proof_file_present": True,
+            "integrated_live_provider_proof_file_read": True,
+            "integrated_live_provider_proof_file_valid_json": True,
+            "integrated_live_provider_proof_file_mapping": True,
+            "integrated_live_provider_proof_file_error_code": "",
+            "integrated_live_provider_proof_file_path_recorded": False,
+            "codex_exec_jsonl_file_required": True,
+            "codex_exec_jsonl_file_present": True,
+            "codex_exec_jsonl_file_read": True,
+            "codex_exec_jsonl_file_valid_jsonl": True,
+            "codex_exec_jsonl_file_error_code": "",
+            "codex_exec_jsonl_file_path_recorded": False,
+            "codex_exec_jsonl_parse_error_count": 0,
+            "codex_exec_event_count": len(events),
+        },
+    )
+    assert packet["status"] == "ok"
+    return packet
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> Path:
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return path
@@ -560,6 +629,69 @@ class CustomCodexHookOriginProofTests(unittest.TestCase):
         self.assertEqual(packet["seal_failures"], [])
         self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_command_execution_delivery_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source = _source_packet(context, ledger)
+            source_path = _write_json(root / "source.json", source)
+            working_flow_path = _write_json(
+                root / "working-flow-command.json",
+                _working_flow_command_packet(source),
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_flow_path,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packet = json.loads(result.stdout)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_origin_proven"])
+        self.assertTrue(packet["custom_codex_flow_proven"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_command_execution_delivery_surface_with_failure_lists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source = _source_packet(context, ledger)
+            source_path = _write_json(root / "source.json", source)
+            working_flow_packet = _working_flow_command_packet(source)
+            working_flow_packet["command_execution_delivery_failures"] = [
+                "forged_failure_list_must_block"
+            ]
+            working_flow_path = _write_json(
+                root / "working-flow-command-forged.json",
+                working_flow_packet,
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_flow_path,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        packet = json.loads(result.stdout)
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["command_origin_proven"])
+        self.assertIn(
+            "working_flow_command_delivery_failures_not_empty",
+            packet["blocking_reasons"],
+        )
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_strict_sealed_mode_blocks_missing_source_seal(self) -> None:

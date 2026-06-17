@@ -51,9 +51,6 @@ _DIGEST_MARKER_PATTERN = re.compile(
     r"([0-9a-f]{64})\b"
 )
 _ASSISTANT_ITEM_HINTS = ("assistant", "output_text", "output-message", "output_message")
-_SUBAGENT_MARKER_PATTERN = re.compile(
-    r"(?i)\b(subagent|sub-agent|sub agent|codex agent)\b"
-)
 _DIP_ALIAS_PATTERN = re.compile(r"(?i)\b(dip|agent\s*2)\b")
 
 
@@ -270,8 +267,6 @@ def _local_subagent_used_as_dip(events: Sequence[Mapping[str, Any]]) -> bool:
             if not combined.strip():
                 continue
             if "subagent" in item_type.casefold() and _DIP_ALIAS_PATTERN.search(combined):
-                return True
-            if _SUBAGENT_MARKER_PATTERN.search(combined) and _DIP_ALIAS_PATTERN.search(combined):
                 return True
     return False
 

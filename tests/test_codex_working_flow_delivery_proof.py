@@ -285,6 +285,44 @@ def _assistant_event(
     }
 
 
+def _command_execution_event(
+    source: dict[str, object],
+    *,
+    expected_text: str = EXPECTED_TEXT,
+    exit_code: int = 0,
+    status: str = "completed",
+) -> dict[str, object]:
+    provider_packet = _live_provider_packet(expected_text=expected_text)
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-live-format-check",
+            "type": "command_execution",
+            "command": (
+                "/bin/zsh -lc "
+                + json.dumps(
+                    f"{sys.executable} -m wild_boar_proxy external-models "
+                    f"live-format-check --route {ROUTE_ID} --json"
+                )
+            ),
+            "aggregated_output": json.dumps(provider_packet),
+            "exit_code": exit_code,
+            "status": status,
+        },
+    }
+
+
+def _command_assistant_event(text: str = EXPECTED_TEXT) -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-command-assistant",
+            "type": "agent_message",
+            "text": text,
+        },
+    }
+
+
 def _subagent_event() -> dict[str, object]:
     return {
         "type": "item.completed",
@@ -442,6 +480,170 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertFalse(packet["transcript_secret_value_present"])
         _assert_no_product_or_ui_claim(self, packet)
         _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_proves_command_execution_live_format_delivery_into_codex_flow(self) -> None:
+        source = _integrated_packet()
+        events = [
+            {"type": "thread.started", "thread_id": "thread-command-flow"},
+            {"type": "turn.started"},
+            _command_execution_event(source),
+            _command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["integrated_live_provider_proof_valid"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertEqual(
+            packet["working_flow_delivery_surface_kind"],
+            working_flow.DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK,
+        )
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertFalse(packet["mcp_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_live_format_observed"])
+        self.assertTrue(packet["command_execution_live_format_event_index_present"])
+        self.assertTrue(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_route_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_extra_args_allowed"])
+        self.assertTrue(packet["command_execution_live_format_exit_code_zero"])
+        self.assertTrue(packet["command_execution_live_format_status_completed"])
+        self.assertEqual(packet["command_execution_live_format_packet_status"], "ok")
+        self.assertEqual(packet["command_execution_live_format_machine_error_code"], "OK")
+        self.assertTrue(packet["command_execution_live_format_route_digest"])
+        self.assertEqual(
+            packet["command_execution_live_format_response_digest"],
+            packet["live_provider_response_digest"],
+        )
+        self.assertTrue(packet["command_execution_live_format_expected_text_observed"])
+        self.assertFalse(packet["command_execution_live_format_fallback_used"])
+        self.assertTrue(packet["command_assistant_response_observed"])
+        self.assertTrue(packet["command_assistant_response_after_command"])
+        self.assertTrue(packet["command_assistant_response_bound_to_live_provider_digest"])
+        self.assertEqual(
+            packet["command_assistant_binding_digest"],
+            packet["live_provider_response_digest"],
+        )
+        self.assertTrue(packet["live_provider_response_digest_bound_to_delivery"])
+        self.assertTrue(packet["controlled_provider_response_digest_bound_to_delivery"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertEqual(packet["transcript_delivery_failures"], [])
+        self.assertEqual(packet["assistant_binding_failures"], [])
+        self.assertEqual(packet["command_execution_delivery_failures"], [])
+        self.assertEqual(packet["command_assistant_binding_failures"], [])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_command_execution_not_bound_to_server_issued_cli(self) -> None:
+        source = _integrated_packet()
+        forged_event = _command_execution_event(source)
+        forged_event["item"]["command"] = (
+            f"/bin/echo external-models live-format-check --route {ROUTE_ID} --json"
+        )
+        events = [
+            {"type": "thread.started", "thread_id": "thread-command-flow"},
+            {"type": "turn.started"},
+            forged_event,
+            _command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["command_execution_delivery_surface_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertIn(
+            "live_format_command_execution_not_bound",
+            packet["blocking_reasons"],
+        )
+        _assert_no_product_or_ui_claim(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_command_execution_reordered_or_unwrapped_cli_shape(self) -> None:
+        source = _integrated_packet()
+        cases = {
+            "reordered_json_before_route": (
+                "/bin/zsh -lc "
+                + json.dumps(
+                    f"{sys.executable} -m wild_boar_proxy external-models "
+                    f"live-format-check --json --route {ROUTE_ID}"
+                )
+            ),
+            "direct_unwrapped_cli": (
+                f"{sys.executable} -m wild_boar_proxy external-models "
+                f"live-format-check --route {ROUTE_ID} --json"
+            ),
+        }
+        for name, command in cases.items():
+            with self.subTest(name=name):
+                event = _command_execution_event(source)
+                event["item"]["command"] = command
+                packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+                    source,
+                    [
+                        {"type": "thread.started", "thread_id": "thread-command-flow"},
+                        {"type": "turn.started"},
+                        event,
+                        _command_assistant_event(),
+                        {"type": "turn.completed"},
+                    ],
+                    file_metadata=_file_metadata(),
+                )
+
+                self.assertEqual(packet["status"], "error")
+                self.assertFalse(packet["command_execution_delivery_surface_proven"])
+                self.assertFalse(packet["codex_working_flow_delivery_proven"])
+                self.assertFalse(
+                    packet["command_execution_live_format_cli_command_digest_bound"]
+                )
+                self.assertIn(
+                    "live_format_command_execution_not_bound",
+                    packet["blocking_reasons"],
+                )
+                _assert_no_product_or_ui_claim(self, packet)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_command_execution_without_bound_assistant_response(self) -> None:
+        source = _integrated_packet()
+        events = [
+            {"type": "thread.started", "thread_id": "thread-command-flow"},
+            {"type": "turn.started"},
+            _command_execution_event(source),
+            _command_assistant_event(text="WRONG_OUTPUT"),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["command_execution_delivery_surface_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertIn(
+            "command_assistant_response_not_bound_to_live_provider_digest",
+            packet["blocking_reasons"],
+        )
+        _assert_no_product_or_ui_claim(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_blocks_in_memory_source_without_file_backed_metadata(self) -> None:

@@ -328,26 +328,56 @@ def _working_flow_failures(
         ("live_provider_response_digest_bound_to_handoff", "working_flow_live_digest_not_bound"),
         ("controlled_provider_response_digest_bound_to_handoff", "working_flow_controlled_digest_not_bound"),
         ("approved_handoff_ready", "working_flow_approved_handoff_not_ready"),
-        ("handoff_delivered", "working_flow_handoff_not_delivered"),
         ("delivery_observed", "working_flow_delivery_not_observed"),
-        ("matching_mcp_tool_result_observed", "working_flow_tool_result_not_observed"),
-        ("mcp_tool_result_name_allowed", "working_flow_tool_name_not_allowed"),
-        ("mcp_tool_result_server_allowed", "working_flow_server_not_allowed"),
-        ("mcp_tool_result_structured_content_present", "working_flow_structured_content_missing"),
-        ("mcp_tool_result_content_text_json_matches_structured_content", "working_flow_content_text_mismatch"),
         ("assistant_response_observed", "working_flow_assistant_response_not_observed"),
-        ("assistant_response_after_tool_result", "working_flow_assistant_not_after_tool"),
-        ("assistant_response_bound_to_handoff_digest", "working_flow_assistant_not_bound"),
         ("codex_exec_assistant_continuation_proven", "working_flow_assistant_continuation_not_proven"),
         ("codex_working_flow_delivery_proven", "working_flow_delivery_not_proven"),
     ):
         if working_flow.get(field) is not True:
             failures.append(reason)
+    if working_flow.get("approved_delivery_surface_proven") is not True:
+        failures.append("working_flow_approved_delivery_surface_not_proven")
+    mcp_surface = working_flow.get("mcp_delivery_surface_proven") is True
+    command_surface = working_flow.get("command_execution_delivery_surface_proven") is True
+    if not (mcp_surface or command_surface):
+        failures.append("working_flow_no_delivery_surface_proven")
+    if mcp_surface:
+        for field, reason in (
+            ("handoff_delivered", "working_flow_handoff_not_delivered"),
+            ("matching_mcp_tool_result_observed", "working_flow_tool_result_not_observed"),
+            ("mcp_tool_result_name_allowed", "working_flow_tool_name_not_allowed"),
+            ("mcp_tool_result_server_allowed", "working_flow_server_not_allowed"),
+            ("mcp_tool_result_structured_content_present", "working_flow_structured_content_missing"),
+            ("mcp_tool_result_content_text_json_matches_structured_content", "working_flow_content_text_mismatch"),
+            ("assistant_response_after_tool_result", "working_flow_assistant_not_after_tool"),
+            ("assistant_response_bound_to_handoff_digest", "working_flow_assistant_not_bound"),
+        ):
+            if working_flow.get(field) is not True:
+                failures.append(reason)
+    if command_surface:
+        for field, reason in (
+            ("command_execution_live_format_observed", "working_flow_command_live_format_not_observed"),
+            ("command_execution_live_format_event_index_present", "working_flow_command_event_missing"),
+            ("command_execution_live_format_cli_command_digest_bound", "working_flow_command_cli_digest_not_bound"),
+            ("command_execution_live_format_route_digest_bound", "working_flow_command_route_digest_not_bound"),
+            ("command_execution_live_format_extra_args_allowed", "working_flow_command_extra_args_not_allowed"),
+            ("command_execution_live_format_exit_code_zero", "working_flow_command_exit_nonzero"),
+            ("command_execution_live_format_status_completed", "working_flow_command_not_completed"),
+            ("command_execution_live_format_expected_text_observed", "working_flow_command_expected_text_not_observed"),
+            ("command_assistant_response_after_command", "working_flow_command_assistant_not_after_command"),
+            ("command_assistant_response_bound_to_live_provider_digest", "working_flow_command_assistant_not_bound"),
+        ):
+            if working_flow.get(field) is not True:
+                failures.append(reason)
+        if working_flow.get("command_execution_live_format_fallback_used") is True:
+            failures.append("working_flow_command_fallback_used")
     for field, reason in (
         ("blocking_reasons", "working_flow_blocking_reasons_not_empty"),
         ("integrated_live_provider_proof_failures", "working_flow_source_failures_not_empty"),
         ("transcript_delivery_failures", "working_flow_transcript_failures_not_empty"),
         ("assistant_binding_failures", "working_flow_assistant_binding_failures_not_empty"),
+        ("command_execution_delivery_failures", "working_flow_command_delivery_failures_not_empty"),
+        ("command_assistant_binding_failures", "working_flow_command_assistant_failures_not_empty"),
         ("source_unsafe_claim_failures", "working_flow_source_unsafe_failures_not_empty"),
         ("transcript_unsafe_claim_failures", "working_flow_transcript_unsafe_failures_not_empty"),
     ):
