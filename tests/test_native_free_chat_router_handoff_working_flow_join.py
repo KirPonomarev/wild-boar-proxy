@@ -179,6 +179,11 @@ class NativeFreeChatRouterHandoffWorkingFlowJoinTests(unittest.TestCase):
         self.assertTrue(packet["dispatch_admission_packet_read"])
         self.assertTrue(packet["dispatch_handoff_file_read"])
         self.assertTrue(packet["dispatch_admission_proven"])
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertTrue(packet["natural_api_alias_command_detected"])
+        self.assertTrue(packet["router_dispatch_admitted"])
+        self.assertTrue(packet["router_owned_dispatch_decision_bound"])
+        self.assertTrue(packet["api_lane_dispatch_admitted"])
         self.assertTrue(packet["dispatch_result_digest_bound"])
         self.assertTrue(packet["handoff_evidence_digest_bound"])
         self.assertTrue(packet["handoff_file_sha256_bound"])
@@ -337,6 +342,55 @@ class NativeFreeChatRouterHandoffWorkingFlowJoinTests(unittest.TestCase):
         self.assertFalse(packet["codex_working_flow_delivery_proven"])
         self.assertFalse(packet["product_ready"])
         self.assertIn("product_ready_must_not_be_claimed", packet["blocking_reasons"])
+        _assert_no_prompt_route_or_secret(self, packet, prompt=PROMPT)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_tampered_router_owned_dispatch_flags_block_join(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            admission_path, handoff_path, admission_packet, handoff = _positive_admission(
+                root
+            )
+            admission_packet["natural_api_alias_command_detected"] = False
+            admission_packet["router_dispatch_admitted"] = False
+            admission_packet["router_owned_dispatch_decision_bound"] = False
+            admission_packet["api_lane_dispatch_admitted"] = False
+            _write_json(admission_path, admission_packet)
+            jsonl_path = _write_jsonl(
+                root / "codex-exec.jsonl",
+                _codex_exec_events(handoff),
+            )
+            result = _run_join(
+                admission_path=admission_path,
+                handoff_path=handoff_path,
+                jsonl_path=jsonl_path,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            packet = json.loads(result.stdout)
+
+        self.assertEqual(
+            packet["machine_error_code"],
+            join.HANDOFF_WORKING_FLOW_JOIN_DISPATCH_ADMISSION_INVALID,
+        )
+        self.assertFalse(packet["dispatch_admission_proven"])
+        self.assertFalse(packet["natural_api_alias_command_detected"])
+        self.assertFalse(packet["router_dispatch_admitted"])
+        self.assertFalse(packet["router_owned_dispatch_decision_bound"])
+        self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertFalse(packet["handoff_to_working_flow_join_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertIn("router_dispatch_not_admitted", packet["blocking_reasons"])
+        self.assertIn(
+            "natural_api_alias_command_not_detected",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "router_owned_dispatch_decision_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("api_lane_dispatch_not_admitted", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
         _assert_no_prompt_route_or_secret(self, packet, prompt=PROMPT)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

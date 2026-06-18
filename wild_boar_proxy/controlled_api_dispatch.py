@@ -109,6 +109,7 @@ def build_controlled_api_dispatch_packet(
     api_lane_dispatch_admitted = (
         admission_packet.get("api_lane_dispatch_admitted") is True
     )
+    router_dispatch_admitted = bool(hook_entry_proven and api_lane_dispatch_admitted)
     route_bound_dispatch_attempted = (
         dispatch_packet.get("route_bound_dispatch_attempted") is True
     )
@@ -214,6 +215,26 @@ def build_controlled_api_dispatch_packet(
         "parser_machine_error_code": _safe_text(
             hook_packet.get("parser_machine_error_code"),
             limit=96,
+        ),
+        "natural_alias_command_detected": (
+            hook_packet.get("natural_alias_command_detected") is True
+        ),
+        "natural_api_alias_command_detected": (
+            hook_packet.get("natural_api_alias_command_detected") is True
+        ),
+        "router_preflight_admitted": hook_entry_proven,
+        "router_dispatch_admitted": router_dispatch_admitted,
+        "router_owned_dispatch_decision_bound": bool(
+            router_dispatch_admitted and route_bound_dispatch_attempted
+        ),
+        "router_dispatch_decision_packet_kind": _safe_text(
+            hook_packet.get("packet_kind"),
+            limit=80,
+        ),
+        "router_dispatch_decision_truth_source": (
+            "wbp_owned_router_hook_entry_to_api_lane_adapter"
+            if router_dispatch_admitted
+            else "not_proven"
         ),
         "prompt_digest": _safe_text(hook_packet.get("prompt_digest"), limit=80),
         "prompt_digest_present": hook_packet.get("prompt_digest_present") is True,

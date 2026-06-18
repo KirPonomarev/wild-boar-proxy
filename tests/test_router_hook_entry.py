@@ -93,6 +93,8 @@ def _assert_no_dispatch(testcase: unittest.TestCase, packet: dict[str, object]) 
     testcase.assertFalse(packet["hook_surface_can_dispatch"])
     testcase.assertTrue(packet["hook_does_not_prove_dispatch"])
     testcase.assertTrue(packet["router_hook_entry_no_dispatch_enforced"])
+    testcase.assertFalse(packet["router_dispatch_admitted"])
+    testcase.assertFalse(packet["router_owned_dispatch_decision_bound"])
 
 
 class RouterHookEntryTests(unittest.TestCase):
@@ -118,6 +120,9 @@ class RouterHookEntryTests(unittest.TestCase):
         self.assertEqual(packet["alias_candidate"], "DIP")
         self.assertEqual(packet["slot_candidate"], "dip")
         self.assertEqual(packet["lane_candidate"], "api_route")
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertTrue(packet["natural_api_alias_command_detected"])
+        self.assertTrue(packet["router_preflight_admitted"])
         self.assertEqual(packet["intent_status"], INTENT_PASS)
         self.assertEqual(packet["contract_preflight_status"], PREFLIGHT_PASS)
         self.assertEqual(packet["source_surface"], "declared_custom_codex_flow")
@@ -158,6 +163,8 @@ class RouterHookEntryTests(unittest.TestCase):
         self.assertFalse(packet["hook_entry_proven"])
         self.assertEqual(packet["alias_candidate"], "Codex")
         self.assertEqual(packet["lane_candidate"], "primary_chatgpt")
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertFalse(packet["natural_api_alias_command_detected"])
         _assert_no_dispatch(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
@@ -441,6 +448,69 @@ class RouterHookEntryTests(unittest.TestCase):
                 _assert_no_dispatch(self, packet)
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_router_hook_entry_does_not_import_future_parser_proof_claims(self) -> None:
+        original_parser = hook_entry.build_natural_intent_parser_packet
+
+        def fake_parser_packet(*args: object, **kwargs: object) -> dict[str, object]:
+            packet = original_parser(*args, **kwargs)
+            packet.update(
+                {
+                    "api_lane_called": True,
+                    "custom_codex_ui_visibility_proven": True,
+                    "dispatch_proven": True,
+                    "dispatch_status": "proven",
+                    "external_live_provider_response_proven": True,
+                    "fallback_used": True,
+                    "local_imitation_used": True,
+                    "native_codex_subagent_used": True,
+                    "native_codex_subagent_used_as_dip": True,
+                    "native_free_chat_router_proven": True,
+                    "product_ready": True,
+                    "raw_backend_details_exposed": True,
+                    "router_dispatch_admitted": True,
+                    "router_owned_dispatch_decision_bound": True,
+                    "proof_seal_verified": True,
+                    "secret_value_exposed": True,
+                    "server_owned_file_bridge": True,
+                }
+            )
+            return packet
+
+        try:
+            hook_entry.build_natural_intent_parser_packet = fake_parser_packet
+            packet = hook_entry.build_router_hook_entry_packet(
+                prompt_text="Codex, дай задачу DIP.",
+                runtime_context=_runtime_context(),
+            )
+        finally:
+            hook_entry.build_natural_intent_parser_packet = original_parser
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["dispatch_proven"])
+        self.assertEqual(packet["dispatch_status"], DISPATCH_STATUS_NOT_ATTEMPTED)
+        self.assertFalse(packet["external_live_provider_response_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["router_dispatch_admitted"])
+        self.assertFalse(packet["router_owned_dispatch_decision_bound"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertNotIn("server_owned_file_bridge", packet)
+        self.assertIn("parser_fallback_used", packet["blocking_reasons"])
+        self.assertIn(
+            "parser_unexpected_field_proof_seal_verified",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["router_hook_entry_preflight_passed"])
         _assert_no_dispatch(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

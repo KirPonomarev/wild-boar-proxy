@@ -341,6 +341,17 @@ def _dispatch_admission_failures(
         ("hook_runtime_context_digest_bound", "hook_runtime_context_digest_not_bound"),
         ("alias_context_read", "alias_context_not_read"),
         ("allowed_api_route_ids_enforced", "allowed_api_route_ids_not_enforced"),
+        ("natural_alias_command_detected", "natural_alias_command_not_detected"),
+        (
+            "natural_api_alias_command_detected",
+            "natural_api_alias_command_not_detected",
+        ),
+        ("router_dispatch_admitted", "router_dispatch_not_admitted"),
+        (
+            "router_owned_dispatch_decision_bound",
+            "router_owned_dispatch_decision_not_bound",
+        ),
+        ("api_lane_dispatch_admitted", "api_lane_dispatch_not_admitted"),
         ("api_lane_called", "api_lane_not_called"),
         ("dispatch_proven", "dispatch_not_proven"),
         ("route_bound_dispatch_proven", "route_bound_dispatch_not_proven"),
@@ -839,6 +850,25 @@ def build_handoff_to_working_flow_join_packet(
         "dispatch_admission_proven": (
             admission.get("native_free_chat_router_dispatch_admission_proven") is True
             and ok
+        ),
+        "natural_alias_command_detected": (
+            admission.get("natural_alias_command_detected") is True and ok
+        ),
+        "natural_api_alias_command_detected": (
+            admission.get("natural_api_alias_command_detected") is True and ok
+        ),
+        "router_dispatch_admitted": (
+            admission.get("router_dispatch_admitted") is True and ok
+        ),
+        "router_owned_dispatch_decision_bound": (
+            admission.get("router_owned_dispatch_decision_bound") is True and ok
+        ),
+        "router_dispatch_decision_truth_source": _safe_text(
+            admission.get("router_dispatch_decision_truth_source"),
+            limit=80,
+        ),
+        "api_lane_dispatch_admitted": (
+            admission.get("api_lane_dispatch_admitted") is True and ok
         ),
         "handoff_file_written": admission.get("handoff_file_written") is True and ok,
         "handoff_file_sha256_bound": (

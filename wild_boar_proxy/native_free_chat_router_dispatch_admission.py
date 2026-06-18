@@ -111,6 +111,17 @@ def _source_required_failures(source: Mapping[str, Any]) -> list[str]:
         ("alias_context_read", "alias_context_not_read"),
         ("allowed_api_route_ids_enforced", "allowed_api_route_ids_not_enforced"),
         ("route_id_allowed", "route_id_not_allowed"),
+        ("natural_alias_command_detected", "natural_alias_command_not_detected"),
+        (
+            "natural_api_alias_command_detected",
+            "natural_api_alias_command_not_detected",
+        ),
+        ("router_dispatch_admitted", "router_dispatch_not_admitted"),
+        (
+            "router_owned_dispatch_decision_bound",
+            "router_owned_dispatch_decision_not_bound",
+        ),
+        ("api_lane_dispatch_admitted", "api_lane_dispatch_not_admitted"),
         ("api_lane_called", "api_lane_not_called"),
         ("api_response_received", "api_response_not_received"),
         ("response_bound_to_proof", "response_not_bound_to_proof"),
@@ -235,6 +246,20 @@ def _handoff_evidence_payload(source: Mapping[str, Any]) -> dict[str, Any]:
             source.get("allowed_api_route_ids_enforced") is True
         ),
         "route_id_allowed": source.get("route_id_allowed") is True,
+        "natural_alias_command_detected": (
+            source.get("natural_alias_command_detected") is True
+        ),
+        "natural_api_alias_command_detected": (
+            source.get("natural_api_alias_command_detected") is True
+        ),
+        "router_dispatch_admitted": source.get("router_dispatch_admitted") is True,
+        "router_owned_dispatch_decision_bound": (
+            source.get("router_owned_dispatch_decision_bound") is True
+        ),
+        "router_dispatch_decision_truth_source": _safe_text(
+            source.get("router_dispatch_decision_truth_source"),
+            limit=80,
+        ),
         "selected_alias": _safe_text(source.get("selected_alias"), limit=80),
         "selected_alias_lane": _safe_text(
             source.get("selected_alias_lane"),
@@ -248,6 +273,9 @@ def _handoff_evidence_payload(source: Mapping[str, Any]) -> dict[str, Any]:
             source.get("selected_api_route_id_sha256")
         ),
         "api_lane_called": source.get("api_lane_called") is True,
+        "api_lane_dispatch_admitted": (
+            source.get("api_lane_dispatch_admitted") is True
+        ),
         "dispatch_status": _safe_text(source.get("dispatch_status"), limit=32),
         "dispatch_proven": source.get("dispatch_proven") is True,
         "dispatch_result_digest": dispatch_result_digest,
@@ -397,6 +425,25 @@ def build_native_free_chat_router_dispatch_admission_packet(
             source_packet.get("allowed_api_route_ids_enforced") is True and ok
         ),
         "route_id_allowed": source_packet.get("route_id_allowed") is True and ok,
+        "natural_alias_command_detected": (
+            source_packet.get("natural_alias_command_detected") is True and ok
+        ),
+        "natural_api_alias_command_detected": (
+            source_packet.get("natural_api_alias_command_detected") is True and ok
+        ),
+        "router_dispatch_admitted": (
+            source_packet.get("router_dispatch_admitted") is True and ok
+        ),
+        "router_owned_dispatch_decision_bound": (
+            source_packet.get("router_owned_dispatch_decision_bound") is True and ok
+        ),
+        "router_dispatch_decision_truth_source": _safe_text(
+            source_packet.get("router_dispatch_decision_truth_source"),
+            limit=80,
+        ),
+        "api_lane_dispatch_admitted": (
+            source_packet.get("api_lane_dispatch_admitted") is True and ok
+        ),
         "api_lane_called": source_packet.get("api_lane_called") is True and ok,
         "api_response_received": (
             source_packet.get("api_response_received") is True and ok

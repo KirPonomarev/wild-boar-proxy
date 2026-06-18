@@ -462,6 +462,13 @@ def _dispatch_failures(dispatch_packet: Mapping[str, Any]) -> list[str]:
         ("alias_context_read", "alias_context_not_read"),
         ("allowed_api_route_ids_enforced", "allowed_api_route_ids_not_enforced"),
         ("route_id_allowed", "route_id_not_allowed"),
+        ("natural_alias_command_detected", "natural_alias_command_not_detected"),
+        ("router_dispatch_admitted", "router_dispatch_not_admitted"),
+        (
+            "router_owned_dispatch_decision_bound",
+            "router_owned_dispatch_decision_not_bound",
+        ),
+        ("api_lane_dispatch_admitted", "api_lane_dispatch_not_admitted"),
         ("api_lane_called", "api_lane_not_called"),
         ("dispatch_proven", "dispatch_not_proven"),
         ("route_bound_dispatch_proven", "route_bound_dispatch_not_proven"),
@@ -995,6 +1002,25 @@ def build_real_custom_codex_hook_proof_packet(
             dispatch_packet.get("dispatch_truth_source"),
             limit=80,
         ),
+        "natural_alias_command_detected": (
+            dispatch_packet.get("natural_alias_command_detected") is True
+        ),
+        "natural_api_alias_command_detected": (
+            dispatch_packet.get("natural_api_alias_command_detected") is True
+        ),
+        "router_preflight_admitted": (
+            dispatch_packet.get("router_preflight_admitted") is True
+        ),
+        "router_dispatch_admitted": (
+            dispatch_packet.get("router_dispatch_admitted") is True
+        ),
+        "router_owned_dispatch_decision_bound": (
+            dispatch_packet.get("router_owned_dispatch_decision_bound") is True
+        ),
+        "router_dispatch_decision_truth_source": _safe_text(
+            dispatch_packet.get("router_dispatch_decision_truth_source"),
+            limit=80,
+        ),
         "provider_like_response_only": (
             dispatch_packet.get("provider_like_response_only") is True
         ),
@@ -1005,6 +1031,9 @@ def build_real_custom_codex_hook_proof_packet(
         ),
         "route_id_allowed": dispatch_packet.get("route_id_allowed") is True,
         "api_lane_called": dispatch_packet.get("api_lane_called") is True,
+        "api_lane_dispatch_admitted": (
+            dispatch_packet.get("api_lane_dispatch_admitted") is True
+        ),
         "api_response_received": (
             dispatch_packet.get("provider_response_proven") is True
         ),

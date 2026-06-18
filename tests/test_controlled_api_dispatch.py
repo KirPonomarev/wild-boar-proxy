@@ -121,6 +121,15 @@ class ControlledApiDispatchTests(unittest.TestCase):
         self.assertEqual(packet["changed_files"], [])
         self.assertTrue(packet["hook_entry_proven"])
         self.assertTrue(packet["alias_context_read"])
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertTrue(packet["natural_api_alias_command_detected"])
+        self.assertTrue(packet["router_preflight_admitted"])
+        self.assertTrue(packet["router_dispatch_admitted"])
+        self.assertTrue(packet["router_owned_dispatch_decision_bound"])
+        self.assertEqual(
+            packet["router_dispatch_decision_truth_source"],
+            "wbp_owned_router_hook_entry_to_api_lane_adapter",
+        )
         self.assertEqual(packet["selected_alias"], "DIP")
         self.assertEqual(packet["selected_alias_lane"], "api_route")
         self.assertTrue(packet["allowed_api_route_ids_enforced"])

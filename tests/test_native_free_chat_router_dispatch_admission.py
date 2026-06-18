@@ -18,6 +18,7 @@ from wild_boar_proxy import real_custom_codex_hook_proof as hook_proof
 from wild_boar_proxy import router_hook_entry
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
+from wild_boar_proxy.runtime import RuntimePaths
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -223,7 +224,16 @@ class NativeFreeChatRouterDispatchAdmissionTests(unittest.TestCase):
         self.assertTrue(packet["alias_context_read"])
         self.assertTrue(packet["allowed_api_route_ids_enforced"])
         self.assertTrue(packet["route_id_allowed"])
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertTrue(packet["natural_api_alias_command_detected"])
+        self.assertTrue(packet["router_dispatch_admitted"])
+        self.assertTrue(packet["router_owned_dispatch_decision_bound"])
+        self.assertEqual(
+            packet["router_dispatch_decision_truth_source"],
+            "wbp_owned_router_hook_entry_to_api_lane_adapter",
+        )
         self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["api_lane_dispatch_admitted"])
         self.assertTrue(packet["api_response_received"])
         self.assertTrue(packet["response_bound_to_proof"])
         self.assertTrue(packet["dispatch_proven"])
@@ -268,6 +278,10 @@ class NativeFreeChatRouterDispatchAdmissionTests(unittest.TestCase):
         )
         self.assertTrue(handoff["hook_prompt_digest_bound"])
         self.assertTrue(handoff["hook_runtime_context_digest_bound"])
+        self.assertTrue(handoff["natural_alias_command_detected"])
+        self.assertTrue(handoff["router_dispatch_admitted"])
+        self.assertTrue(handoff["router_owned_dispatch_decision_bound"])
+        self.assertTrue(handoff["api_lane_dispatch_admitted"])
         self.assertTrue(handoff["api_lane_called"])
         self.assertTrue(handoff["dispatch_result_digest_bound"])
         self.assertFalse(handoff["product_ready"])
@@ -338,6 +352,66 @@ class NativeFreeChatRouterDispatchAdmissionTests(unittest.TestCase):
                     extra_prompts=[prompt] if prompt != PROMPT else None,
                 )
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_source_without_router_owned_dispatch_decision_blocks_handoff_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, ledger_path = _write_context_and_ledger(root)
+            previous_profile_dir = os.environ.get("WBP_PROFILE_DIR")
+            previous_managed_dir = os.environ.get("WBP_MANAGED_DIR")
+            os.environ["WBP_PROFILE_DIR"] = str(profile_dir)
+            os.environ["WBP_MANAGED_DIR"] = str(profile_dir / "managed")
+            try:
+                source_packet = hook_proof.run_real_custom_codex_hook_proof_command(
+                    paths=RuntimePaths.from_env(),
+                    prompt_text=PROMPT,
+                    hook_ledger_file=str(ledger_path),
+                )
+            finally:
+                if previous_profile_dir is None:
+                    os.environ.pop("WBP_PROFILE_DIR", None)
+                else:
+                    os.environ["WBP_PROFILE_DIR"] = previous_profile_dir
+                if previous_managed_dir is None:
+                    os.environ.pop("WBP_MANAGED_DIR", None)
+                else:
+                    os.environ["WBP_MANAGED_DIR"] = previous_managed_dir
+
+            source_packet = dict(source_packet)
+            source_packet["natural_api_alias_command_detected"] = False
+            source_packet["router_dispatch_admitted"] = False
+            source_packet["router_owned_dispatch_decision_bound"] = False
+            source_packet["api_lane_dispatch_admitted"] = False
+            handoff_path = root / "blocked-handoff.json"
+            packet = admission.build_native_free_chat_router_dispatch_admission_packet(
+                source_packet=source_packet,
+                handoff_file=handoff_path,
+                secret_values=[PROMPT, ROUTE_ID],
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.DISPATCH_ADMISSION_SOURCE_INVALID,
+        )
+        self.assertFalse(packet["handoff_file_written"])
+        self.assertFalse(handoff_path.exists())
+        self.assertFalse(packet["natural_api_alias_command_detected"])
+        self.assertFalse(packet["router_dispatch_admitted"])
+        self.assertFalse(packet["router_owned_dispatch_decision_bound"])
+        self.assertFalse(packet["api_lane_dispatch_admitted"])
+        self.assertIn("router_dispatch_not_admitted", packet["blocking_reasons"])
+        self.assertIn(
+            "natural_api_alias_command_not_detected",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "router_owned_dispatch_decision_not_bound",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("api_lane_dispatch_not_admitted", packet["blocking_reasons"])
+        _assert_no_prompt_route_or_secret(self, packet, prompt=PROMPT)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_cli_effect_classifier_marks_dispatch_admission_as_mutate(self) -> None:
         parser = cli_mod.build_parser()

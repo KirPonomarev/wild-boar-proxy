@@ -608,6 +608,12 @@ def build_natural_intent_contract_packet(
         ambiguous=ambiguous,
     )
     ok = resolved["contract_preflight_status"] == PREFLIGHT_PASS
+    natural_alias_command_detected = bool(
+        resolved["alias_bound"] and not ambiguous and bool(resolved["alias_candidate_key"])
+    )
+    natural_api_alias_command_detected = bool(
+        natural_alias_command_detected and resolved["lane_candidate"] == API_ROUTE_LANE
+    )
     extra = {
         "schema_version": 1,
         "packet_kind": NATURAL_INTENT_CONTRACT_PACKET_KIND,
@@ -645,8 +651,13 @@ def build_natural_intent_contract_packet(
             resolved["forbidden_stale_route_ids"]
         ),
         "ambiguous_intent": bool(ambiguous),
+        "natural_alias_command_detected": natural_alias_command_detected,
+        "natural_api_alias_command_detected": natural_api_alias_command_detected,
         "intent_status": resolved["intent_status"],
         "contract_preflight_status": resolved["contract_preflight_status"],
+        "router_preflight_admitted": ok,
+        "router_dispatch_admitted": False,
+        "router_owned_dispatch_decision_bound": False,
         "dispatch_status": DISPATCH_STATUS_NOT_ATTEMPTED,
         "api_lane_called": False,
         "dispatch_proven": False,

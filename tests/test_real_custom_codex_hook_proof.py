@@ -291,7 +291,17 @@ class RealCustomCodexHookProofTests(unittest.TestCase):
         self.assertFalse(packet["custom_codex_origin_proven"])
         self.assertFalse(packet["native_custom_codex_flow_proven"])
         self.assertFalse(packet["native_router_hook_observed"])
+        self.assertTrue(packet["natural_alias_command_detected"])
+        self.assertTrue(packet["natural_api_alias_command_detected"])
+        self.assertTrue(packet["router_preflight_admitted"])
+        self.assertTrue(packet["router_dispatch_admitted"])
+        self.assertTrue(packet["router_owned_dispatch_decision_bound"])
+        self.assertEqual(
+            packet["router_dispatch_decision_truth_source"],
+            "wbp_owned_router_hook_entry_to_api_lane_adapter",
+        )
         self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["api_lane_dispatch_admitted"])
         self.assertTrue(packet["api_response_received"])
         self.assertTrue(packet["response_bound_to_proof"])
         self.assertEqual(packet["dispatch_status"], "proven")
