@@ -50,6 +50,7 @@ VISIBLE_SOURCE_BINDING_SOURCE_NOT_OBSERVED = (
 )
 VISIBLE_SOURCE_BINDING_NOT_BOUND = "WBP_VISIBLE_SOURCE_BINDING_NOT_BOUND"
 VISIBLE_SOURCE_BINDING_PAYLOAD_UNSAFE = "WBP_VISIBLE_SOURCE_BINDING_PAYLOAD_UNSAFE"
+APPROVED_VISIBLE_SOURCE_UNAVAILABLE = "APPROVED_VISIBLE_SOURCE_UNAVAILABLE"
 
 VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT = "codex_exec_json_assistant_output"
 APPROVED_VISIBLE_SOURCE_KINDS = frozenset(
@@ -356,6 +357,19 @@ def build_custom_codex_visible_source_binding_proof_packet(
     if assistant_candidates and not visible_source_after_delivery:
         binding_failures.append("visible_source_not_after_delivery")
 
+    command_exec_only_evidence_available = bool(
+        source.get("approved_delivery_surface_proven") is True
+        and source.get("command_execution_delivery_surface_proven") is True
+        and source.get("mcp_delivery_surface_proven") is not True
+    )
+    approved_visible_source_unavailable = bool(
+        source_allowed
+        and command_exec_only_evidence_available
+        and tool_result_index is None
+    )
+    if approved_visible_source_unavailable:
+        binding_failures.append("approved_visible_source_unavailable")
+
     blocking_reasons = sorted(
         set(
             working_flow_failures
@@ -375,6 +389,8 @@ def build_custom_codex_visible_source_binding_proof_packet(
 
     if ok:
         machine_error_code = VISIBLE_SOURCE_BINDING_OK
+    elif approved_visible_source_unavailable and not unsafe_failures:
+        machine_error_code = APPROVED_VISIBLE_SOURCE_UNAVAILABLE
     elif working_flow_failures:
         machine_error_code = VISIBLE_SOURCE_BINDING_WORKING_FLOW_INVALID
     elif not source_allowed:
@@ -439,6 +455,35 @@ def build_custom_codex_visible_source_binding_proof_packet(
         "approved_visible_source_kind": source_kind,
         "approved_visible_source_allowed": source_allowed,
         "approved_visible_source_kinds_count": len(APPROVED_VISIBLE_SOURCE_KINDS),
+        "approved_visible_source_unavailable": approved_visible_source_unavailable,
+        "approved_visible_source_expected": "mcp_tool_response",
+        "available_delivery_surface_kind": _safe_text(
+            source.get("working_flow_delivery_surface_kind"),
+            limit=96,
+        ),
+        "available_visible_source_evidence": (
+            "command_execution_delivery_surface"
+            if command_exec_only_evidence_available
+            else "not_proven"
+        ),
+        "approved_visible_source_unavailable_reason": (
+            "command_exec_only_not_accepted_as_approved_visible_source"
+            if approved_visible_source_unavailable
+            else ""
+        ),
+        "command_exec_only_evidence_available": (
+            command_exec_only_evidence_available
+        ),
+        "command_exec_only_not_accepted_as_visible_source": (
+            command_exec_only_evidence_available
+        ),
+        "approved_visible_source_unblockers": [
+            "mcp_delivery_surface_proven",
+            "matching_mcp_tool_result_observed",
+            "assistant_response_bound_to_handoff_digest",
+        ]
+        if approved_visible_source_unavailable
+        else [],
         "visible_source_read": metadata.get("codex_exec_jsonl_file_read") is True,
         "visible_source_events_observed": bool(events),
         "visible_source_digest": visible_source_digest,

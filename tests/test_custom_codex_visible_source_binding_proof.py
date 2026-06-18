@@ -310,6 +310,62 @@ class CustomCodexVisibleSourceBindingProofTests(unittest.TestCase):
                 _assert_no_raw_prompt_route_or_provider(self, packet)
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_diagnoses_command_exec_only_source_as_approved_visible_source_unavailable(self) -> None:
+        source, events = _working_flow_packet()
+        handoff_digest = str(source["handoff_payload_digest"])
+        command_exec_events = [
+            _assistant_event(
+                handoff_digest,
+                text="Command execution receipt is not an MCP tool result.",
+            )
+        ]
+        source = dict(source)
+        source.update(
+            {
+                "mcp_delivery_surface_proven": False,
+                "command_execution_delivery_surface_proven": True,
+                "working_flow_delivery_surface_kind": (
+                    "codex_command_execution_live_format_check"
+                ),
+                "matching_mcp_tool_result_observed": False,
+                "mcp_tool_result_structured_content_present": False,
+                "structured_content_matches_handoff": False,
+                "assistant_response_after_tool_result": False,
+                "approved_delivery_surface_proven": True,
+                "codex_exec_transcript_sha256": (
+                    working_flow._codex_exec_transcript_digest(command_exec_events)
+                ),
+            }
+        )
+        packet = binding.build_custom_codex_visible_source_binding_proof_packet(
+            source,
+            command_exec_events,
+            file_metadata=_file_metadata(event_count=1),
+            secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT, RAW_PROVIDER_TEXT],
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            binding.APPROVED_VISIBLE_SOURCE_UNAVAILABLE,
+        )
+        self.assertTrue(packet["approved_visible_source_unavailable"])
+        self.assertEqual(packet["approved_visible_source_expected"], "mcp_tool_response")
+        self.assertTrue(packet["command_exec_only_evidence_available"])
+        self.assertTrue(packet["command_exec_only_not_accepted_as_visible_source"])
+        self.assertIn("approved_visible_source_unavailable", packet["blocking_reasons"])
+        self.assertIn("mcp_delivery_surface_not_proven", packet["blocking_reasons"])
+        self.assertIn("matching_mcp_tool_result_not_observed", packet["blocking_reasons"])
+        self.assertIn(
+            "mcp_delivery_surface_proven",
+            packet["approved_visible_source_unblockers"],
+        )
+        self.assertFalse(packet["visible_source_binding_proven"])
+        self.assertFalse(packet["custom_codex_visible_source_binding_proven"])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_blocks_unapproved_source_missing_source_and_invalid_jsonl(self) -> None:
         source, events = _working_flow_packet()
         cases = [
