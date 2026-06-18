@@ -567,13 +567,28 @@ def _split_command_tokens(command: str) -> tuple[list[str], bool]:
         outer_tokens = shlex.split(command)
     except ValueError:
         return [], False
-    if len(outer_tokens) >= 3:
+    if len(outer_tokens) == 3:
         shell_name = Path(outer_tokens[0]).name
         if shell_name in {"sh", "bash", "zsh"} and outer_tokens[1] == "-lc":
             try:
                 return shlex.split(outer_tokens[2]), True
             except ValueError:
                 return [], True
+        if shell_name in {"sh", "bash", "zsh"} and outer_tokens[1] == "-c":
+            try:
+                nested_tokens = shlex.split(outer_tokens[2])
+            except ValueError:
+                return [], True
+            if len(nested_tokens) == 3:
+                nested_shell_name = Path(nested_tokens[0]).name
+                if (
+                    nested_shell_name in {"sh", "bash", "zsh"}
+                    and nested_tokens[1] == "-lc"
+                ):
+                    try:
+                        return shlex.split(nested_tokens[2]), True
+                    except ValueError:
+                        return [], True
     return outer_tokens, False
 
 

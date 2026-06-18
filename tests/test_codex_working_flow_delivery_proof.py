@@ -312,6 +312,13 @@ def _command_execution_event(
     }
 
 
+def _codex_wrapped_command_execution_event(source: dict[str, object]) -> dict[str, object]:
+    event = _command_execution_event(source)
+    original_command = str(event["item"]["command"])
+    event["item"]["command"] = "/bin/zsh -c " + json.dumps(original_command)
+    return event
+
+
 def _command_assistant_event(text: str = EXPECTED_TEXT) -> dict[str, object]:
     return {
         "type": "item.completed",
@@ -545,6 +552,35 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         _assert_no_secret_or_raw_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_positive_accepts_current_codex_shell_c_wrapped_live_format_command(
+        self,
+    ) -> None:
+        source = _integrated_packet()
+        events = [
+            {"type": "thread.started", "thread_id": "thread-command-flow"},
+            {"type": "turn.started"},
+            _codex_wrapped_command_execution_event(source),
+            _command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_execution_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_route_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_extra_args_allowed"])
+        self.assertTrue(packet["command_assistant_response_bound_to_live_provider_digest"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        _assert_no_product_or_ui_claim(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_blocks_command_execution_not_bound_to_server_issued_cli(self) -> None:
         source = _integrated_packet()
         forged_event = _command_execution_event(source)
@@ -619,6 +655,36 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
                 )
                 _assert_no_product_or_ui_claim(self, packet)
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_codex_shell_c_wrapper_with_extra_shell_chain(self) -> None:
+        source = _integrated_packet()
+        event = _codex_wrapped_command_execution_event(source)
+        nested_command = str(event["item"]["command"])
+        event["item"]["command"] = "/bin/zsh -c " + json.dumps(
+            f"echo unsafe && {nested_command}"
+        )
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            [
+                {"type": "thread.started", "thread_id": "thread-command-flow"},
+                {"type": "turn.started"},
+                event,
+                _command_assistant_event(),
+                {"type": "turn.completed"},
+            ],
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["command_execution_delivery_surface_proven"])
+        self.assertFalse(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertIn(
+            "live_format_command_execution_not_bound",
+            packet["blocking_reasons"],
+        )
+        _assert_no_product_or_ui_claim(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_blocks_command_execution_without_bound_assistant_response(self) -> None:
         source = _integrated_packet()
