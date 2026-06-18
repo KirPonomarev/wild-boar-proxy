@@ -433,9 +433,22 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertTrue(packet["user_prompt_submit_hook_ran"])
         self.assertTrue(packet["hook_prompt_digest_bound"])
         self.assertTrue(packet["hook_runtime_context_digest_bound"])
+        self.assertEqual(packet["source_prompt_digest"], source["prompt_digest"])
+        self.assertEqual(
+            packet["source_runtime_context_digest"],
+            source["runtime_context_digest"],
+        )
         self.assertTrue(packet["api_lane_called"])
         self.assertTrue(packet["dispatch_proven"])
         self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertEqual(
+            packet["selected_api_route_id_sha256"],
+            source["selected_api_route_id_sha256"],
+        )
+        self.assertEqual(
+            packet["route_bound_request_sha256"],
+            source["route_bound_request_sha256"],
+        )
         self.assertTrue(packet["live_provider_response_proven"])
         self.assertTrue(packet["external_live_provider_response_proven"])
         self.assertFalse(packet["does_not_prove_live_provider"])

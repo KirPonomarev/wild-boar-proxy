@@ -1184,6 +1184,10 @@ def build_codex_working_flow_delivery_proof_packet(
         "hook_runtime_context_digest_bound": (
             source.get("hook_runtime_context_digest_bound") is True
         ),
+        "source_prompt_digest": _hex_sha256(source.get("prompt_digest")),
+        "source_runtime_context_digest": _hex_sha256(
+            source.get("runtime_context_digest")
+        ),
         "thread_or_turn_digest_bound": (
             source.get("thread_or_turn_digest_bound") is True
         ),
@@ -1197,6 +1201,12 @@ def build_codex_working_flow_delivery_proof_packet(
             source.get("allowed_api_route_ids_enforced") is True
         ),
         "route_id_allowed": source.get("route_id_allowed") is True,
+        "selected_api_route_id_sha256": _hex_sha256(
+            source.get("selected_api_route_id_sha256")
+        ),
+        "route_bound_request_sha256": _hex_sha256(
+            source.get("route_bound_request_sha256")
+        ),
         "api_lane_called": source.get("api_lane_called") is True,
         "dispatch_status": _safe_text(source.get("dispatch_status"), limit=32),
         "dispatch_proven": source.get("dispatch_proven") is True,

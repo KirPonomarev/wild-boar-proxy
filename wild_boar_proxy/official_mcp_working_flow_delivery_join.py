@@ -504,6 +504,24 @@ def build_official_mcp_working_flow_delivery_join_packet(
     working_flow_transcript_digest = _hex_sha256(
         working_flow.get("codex_exec_transcript_sha256")
     )
+    working_flow_source_prompt_digest = _hex_sha256(
+        working_flow.get("source_prompt_digest")
+    )
+    working_flow_source_runtime_context_digest = _hex_sha256(
+        working_flow.get("source_runtime_context_digest")
+    )
+    working_flow_selected_route_digest = _hex_sha256(
+        working_flow.get("selected_api_route_id_sha256")
+    )
+    working_flow_route_bound_request_digest = _hex_sha256(
+        working_flow.get("route_bound_request_sha256")
+    )
+    working_flow_live_provider_response_digest = _hex_sha256(
+        working_flow.get("live_provider_response_digest")
+    )
+    working_flow_controlled_provider_response_digest = _hex_sha256(
+        working_flow.get("controlled_provider_response_digest")
+    )
 
     extra = {
         **metadata,
@@ -589,6 +607,42 @@ def build_official_mcp_working_flow_delivery_join_packet(
         "working_flow_handoff_payload_digest": working_flow_handoff_digest if ok else "",
         "working_flow_codex_exec_transcript_sha256": (
             working_flow_transcript_digest if ok else ""
+        ),
+        "working_flow_source_prompt_digest": (
+            working_flow_source_prompt_digest if ok else ""
+        ),
+        "working_flow_source_runtime_context_digest": (
+            working_flow_source_runtime_context_digest if ok else ""
+        ),
+        "working_flow_selected_api_route_id_sha256": (
+            working_flow_selected_route_digest if ok else ""
+        ),
+        "working_flow_route_bound_request_sha256": (
+            working_flow_route_bound_request_digest if ok else ""
+        ),
+        "working_flow_live_provider_response_digest": (
+            working_flow_live_provider_response_digest if ok else ""
+        ),
+        "working_flow_controlled_provider_response_digest": (
+            working_flow_controlled_provider_response_digest if ok else ""
+        ),
+        "working_flow_hook_producer_ledger_proven": bool(
+            ok and working_flow.get("hook_producer_ledger_proven") is True
+        ),
+        "working_flow_user_prompt_submit_hook_ran": bool(
+            ok and working_flow.get("user_prompt_submit_hook_ran") is True
+        ),
+        "working_flow_hook_ledger_written": bool(
+            ok and working_flow.get("hook_ledger_written") is True
+        ),
+        "working_flow_hook_prompt_digest_bound": bool(
+            ok and working_flow.get("hook_prompt_digest_bound") is True
+        ),
+        "working_flow_hook_runtime_context_digest_bound": bool(
+            ok and working_flow.get("hook_runtime_context_digest_bound") is True
+        ),
+        "working_flow_thread_or_turn_digest_bound": bool(
+            ok and working_flow.get("thread_or_turn_digest_bound") is True
         ),
         "handoff_payload_digest": working_flow_handoff_digest if ok else "",
         "codex_exec_transcript_sha256": working_flow_transcript_digest if ok else "",

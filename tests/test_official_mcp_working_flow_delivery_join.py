@@ -171,7 +171,11 @@ class OfficialMcpWorkingFlowDeliveryJoinTests(unittest.TestCase):
     def test_positive_joins_official_candidate_to_canonical_working_flow_delivery(
         self,
     ) -> None:
-        packet = _packet()
+        positive_candidate, positive_working_flow = _positive_pair()
+        packet = _packet(
+            candidate=positive_candidate,
+            working_flow_packet=positive_working_flow,
+        )
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
@@ -224,6 +228,36 @@ class OfficialMcpWorkingFlowDeliveryJoinTests(unittest.TestCase):
             packet["candidate_codex_exec_transcript_sha256"],
             packet["working_flow_codex_exec_transcript_sha256"],
         )
+        self.assertEqual(
+            packet["working_flow_source_prompt_digest"],
+            positive_working_flow["source_prompt_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_source_runtime_context_digest"],
+            positive_working_flow["source_runtime_context_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_selected_api_route_id_sha256"],
+            positive_working_flow["selected_api_route_id_sha256"],
+        )
+        self.assertEqual(
+            packet["working_flow_route_bound_request_sha256"],
+            positive_working_flow["route_bound_request_sha256"],
+        )
+        self.assertEqual(
+            packet["working_flow_live_provider_response_digest"],
+            positive_working_flow["live_provider_response_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_controlled_provider_response_digest"],
+            positive_working_flow["controlled_provider_response_digest"],
+        )
+        self.assertTrue(packet["working_flow_hook_producer_ledger_proven"])
+        self.assertTrue(packet["working_flow_user_prompt_submit_hook_ran"])
+        self.assertTrue(packet["working_flow_hook_ledger_written"])
+        self.assertTrue(packet["working_flow_hook_prompt_digest_bound"])
+        self.assertTrue(packet["working_flow_hook_runtime_context_digest_bound"])
+        self.assertTrue(packet["working_flow_thread_or_turn_digest_bound"])
         self.assertTrue(packet["candidate_transcript_bound_to_working_flow"])
         self.assertTrue(
             packet["candidate_approved_source_bound_to_working_flow_transcript"]

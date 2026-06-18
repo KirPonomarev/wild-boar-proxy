@@ -131,6 +131,9 @@ from .official_mcp_delivery_candidate_join import (
 from .official_mcp_working_flow_delivery_join import (
     run_official_mcp_working_flow_delivery_join_command,
 )
+from .official_e2e_working_flow_proof_join import (
+    run_official_e2e_working_flow_proof_join_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -771,6 +774,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_e2e_working_flow_proof_join = (
+        router_hook_subparsers.add_parser(
+            "official-e2e-working-flow-proof-join"
+        )
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--real-custom-hook-proof-file",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--official-working-flow-delivery-join-file",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1295,6 +1316,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "official-mcp-approved-codex-exec-source-observe",
         "official-mcp-delivery-candidate-join",
         "official-mcp-working-flow-delivery-join",
+        "official-e2e-working-flow-proof-join",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1902,6 +1924,18 @@ def main(argv: list[str] | None = None) -> int:
                     delivery_candidate_file=args.delivery_candidate_file,
                     working_flow_delivery_proof_file=(
                         args.working_flow_delivery_proof_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-e2e-working-flow-proof-join"
+        ):
+            return emit_json(
+                run_official_e2e_working_flow_proof_join_command(
+                    real_custom_hook_proof_file=args.real_custom_hook_proof_file,
+                    official_working_flow_delivery_join_file=(
+                        args.official_working_flow_delivery_join_file
                     ),
                 )
             )
