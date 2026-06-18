@@ -125,6 +125,9 @@ from .official_mcp_assistant_continuation_observation import (
 from .official_mcp_approved_codex_exec_source_observation import (
     run_official_mcp_approved_codex_exec_source_observation_command,
 )
+from .official_mcp_delivery_candidate_join import (
+    run_official_mcp_delivery_candidate_join_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -733,6 +736,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_mcp_delivery_candidate_join = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-delivery-candidate-join"
+        )
+    )
+    router_hook_official_mcp_delivery_candidate_join.add_argument(
+        "--approved-exec-source-observation-file",
+        required=True,
+    )
+    router_hook_official_mcp_delivery_candidate_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1255,6 +1272,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "official-mcp-transcript-tool-result-observe",
         "official-mcp-assistant-continuation-observe",
         "official-mcp-approved-codex-exec-source-observe",
+        "official-mcp-delivery-candidate-join",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1840,6 +1858,17 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     approved_source_kind=args.approved_source_kind,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-delivery-candidate-join"
+        ):
+            return emit_json(
+                run_official_mcp_delivery_candidate_join_command(
+                    approved_exec_source_observation_file=(
+                        args.approved_exec_source_observation_file
+                    ),
                 )
             )
         if (
