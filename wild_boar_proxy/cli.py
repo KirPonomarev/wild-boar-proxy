@@ -116,6 +116,9 @@ from .official_mcp_ledger_bound_dispatch_join import (
 from .official_mcp_handoff_source_proof import (
     run_official_mcp_handoff_source_proof_command,
 )
+from .official_mcp_transcript_tool_result_observation import (
+    run_official_mcp_transcript_tool_result_observation_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -665,6 +668,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_mcp_transcript_tool_result_observation = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-transcript-tool-result-observe"
+        )
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--handoff-source-file",
+        required=True,
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1184,6 +1205,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "custom-origin-bound-live-provider-join",
         "official-mcp-ledger-bound-dispatch-join",
         "official-mcp-handoff-source-proof",
+        "official-mcp-transcript-tool-result-observe",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1733,6 +1755,17 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_official_mcp_handoff_source_proof_command(
                     dispatch_join_file=args.dispatch_join_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-transcript-tool-result-observe"
+        ):
+            return emit_json(
+                run_official_mcp_transcript_tool_result_observation_command(
+                    handoff_source_file=args.handoff_source_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                 )
             )
         if (
