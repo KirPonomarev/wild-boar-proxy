@@ -128,6 +128,9 @@ from .official_mcp_approved_codex_exec_source_observation import (
 from .official_mcp_delivery_candidate_join import (
     run_official_mcp_delivery_candidate_join_command,
 )
+from .official_mcp_working_flow_delivery_join import (
+    run_official_mcp_working_flow_delivery_join_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -750,6 +753,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_mcp_working_flow_delivery_join = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-working-flow-delivery-join"
+        )
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--delivery-candidate-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1273,6 +1294,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "official-mcp-assistant-continuation-observe",
         "official-mcp-approved-codex-exec-source-observe",
         "official-mcp-delivery-candidate-join",
+        "official-mcp-working-flow-delivery-join",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1868,6 +1890,18 @@ def main(argv: list[str] | None = None) -> int:
                 run_official_mcp_delivery_candidate_join_command(
                     approved_exec_source_observation_file=(
                         args.approved_exec_source_observation_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-working-flow-delivery-join"
+        ):
+            return emit_json(
+                run_official_mcp_working_flow_delivery_join_command(
+                    delivery_candidate_file=args.delivery_candidate_file,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
                     ),
                 )
             )
