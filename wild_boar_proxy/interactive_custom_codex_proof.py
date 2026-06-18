@@ -398,7 +398,10 @@ def run_interactive_custom_codex_preflight_command(
     prompt = str(prompt_text)
     context_file = runtime_context_path(paths=paths, runtime_context_file=None)
     runtime_context, context_metadata = load_runtime_context_packet(context_file)
-    readiness_packet = build_user_prompt_submit_readiness_packet(paths=paths)
+    readiness_packet = build_user_prompt_submit_readiness_packet(
+        paths=paths,
+        probe_codex_app_server=True,
+    )
     ledger_path = hook_ledger_path(paths)
     ledger_before_present = ledger_path.exists()
     ledger_before_sha256 = sha256_file(ledger_path) if ledger_before_present else ""

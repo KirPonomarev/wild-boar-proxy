@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import real_ledger_bound_api_dispatch_proof as proof
@@ -26,6 +26,8 @@ if str(TESTS_DIR) not in sys.path:
 from test_user_prompt_submit_hook_producer import (  # noqa: E402
     ROOT,
     ROUTE_ID,
+    TEST_CODEX_CURRENT_HASH,
+    _env_with_fake_codex_app_server,
     _event,
     _paths,
     _runtime_context,
@@ -38,15 +40,7 @@ RAW_PROVIDER_TEXT = "raw provider text must not be stored"
 
 
 def _env(paths) -> dict[str, str]:
-    env = os.environ.copy()
-    env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
-    env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
-    env["WBP_CONFIG_TOML"] = str(paths.config_toml)
-    return env
-
-
-def _trust_hash() -> str:
-    return "sha256:" + hashlib.sha256(b"codex-trusted-hook-state").hexdigest()
+    return _env_with_fake_codex_app_server(paths)
 
 
 def _write_context(paths, context: dict[str, object]) -> None:
@@ -59,13 +53,13 @@ def _write_context(paths, context: dict[str, object]) -> None:
 
 
 def _write_codex_trust_state(paths) -> None:
-    trust_key = f"{producer.hooks_json_path(paths)}:user_prompt_submit:0:0"
+    trust_key = producer.hook_trust_key_for_paths(paths)
     with paths.config_toml.open("a", encoding="utf-8") as handle:
         handle.write(
             "\n[hooks.state."
             + json.dumps(trust_key)
             + "]\ntrusted_hash = "
-            + json.dumps(_trust_hash())
+            + json.dumps(TEST_CODEX_CURRENT_HASH)
             + "\n"
         )
 
@@ -157,10 +151,14 @@ def _run_dispatch_proof(
 
 
 def _ledger_proof_packet(paths, *, prompt: str = PROMPT) -> dict[str, object]:
-    return ledger_proof.run_real_user_prompt_submit_ledger_proof_command(
-        paths=paths,
-        prompt_text=prompt,
-    )
+    with mock.patch.dict(
+        os.environ,
+        _env(paths),
+    ):
+        return ledger_proof.run_real_user_prompt_submit_ledger_proof_command(
+            paths=paths,
+            prompt_text=prompt,
+        )
 
 
 def _dispatch_packet(

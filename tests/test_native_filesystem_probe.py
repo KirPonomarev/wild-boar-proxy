@@ -4623,6 +4623,51 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertNotIn("local-token", json.dumps(written))
         self.assertEqual(len(packet["agent_runtime_context_sha256"]), 64)
 
+    def test_materialize_probe_profile_preserves_hook_trust_sections_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            layout.profile_dir.mkdir(parents=True, exist_ok=True)
+            trust_key = f"{layout.profile_dir / 'hooks.json'}:user_prompt_submit:0:0"
+            (layout.profile_dir / "config.toml").write_text(
+                'model = "old-model"\n'
+                'experimental_bearer_token = "must-not-survive"\n\n'
+                "[hooks]\n"
+                "enabled = true\n\n"
+                "[hooks.state."
+                + json.dumps(trust_key)
+                + "]\n"
+                'trusted_hash = "sha256:'
+                + ("1" * 64)
+                + '"\n\n'
+                "[model_providers.old.auth]\n"
+                'command = "must-not-survive"\n',
+                encoding="utf-8",
+            )
+
+            packet = native_fs_probe.materialize_probe_profile(
+                layout=layout,
+                endpoint="http://127.0.0.1:8788/v1",
+                model="gpt-5.5",
+                auth_command_path=root / "auth.py",
+                local_token="local-token",
+            )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+
+        self.assertTrue(packet["hooks_config_sections_preserved"])
+        self.assertEqual(
+            packet["hooks_config_preservation_scope"],
+            "top_level_hooks_toml_tables_only",
+        )
+        self.assertIn("[hooks]", config_text)
+        self.assertIn("[hooks.state.", config_text)
+        self.assertIn('trusted_hash = "sha256:' + ("1" * 64) + '"', config_text)
+        self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertNotIn("old-model", config_text)
+        self.assertNotIn("must-not-survive", config_text)
+
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(
             host_negative_packet={

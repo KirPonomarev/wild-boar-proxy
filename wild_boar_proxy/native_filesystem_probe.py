@@ -4278,6 +4278,27 @@ def create_persistent_custom_profile_layout(
     )
 
 
+def _toml_table_header_name(line: str) -> str:
+    stripped = line.strip()
+    if not stripped.startswith("[") or not stripped.endswith("]"):
+        return ""
+    while stripped.startswith("[") and stripped.endswith("]"):
+        stripped = stripped[1:-1].strip()
+    return stripped
+
+
+def preserved_hooks_toml_sections(config_text: str) -> str:
+    preserved: list[str] = []
+    keep = False
+    for line in config_text.splitlines():
+        header = _toml_table_header_name(line)
+        if header:
+            keep = header == "hooks" or header.startswith("hooks.")
+        if keep:
+            preserved.append(line)
+    return "\n".join(preserved).strip()
+
+
 def materialize_probe_profile(
     *,
     layout: NativeProbeLayout,
@@ -4293,9 +4314,24 @@ def materialize_probe_profile(
     layout.custom_home_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_codex_home.mkdir(parents=True, exist_ok=True)
     layout.custom_tmp_dir.mkdir(parents=True, exist_ok=True)
+    config_path = layout.profile_dir / "config.toml"
+    existing_config_text = ""
+    if config_path.exists():
+        try:
+            existing_config_text = config_path.read_text(encoding="utf-8")
+        except OSError:
+            existing_config_text = ""
+    preserved_hooks_sections = preserved_hooks_toml_sections(existing_config_text)
+    provider_config = build_provider_config(
+        endpoint=endpoint,
+        model=model,
+        auth_command_path=auth_command_path,
+    )
+    if preserved_hooks_sections:
+        provider_config = provider_config.rstrip() + "\n\n" + preserved_hooks_sections + "\n"
     write_text_atomic(
-        layout.profile_dir / "config.toml",
-        build_provider_config(endpoint=endpoint, model=model, auth_command_path=auth_command_path),
+        config_path,
+        provider_config,
     )
     write_text_atomic(
         layout.profile_dir / "auth.json",
@@ -4322,6 +4358,13 @@ def materialize_probe_profile(
         "profile_dir": str(layout.profile_dir),
         "launcher_path": str(layout.launcher_path),
         "config_path": str(layout.profile_dir / "config.toml"),
+        "hooks_config_sections_preserved": bool(preserved_hooks_sections),
+        "hooks_config_preservation_scope": "top_level_hooks_toml_tables_only",
+        "hooks_config_preserved_sha256": (
+            hashlib.sha256(preserved_hooks_sections.encode("utf-8")).hexdigest()
+            if preserved_hooks_sections
+            else ""
+        ),
         "auth_path": str(layout.profile_dir / "auth.json"),
         "agent_runtime_context_path": (
             str(agent_runtime_context_path) if agent_runtime_context_written else ""

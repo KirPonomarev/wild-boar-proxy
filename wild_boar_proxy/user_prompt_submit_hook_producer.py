@@ -4,18 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
 import os
 from pathlib import Path
 import shlex
+import shutil
+import socket
 import subprocess
+import struct
 import sys
+import tempfile
+import time
 import tomllib
 from typing import Any
 
-from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ
+from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets
 from .real_custom_codex_hook_proof import (
     ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
@@ -31,12 +37,13 @@ from .router_hook_entry import (
     load_runtime_context_packet,
     runtime_context_path,
 )
-from .runtime import RuntimePaths, write_executable_text_atomic, write_json_atomic
+from .runtime import RuntimePaths, write_executable_text_atomic, write_json_atomic, write_text_atomic
 
 
 HOOK_INSTALL_PACKET_KIND = "wbp_user_prompt_submit_hook_install"
 HOOK_READINESS_PACKET_KIND = "wbp_user_prompt_submit_hook_readiness"
 HOOK_PRODUCER_RUN_PACKET_KIND = "wbp_user_prompt_submit_hook_producer_run"
+HOOK_TRUST_REPAIR_PACKET_KIND = "wbp_user_prompt_submit_hook_trust_repair"
 
 HOOK_STATE_READY = "HOOK_READY"
 HOOK_STATE_RAN_SYNTHETIC = "HOOK_RAN_SYNTHETIC"
@@ -50,14 +57,18 @@ HOOK_CONFIG_NOT_INSTALLED = "WBP_USER_PROMPT_SUBMIT_HOOK_CONFIG_NOT_INSTALLED"
 HOOK_CONFIG_DISABLED = "WBP_USER_PROMPT_SUBMIT_HOOK_DISABLED"
 HOOK_CONFIG_MISMATCH = "WBP_USER_PROMPT_SUBMIT_HOOK_CONFIG_MISMATCH"
 HOOK_BLOCKED_TRUST_REQUIRED = "WBP_USER_PROMPT_SUBMIT_HOOK_BLOCKED_TRUST_REQUIRED"
+HOOK_CURRENT_HASH_UNAVAILABLE = "WBP_USER_PROMPT_SUBMIT_HOOK_CURRENT_HASH_UNAVAILABLE"
 HOOK_EVENT_INVALID = "WBP_USER_PROMPT_SUBMIT_HOOK_EVENT_INVALID"
 HOOK_RUNTIME_CONTEXT_INVALID = "WBP_USER_PROMPT_SUBMIT_RUNTIME_CONTEXT_INVALID"
+HOOK_TRUST_REPAIR_BLOCKED = "WBP_USER_PROMPT_SUBMIT_HOOK_TRUST_REPAIR_BLOCKED"
 
 HOOKS_JSON_FILENAME = "hooks.json"
 HOOK_SCRIPT_RELATIVE_PATH = "wbp-hooks/user_prompt_submit_hook.sh"
 HOOK_LEDGER_RELATIVE_PATH = "managed/router-hook/user-prompt-submit-ledger.json"
 HOOK_STATUS_MESSAGE = "WBP routing ledger"
 HOOK_TIMEOUT_SECONDS = 30
+CODEX_APP_SERVER_BIN_ENV = "WBP_CODEX_APP_SERVER_BIN"
+CODEX_BIN_ENV = "WBP_CODEX_BIN"
 
 
 def _sha256_text(value: str) -> str:
@@ -78,6 +89,17 @@ def _canonical_json_digest(value: Mapping[str, Any]) -> str:
 def _hex_sha256(value: object) -> str:
     text = _safe_text(value, limit=80)
     if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return ""
+
+
+def _valid_prefixed_sha256(value: object) -> str:
+    text = _safe_text(value, limit=80)
+    if (
+        text.startswith("sha256:")
+        and len(text) == len("sha256:") + 64
+        and all(char in "0123456789abcdef" for char in text.removeprefix("sha256:"))
+    ):
         return text
     return ""
 
@@ -118,8 +140,256 @@ def hook_definition_digest(command: str) -> str:
     return _canonical_json_digest(build_hook_definition(command))
 
 
+def hook_trust_key_for_paths(paths: RuntimePaths) -> str:
+    return f"{hooks_json_path(paths)}:user_prompt_submit:0:0"
+
+
+def expected_hook_trusted_hash(command: str) -> str:
+    return "sha256:" + hook_definition_digest(command)
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _codex_app_server_binary() -> Path | None:
+    candidates = [
+        os.environ.get(CODEX_APP_SERVER_BIN_ENV, ""),
+        os.environ.get(CODEX_BIN_ENV, ""),
+        str(
+            Path.home()
+            / "Applications"
+            / "Codex WBP Clean.app"
+            / "Contents"
+            / "Resources"
+            / "codex"
+        ),
+        "/Applications/Codex.app/Contents/Resources/codex",
+        shutil.which("codex") or "",
+    ]
+    for raw in candidates:
+        if not raw:
+            continue
+        candidate = Path(raw).expanduser()
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _websocket_send_json(sock: socket.socket, payload: Mapping[str, Any]) -> None:
+    body = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    header = bytearray([0x81])
+    if len(body) < 126:
+        header.append(0x80 | len(body))
+    elif len(body) < 65536:
+        header += bytes([0x80 | 126]) + struct.pack("!H", len(body))
+    else:
+        header += bytes([0x80 | 127]) + struct.pack("!Q", len(body))
+    mask = os.urandom(4)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(body))
+    sock.sendall(bytes(header) + mask + masked)
+
+
+def _websocket_recv_json(sock: socket.socket, *, timeout_seconds: float) -> dict[str, Any]:
+    sock.settimeout(timeout_seconds)
+    first = sock.recv(2)
+    if len(first) != 2:
+        return {}
+    opcode = first[0] & 0x0F
+    if opcode == 0x8:
+        return {}
+    masked = bool(first[1] & 0x80)
+    length = first[1] & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", sock.recv(2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", sock.recv(8))[0]
+    mask = sock.recv(4) if masked else b""
+    body = b""
+    while len(body) < length:
+        chunk = sock.recv(length - len(body))
+        if not chunk:
+            return {}
+        body += chunk
+    if masked:
+        body = bytes(byte ^ mask[index % 4] for index, byte in enumerate(body))
+    try:
+        parsed = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return dict(parsed) if isinstance(parsed, Mapping) else {}
+
+
+def _websocket_upgrade(sock: socket.socket, *, timeout_seconds: float) -> bool:
+    sock.settimeout(timeout_seconds)
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    request = (
+        "GET / HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    ).encode("ascii")
+    sock.sendall(request)
+    response = b""
+    while b"\r\n\r\n" not in response and len(response) < 8192:
+        chunk = sock.recv(1024)
+        if not chunk:
+            break
+        response += chunk
+    return b" 101 " in response or response.startswith(b"HTTP/1.1 101")
+
+
+def _extract_hook_current_hash(
+    response: Mapping[str, Any],
+    *,
+    trust_key: str,
+    command: str,
+) -> tuple[str, str]:
+    result = response.get("result")
+    data = result.get("data") if isinstance(result, Mapping) else None
+    if not isinstance(data, list):
+        return "", ""
+    for entry in data:
+        if not isinstance(entry, Mapping):
+            continue
+        hooks = entry.get("hooks")
+        if not isinstance(hooks, list):
+            continue
+        for hook in hooks:
+            if not isinstance(hook, Mapping):
+                continue
+            if _safe_text(hook.get("key"), limit=2000) != trust_key:
+                continue
+            if _safe_text(hook.get("command"), limit=4000) != command:
+                continue
+            return (
+                _valid_prefixed_sha256(hook.get("currentHash")),
+                _safe_text(hook.get("trustStatus"), limit=32),
+            )
+    return "", ""
+
+
+def _probe_codex_hook_current_hash(
+    *,
+    paths: RuntimePaths,
+    command: str,
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "codex_hook_current_hash_probe_attempted": False,
+        "codex_hook_current_hash_available": False,
+        "codex_hook_current_hash_valid": False,
+        "codex_hook_current_hash": "",
+        "codex_hook_current_hash_source": "",
+        "codex_hook_trust_status_from_app_server": "",
+        "codex_hook_current_hash_error_code": "",
+    }
+
+    codex_bin = _codex_app_server_binary()
+    if codex_bin is None:
+        metadata["codex_hook_current_hash_error_code"] = "codex_app_server_binary_missing"
+        return metadata
+
+    trust_key = hook_trust_key_for_paths(paths)
+    temp_dir = tempfile.mkdtemp(prefix="wbp-hook-", dir="/tmp")
+    socket_name = "hooks.sock"
+    socket_path = Path(temp_dir) / socket_name
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(paths.profile_dir)
+    env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
+    env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
+    env["WBP_CONFIG_TOML"] = str(paths.config_toml)
+    process: subprocess.Popen[bytes] | None = None
+    metadata["codex_hook_current_hash_probe_attempted"] = True
+    try:
+        process = subprocess.Popen(
+            [str(codex_bin), "app-server", "--listen", f"unix://{socket_name}"],
+            cwd=temp_dir,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if socket_path.exists():
+                break
+            if process.poll() is not None:
+                metadata["codex_hook_current_hash_error_code"] = "codex_app_server_exited"
+                return metadata
+            time.sleep(0.05)
+        if not socket_path.exists():
+            metadata["codex_hook_current_hash_error_code"] = "codex_app_server_socket_timeout"
+            return metadata
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(str(socket_path))
+            if not _websocket_upgrade(sock, timeout_seconds=2.0):
+                metadata["codex_hook_current_hash_error_code"] = "websocket_upgrade_failed"
+                return metadata
+            _websocket_send_json(
+                sock,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "clientInfo": {"name": "wbp-hook-current-hash", "version": "0"},
+                        "capabilities": None,
+                    },
+                },
+            )
+            _websocket_send_json(
+                sock,
+                {"jsonrpc": "2.0", "method": "initialized", "params": {}},
+            )
+            _websocket_send_json(
+                sock,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "hooks/list",
+                    "params": {"cwds": [str(_repo_root())]},
+                },
+            )
+            while time.monotonic() < deadline:
+                response = _websocket_recv_json(sock, timeout_seconds=2.0)
+                if response.get("id") != 2:
+                    continue
+                current_hash, trust_status = _extract_hook_current_hash(
+                    response,
+                    trust_key=trust_key,
+                    command=command,
+                )
+                if not current_hash:
+                    metadata["codex_hook_current_hash_error_code"] = "hook_not_listed_by_app_server"
+                    return metadata
+                metadata.update(
+                    {
+                        "codex_hook_current_hash_available": True,
+                        "codex_hook_current_hash_valid": True,
+                        "codex_hook_current_hash": current_hash,
+                        "codex_hook_current_hash_source": "codex_app_server_hooks_list",
+                        "codex_hook_trust_status_from_app_server": trust_status,
+                    }
+                )
+                return metadata
+            metadata["codex_hook_current_hash_error_code"] = "hooks_list_timeout"
+            return metadata
+    except (OSError, subprocess.SubprocessError, TimeoutError, socket.timeout):
+        metadata["codex_hook_current_hash_error_code"] = "codex_app_server_probe_failed"
+        return metadata
+    finally:
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def build_hook_script_text(
@@ -257,12 +527,16 @@ def _codex_hook_trust_state(
     hooks_json: Path,
     hooks_document: Mapping[str, Any],
     command: str,
+    codex_hook_current_hash: str,
 ) -> dict[str, Any]:
+    current_hash = _valid_prefixed_sha256(codex_hook_current_hash)
     metadata: dict[str, Any] = {
         "codex_hook_trust_state_present": False,
         "codex_hook_trust_state_matches_hook_slot": False,
         "codex_hook_trusted_hash_present": False,
         "codex_hook_trusted_hash_valid": False,
+        "codex_hook_trusted_hash_matches_hook_definition": False,
+        "codex_hook_trusted_hash_matches_current_hash": False,
         "codex_hook_trusted_hash_recorded": False,
         "codex_hook_trusted_by_profile_state": False,
     }
@@ -296,17 +570,49 @@ def _codex_hook_trust_state(
             if not isinstance(trust_entry, Mapping):
                 continue
             metadata["codex_hook_trust_state_matches_hook_slot"] = True
+            expected_trusted_hash = "sha256:" + _canonical_json_digest(handler)
             trusted_hash = _safe_text(trust_entry.get("trusted_hash"), limit=80)
-            trusted_hash_valid = (
-                trusted_hash.startswith("sha256:")
-                and len(trusted_hash) == len("sha256:") + 64
-                and all(char in "0123456789abcdef" for char in trusted_hash.removeprefix("sha256:"))
+            trusted_hash_valid = bool(_valid_prefixed_sha256(trusted_hash))
+            trusted_hash_matches = trusted_hash_valid and trusted_hash == expected_trusted_hash
+            current_hash_matches = bool(
+                trusted_hash_valid and current_hash and trusted_hash == current_hash
             )
             metadata["codex_hook_trusted_hash_present"] = bool(trusted_hash)
             metadata["codex_hook_trusted_hash_valid"] = trusted_hash_valid
-            metadata["codex_hook_trusted_by_profile_state"] = trusted_hash_valid
+            metadata["codex_hook_trusted_hash_matches_hook_definition"] = trusted_hash_matches
+            metadata["codex_hook_trusted_hash_matches_current_hash"] = current_hash_matches
+            metadata["codex_hook_trusted_by_profile_state"] = current_hash_matches
             return metadata
     return metadata
+
+
+def _toml_table_header(line: str) -> str:
+    stripped = line.strip()
+    if not stripped.startswith("[") or not stripped.endswith("]"):
+        return ""
+    return stripped
+
+
+def _remove_exact_hook_trust_state_section(config_text: str, *, trust_key: str) -> str:
+    target_header = f"[hooks.state.{json.dumps(trust_key)}]"
+    output: list[str] = []
+    skipping = False
+    for line in config_text.splitlines():
+        header = _toml_table_header(line)
+        if header:
+            skipping = header == target_header
+        if not skipping:
+            output.append(line)
+    return "\n".join(output).rstrip() + ("\n" if output else "")
+
+
+def _append_exact_hook_trust_state(config_text: str, *, trust_key: str, trusted_hash: str) -> str:
+    base = _remove_exact_hook_trust_state_section(config_text, trust_key=trust_key).rstrip()
+    trust_section = (
+        f"[hooks.state.{json.dumps(trust_key)}]\n"
+        f"trusted_hash = {json.dumps(trusted_hash)}\n"
+    )
+    return (base + "\n\n" if base else "") + trust_section
 
 
 def _find_hook_definition(document: Mapping[str, Any], *, command: str) -> dict[str, Any]:
@@ -402,17 +708,51 @@ def build_user_prompt_submit_install_packet(
 def build_user_prompt_submit_readiness_packet(
     *,
     paths: RuntimePaths,
+    codex_hook_current_hash: str = "",
+    probe_codex_app_server: bool = False,
 ) -> dict[str, Any]:
     command = hook_command_for_paths(paths)
     expected_digest = hook_definition_digest(command)
     document, hooks_metadata = _read_hooks_json(hooks_json_path(paths))
     hooks_disabled, config_metadata = _features_hooks_disabled(paths.config_toml)
     hook_definition = _find_hook_definition(document, command=command)
+    current_hash_metadata = (
+        {
+            "codex_hook_current_hash_probe_attempted": False,
+            "codex_hook_current_hash_available": bool(
+                _valid_prefixed_sha256(codex_hook_current_hash)
+            ),
+            "codex_hook_current_hash_valid": bool(
+                _valid_prefixed_sha256(codex_hook_current_hash)
+            ),
+            "codex_hook_current_hash": _valid_prefixed_sha256(
+                codex_hook_current_hash
+            ),
+            "codex_hook_current_hash_source": "argument",
+            "codex_hook_trust_status_from_app_server": "",
+            "codex_hook_current_hash_error_code": "",
+        }
+        if _valid_prefixed_sha256(codex_hook_current_hash)
+        else _probe_codex_hook_current_hash(paths=paths, command=command)
+        if probe_codex_app_server
+        else {
+            "codex_hook_current_hash_probe_attempted": False,
+            "codex_hook_current_hash_available": False,
+            "codex_hook_current_hash_valid": False,
+            "codex_hook_current_hash": "",
+            "codex_hook_current_hash_source": "",
+            "codex_hook_trust_status_from_app_server": "",
+            "codex_hook_current_hash_error_code": "codex_current_hash_not_requested",
+        }
+    )
     trust_metadata = _codex_hook_trust_state(
         config_toml=paths.config_toml,
         hooks_json=hooks_json_path(paths),
         hooks_document=document,
         command=command,
+        codex_hook_current_hash=str(
+            current_hash_metadata.get("codex_hook_current_hash", "")
+        ),
     )
     loaded_digest = (
         _canonical_json_digest(hook_definition) if hook_definition else ""
@@ -439,6 +779,9 @@ def build_user_prompt_submit_readiness_packet(
     elif not script_executable:
         blocking_reasons.append("hook_script_not_executable")
     hook_trusted = trust_metadata["codex_hook_trusted_by_profile_state"] is True
+    current_hash_available = current_hash_metadata["codex_hook_current_hash_available"] is True
+    if not blocking_reasons and not current_hash_available:
+        blocking_reasons.append("codex_hook_current_hash_unavailable")
     if not blocking_reasons and not hook_trusted:
         blocking_reasons.append("hook_trust_review_required")
 
@@ -448,6 +791,8 @@ def build_user_prompt_submit_readiness_packet(
         machine_error_code = HOOK_CONFIG_NOT_INSTALLED
     elif not digest_bound or not script_executable:
         machine_error_code = HOOK_CONFIG_MISMATCH
+    elif not current_hash_available:
+        machine_error_code = HOOK_CURRENT_HASH_UNAVAILABLE
     elif hook_trusted:
         machine_error_code = HOOK_CONFIG_OK
     else:
@@ -457,6 +802,7 @@ def build_user_prompt_submit_readiness_packet(
     extra = {
         **hooks_metadata,
         **config_metadata,
+        **current_hash_metadata,
         **trust_metadata,
         "schema_version": 1,
         "packet_kind": HOOK_READINESS_PACKET_KIND,
@@ -471,10 +817,14 @@ def build_user_prompt_submit_readiness_packet(
         "hook_config_digest_bound": digest_bound,
         "hook_trust_requirement_declared": True,
         "hook_trusted": hook_trusted,
-        "hook_requires_manual_review": bool(hook_config_present and not hook_trusted),
+        "hook_requires_manual_review": bool(
+            hook_config_present and current_hash_available and not hook_trusted
+        ),
         "hook_readiness_state": (
             HOOK_STATE_READY_TRUSTED
             if ok
+            else "HOOK_BLOCKED_CURRENT_HASH_UNAVAILABLE"
+            if machine_error_code == HOOK_CURRENT_HASH_UNAVAILABLE
             else HOOK_STATE_BLOCKED_TRUST_REQUIRED
             if machine_error_code == HOOK_BLOCKED_TRUST_REQUIRED
             else "HOOK_NOT_READY"
@@ -503,6 +853,191 @@ def build_user_prompt_submit_readiness_packet(
         operator_action="none" if ok else "user_action",
         changed_files=[],
         effect=EFFECT_PROBE,
+        extra=extra,
+    )
+
+
+def build_user_prompt_submit_trust_repair_packet(
+    *,
+    paths: RuntimePaths,
+    apply: bool = False,
+    codex_hook_current_hash: str = "",
+    probe_codex_app_server: bool = False,
+) -> dict[str, Any]:
+    command = hook_command_for_paths(paths)
+    expected_digest = hook_definition_digest(command)
+    current_hash_metadata = (
+        {
+            "codex_hook_current_hash_probe_attempted": False,
+            "codex_hook_current_hash_available": bool(
+                _valid_prefixed_sha256(codex_hook_current_hash)
+            ),
+            "codex_hook_current_hash_valid": bool(
+                _valid_prefixed_sha256(codex_hook_current_hash)
+            ),
+            "codex_hook_current_hash": _valid_prefixed_sha256(
+                codex_hook_current_hash
+            ),
+            "codex_hook_current_hash_source": "argument",
+            "codex_hook_trust_status_from_app_server": "",
+            "codex_hook_current_hash_error_code": "",
+        }
+        if _valid_prefixed_sha256(codex_hook_current_hash)
+        else _probe_codex_hook_current_hash(paths=paths, command=command)
+        if probe_codex_app_server
+        else {
+            "codex_hook_current_hash_probe_attempted": False,
+            "codex_hook_current_hash_available": False,
+            "codex_hook_current_hash_valid": False,
+            "codex_hook_current_hash": "",
+            "codex_hook_current_hash_source": "",
+            "codex_hook_trust_status_from_app_server": "",
+            "codex_hook_current_hash_error_code": "codex_current_hash_not_requested",
+        }
+    )
+    expected_trusted_hash = str(current_hash_metadata.get("codex_hook_current_hash", ""))
+    document, hooks_metadata = _read_hooks_json(hooks_json_path(paths))
+    hook_definition = _find_hook_definition(document, command=command)
+    loaded_digest = _canonical_json_digest(hook_definition) if hook_definition else ""
+    script = hook_script_path(paths)
+    script_present = script.exists()
+    script_executable = bool(script_present and os.access(script, os.X_OK))
+    trust_key = hook_trust_key_for_paths(paths)
+
+    precondition_failures: list[str] = []
+    if not hooks_metadata["hooks_json_present"]:
+        precondition_failures.append("hooks_json_missing")
+    elif not hooks_metadata["hooks_json_valid_json"]:
+        precondition_failures.append("hooks_json_invalid")
+    if not hook_definition:
+        precondition_failures.append("user_prompt_submit_hook_definition_missing")
+    if hook_definition and loaded_digest != expected_digest:
+        precondition_failures.append("hook_config_digest_mismatch")
+    if not script_present:
+        precondition_failures.append("hook_script_missing")
+    elif not script_executable:
+        precondition_failures.append("hook_script_not_executable")
+    if not expected_trusted_hash:
+        precondition_failures.append("codex_hook_current_hash_unavailable")
+
+    before_trust = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+        codex_hook_current_hash=expected_trusted_hash,
+    )
+    already_trusted = before_trust["codex_hook_trusted_by_profile_state"] is True
+    changed_files: list[str] = []
+    repair_error = ""
+    state_written = False
+    if apply and not precondition_failures and not already_trusted:
+        try:
+            existing_text = (
+                paths.config_toml.read_text(encoding="utf-8")
+                if paths.config_toml.exists()
+                else ""
+            )
+            repaired_text = _append_exact_hook_trust_state(
+                existing_text,
+                trust_key=trust_key,
+                trusted_hash=expected_trusted_hash,
+            )
+            write_text_atomic(paths.config_toml, repaired_text)
+            changed_files = [str(paths.config_toml)]
+            state_written = True
+        except OSError:
+            repair_error = "config_toml_write_failed"
+
+    after_trust = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+        codex_hook_current_hash=expected_trusted_hash,
+    )
+    repaired_or_already = after_trust["codex_hook_trusted_by_profile_state"] is True
+    blocking_reasons = sorted(
+        set(
+            precondition_failures
+            + ([repair_error] if repair_error else [])
+            + ([] if (not apply or repaired_or_already) else ["hook_trust_repair_not_applied"])
+        )
+    )
+    ok = not blocking_reasons
+    extra = {
+        **hooks_metadata,
+        **current_hash_metadata,
+        "schema_version": 1,
+        "packet_kind": HOOK_TRUST_REPAIR_PACKET_KIND,
+        "hook_event_name": "UserPromptSubmit",
+        "hook_trust_repair_apply": bool(apply),
+        "hook_trust_repair_planned": True,
+        "hook_config_present": bool(hooks_metadata["hooks_json_present"] and hook_definition),
+        "hook_command_path_resolves": script_present,
+        "hook_script_executable": script_executable,
+        "expected_hook_definition_sha256": expected_digest,
+        "loaded_hook_definition_sha256": loaded_digest,
+        "hook_config_digest_bound": bool(loaded_digest and loaded_digest == expected_digest),
+        "expected_hook_trusted_hash_sha256": expected_trusted_hash.removeprefix("sha256:"),
+        "codex_hook_trust_state_present_before": before_trust["codex_hook_trust_state_present"],
+        "codex_hook_trust_state_matches_hook_slot_before": before_trust[
+            "codex_hook_trust_state_matches_hook_slot"
+        ],
+        "codex_hook_trusted_hash_valid_before": before_trust[
+            "codex_hook_trusted_hash_valid"
+        ],
+        "codex_hook_trusted_hash_matches_hook_definition_before": before_trust[
+            "codex_hook_trusted_hash_matches_hook_definition"
+        ],
+        "codex_hook_trusted_hash_matches_current_hash_before": before_trust[
+            "codex_hook_trusted_hash_matches_current_hash"
+        ],
+        "codex_hook_trusted_before_repair": already_trusted,
+        "codex_hook_trust_state_present_after": after_trust["codex_hook_trust_state_present"],
+        "codex_hook_trust_state_matches_hook_slot_after": after_trust[
+            "codex_hook_trust_state_matches_hook_slot"
+        ],
+        "codex_hook_trusted_hash_valid_after": after_trust[
+            "codex_hook_trusted_hash_valid"
+        ],
+        "codex_hook_trusted_hash_matches_hook_definition_after": after_trust[
+            "codex_hook_trusted_hash_matches_hook_definition"
+        ],
+        "codex_hook_trusted_hash_matches_current_hash_after": after_trust[
+            "codex_hook_trusted_hash_matches_current_hash"
+        ],
+        "codex_hook_trusted_after_repair": repaired_or_already,
+        "hook_trusted": repaired_or_already,
+        "state_written": state_written,
+        "changed_files": changed_files,
+        "blocking_reasons": blocking_reasons,
+        "hook_config_path_recorded": False,
+        "hook_script_path_recorded": False,
+        "ledger_file_path_recorded": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+        "api_lane_called": False,
+        "dispatch_attempted": False,
+        "handoff_file_written": False,
+        "product_ready": False,
+    }
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "WBP repaired the UserPromptSubmit hook trust state."
+            if ok and apply
+            else "WBP prepared a UserPromptSubmit hook trust repair."
+            if ok
+            else "WBP blocked UserPromptSubmit hook trust repair."
+        ),
+        machine_error_code=HOOK_CONFIG_OK if ok else HOOK_TRUST_REPAIR_BLOCKED,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=changed_files,
+        effect=EFFECT_REPAIR if apply else EFFECT_PROBE,
         extra=extra,
     )
 

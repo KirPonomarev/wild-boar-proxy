@@ -93,6 +93,7 @@ from .real_custom_app_submit_ledger_proof import (
 from .user_prompt_submit_hook_producer import (
     build_user_prompt_submit_install_packet,
     build_user_prompt_submit_readiness_packet,
+    build_user_prompt_submit_trust_repair_packet,
 )
 from .runtime_health import run_healthcheck_probe
 from .runtime_repair import run_healthcheck_repair
@@ -629,6 +630,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_user_prompt_submit_trust_repair = router_hook_subparsers.add_parser(
+        "user-prompt-submit-trust-repair"
+    )
+    trust_repair_mode = router_hook_user_prompt_submit_trust_repair.add_mutually_exclusive_group(
+        required=True
+    )
+    trust_repair_mode.add_argument("--dry-run", action="store_true")
+    trust_repair_mode.add_argument("--apply", action="store_true")
+    router_hook_user_prompt_submit_trust_repair.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -948,6 +962,11 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "user-prompt-submit-readiness",
     }:
         return EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "user-prompt-submit-trust-repair"
+    ):
+        return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_PROBE
     if (
         command == "router-hook"
         and getattr(args, "router_hook_command", None) == "dispatch-admission"
@@ -1484,7 +1503,23 @@ def main(argv: list[str] | None = None) -> int:
             args.command == "router-hook"
             and args.router_hook_command == "user-prompt-submit-readiness"
         ):
-            return emit_json(build_user_prompt_submit_readiness_packet(paths=paths))
+            return emit_json(
+                build_user_prompt_submit_readiness_packet(
+                    paths=paths,
+                    probe_codex_app_server=True,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-trust-repair"
+        ):
+            return emit_json(
+                build_user_prompt_submit_trust_repair_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                    probe_codex_app_server=True,
+                )
+            )
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":

@@ -23,6 +23,7 @@ from wild_boar_proxy.runtime import RuntimePaths
 ROOT = Path(__file__).resolve().parents[1]
 ROUTE_ID = "wbp-deepseek-chat"
 PROMPT = "Codex, дай задачу DIP: сделай hook ledger."
+TEST_CODEX_CURRENT_HASH = "sha256:" + ("1" * 64)
 
 
 def _runtime_context(*, allowed_routes: list[str] | None = None) -> dict[str, object]:
@@ -103,6 +104,174 @@ def _write_context(paths: RuntimePaths) -> None:
         json.dumps(_runtime_context()) + "\n",
         encoding="utf-8",
     )
+
+
+def _write_fake_codex_app_server(paths: RuntimePaths) -> Path:
+    paths.profile_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = paths.profile_dir / "fake-codex-app-server.py"
+    fake_bin.write_text(
+        """#!/usr/bin/env python3
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import struct
+import sys
+
+CURRENT_HASH = "sha256:" + "1" * 64
+
+
+def recv_exact(conn, length):
+    data = b""
+    while len(data) < length:
+        chunk = conn.recv(length - len(data))
+        if not chunk:
+            raise SystemExit(0)
+        data += chunk
+    return data
+
+
+def recv_json(conn):
+    first = recv_exact(conn, 2)
+    length = first[1] & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", recv_exact(conn, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", recv_exact(conn, 8))[0]
+    mask = recv_exact(conn, 4) if first[1] & 0x80 else b""
+    body = recv_exact(conn, length)
+    if mask:
+        body = bytes(byte ^ mask[index % 4] for index, byte in enumerate(body))
+    return json.loads(body.decode("utf-8"))
+
+
+def send_json(conn, payload):
+    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    if len(body) < 126:
+        header = bytes([0x81, len(body)])
+    elif len(body) < 65536:
+        header = bytes([0x81, 126]) + struct.pack("!H", len(body))
+    else:
+        header = bytes([0x81, 127]) + struct.pack("!Q", len(body))
+    conn.sendall(header + body)
+
+
+def hook_command(profile_dir):
+    hooks_path = profile_dir / "hooks.json"
+    document = json.loads(hooks_path.read_text(encoding="utf-8"))
+    groups = document.get("hooks", {}).get("UserPromptSubmit", [])
+    return groups[0]["hooks"][0]["command"]
+
+
+def trust_status(profile_dir):
+    config = profile_dir / "config.toml"
+    if config.exists() and CURRENT_HASH in config.read_text(encoding="utf-8"):
+        return "trusted"
+    return "untrusted"
+
+
+def main():
+    if len(sys.argv) < 4 or sys.argv[1:3] != ["app-server", "--listen"]:
+        raise SystemExit(64)
+    listen = sys.argv[3]
+    if not listen.startswith("unix://"):
+        raise SystemExit(64)
+    socket_name = listen.removeprefix("unix://")
+    socket_path = Path(socket_name)
+    if not socket_path.is_absolute():
+        socket_path = Path.cwd() / socket_path
+    try:
+        socket_path.unlink()
+    except FileNotFoundError:
+        pass
+    profile_dir = Path(os.environ["CODEX_HOME"])
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+        server.bind(str(socket_path))
+        server.listen(1)
+        conn, _ = server.accept()
+        with conn:
+            request = b""
+            while b"\\r\\n\\r\\n" not in request:
+                chunk = conn.recv(1024)
+                if not chunk:
+                    return
+                request += chunk
+            key = ""
+            for raw_line in request.decode("ascii", "ignore").split("\\r\\n"):
+                if raw_line.lower().startswith("sec-websocket-key:"):
+                    key = raw_line.split(":", 1)[1].strip()
+            accept = base64.b64encode(
+                hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+            ).decode("ascii")
+            conn.sendall(
+                (
+                    "HTTP/1.1 101 Switching Protocols\\r\\n"
+                    "Upgrade: websocket\\r\\n"
+                    "Connection: Upgrade\\r\\n"
+                    f"Sec-WebSocket-Accept: {accept}\\r\\n\\r\\n"
+                ).encode("ascii")
+            )
+            while True:
+                try:
+                    message = recv_json(conn)
+                except Exception:
+                    return
+                method = message.get("method")
+                msg_id = message.get("id")
+                if msg_id is None:
+                    continue
+                if method == "initialize":
+                    send_json(conn, {"jsonrpc": "2.0", "id": msg_id, "result": {"capabilities": {}}})
+                elif method == "hooks/list":
+                    hooks_path = profile_dir / "hooks.json"
+                    command = hook_command(profile_dir)
+                    key = f"{hooks_path}:user_prompt_submit:0:0"
+                    send_json(
+                        conn,
+                        {
+                            "jsonrpc": "2.0",
+                            "id": msg_id,
+                            "result": {
+                                "data": [
+                                    {
+                                        "cwd": os.getcwd(),
+                                        "errors": [],
+                                        "warnings": [],
+                                        "hooks": [
+                                            {
+                                                "key": key,
+                                                "command": command,
+                                                "currentHash": CURRENT_HASH,
+                                                "trustStatus": trust_status(profile_dir),
+                                            }
+                                        ],
+                                    }
+                                ]
+                            },
+                        },
+                    )
+                else:
+                    send_json(conn, {"jsonrpc": "2.0", "id": msg_id, "result": {}})
+
+
+if __name__ == "__main__":
+    main()
+""",
+        encoding="utf-8",
+    )
+    fake_bin.chmod(0o755)
+    return fake_bin
+
+
+def _env_with_fake_codex_app_server(paths: RuntimePaths) -> dict[str, str]:
+    env = os.environ.copy()
+    env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
+    env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
+    env["WBP_CONFIG_TOML"] = str(paths.config_toml)
+    env[producer.CODEX_APP_SERVER_BIN_ENV] = str(_write_fake_codex_app_server(paths))
+    return env
 
 
 def _event(*, prompt: str = PROMPT, turn_id: str = "turn-hook-1") -> dict[str, object]:
@@ -191,7 +360,10 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             paths = _paths(Path(temp_dir))
             _write_context(paths)
             producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
-            packet = producer.build_user_prompt_submit_readiness_packet(paths=paths)
+            packet = producer.build_user_prompt_submit_readiness_packet(
+                paths=paths,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
 
             self.assertEqual(packet["status"], "error")
             self.assertEqual(
@@ -210,14 +382,163 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertFalse(packet["product_ready"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_readiness_fail_closes_when_current_hook_hash_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+
+            packet = producer.build_user_prompt_submit_readiness_packet(paths=paths)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                producer.HOOK_CURRENT_HASH_UNAVAILABLE,
+            )
+            self.assertFalse(packet["codex_hook_current_hash_available"])
+            self.assertFalse(packet["hook_trusted"])
+            self.assertIn(
+                "codex_hook_current_hash_unavailable",
+                packet["blocking_reasons"],
+            )
+            self.assertFalse(packet["product_ready"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_readiness_rejects_valid_sha_that_does_not_match_current_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            trust_key = producer.hook_trust_key_for_paths(paths)
+            paths.config_toml.write_text(
+                paths.config_toml.read_text(encoding="utf-8")
+                + "\n[hooks.state."
+                + json.dumps(trust_key)
+                + "]\ntrusted_hash = \"sha256:"
+                + ("0" * 64)
+                + "\"\n",
+                encoding="utf-8",
+            )
+
+            packet = producer.build_user_prompt_submit_readiness_packet(
+                paths=paths,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                producer.HOOK_BLOCKED_TRUST_REQUIRED,
+            )
+            self.assertTrue(packet["codex_hook_trusted_hash_present"])
+            self.assertTrue(packet["codex_hook_trusted_hash_valid"])
+            self.assertFalse(packet["codex_hook_trusted_hash_matches_hook_definition"])
+            self.assertFalse(packet["codex_hook_trusted_hash_matches_current_hash"])
+            self.assertFalse(packet["codex_hook_trusted_by_profile_state"])
+            self.assertFalse(packet["hook_trusted"])
+            self.assertIn("hook_trust_review_required", packet["blocking_reasons"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_trust_repair_apply_writes_current_hook_hash_and_readiness_turns_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+
+            repair = producer.build_user_prompt_submit_trust_repair_packet(
+                paths=paths,
+                apply=True,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
+            readiness = producer.build_user_prompt_submit_readiness_packet(
+                paths=paths,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
+
+            self.assertEqual(repair["status"], "ok")
+            self.assertEqual(repair["effect"], "repair")
+            self.assertTrue(repair["state_written"])
+            self.assertEqual(repair["changed_files"], [str(paths.config_toml)])
+            self.assertTrue(repair["codex_hook_trusted_after_repair"])
+            self.assertFalse(
+                repair["codex_hook_trusted_hash_matches_hook_definition_after"]
+            )
+            self.assertTrue(repair["codex_hook_trusted_hash_matches_current_hash_after"])
+            self.assertFalse(repair["api_lane_called"])
+            self.assertFalse(repair["product_ready"])
+            self.assertEqual(readiness["status"], "ok")
+            self.assertTrue(readiness["hook_trusted"])
+            self.assertFalse(readiness["codex_hook_trusted_hash_matches_hook_definition"])
+            self.assertTrue(readiness["codex_hook_trusted_hash_matches_current_hash"])
+            self.assertEqual(packets.inspect_command_packet_semantics(repair), [])
+            self.assertEqual(packets.inspect_command_packet_semantics(readiness), [])
+
+    def test_trust_repair_blocks_when_current_hook_hash_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+
+            repair = producer.build_user_prompt_submit_trust_repair_packet(
+                paths=paths,
+                apply=True,
+            )
+
+            self.assertEqual(repair["status"], "error")
+            self.assertEqual(
+                repair["machine_error_code"],
+                producer.HOOK_TRUST_REPAIR_BLOCKED,
+            )
+            self.assertFalse(repair["state_written"])
+            self.assertEqual(repair["changed_files"], [])
+            self.assertIn(
+                "codex_hook_current_hash_unavailable",
+                repair["blocking_reasons"],
+            )
+            self.assertFalse(repair["hook_trusted"])
+            self.assertFalse(repair["product_ready"])
+            self.assertEqual(packets.inspect_command_packet_semantics(repair), [])
+
+    def test_cli_trust_repair_apply_emits_strict_json_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            env = _env_with_fake_codex_app_server(paths)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy",
+                    "router-hook",
+                    "user-prompt-submit-trust-repair",
+                    "--apply",
+                    "--json",
+                ],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            packet = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                result.stdout.strip(),
+                json.dumps(packet, ensure_ascii=True),
+            )
+            self.assertEqual(packet["packet_kind"], producer.HOOK_TRUST_REPAIR_PACKET_KIND)
+            self.assertEqual(packet["effect"], "repair")
+            self.assertTrue(packet["codex_hook_trusted_after_repair"])
+            self.assertTrue(packet["codex_hook_trusted_hash_matches_current_hash_after"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_cli_install_apply_and_readiness_emit_strict_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
             _write_context(paths)
-            env = os.environ.copy()
-            env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
-            env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
-            env["WBP_CONFIG_TOML"] = str(paths.config_toml)
+            env = _env_with_fake_codex_app_server(paths)
             install = subprocess.run(
                 [
                     sys.executable,
@@ -278,7 +599,10 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
-            packet = producer.build_user_prompt_submit_readiness_packet(paths=paths)
+            packet = producer.build_user_prompt_submit_readiness_packet(
+                paths=paths,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
 
             self.assertEqual(packet["status"], "error")
             self.assertEqual(packet["machine_error_code"], producer.HOOK_CONFIG_DISABLED)
@@ -298,7 +622,10 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                 json.dumps(document),
                 encoding="utf-8",
             )
-            packet = producer.build_user_prompt_submit_readiness_packet(paths=paths)
+            packet = producer.build_user_prompt_submit_readiness_packet(
+                paths=paths,
+                codex_hook_current_hash=TEST_CODEX_CURRENT_HASH,
+            )
 
             self.assertEqual(packet["status"], "error")
             self.assertEqual(packet["machine_error_code"], producer.HOOK_CONFIG_MISMATCH)
