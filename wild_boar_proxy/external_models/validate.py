@@ -146,9 +146,10 @@ def _bridge_live_format_data(
     latency_ms: int | None,
     bridge_kind: str,
     request_count: int,
+    request_id: str = "",
 ) -> dict[str, Any]:
     is_file_bridge = "file_bridge" in bridge_kind
-    return {
+    data = {
         "check_kind": "api_only_live_route_format",
         "network_dependent": True,
         "verification_scope": "route_provider_only_no_write",
@@ -184,6 +185,11 @@ def _bridge_live_format_data(
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
     }
+    if is_file_bridge and request_id:
+        data["file_bridge_response_request_id_sha256"] = hashlib.sha256(
+            request_id.encode("utf-8")
+        ).hexdigest()
+    return data
 
 
 def _runtime_context_loopback_bridge_data(
@@ -308,6 +314,7 @@ def _runtime_context_file_bridge_data(
         latency_ms=int((time.monotonic() - started_at) * 1000),
         bridge_kind=str(bridge.get("bridge_kind") or "file_bridge"),
         request_count=1,
+        request_id=request_id,
     )
 
 

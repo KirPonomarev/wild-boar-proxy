@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import socket
@@ -1380,6 +1381,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         response_dir = self.root / "file-bridge" / "responses"
         request_dir.mkdir(parents=True)
         response_dir.mkdir(parents=True)
+        observed_request_ids: list[str] = []
 
         def responder() -> None:
             deadline = time.monotonic() + 5
@@ -1387,6 +1389,7 @@ class ExternalModelsCliTests(unittest.TestCase):
                 requests = sorted(request_dir.glob("*.json"))
                 if requests:
                     request_payload = json.loads(requests[0].read_text(encoding="utf-8"))
+                    observed_request_ids.append(str(request_payload["request_id"]))
                     response_path = response_dir / f"{request_payload['request_id']}.json"
                     response_path.write_text(
                         json.dumps(
@@ -1469,6 +1472,12 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertTrue(payload["data"]["runtime_context_file_bridge_used"])
         self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
         self.assertEqual(payload["data"]["bridge_kind"], "server_owned_file_bridge")
+        self.assertEqual(len(observed_request_ids), 1)
+        self.assertEqual(
+            payload["data"]["file_bridge_response_request_id_sha256"],
+            hashlib.sha256(observed_request_ids[0].encode("utf-8")).hexdigest(),
+        )
+        self.assertNotIn("file_bridge_response_request_id", payload["data"])
         self.assertFalse(payload["data"]["fallback_used"])
         self.assertFalse(payload["data"]["state_written"])
         self.assertFalse(payload["data"]["evidence_written"])

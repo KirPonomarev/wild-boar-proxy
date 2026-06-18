@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import textwrap
 import unittest
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from wild_boar_proxy import custom_codex_admission as admission
@@ -27,8 +32,83 @@ PROMPT = "Codex, дай задачу DIP: верни доказанный API о
 EXPECTED_TEXT = "WBP_DIP_DISPATCH_OK"
 
 
-def _runtime_context(*, route_id: str = ROUTE_ID) -> dict[str, object]:
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+        handle.bind(("127.0.0.1", 0))
+        return int(handle.getsockname()[1])
+
+
+@contextmanager
+def _mocked_provider(*, expected_text: str = EXPECTED_TEXT) -> tuple[str, ThreadingHTTPServer]:
+    class Handler(BaseHTTPRequestHandler):
+        def _send_json(self, status_code: int, payload: dict[str, object]) -> None:
+            raw = json.dumps(payload).encode("utf-8")
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_POST(self) -> None:  # noqa: N802
+            self.server.request_count += 1  # type: ignore[attr-defined]
+            if self.path != "/v1/chat/completions":
+                self._send_json(404, {"error": "not_found"})
+                return
+            if self.headers.get("Authorization") != "Bearer test-key":
+                self._send_json(401, {"error": "auth_failed"})
+                return
+            self._send_json(
+                200,
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": expected_text},
+                        }
+                    ],
+                },
+            )
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", _free_port()), Handler)
+    server.request_count = 0  # type: ignore[attr-defined]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (f"http://127.0.0.1:{server.server_port}/v1", server)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def _sample_route(*, base_url: str, route_id: str = ROUTE_ID) -> dict[str, object]:
     return {
+        "schema_version": 1,
+        "route_id": route_id,
+        "display_name": "DeepSeek test route",
+        "provider": "openrouter",
+        "base_url": base_url,
+        "endpoint_path": "/chat/completions",
+        "upstream_model": "deepseek-test",
+        "compatibility": "openai_chat_completions",
+        "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+        "cost_class": "paid_or_free_limited",
+        "lane_role": "candidate",
+        "fallback_eligible": False,
+        "enabled": True,
+    }
+
+
+def _runtime_context(
+    *,
+    route_id: str = ROUTE_ID,
+    file_bridge: dict[str, object] | None = None,
+    allowed_route_ids: list[str] | None = None,
+) -> dict[str, object]:
+    context: dict[str, object] = {
         "schema_version": 1,
         "packet_kind": "codex_custom_native_agent_runtime_context",
         "context_truth_source": "server_launch_selection_packet",
@@ -64,7 +144,9 @@ def _runtime_context(*, route_id: str = ROUTE_ID) -> dict[str, object]:
         },
         "agent_id_to_route": {"dip": route_id},
         "agent_id_to_model": {"codex": "gpt-5.4"},
-        "allowed_api_route_ids": [route_id],
+        "allowed_api_route_ids": (
+            [route_id] if allowed_route_ids is None else allowed_route_ids
+        ),
         "deepseek_live_format_check_cli_command": [
             sys.executable,
             "-m",
@@ -79,6 +161,9 @@ def _runtime_context(*, route_id: str = ROUTE_ID) -> dict[str, object]:
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
     }
+    if file_bridge is not None:
+        context["deepseek_live_format_check_file_bridge"] = file_bridge
+    return context
 
 
 def _paths(root: Path) -> RuntimePaths:
@@ -108,18 +193,70 @@ def _paths(root: Path) -> RuntimePaths:
     )
 
 
-def _write_profile(paths: RuntimePaths) -> None:
+def _write_profile(
+    paths: RuntimePaths,
+    *,
+    runtime_context: dict[str, object] | None = None,
+) -> None:
     paths.profile_dir.mkdir(parents=True, exist_ok=True)
     paths.managed_dir.mkdir(parents=True, exist_ok=True)
     paths.config_toml.write_text('model = "gpt-5.4"\n', encoding="utf-8")
     paths.runtime_effective_mode_file.write_text("stable\n", encoding="utf-8")
     paths.managed_config_file.write_text("mode: stable\n", encoding="utf-8")
     (paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME).write_text(
-        json.dumps(_runtime_context()) + "\n",
+        json.dumps(runtime_context or _runtime_context()) + "\n",
         encoding="utf-8",
     )
     install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
     assert install["status"] == "ok"
+
+
+def _write_external_models_registry(paths: RuntimePaths, *, base_url: str) -> Path:
+    external_root = paths.managed_dir / "external-models"
+    external_root.mkdir(parents=True, exist_ok=True)
+    (external_root / "routes.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "routes": [_sample_route(base_url=base_url)],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    secrets_file = external_root / "secrets.env"
+    secrets_file.write_text("OPENROUTER_API_KEY=test-key\n", encoding="utf-8")
+    os.chmod(secrets_file, 0o600)
+    return external_root
+
+
+def _file_bridge_packet(root: Path, *, route_id: str = ROUTE_ID) -> dict[str, object]:
+    bridge_root = root / "file-bridge"
+    return {
+        "enabled": True,
+        "bridge_kind": "server_owned_file_bridge",
+        "network_boundary": "custom_sandbox_filesystem_to_wbp_server_then_provider",
+        "request_dir": str(bridge_root / "requests"),
+        "response_dir": str(bridge_root / "responses"),
+        "processed_dir": str(bridge_root / "processed"),
+        "request_extension": ".json",
+        "response_extension": ".json",
+        "model": route_id,
+        "poll_interval_seconds": 0.02,
+        "timeout_seconds": 5,
+        "request_json_template": {
+            "schema_version": 1,
+            "request_id": "<unique-id>",
+            "model": route_id,
+            "input": "Answer exactly one line: <expected_text>",
+            "stream": False,
+            "max_output_tokens": 32,
+            "temperature": 0,
+        },
+        "response_text_field": "output_text",
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
 
 
 def _write_fake_codex(path: Path) -> Path:
@@ -226,7 +363,38 @@ def _write_fake_codex(path: Path) -> Path:
             if os.environ.get("WBP_FAKE_MUTATE_RUNTIME") == "1":
                 Path(os.environ["WBP_RUNTIME_EFFECTIVE_MODE_FILE"]).write_text("mutated\\n")
 
+            cli_parts = list(context["deepseek_live_format_check_cli_command"])
+            live_parts = (
+                cli_parts[:-1]
+                + [
+                    "--prompt",
+                    "Answer exactly one line: " + expected,
+                    "--expected-text",
+                    expected,
+                ]
+                + [cli_parts[-1]]
+            )
             provider_packet = _provider_packet(route_id, expected)
+            provider_stdout = json.dumps(provider_packet)
+            if mode == "managed_file_bridge":
+                provider_result = subprocess.run(
+                    live_parts,
+                    cwd=os.getcwd(),
+                    env=os.environ.copy(),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                provider_stdout = provider_result.stdout.strip()
+                try:
+                    provider_packet = json.loads(provider_stdout)
+                except json.JSONDecodeError:
+                    provider_packet = {
+                        "status": "error",
+                        "machine_error_code": "FAKE_CODEX_PROVIDER_PACKET_INVALID",
+                        "changed_files": [],
+                        "data": {},
+                    }
             ledger = json.loads(
                 (profile / producer.HOOK_LEDGER_RELATIVE_PATH).read_text()
             )
@@ -254,17 +422,6 @@ def _write_fake_codex(path: Path) -> Path:
                 live_provider_source_kind="file_backed_external_models_live_format_check",
             )
             structured = working_flow._safe_working_flow_delivery_payload(source)
-            cli_parts = list(context["deepseek_live_format_check_cli_command"])
-            live_parts = (
-                cli_parts[:-1]
-                + [
-                    "--prompt",
-                    "Answer exactly one line: " + expected,
-                    "--expected-text",
-                    expected,
-                ]
-                + [cli_parts[-1]]
-            )
             if mode == "echo_provider":
                 command = "/bin/echo " + shlex.quote(expected)
             else:
@@ -284,7 +441,7 @@ def _write_fake_codex(path: Path) -> Path:
                         "id": "item-live-format-check",
                         "type": "command_execution",
                         "command": command,
-                        "aggregated_output": json.dumps(provider_packet),
+                        "aggregated_output": provider_stdout,
                         "exit_code": 0,
                         "status": "completed",
                     },
@@ -506,6 +663,207 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_managed_file_bridge_admission_proves_workspace_write_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            context = _runtime_context(file_bridge=_file_bridge_packet(root))
+            _write_profile(paths, runtime_context=context)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            with _mocked_provider(expected_text=EXPECTED_TEXT) as (base_url, provider):
+                _write_external_models_registry(paths, base_url=base_url)
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        "PYTHONPATH": str(ROOT),
+                        "WBP_FAKE_CODEX_MODE": "managed_file_bridge",
+                        "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                    },
+                ):
+                    packet = admission.run_custom_codex_admission_command(
+                        paths=paths,
+                        prompt_text=PROMPT,
+                        codex_bin=str(fake_codex),
+                        proof_dir=str(root / "proof"),
+                        codex_cwd=str(ROOT),
+                        expected_text=EXPECTED_TEXT,
+                        sandbox="workspace-write",
+                        timeout_seconds=20,
+                    )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["admission_proven"])
+        self.assertTrue(packet["custom_codex_flow_proven"])
+        self.assertTrue(packet["managed_file_bridge_configured"])
+        self.assertTrue(packet["managed_file_bridge_started"])
+        self.assertTrue(packet["managed_file_bridge_stopped"])
+        self.assertTrue(packet["managed_file_bridge_route_allowed"])
+        self.assertTrue(packet["managed_file_bridge_sandbox_admitted"])
+        self.assertTrue(packet["managed_file_bridge_observed"])
+        self.assertTrue(packet["managed_file_bridge_response_id_bound"])
+        self.assertFalse(packet["managed_file_bridge_response_request_id_recorded"])
+        self.assertTrue(packet["managed_file_bridge_lifecycle_ok"])
+        self.assertTrue(packet["managed_file_bridge_ok"])
+        self.assertTrue(packet["server_owned_file_bridge_configured"])
+        self.assertTrue(packet["server_owned_file_bridge"])
+        self.assertIn("managed_file_bridge_response", packet["declared_write_surfaces"])
+        self.assertTrue(packet["runtime_context_file_bridge_used"])
+        self.assertTrue(packet["bridge_or_file_bridge_used"])
+        self.assertEqual(packet["bridge_kind"], "server_owned_file_bridge")
+        self.assertGreaterEqual(packet["managed_file_bridge_request_count"], 1)
+        self.assertGreaterEqual(packet["managed_file_bridge_response_count"], 1)
+        self.assertEqual(packet["managed_file_bridge_error_count"], 0)
+        self.assertEqual(packet["managed_file_bridge_last_machine_error_code"], "OK")
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["live_provider_response_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertTrue(packet["runtime_effective_truth_unchanged"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertEqual(provider.request_count, 1)  # type: ignore[attr-defined]
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_file_bridge_response_event_is_normalized_to_live_provider_packet(self) -> None:
+        raw_response = {
+            "schema_version": 1,
+            "packet_kind": "custom_native_file_bridge_response",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "request_id": "codex-test-request",
+            "model": ROUTE_ID,
+            "bridge_kind": "server_owned_file_bridge",
+            "server_owned_file_bridge": True,
+            "output_text": EXPECTED_TEXT,
+            "response_text_field": "output_text",
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        packet, observed = admission._live_provider_packet_from_events(
+            [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": "/bin/zsh -lc file-bridge-request",
+                        "aggregated_output": json.dumps(raw_response),
+                        "exit_code": 0,
+                        "status": "completed",
+                    },
+                }
+            ],
+            expected_text=EXPECTED_TEXT,
+        )
+
+        data = packet["data"]
+        self.assertTrue(observed)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(data["check_kind"], "api_only_live_route_format")
+        self.assertEqual(data["requested_model"], ROUTE_ID)
+        self.assertTrue(data["expected_text_observed"])
+        self.assertEqual(data["response_preview_bounded"], EXPECTED_TEXT)
+        self.assertTrue(data["runtime_context_file_bridge_used"])
+        self.assertEqual(data["bridge_kind"], "server_owned_file_bridge")
+        self.assertEqual(
+            data["file_bridge_response_request_id_sha256"],
+            hashlib.sha256(b"codex-test-request").hexdigest(),
+        )
+        self.assertNotIn("file_bridge_response_request_id", data)
+        self.assertFalse(data["fallback_used"])
+        self.assertFalse(data["raw_backend_details_exposed"])
+
+    def test_file_bridge_response_without_request_id_is_not_observed(self) -> None:
+        raw_response = {
+            "schema_version": 1,
+            "packet_kind": "custom_native_file_bridge_response",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "model": ROUTE_ID,
+            "bridge_kind": "server_owned_file_bridge",
+            "server_owned_file_bridge": True,
+            "output_text": EXPECTED_TEXT,
+            "response_text_field": "output_text",
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        packet, observed = admission._live_provider_packet_from_events(
+            [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": "/bin/zsh -lc file-bridge-request",
+                        "aggregated_output": json.dumps(raw_response),
+                        "exit_code": 0,
+                        "status": "completed",
+                    },
+                }
+            ],
+            expected_text=EXPECTED_TEXT,
+        )
+
+        self.assertFalse(observed)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_LIVE_PROVIDER_NOT_OBSERVED,
+        )
+
+    def test_managed_file_bridge_read_only_is_not_admitted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            context = _runtime_context(file_bridge=_file_bridge_packet(root))
+            _write_profile(paths, runtime_context=context)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            with _mocked_provider(expected_text=EXPECTED_TEXT) as (base_url, _provider):
+                _write_external_models_registry(paths, base_url=base_url)
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        "PYTHONPATH": str(ROOT),
+                        "WBP_FAKE_CODEX_MODE": "managed_file_bridge",
+                        "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                    },
+                ):
+                    packet = admission.run_custom_codex_admission_command(
+                        paths=paths,
+                        prompt_text=PROMPT,
+                        codex_bin=str(fake_codex),
+                        proof_dir=str(root / "proof"),
+                        codex_cwd=str(ROOT),
+                        expected_text=EXPECTED_TEXT,
+                        sandbox="read-only",
+                        timeout_seconds=20,
+                    )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.ADMISSION_FILE_BRIDGE_NOT_PROVEN,
+        )
+        self.assertFalse(packet["admission_proven"])
+        self.assertTrue(packet["managed_file_bridge_configured"])
+        self.assertFalse(packet["managed_file_bridge_sandbox_admitted"])
+        self.assertFalse(packet["managed_file_bridge_started"])
+        self.assertFalse(packet["managed_file_bridge_ok"])
+        self.assertTrue(packet["server_owned_file_bridge_configured"])
+        self.assertFalse(packet["server_owned_file_bridge"])
+        self.assertIn("managed_file_bridge_sandbox_not_admitted", packet["blocking_reasons"])
+        self.assertIn("managed_file_bridge_not_started", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        _assert_no_raw_sensitive_text(self, packet)
 
     def test_missing_admission_run_id_digest_blocks_same_turn_admission(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1122,6 +1480,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         base = {
             "codex_exit_ok": True,
             "provider_observed": True,
+            "managed_file_bridge_ok": True,
             "source_ok": True,
             "working_ok": True,
             "source_seal_ok": True,
@@ -1138,6 +1497,7 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             ("runtime_truth_ok", admission.ADMISSION_RUNTIME_TRUTH_MUTATED),
             ("codex_exit_ok", admission.ADMISSION_CODEX_LAUNCH_FAILED),
             ("provider_observed", admission.ADMISSION_LIVE_PROVIDER_NOT_OBSERVED),
+            ("managed_file_bridge_ok", admission.ADMISSION_FILE_BRIDGE_NOT_PROVEN),
             ("source_ok", admission.ADMISSION_HOOK_PROOF_FAILED),
             ("working_ok", admission.ADMISSION_WORKING_FLOW_FAILED),
             ("source_seal_ok", admission.ADMISSION_SEAL_FAILED),

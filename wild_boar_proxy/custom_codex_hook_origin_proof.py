@@ -355,10 +355,12 @@ def _working_flow_failures(
             if working_flow.get(field) is not True:
                 failures.append(reason)
     if command_surface:
+        file_bridge_command_surface = (
+            working_flow.get("command_execution_file_bridge_response_bound") is True
+        )
         for field, reason in (
             ("command_execution_live_format_observed", "working_flow_command_live_format_not_observed"),
             ("command_execution_live_format_event_index_present", "working_flow_command_event_missing"),
-            ("command_execution_live_format_cli_command_digest_bound", "working_flow_command_cli_digest_not_bound"),
             ("command_execution_live_format_route_digest_bound", "working_flow_command_route_digest_not_bound"),
             ("command_execution_live_format_extra_args_allowed", "working_flow_command_extra_args_not_allowed"),
             ("command_execution_live_format_exit_code_zero", "working_flow_command_exit_nonzero"),
@@ -369,6 +371,11 @@ def _working_flow_failures(
         ):
             if working_flow.get(field) is not True:
                 failures.append(reason)
+        if file_bridge_command_surface:
+            if working_flow.get("command_execution_file_bridge_response_observed") is not True:
+                failures.append("working_flow_command_file_bridge_response_not_observed")
+        elif working_flow.get("command_execution_live_format_cli_command_digest_bound") is not True:
+            failures.append("working_flow_command_cli_digest_not_bound")
         if working_flow.get("command_execution_live_format_fallback_used") is True:
             failures.append("working_flow_command_fallback_used")
     for field, reason in (

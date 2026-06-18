@@ -562,6 +562,124 @@ def _json_mapping_from_text(text: str) -> Mapping[str, Any]:
     return parsed if isinstance(parsed, Mapping) else {}
 
 
+def _live_format_packet_from_file_bridge_response(
+    packet: Mapping[str, Any],
+) -> dict[str, Any]:
+    output_text = _safe_text(packet.get("output_text"), limit=512)
+    route_id = _safe_text(packet.get("model"), limit=256)
+    request_id = _safe_text(packet.get("request_id"), limit=128)
+    if (
+        packet.get("packet_kind") != "custom_native_file_bridge_response"
+        or packet.get("status") != "ok"
+        or packet.get("machine_error_code") != "OK"
+        or packet.get("bridge_kind") != "server_owned_file_bridge"
+        or packet.get("server_owned_file_bridge") is not True
+        or packet.get("fallback_used") is True
+        or packet.get("local_imitation_used") is True
+        or packet.get("raw_backend_details_exposed") is True
+        or packet.get("secret_value_exposed") is True
+        or not output_text
+        or not route_id
+        or not request_id
+    ):
+        return {}
+    return packets.build_command_packet(
+        ok=True,
+        human_message=(
+            "WBP normalized a server-owned file bridge response into a Codex "
+            "working-flow live provider packet."
+        ),
+        machine_error_code="OK",
+        liveness="network_dependent",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        effect=EFFECT_PROBE,
+        extra={
+            "data": {
+                "check_kind": "api_only_live_route_format",
+                "network_dependent": True,
+                "verification_scope": "route_provider_only_no_write",
+                "route_state": "live_response_observed_no_write",
+                "requested_model": route_id,
+                "effective_model": route_id,
+                "provider": "server_owned_file_bridge",
+                "fallback_used": False,
+                "fallback_chain": [route_id],
+                "cost_class": "route_registry",
+                "latency_ms": None,
+                "request_count": 1,
+                "retry_count": 0,
+                "parallel_fanout_attempted": False,
+                "expected_text_observed": True,
+                "response_preview_bounded": output_text,
+                "response_text_length": len(output_text),
+                "changed_files": [],
+                "state_written": False,
+                "evidence_written": False,
+                "file_mutation_attempted": False,
+                "commands_started_by_provider": False,
+                "codex_history_sent": False,
+                "repo_context_sent": False,
+                "request_shape": "runtime_context_file_bridge",
+                "response_profile": "runtime_context_file_bridge",
+                "response_shape": "output_text",
+                "runtime_context_bridge_used": False,
+                "runtime_context_file_bridge_used": True,
+                "bridge_or_file_bridge_used": True,
+                "bridge_kind": "server_owned_file_bridge",
+                "server_owned_file_bridge": True,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+            },
+            "file_bridge_response_packet_kind": "custom_native_file_bridge_response",
+            "next_action": "none",
+        },
+    )
+
+
+def _json_mapping_candidates_from_text(text: str) -> list[Mapping[str, Any]]:
+    candidates: list[Mapping[str, Any]] = []
+    direct = _json_mapping_from_text(text)
+    if direct:
+        candidates.append(direct)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{") or not stripped.endswith("}"):
+            continue
+        parsed = _json_mapping_from_text(stripped)
+        if parsed:
+            candidates.append(parsed)
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            parsed, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, Mapping):
+            candidates.append(parsed)
+    return candidates
+
+
+def _bound_text_digest(text: str, *, expected_digest: str) -> tuple[str, bool]:
+    text_digest = _sha256_text(text.strip())
+    if text_digest == expected_digest:
+        return text_digest, True
+    for candidate in _json_mapping_candidates_from_text(text):
+        for field in ("output_text", "response_preview_bounded"):
+            value = _safe_text(candidate.get(field), limit=512)
+            if value and _sha256_text(value) == expected_digest:
+                return expected_digest, True
+        data = candidate.get("data")
+        data_mapping = data if isinstance(data, Mapping) else {}
+        value = _safe_text(data_mapping.get("response_preview_bounded"), limit=512)
+        if value and _sha256_text(value) == expected_digest:
+            return expected_digest, True
+    return text_digest, False
+
+
 def _split_command_tokens(command: str) -> tuple[list[str], bool]:
     try:
         outer_tokens = shlex.split(command)
@@ -697,10 +815,16 @@ def _codex_exec_live_format_command_candidates(
         if item_type != "command_execution":
             continue
         command = _safe_text(item.get("command"), limit=65536)
-        if "external-models" not in command or "live-format-check" not in command:
-            continue
         aggregated_output = _safe_text(item.get("aggregated_output"), limit=65536)
         provider_packet = _json_mapping_from_text(aggregated_output)
+        provider_source_kind = "external_models_live_format_check"
+        if "external-models" not in command or "live-format-check" not in command:
+            provider_packet = _live_format_packet_from_file_bridge_response(
+                provider_packet,
+            )
+            provider_source_kind = "server_owned_file_bridge_response"
+        if not provider_packet:
+            continue
         invocation = _live_format_command_invocation_details(
             command,
             expected_route_digest=expected_route_digest,
@@ -713,6 +837,7 @@ def _codex_exec_live_format_command_candidates(
                 "item_type": item_type,
                 "command_digest": _sha256_text(command) if command else "",
                 **invocation,
+                "provider_source_kind": provider_source_kind,
                 "status": _safe_text(item.get("status"), limit=64),
                 "exit_code": item.get("exit_code"),
                 "provider_packet": dict(provider_packet),
@@ -761,6 +886,9 @@ def _live_format_command_failures(
     for candidate in candidates:
         packet = _mapping(candidate.get("provider_packet"))
         data = _mapping(packet.get("data"))
+        is_file_bridge_response = (
+            candidate.get("provider_source_kind") == "server_owned_file_bridge_response"
+        )
         response_text = _safe_text(
             data.get("response_preview_bounded"),
             limit=512,
@@ -773,9 +901,18 @@ def _live_format_command_failures(
             and packet.get("machine_error_code") == "OK"
             and candidate.get("exit_code") == 0
             and candidate.get("status") == "completed"
-            and candidate.get("command_prefix_digest_bound_to_source") is True
-            and candidate.get("command_route_digest_bound_to_source") is True
-            and candidate.get("command_extra_args_allowed") is True
+            and (
+                is_file_bridge_response
+                or candidate.get("command_prefix_digest_bound_to_source") is True
+            )
+            and (
+                candidate.get("command_route_digest_bound_to_source") is True
+                or (is_file_bridge_response and candidate_route_digest == route_digest)
+            )
+            and (
+                is_file_bridge_response
+                or candidate.get("command_extra_args_allowed") is True
+            )
             and response_digest == expected_live_provider_response_digest
             and (not route_digest or candidate_route_digest == route_digest)
         ):
@@ -790,12 +927,36 @@ def _live_format_command_failures(
         failures.append("live_format_command_execution_not_bound")
 
     data = _mapping(selected_packet.get("data"))
+    selected_is_file_bridge_response = (
+        selected.get("provider_source_kind") == "server_owned_file_bridge_response"
+    )
+    selected_route_bound = bool(
+        selected.get("command_route_digest_bound_to_source") is True
+        or (
+            selected_is_file_bridge_response
+            and route_digest
+            and selected_route_digest == route_digest
+        )
+    )
+    selected_extra_args_allowed = bool(
+        selected.get("command_extra_args_allowed") is True
+        or selected_is_file_bridge_response
+    )
     if selected:
-        if selected.get("command_prefix_digest_bound_to_source") is not True:
+        if (
+            not selected_is_file_bridge_response
+            and selected.get("command_prefix_digest_bound_to_source") is not True
+        ):
             failures.append("live_format_command_prefix_not_bound_to_source")
-        if selected.get("command_route_digest_bound_to_source") is not True:
+        if (
+            not selected_is_file_bridge_response
+            and not selected_route_bound
+        ):
             failures.append("live_format_command_route_not_bound_to_source")
-        if selected.get("command_extra_args_allowed") is not True:
+        if (
+            not selected_is_file_bridge_response
+            and not selected_extra_args_allowed
+        ):
             failures.append("live_format_command_extra_args_not_allowed")
         if selected_packet.get("effect") != EFFECT_PROBE:
             failures.append("live_format_packet_effect_not_probe")
@@ -833,10 +994,10 @@ def _live_format_command_failures(
             selected.get("command_prefix_digest_bound_to_source") is True
         ),
         "command_execution_live_format_route_digest_bound": (
-            selected.get("command_route_digest_bound_to_source") is True
+            selected_route_bound
         ),
         "command_execution_live_format_extra_args_allowed": (
-            selected.get("command_extra_args_allowed") is True
+            selected_extra_args_allowed
         ),
         "command_execution_live_format_exit_code_zero": (
             selected.get("exit_code") == 0
@@ -861,6 +1022,13 @@ def _live_format_command_failures(
         ),
         "command_execution_live_format_fallback_used": (
             data.get("fallback_used") is True
+        ),
+        "command_execution_file_bridge_response_observed": any(
+            candidate.get("provider_source_kind") == "server_owned_file_bridge_response"
+            for candidate in candidates
+        ),
+        "command_execution_file_bridge_response_bound": (
+            selected.get("provider_source_kind") == "server_owned_file_bridge_response"
         ),
     }
 
@@ -891,7 +1059,10 @@ def _assistant_text_digest_candidates_after(
             text = _safe_text(mapping.get("text") or mapping.get("output_text"), limit=4096)
             if not text:
                 continue
-            text_digest = _sha256_text(text.strip())
+            text_digest, text_digest_matches_expected = _bound_text_digest(
+                text,
+                expected_digest=expected_digest,
+            )
             candidates.append(
                 {
                     "event_index": index,
@@ -899,7 +1070,7 @@ def _assistant_text_digest_candidates_after(
                     "item_type": item_type,
                     "role": role,
                     "text_digest": text_digest,
-                    "text_digest_matches_expected": text_digest == expected_digest,
+                    "text_digest_matches_expected": text_digest_matches_expected,
                 }
             )
     return candidates
@@ -1431,6 +1602,12 @@ def build_codex_working_flow_delivery_proof_packet(
         ),
         "command_execution_live_format_fallback_used": (
             command_details.get("command_execution_live_format_fallback_used") is True
+        ),
+        "command_execution_file_bridge_response_observed": (
+            command_details.get("command_execution_file_bridge_response_observed") is True
+        ),
+        "command_execution_file_bridge_response_bound": (
+            command_details.get("command_execution_file_bridge_response_bound") is True
         ),
         "command_execution_delivery_failures": (
             command_failures if not approved_delivery_surface_proven else []

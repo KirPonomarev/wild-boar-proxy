@@ -312,6 +312,40 @@ def _command_execution_event(
     }
 
 
+def _file_bridge_command_execution_event(
+    *,
+    expected_text: str = EXPECTED_TEXT,
+    route_id: str = ROUTE_ID,
+) -> dict[str, object]:
+    bridge_response = {
+        "schema_version": 1,
+        "packet_kind": "custom_native_file_bridge_response",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "request_id": "codex-test-request",
+        "model": route_id,
+        "bridge_kind": "server_owned_file_bridge",
+        "server_owned_file_bridge": True,
+        "output_text": expected_text,
+        "response_text_field": "output_text",
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-file-bridge-check",
+            "type": "command_execution",
+            "command": "/bin/zsh -lc file-bridge-request",
+            "aggregated_output": json.dumps(bridge_response),
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }
+
+
 def _codex_wrapped_command_execution_event(source: dict[str, object]) -> dict[str, object]:
     event = _command_execution_event(source)
     original_command = str(event["item"]["command"])
@@ -328,6 +362,34 @@ def _command_assistant_event(text: str = EXPECTED_TEXT) -> dict[str, object]:
             "text": text,
         },
     }
+
+
+def _file_bridge_command_assistant_event(
+    *,
+    expected_text: str = EXPECTED_TEXT,
+    route_id: str = ROUTE_ID,
+) -> dict[str, object]:
+    bridge_response = {
+        "schema_version": 1,
+        "packet_kind": "custom_native_file_bridge_response",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "request_id": "codex-test-request",
+        "model": route_id,
+        "bridge_kind": "server_owned_file_bridge",
+        "server_owned_file_bridge": True,
+        "output_text": expected_text,
+        "response_text_field": "output_text",
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+    return _command_assistant_event(
+        "Использован live file bridge.\n\n```jsonl\n"
+        + json.dumps(bridge_response, ensure_ascii=True, sort_keys=True)
+        + "\n```"
+    )
 
 
 def _subagent_event() -> dict[str, object]:
@@ -563,6 +625,81 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertEqual(packet["command_assistant_binding_failures"], [])
         _assert_no_product_or_ui_claim(self, packet)
         _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_server_owned_file_bridge_command_delivery(
+        self,
+    ) -> None:
+        source = _integrated_packet()
+        events = [
+            {"type": "thread.started", "thread_id": "thread-file-bridge-flow"},
+            {"type": "turn.started"},
+            _file_bridge_command_execution_event(),
+            _file_bridge_command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_live_format_observed"])
+        self.assertTrue(packet["command_execution_live_format_event_index_present"])
+        self.assertFalse(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_route_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_extra_args_allowed"])
+        self.assertTrue(packet["command_execution_file_bridge_response_observed"])
+        self.assertTrue(packet["command_execution_file_bridge_response_bound"])
+        self.assertTrue(packet["command_assistant_response_after_command"])
+        self.assertTrue(packet["command_assistant_response_bound_to_live_provider_digest"])
+        self.assertEqual(
+            packet["command_assistant_binding_digest"],
+            packet["live_provider_response_digest"],
+        )
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertEqual(packet["command_execution_delivery_failures"], [])
+        self.assertEqual(packet["command_assistant_binding_failures"], [])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_file_bridge_command_delivery_without_request_id(
+        self,
+    ) -> None:
+        source = _integrated_packet()
+        command_event = _file_bridge_command_execution_event()
+        raw_response = json.loads(str(command_event["item"]["aggregated_output"]))
+        raw_response.pop("request_id")
+        command_event["item"]["aggregated_output"] = json.dumps(raw_response)
+        events = [
+            {"type": "thread.started", "thread_id": "thread-file-bridge-flow"},
+            {"type": "turn.started"},
+            command_event,
+            _file_bridge_command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["command_execution_file_bridge_response_bound"])
+        self.assertIn(
+            "live_format_command_execution_not_observed",
+            packet["command_execution_delivery_failures"],
+        )
+        _assert_no_product_or_ui_claim(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_positive_accepts_current_codex_shell_c_wrapped_live_format_command(
