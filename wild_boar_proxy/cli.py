@@ -113,6 +113,9 @@ from .custom_origin_bound_live_provider_join import (
 from .official_mcp_ledger_bound_dispatch_join import (
     run_official_mcp_ledger_bound_dispatch_join_command,
 )
+from .official_mcp_handoff_source_proof import (
+    run_official_mcp_handoff_source_proof_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -650,6 +653,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_mcp_handoff_source_proof = router_hook_subparsers.add_parser(
+        "official-mcp-handoff-source-proof"
+    )
+    router_hook_official_mcp_handoff_source_proof.add_argument(
+        "--dispatch-join-file",
+        required=True,
+    )
+    router_hook_official_mcp_handoff_source_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1168,6 +1183,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "custom-origin-bound-dispatch-proof",
         "custom-origin-bound-live-provider-join",
         "official-mcp-ledger-bound-dispatch-join",
+        "official-mcp-handoff-source-proof",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1708,6 +1724,15 @@ def main(argv: list[str] | None = None) -> int:
                     ledger_bound_dispatch_proof_file=(
                         args.ledger_bound_dispatch_proof_file
                     ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-handoff-source-proof"
+        ):
+            return emit_json(
+                run_official_mcp_handoff_source_proof_command(
+                    dispatch_join_file=args.dispatch_join_file,
                 )
             )
         if (

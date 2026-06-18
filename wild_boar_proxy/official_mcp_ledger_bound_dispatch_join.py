@@ -404,6 +404,61 @@ def build_official_mcp_ledger_bound_dispatch_join_packet(
             and dispatch.get("allowed_api_route_ids_enforced") is True
         ),
         "route_id_allowed": bool(ok and dispatch.get("route_id_allowed") is True),
+        "selected_api_route_id_present": bool(
+            ok and dispatch.get("selected_api_route_id_present") is True
+        ),
+        "selected_api_route_id_sha256": _hex_sha256(
+            dispatch.get("selected_api_route_id_sha256")
+        )
+        if ok
+        else "",
+        "route_bound_request_sent": bool(
+            ok and dispatch.get("route_bound_request_sent") is True
+        ),
+        "route_bound_request_sha256": _hex_sha256(
+            dispatch.get("route_bound_request_sha256")
+        )
+        if ok
+        else "",
+        "provider_response_digest": _hex_sha256(
+            dispatch.get("provider_response_digest")
+        )
+        if ok
+        else "",
+        "controlled_provider_response_sha256": _hex_sha256(
+            dispatch.get("controlled_provider_response_sha256")
+        )
+        if ok
+        else "",
+        "response_digest_bound": bool(
+            ok and dispatch.get("response_digest_bound") is True
+        ),
+        "response_bound_to_proof": bool(
+            ok and dispatch.get("response_bound_to_proof") is True
+        ),
+        "provider_like_response_only": bool(
+            ok and dispatch.get("provider_like_response_only") is True
+        ),
+        "dispatch_truth_source": _safe_text(
+            dispatch.get("dispatch_truth_source"),
+            limit=80,
+        )
+        if ok
+        else "",
+        "api_lane_truth_source": _safe_text(
+            dispatch.get("api_lane_truth_source"),
+            limit=80,
+        )
+        if ok
+        else "",
+        "forbidden_stale_route_ids_enforced": bool(
+            ok and dispatch.get("forbidden_stale_route_ids_enforced") is True
+        ),
+        "forbidden_stale_route_ids_count": int(
+            dispatch.get("forbidden_stale_route_ids_count") or 0
+        )
+        if ok
+        else 0,
         "user_prompt_submit_hook_ran": bool(
             ok and dispatch.get("user_prompt_submit_hook_ran") is True
         ),
