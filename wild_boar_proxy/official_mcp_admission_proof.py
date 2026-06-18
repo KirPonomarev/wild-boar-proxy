@@ -917,6 +917,8 @@ def build_official_mcp_admission_case_packet(
             "prompt_digest_present": (
                 codex_tool_call_packet.get("prompt_digest_present") is True
             ),
+            "prompt_sha256": str(codex_tool_call_packet.get("prompt_sha256") or ""),
+            "prompt_digest_bound_to_tool_call": prompt_bound,
             "prompt_task_digest_matched": (
                 codex_tool_call_packet.get("prompt_task_digest_matched") is True
             ),

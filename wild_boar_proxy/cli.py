@@ -110,6 +110,9 @@ from .custom_origin_bound_api_dispatch_proof import (
 from .custom_origin_bound_live_provider_join import (
     run_custom_origin_bound_live_provider_join_command,
 )
+from .official_mcp_ledger_bound_dispatch_join import (
+    run_official_mcp_ledger_bound_dispatch_join_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -631,6 +634,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_mcp_ledger_bound_dispatch_join = router_hook_subparsers.add_parser(
+        "official-mcp-ledger-bound-dispatch-join"
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--official-mcp-case-file",
+        required=True,
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--ledger-bound-dispatch-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1148,6 +1167,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "ledger-bound-dispatch-proof",
         "custom-origin-bound-dispatch-proof",
         "custom-origin-bound-live-provider-join",
+        "official-mcp-ledger-bound-dispatch-join",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1676,6 +1696,18 @@ def main(argv: list[str] | None = None) -> int:
                     live_provider_proof_file=args.live_provider_proof_file,
                     live_provider_expected_text=args.live_provider_expected_text,
                     runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-ledger-bound-dispatch-join"
+        ):
+            return emit_json(
+                run_official_mcp_ledger_bound_dispatch_join_command(
+                    official_mcp_case_file=args.official_mcp_case_file,
+                    ledger_bound_dispatch_proof_file=(
+                        args.ledger_bound_dispatch_proof_file
+                    ),
                 )
             )
         if (
