@@ -754,6 +754,16 @@ def build_user_prompt_submit_readiness_packet(
             current_hash_metadata.get("codex_hook_current_hash", "")
         ),
     )
+    current_hash_source = str(
+        current_hash_metadata.get("codex_hook_current_hash_source", "")
+    )
+    app_server_trust_status = str(
+        current_hash_metadata.get("codex_hook_trust_status_from_app_server", "")
+    )
+    app_server_trust_status_required = (
+        current_hash_source == "codex_app_server_hooks_list"
+    )
+    app_server_trust_status_trusted = app_server_trust_status == "trusted"
     loaded_digest = (
         _canonical_json_digest(hook_definition) if hook_definition else ""
     )
@@ -778,10 +788,26 @@ def build_user_prompt_submit_readiness_packet(
         blocking_reasons.append("hook_script_missing")
     elif not script_executable:
         blocking_reasons.append("hook_script_not_executable")
-    hook_trusted = trust_metadata["codex_hook_trusted_by_profile_state"] is True
+    hook_trusted_by_profile_state = (
+        trust_metadata["codex_hook_trusted_by_profile_state"] is True
+    )
+    hook_trusted = bool(
+        hook_trusted_by_profile_state
+        and (
+            not app_server_trust_status_required
+            or app_server_trust_status_trusted
+        )
+    )
     current_hash_available = current_hash_metadata["codex_hook_current_hash_available"] is True
     if not blocking_reasons and not current_hash_available:
         blocking_reasons.append("codex_hook_current_hash_unavailable")
+    if (
+        not blocking_reasons
+        and hook_trusted_by_profile_state
+        and app_server_trust_status_required
+        and not app_server_trust_status_trusted
+    ):
+        blocking_reasons.append("codex_hook_app_server_trust_status_not_trusted")
     if not blocking_reasons and not hook_trusted:
         blocking_reasons.append("hook_trust_review_required")
 
@@ -816,6 +842,8 @@ def build_user_prompt_submit_readiness_packet(
         "loaded_hook_definition_sha256": loaded_digest,
         "hook_config_digest_bound": digest_bound,
         "hook_trust_requirement_declared": True,
+        "codex_hook_app_server_trust_status_required": app_server_trust_status_required,
+        "codex_hook_app_server_trust_status_trusted": app_server_trust_status_trusted,
         "hook_trusted": hook_trusted,
         "hook_requires_manual_review": bool(
             hook_config_present and current_hash_available and not hook_trusted
@@ -1274,13 +1302,21 @@ def build_user_prompt_submit_run_packet(
         and trusted_hook_config_sha256 != loaded_hook_config_sha256
     ):
         blocking_reasons.append("hook_config_digest_mismatch")
+    if (
+        origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN
+        and _event_transport(metadata) != "stdin"
+    ):
+        blocking_reasons.append("custom_codex_origin_requires_stdin_transport")
 
+    ok = not blocking_reasons
+    effective_origin_state = (
+        origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW
+    )
     producer_state = _producer_state(
         event_name=event_name,
         turn_id=turn_id,
-        origin_state=origin_state,
+        origin_state=effective_origin_state,
     )
-    ok = not blocking_reasons
     ledger_path = ledger_file or hook_ledger_path(paths)
     ledger_written = False
     if ok:
@@ -1293,14 +1329,14 @@ def build_user_prompt_submit_run_packet(
         ledger = build_user_prompt_submit_hook_ledger(
             prompt_digest=_safe_text(entry_packet.get("prompt_digest"), limit=80),
             runtime_context_digest_value=runtime_context_digest(runtime_context),
-            origin_state=origin_state,
+            origin_state=effective_origin_state,
             thread_digest=_event_digest(session_id),
             turn_digest=_event_digest(turn_id),
             trusted_hook_config_sha256=trusted_hook_config_sha256,
             loaded_hook_config_sha256=loaded_hook_config_sha256,
             hook_config_present=True,
             hook_enabled=True,
-            hook_trusted=origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+            hook_trusted=effective_origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
             hook_hash_current=trusted_hook_config_sha256 == loaded_hook_config_sha256,
             hook_runnable=True,
             user_prompt_submit_hook_ran=True,
@@ -1373,7 +1409,7 @@ def build_user_prompt_submit_run_packet(
             ),
             hook_trust_source=(
                 "codex_non_managed_hook_execution"
-                if origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN
+                if effective_origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN
                 else "not_proven"
             ),
         )
@@ -1390,7 +1426,7 @@ def build_user_prompt_submit_run_packet(
         "hook_event_transport": _event_transport(metadata),
         "hook_event_transport_stdin": _event_transport(metadata) == "stdin",
         "hook_producer_state": producer_state,
-        "origin_state": origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW,
+        "origin_state": effective_origin_state,
         "prompt_digest": (
             _safe_text(
                 build_router_hook_entry_packet(

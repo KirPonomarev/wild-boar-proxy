@@ -280,10 +280,26 @@ def _read_process_inventory_file(path: Path | None) -> tuple[dict[str, Any] | No
 
 
 def _hook_ready(hook_readiness_packet: Mapping[str, Any]) -> bool:
+    app_server_status_required = (
+        hook_readiness_packet.get("codex_hook_app_server_trust_status_required")
+        is True
+        or hook_readiness_packet.get("codex_hook_current_hash_source")
+        == "codex_app_server_hooks_list"
+    )
+    app_server_status_trusted = (
+        hook_readiness_packet.get("codex_hook_app_server_trust_status_trusted")
+        is True
+        or hook_readiness_packet.get("codex_hook_trust_status_from_app_server")
+        == "trusted"
+    )
     return (
         hook_readiness_packet.get("status") == "ok"
         and hook_readiness_packet.get("machine_error_code") == HOOK_CONFIG_OK
         and hook_readiness_packet.get("hook_trusted") is True
+        and (
+            not app_server_status_required
+            or app_server_status_trusted
+        )
     )
 
 

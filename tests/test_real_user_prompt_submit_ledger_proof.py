@@ -231,18 +231,25 @@ class RealUserPromptSubmitLedgerProofTests(unittest.TestCase):
             run_result = _run_hook(paths, hook_hash=hook_hash, use_event_file=True)
             proof_result = _run_ledger_proof(paths)
 
-        self.assertEqual(run_result.returncode, 0, run_result.stderr)
+        self.assertEqual(run_result.returncode, 1, run_result.stderr)
         run_packet = json.loads(run_result.stdout)
         self.assertEqual(run_packet["hook_event_transport"], "event_file")
+        self.assertFalse(run_packet["hook_ledger_written"])
+        self.assertIn(
+            "custom_codex_origin_requires_stdin_transport",
+            run_packet["blocking_reasons"],
+        )
+        self.assertEqual(packets.inspect_command_packet_semantics(run_packet), [])
         packet = json.loads(proof_result.stdout)
         self.assertEqual(proof_result.returncode, 1)
         self.assertEqual(
             packet["machine_error_code"],
-            ledger_proof.REAL_USER_PROMPT_SUBMIT_LEDGER_TRANSPORT_NOT_HOOK_STDIN,
+            hook_proof.USER_PROMPT_SUBMIT_ORIGIN_NOT_CUSTOM_CODEX,
         )
         self.assertFalse(packet["real_user_prompt_submit_ledger_proven"])
         self.assertFalse(packet["custom_codex_origin_proven"])
         self.assertFalse(packet["api_lane_called"])
+        self.assertIn("hook_ledger_file_not_read", packet["blocking_reasons"])
         self.assertIn("hook_event_transport_not_stdin", packet["blocking_reasons"])
         _assert_no_prompt_route_or_secret(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])

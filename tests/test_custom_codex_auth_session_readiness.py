@@ -223,6 +223,41 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertIn("user_prompt_submit_hook_not_ready", packet["blocking_reasons"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_hook_readiness_must_match_app_server_trust_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+            hook_packet = {
+                **_hook_ready_packet(),
+                "codex_hook_current_hash_source": "codex_app_server_hooks_list",
+                "codex_hook_trust_status_from_app_server": "untrusted",
+                "codex_hook_app_server_trust_status_required": True,
+                "codex_hook_app_server_trust_status_trusted": False,
+                "blocking_reasons": [
+                    "codex_hook_app_server_trust_status_not_trusted",
+                ],
+            }
+
+            packet = readiness.build_custom_codex_auth_session_readiness_packet(
+                paths=paths,
+                process_inventory=_process_inventory(),
+                process_inventory_live=True,
+                hook_readiness_packet=hook_packet,
+                account_read_metadata=_account_read(account_type="chatgpt"),
+            )
+
+            self.assertEqual(
+                packet["machine_error_code"],
+                readiness.CUSTOM_CODEX_AUTH_SESSION_HOOK_NOT_READY,
+            )
+            self.assertFalse(packet["hook_readiness_trusted"])
+            self.assertIn("user_prompt_submit_hook_not_ready", packet["blocking_reasons"])
+            self.assertIn(
+                "codex_hook_app_server_trust_status_not_trusted",
+                packet["blocking_reasons"],
+            )
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_cli_emits_strict_json_without_green_from_provided_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

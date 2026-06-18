@@ -166,6 +166,9 @@ def hook_command(profile_dir):
 
 
 def trust_status(profile_dir):
+    override = os.environ.get("WBP_FAKE_CODEX_HOOK_TRUST_STATUS", "")
+    if override:
+        return override
     config = profile_dir / "config.toml"
     if config.exists() and CURRENT_HASH in config.read_text(encoding="utf-8"):
         return "trusted"
@@ -534,6 +537,65 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertTrue(packet["codex_hook_trusted_hash_matches_current_hash_after"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_readiness_rejects_current_hash_when_app_server_trust_status_is_untrusted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths)
+            producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            repair_env = _env_with_fake_codex_app_server(paths)
+            repair = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy",
+                    "router-hook",
+                    "user-prompt-submit-trust-repair",
+                    "--apply",
+                    "--json",
+                ],
+                cwd=ROOT,
+                env=repair_env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(repair.returncode, 0, repair.stderr)
+
+            readiness_env = dict(repair_env)
+            readiness_env["WBP_FAKE_CODEX_HOOK_TRUST_STATUS"] = "untrusted"
+            readiness = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy",
+                    "router-hook",
+                    "user-prompt-submit-readiness",
+                    "--json",
+                ],
+                cwd=ROOT,
+                env=readiness_env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            packet = json.loads(readiness.stdout)
+            self.assertEqual(readiness.returncode, 1)
+            self.assertEqual(
+                packet["machine_error_code"],
+                producer.HOOK_BLOCKED_TRUST_REQUIRED,
+            )
+            self.assertTrue(packet["codex_hook_trusted_hash_matches_current_hash"])
+            self.assertTrue(packet["codex_hook_app_server_trust_status_required"])
+            self.assertFalse(packet["codex_hook_app_server_trust_status_trusted"])
+            self.assertFalse(packet["hook_trusted"])
+            self.assertIn(
+                "codex_hook_app_server_trust_status_not_trusted",
+                packet["blocking_reasons"],
+            )
+            self.assertFalse(packet["product_ready"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_cli_install_apply_and_readiness_emit_strict_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
@@ -640,8 +702,6 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             _write_context(paths)
             install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
             hook_hash = str(install["hook_definition_digest"])
-            event_path = root / "event.json"
-            event_path.write_text(json.dumps(_event()) + "\n", encoding="utf-8")
             ledger_path = root / "ledger.json"
             env = os.environ.copy()
             env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
@@ -653,8 +713,6 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                     "-m",
                     "wild_boar_proxy.user_prompt_submit_hook_producer",
                     "run-hook",
-                    "--event-file",
-                    str(event_path),
                     "--ledger-file",
                     str(ledger_path),
                     "--trusted-hook-config-sha256",
@@ -667,6 +725,7 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                 ],
                 cwd=ROOT,
                 env=env,
+                input=json.dumps(_event()) + "\n",
                 text=True,
                 capture_output=True,
                 check=False,
@@ -723,6 +782,61 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertFalse(verified["product_ready"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
             self.assertEqual(packets.inspect_command_packet_semantics(verified), [])
+
+    def test_event_file_transport_cannot_self_assert_custom_codex_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            event_path = root / "event.json"
+            event_path.write_text(json.dumps(_event()) + "\n", encoding="utf-8")
+            ledger_path = root / "ledger.json"
+            env = os.environ.copy()
+            env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
+            env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
+            env["WBP_CONFIG_TOML"] = str(paths.config_toml)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy.user_prompt_submit_hook_producer",
+                    "run-hook",
+                    "--event-file",
+                    str(event_path),
+                    "--ledger-file",
+                    str(ledger_path),
+                    "--trusted-hook-config-sha256",
+                    hook_hash,
+                    "--loaded-hook-config-sha256",
+                    hook_hash,
+                    "--origin-state",
+                    proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                    "--json",
+                ],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            packet = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(packet["hook_ledger_written"])
+            self.assertNotEqual(
+                packet["hook_producer_state"],
+                producer.HOOK_STATE_RAN_CUSTOM_CODEX_PROVEN,
+            )
+            self.assertFalse(ledger_path.exists())
+            self.assertIn(
+                "custom_codex_origin_requires_stdin_transport",
+                packet["blocking_reasons"],
+            )
+            self.assertFalse(packet["product_ready"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_synthetic_run_cannot_claim_custom_codex_origin_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
