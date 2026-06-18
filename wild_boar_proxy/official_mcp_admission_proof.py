@@ -28,6 +28,10 @@ DEFAULT_TIMEOUT_SECONDS = 180
 OFFICIAL_MCP_ADMISSION_CASE_PACKET_KIND = "wbp_official_mcp_admission_case"
 OFFICIAL_MCP_ADMISSION_MATRIX_PACKET_KIND = "wbp_official_mcp_admission_matrix"
 NATURAL_ALIAS_INTENT_MATRIX_PACKET_KIND = "wbp_natural_alias_intent_matrix"
+OFFICIAL_MCP_ADMISSION_NOT_PROVEN = "WBP_OFFICIAL_MCP_ADMISSION_NOT_PROVEN"
+OFFICIAL_MCP_TOOL_CALL_NOT_BOUND = "WBP_OFFICIAL_MCP_TOOL_CALL_NOT_BOUND"
+NATURAL_MCP_TOOL_CALL_NOT_BOUND = "WBP_NATURAL_MCP_TOOL_CALL_NOT_BOUND"
+OFFICIAL_MCP_ALIAS_MISMATCH = "WBP_OFFICIAL_MCP_ALIAS_MISMATCH"
 INTENT_TOOL_DIRECTED = "tool_directed"
 INTENT_STRICT_NATURAL = "strict_natural"
 INTENT_AMBIGUOUS_NATURAL = "ambiguous_natural"
@@ -372,6 +376,14 @@ def prompt_has_expected_alias(prompt: str, expected_alias: str) -> bool:
     return bool(alias_key and alias_key in prompt_key)
 
 
+def _first_non_ok_machine_error_code(*values: object) -> str:
+    for value in values:
+        code = str(value or "").strip()
+        if code and code != "OK":
+            return code
+    return ""
+
+
 def _load_entry_evidence(evidence_path: Path) -> dict[str, Any]:
     if not evidence_path.exists():
         return {}
@@ -441,6 +453,14 @@ def build_official_mcp_admission_case_packet(
     expected_alias_present_in_prompt = prompt_has_expected_alias(
         variant.prompt,
         variant.expected_alias,
+    )
+    tool_call_completed_but_prompt_not_bound = bool(
+        tool_call_completed and not prompt_bound
+    )
+    natural_mcp_tool_call_unbound = bool(
+        natural_prompt_used
+        and not explicit_tool_instruction
+        and tool_call_completed_but_prompt_not_bound
     )
     positive_proof = bool(
         config_loaded
@@ -524,16 +544,22 @@ def build_official_mcp_admission_case_packet(
     if raw_prompt_recorded:
         blocking_reasons.append("raw_prompt_recorded")
 
-    proof_machine_error_code = (
-        "OK"
-        if positive_proof
-        else str(
-            evidence.get("machine_error_code")
-            or codex_tool_call_packet.get("machine_error_code")
-            or config_packet.get("machine_error_code")
-            or "WBP_OFFICIAL_MCP_ADMISSION_NOT_PROVEN"
+    if positive_proof:
+        proof_machine_error_code = "OK"
+    elif tool_call_completed_but_prompt_not_bound:
+        proof_machine_error_code = (
+            NATURAL_MCP_TOOL_CALL_NOT_BOUND
+            if natural_mcp_tool_call_unbound
+            else OFFICIAL_MCP_TOOL_CALL_NOT_BOUND
         )
-    )
+    elif entry_ok and not selected_alias_matches_expected:
+        proof_machine_error_code = OFFICIAL_MCP_ALIAS_MISMATCH
+    else:
+        proof_machine_error_code = _first_non_ok_machine_error_code(
+            evidence.get("machine_error_code"),
+            codex_tool_call_packet.get("machine_error_code"),
+            config_packet.get("machine_error_code"),
+        ) or OFFICIAL_MCP_ADMISSION_NOT_PROVEN
     return packets.build_command_packet(
         ok=expectation_met,
         human_message=(
@@ -581,6 +607,36 @@ def build_official_mcp_admission_case_packet(
             "delegate_to_dip_called": tool_call_observed,
             "delegate_to_dip_tool_call_completed": tool_call_completed,
             "prompt_to_mcp_call_bound": prompt_bound,
+            "tool_call_completed_but_prompt_not_bound": (
+                tool_call_completed_but_prompt_not_bound
+            ),
+            "natural_mcp_tool_call_unbound": natural_mcp_tool_call_unbound,
+            "tool_call_digest_present": (
+                codex_tool_call_packet.get("tool_call_digest_present") is True
+            ),
+            "expected_delegate_tool_call_digest_present": (
+                codex_tool_call_packet.get(
+                    "expected_delegate_tool_call_digest_present"
+                )
+                is True
+            ),
+            "expected_delegate_tool_call_matched": (
+                codex_tool_call_packet.get("expected_delegate_tool_call_matched")
+                is True
+            ),
+            "prompt_digest_present": (
+                codex_tool_call_packet.get("prompt_digest_present") is True
+            ),
+            "prompt_task_digest_matched": (
+                codex_tool_call_packet.get("prompt_task_digest_matched") is True
+            ),
+            "codex_tool_call_claim_digest_present": (
+                codex_tool_call_packet.get("codex_tool_call_claim_digest_present")
+                is True
+            ),
+            "codex_tool_call_claim_sha256": str(
+                codex_tool_call_packet.get("codex_tool_call_claim_sha256") or ""
+            ),
             "alias_context_read": alias_context_read,
             "selected_alias": str(evidence.get("selected_alias") or ""),
             "selected_alias_matches_expected": selected_alias_matches_expected,

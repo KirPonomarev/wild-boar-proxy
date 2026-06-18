@@ -336,6 +336,58 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_natural_tool_call_without_prompt_binding_is_specific_red(self) -> None:
+        prompt = "Codex, дай задачу DIP: верни короткий план."
+        packet = _natural_case_packet(
+            "DIP",
+            prompt,
+            tool_arguments={
+                "task": "DIP: верни короткий план.",
+                "expected_alias": "DIP",
+            },
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.NATURAL_MCP_TOOL_CALL_NOT_BOUND,
+        )
+        self.assertEqual(
+            packet["proof_machine_error_code"],
+            proof.NATURAL_MCP_TOOL_CALL_NOT_BOUND,
+        )
+        self.assertFalse(packet["positive_proof"])
+        self.assertTrue(packet["natural_prompt_used"])
+        self.assertTrue(packet["strict_natural_prompt"])
+        self.assertFalse(packet["explicit_tool_instruction_used"])
+        self.assertTrue(packet["codex_mcp_tool_called"])
+        self.assertTrue(packet["delegate_to_dip_tool_call_completed"])
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertTrue(packet["tool_call_completed_but_prompt_not_bound"])
+        self.assertTrue(packet["natural_mcp_tool_call_unbound"])
+        self.assertTrue(packet["tool_call_digest_present"])
+        self.assertFalse(packet["expected_delegate_tool_call_digest_present"])
+        self.assertFalse(packet["prompt_task_digest_matched"])
+        self.assertTrue(packet["prompt_digest_present"])
+        self.assertTrue(packet["codex_tool_call_claim_digest_present"])
+        self.assertTrue(packet["alias_context_read"])
+        self.assertEqual(packet["selected_alias"], "DIP")
+        self.assertTrue(packet["selected_alias_matches_expected"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_jsonl_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertIn(
+            "prompt_not_bound_to_codex_mcp_tool_call",
+            packet["proof_blocking_reasons"],
+        )
+        self.assertNotIn(prompt, json.dumps(packet, ensure_ascii=False))
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_natural_case_blocks_alias_collapse_to_dip(self) -> None:
         packet = _natural_case_packet(
             "Worker",
@@ -347,6 +399,10 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         )
 
         self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_MCP_ALIAS_MISMATCH,
+        )
         self.assertFalse(packet["positive_proof"])
         self.assertFalse(packet["natural_alias_intent_routed"])
         self.assertEqual(packet["selected_alias"], "DIP")
