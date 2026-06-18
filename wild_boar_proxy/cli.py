@@ -68,6 +68,9 @@ from .custom_codex_visible_source_binding_proof import (
     VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT as BINDING_VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
     run_custom_codex_visible_source_binding_proof_command,
 )
+from .custom_codex_ui_visibility_proof import (
+    run_custom_codex_ui_visibility_proof_command,
+)
 from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
@@ -498,6 +501,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     router_hook_visible_source_binding.add_argument("--runtime-context-file")
     router_hook_visible_source_binding.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_ui_visibility = router_hook_subparsers.add_parser(
+        "custom-codex-ui-visibility-proof"
+    )
+    router_hook_ui_visibility.add_argument(
+        "--visible-source-binding-proof-file",
+        required=True,
+    )
+    router_hook_ui_visibility.add_argument(
+        "--native-ui-observer-packet-file",
+        required=True,
+    )
+    router_hook_ui_visibility.add_argument("--expected-visible-text", required=True)
+    router_hook_ui_visibility.add_argument("--request-id", required=True)
+    router_hook_ui_visibility.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1101,6 +1122,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "assistant-continuation-proof",
         "visible-source-observe",
         "visible-source-binding-proof",
+        "custom-codex-ui-visibility-proof",
         "user-prompt-submit-proof",
         "user-prompt-submit-ledger-proof",
         "ledger-bound-dispatch-proof",
@@ -1526,6 +1548,22 @@ def main(argv: list[str] | None = None) -> int:
                     visible_source_kind=args.visible_source_kind,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                     runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-codex-ui-visibility-proof"
+        ):
+            return emit_json(
+                run_custom_codex_ui_visibility_proof_command(
+                    visible_source_binding_proof_file=(
+                        args.visible_source_binding_proof_file
+                    ),
+                    native_ui_observer_packet_file=(
+                        args.native_ui_observer_packet_file
+                    ),
+                    expected_visible_text=args.expected_visible_text,
+                    request_id=args.request_id,
                 )
             )
         if (
