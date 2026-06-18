@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import secrets
+import time
 from typing import Any
 
 from wild_boar_proxy.runtime import RuntimeErrorInfo
@@ -78,6 +81,254 @@ def _models_url(route: dict[str, Any]) -> str:
 
 def _completion_url(route: dict[str, Any]) -> str:
     return str(route["base_url"]).rstrip("/") + str(route["endpoint_path"])
+
+
+def _load_runtime_context_from_env() -> dict[str, Any]:
+    profile_dir = os.environ.get("WBP_PROFILE_DIR", "").strip()
+    if not profile_dir:
+        return {}
+    context_path = Path(profile_dir).expanduser() / "wbp-agent-runtime-context.json"
+    try:
+        parsed = json.loads(context_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _runtime_context_allows_route(context: dict[str, Any], route_id: str) -> bool:
+    allowed = context.get("allowed_api_route_ids")
+    return isinstance(allowed, list) and route_id in allowed
+
+
+def _replace_bridge_placeholders(value: Any, *, request_id: str, expected_text: str) -> Any:
+    if isinstance(value, str):
+        return value.replace("<unique-id>", request_id).replace(
+            "<expected_text>",
+            expected_text,
+        )
+    if isinstance(value, list):
+        return [
+            _replace_bridge_placeholders(
+                item,
+                request_id=request_id,
+                expected_text=expected_text,
+            )
+            for item in value
+        ]
+    if isinstance(value, dict):
+        return {
+            str(key): _replace_bridge_placeholders(
+                item,
+                request_id=request_id,
+                expected_text=expected_text,
+            )
+            for key, item in value.items()
+        }
+    return value
+
+
+def _response_text_from_field(payload: Any, field_name: str) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    value: Any = payload
+    for part in field_name.split("."):
+        if not isinstance(value, dict):
+            return ""
+        value = value.get(part)
+    return str(value) if isinstance(value, str) else ""
+
+
+def _bridge_live_format_data(
+    *,
+    route: dict[str, Any],
+    expected_text: str,
+    response_text: str,
+    latency_ms: int | None,
+    bridge_kind: str,
+    request_count: int,
+) -> dict[str, Any]:
+    is_file_bridge = "file_bridge" in bridge_kind
+    return {
+        "check_kind": "api_only_live_route_format",
+        "network_dependent": True,
+        "verification_scope": "route_provider_only_no_write",
+        "route_state": "live_response_observed_no_write",
+        "requested_model": route["route_id"],
+        "effective_model": route["upstream_model"],
+        "provider": route["provider"],
+        "fallback_used": False,
+        "fallback_chain": [route["route_id"]],
+        "cost_class": route["cost_class"],
+        "latency_ms": latency_ms,
+        "request_count": request_count,
+        "retry_count": 0,
+        "parallel_fanout_attempted": False,
+        "expected_text": expected_text,
+        "expected_text_observed": expected_text in response_text,
+        "response_preview_bounded": response_text[:160],
+        "response_text_length": len(response_text),
+        "changed_files": [],
+        "state_written": False,
+        "evidence_written": False,
+        "file_mutation_attempted": False,
+        "commands_started_by_provider": False,
+        "codex_history_sent": False,
+        "repo_context_sent": False,
+        "request_shape": "runtime_context_bridge",
+        "response_profile": "runtime_context_bridge",
+        "response_shape": "output_text",
+        "runtime_context_bridge_used": not is_file_bridge,
+        "runtime_context_file_bridge_used": is_file_bridge,
+        "bridge_or_file_bridge_used": True,
+        "bridge_kind": bridge_kind,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+
+
+def _runtime_context_loopback_bridge_data(
+    *,
+    context: dict[str, Any],
+    route: dict[str, Any],
+    expected_text: str,
+) -> dict[str, Any] | None:
+    bridge = context.get("deepseek_live_format_check_bridge")
+    if not isinstance(bridge, dict) or bridge.get("enabled") is not True:
+        return None
+    if str(bridge.get("model") or "") != str(route["route_id"]):
+        return None
+    urls = bridge.get("url_candidates")
+    if not isinstance(urls, list) or not urls:
+        raw_url = str(bridge.get("url") or "").strip()
+        urls = [raw_url] if raw_url else []
+    request_template = bridge.get("request_json_template")
+    if not isinstance(request_template, dict):
+        return None
+    field_name = str(bridge.get("response_text_field") or "output_text")
+    last_error: RuntimeErrorInfo | None = None
+    for raw_url in urls:
+        url = str(raw_url).strip()
+        if not url:
+            continue
+        request_id = secrets.token_urlsafe(16)
+        payload = _replace_bridge_placeholders(
+            request_template,
+            request_id=request_id,
+            expected_text=expected_text,
+        )
+        try:
+            response = request_json(
+                url=url,
+                method=str(bridge.get("method") or "POST"),
+                headers={},
+                payload=payload,
+            )
+        except RuntimeErrorInfo as exc:
+            last_error = exc
+            continue
+        if response.status_code != 200:
+            continue
+        response_text = _response_text_from_field(response.payload, field_name)
+        if not response_text:
+            continue
+        return _bridge_live_format_data(
+            route=route,
+            expected_text=expected_text,
+            response_text=response_text,
+            latency_ms=response.latency_ms,
+            bridge_kind=str(bridge.get("bridge_kind") or "runtime_context_loopback_bridge"),
+            request_count=1,
+        )
+    if last_error is not None:
+        return None
+    return None
+
+
+def _runtime_context_file_bridge_data(
+    *,
+    context: dict[str, Any],
+    route: dict[str, Any],
+    expected_text: str,
+) -> dict[str, Any] | None:
+    bridge = context.get("deepseek_live_format_check_file_bridge")
+    if not isinstance(bridge, dict) or bridge.get("enabled") is not True:
+        return None
+    if str(bridge.get("model") or "") != str(route["route_id"]):
+        return None
+    request_template = bridge.get("request_json_template")
+    if not isinstance(request_template, dict):
+        return None
+    request_dir_raw = str(bridge.get("request_dir") or "").strip()
+    response_dir_raw = str(bridge.get("response_dir") or "").strip()
+    if not request_dir_raw or not response_dir_raw:
+        return None
+    request_dir = Path(request_dir_raw).expanduser()
+    response_dir = Path(response_dir_raw).expanduser()
+    request_extension = str(bridge.get("request_extension") or ".json")
+    response_extension = str(bridge.get("response_extension") or ".json")
+    request_id = secrets.token_urlsafe(16)
+    request_path = request_dir / f"{request_id}{request_extension}"
+    response_path = response_dir / f"{request_id}{response_extension}"
+    payload = _replace_bridge_placeholders(
+        request_template,
+        request_id=request_id,
+        expected_text=expected_text,
+    )
+    started_at = time.monotonic()
+    try:
+        request_dir.mkdir(parents=True, exist_ok=True)
+        response_dir.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(
+            json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        return None
+    timeout_seconds = max(float(bridge.get("timeout_seconds") or 45.0), 0.0)
+    poll_interval = max(float(bridge.get("poll_interval_seconds") or 0.25), 0.01)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() <= deadline:
+        if response_path.exists():
+            break
+        time.sleep(poll_interval)
+    if not response_path.exists():
+        return None
+    try:
+        parsed = json.loads(response_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    field_name = str(bridge.get("response_text_field") or "output_text")
+    response_text = _response_text_from_field(parsed, field_name)
+    if not response_text:
+        return None
+    return _bridge_live_format_data(
+        route=route,
+        expected_text=expected_text,
+        response_text=response_text,
+        latency_ms=int((time.monotonic() - started_at) * 1000),
+        bridge_kind=str(bridge.get("bridge_kind") or "file_bridge"),
+        request_count=1,
+    )
+
+
+def _runtime_context_bridge_live_format_data(
+    *,
+    route: dict[str, Any],
+    route_id: str,
+    expected_text: str,
+) -> dict[str, Any] | None:
+    context = _load_runtime_context_from_env()
+    if not context or not _runtime_context_allows_route(context, route_id):
+        return None
+    return _runtime_context_loopback_bridge_data(
+        context=context,
+        route=route,
+        expected_text=expected_text,
+    ) or _runtime_context_file_bridge_data(
+        context=context,
+        route=route,
+        expected_text=expected_text,
+    )
 
 
 def _require_enabled_route(route: dict[str, Any], *, action_label: str) -> None:
@@ -506,6 +757,13 @@ def check_route_provider_once_no_write(
             operator_action="user_action",
         )
     _require_enabled_route(route, action_label="live-format-check")
+    bridge_data = _runtime_context_bridge_live_format_data(
+        route=route,
+        route_id=route_id,
+        expected_text=expected_text,
+    )
+    if bridge_data is not None:
+        return {**bridge_data, **transform_metadata}
     headers = _provider_headers(route, paths)
     request_payload, request_metadata = transforms.build_check_request(
         route, user_prompt=user_prompt

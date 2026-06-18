@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -145,6 +146,41 @@ def mocked_provider(
     thread.start()
     try:
         yield (f"http://127.0.0.1:{port}/v1", server)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@contextmanager
+def mocked_runtime_bridge(*, response_text: str) -> tuple[str, ThreadingHTTPServer]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            raw_length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(raw_length) if raw_length else b"{}"
+            try:
+                self.server.last_request_payload = json.loads(raw_body.decode("utf-8"))  # type: ignore[attr-defined]
+            except json.JSONDecodeError:
+                self.server.last_request_payload = {}  # type: ignore[attr-defined]
+            self.server.request_count += 1  # type: ignore[attr-defined]
+            raw = json.dumps({"output_text": response_text}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+            return
+
+    port = _free_port()
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server.request_count = 0  # type: ignore[attr-defined]
+    server.last_request_payload = {}  # type: ignore[attr-defined]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (f"http://127.0.0.1:{port}", server)
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -1250,6 +1286,259 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(request_payload["max_tokens"], 96)
         self.assertEqual(state_after, state_before)
         self.assertEqual(evidence_after, evidence_before)
+
+    def test_live_format_check_uses_runtime_context_loopback_bridge_before_direct_provider(
+        self,
+    ) -> None:
+        expected_text = "API_ONLY_DEEPSEEK_READY"
+        route_id = "wbp-deepseek-v3"
+        with mocked_runtime_bridge(response_text=expected_text) as (bridge_base_url, bridge):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(
+                    sample_route(
+                        route_id=route_id,
+                        base_url=f"http://127.0.0.1:{_free_port()}/v1",
+                    )
+                ),
+            )
+            (self.profile_dir / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "allowed_api_route_ids": [route_id],
+                        "agent_id_to_route": {"dip": route_id},
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "bridge_kind": "local_wbp_responses_bridge",
+                            "model": route_id,
+                            "method": "POST",
+                            "url_candidates": [f"{bridge_base_url}/responses"],
+                            "request_json_template": {
+                                "model": route_id,
+                                "input": "Answer exactly one line: <expected_text>",
+                                "request_id": "<unique-id>",
+                                "stream": False,
+                            },
+                            "response_text_field": "output_text",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state_before = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            result = self.run_cli(
+                "external-models",
+                "live-format-check",
+                "--json",
+                "--route",
+                route_id,
+                "--prompt",
+                "Return the marker.",
+                "--expected-text",
+                expected_text,
+            )
+            state_after = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["data"]["check_kind"], "api_only_live_route_format")
+        self.assertTrue(payload["data"]["expected_text_observed"])
+        self.assertEqual(payload["data"]["response_shape"], "output_text")
+        self.assertTrue(payload["data"]["runtime_context_bridge_used"])
+        self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertEqual(payload["data"]["bridge_kind"], "local_wbp_responses_bridge")
+        self.assertFalse(payload["data"]["fallback_used"])
+        self.assertFalse(payload["data"]["state_written"])
+        self.assertFalse(payload["data"]["evidence_written"])
+        self.assertFalse(payload["data"]["file_mutation_attempted"])
+        self.assertEqual(bridge.request_count, 1)  # type: ignore[attr-defined]
+        self.assertEqual(state_after, state_before)
+
+    def test_live_format_check_uses_runtime_context_file_bridge_without_socket(
+        self,
+    ) -> None:
+        expected_text = "API_ONLY_FILE_BRIDGE_READY"
+        route_id = "wbp-deepseek-v3"
+        request_dir = self.root / "file-bridge" / "requests"
+        response_dir = self.root / "file-bridge" / "responses"
+        request_dir.mkdir(parents=True)
+        response_dir.mkdir(parents=True)
+
+        def responder() -> None:
+            deadline = time.monotonic() + 5
+            while time.monotonic() <= deadline:
+                requests = sorted(request_dir.glob("*.json"))
+                if requests:
+                    request_payload = json.loads(requests[0].read_text(encoding="utf-8"))
+                    response_path = response_dir / f"{request_payload['request_id']}.json"
+                    response_path.write_text(
+                        json.dumps(
+                            {
+                                "packet_kind": "custom_native_file_bridge_response",
+                                "status": "completed",
+                                "output_text": expected_text,
+                            }
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    return
+                time.sleep(0.02)
+
+        self.run_cli(
+            "external-models",
+            "routes",
+            "add",
+            "--json",
+            "--stdin",
+            stdin_text=json.dumps(
+                sample_route(
+                    route_id=route_id,
+                    base_url=f"http://127.0.0.1:{_free_port()}/v1",
+                )
+            ),
+        )
+        (self.profile_dir / "wbp-agent-runtime-context.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "allowed_api_route_ids": [route_id],
+                    "agent_id_to_route": {"dip": route_id},
+                    "deepseek_live_format_check_file_bridge": {
+                        "enabled": True,
+                        "bridge_kind": "server_owned_file_bridge",
+                        "model": route_id,
+                        "request_dir": str(request_dir),
+                        "response_dir": str(response_dir),
+                        "request_extension": ".json",
+                        "response_extension": ".json",
+                        "request_json_template": {
+                            "schema_version": 1,
+                            "request_id": "<unique-id>",
+                            "model": route_id,
+                            "input": "Answer exactly one line: <expected_text>",
+                            "stream": False,
+                        },
+                        "response_text_field": "output_text",
+                        "poll_interval_seconds": 0.02,
+                        "timeout_seconds": 5,
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        thread = threading.Thread(target=responder, daemon=True)
+        thread.start()
+        result = self.run_cli(
+            "external-models",
+            "live-format-check",
+            "--json",
+            "--route",
+            route_id,
+            "--prompt",
+            "Return the marker.",
+            "--expected-text",
+            expected_text,
+        )
+        thread.join(timeout=2)
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertTrue(payload["data"]["expected_text_observed"])
+        self.assertFalse(payload["data"]["runtime_context_bridge_used"])
+        self.assertTrue(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertEqual(payload["data"]["bridge_kind"], "server_owned_file_bridge")
+        self.assertFalse(payload["data"]["fallback_used"])
+        self.assertFalse(payload["data"]["state_written"])
+        self.assertFalse(payload["data"]["evidence_written"])
+        self.assertFalse(payload["data"]["file_mutation_attempted"])
+
+    def test_live_format_check_does_not_use_runtime_bridge_without_allowlist(
+        self,
+    ) -> None:
+        expected_text = "API_ONLY_BRIDGE_MUST_NOT_BE_USED"
+        route_id = "wbp-deepseek-v3"
+        with mocked_runtime_bridge(response_text=expected_text) as (bridge_base_url, bridge):
+            with mocked_provider(
+                smoke_payload={"choices": [{"message": {"content": expected_text}}]},
+            ) as (provider_base_url, _provider):
+                self.run_cli(
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--json",
+                    "--stdin",
+                    stdin_text=json.dumps(
+                        sample_route(
+                            route_id=route_id,
+                            base_url=provider_base_url,
+                        )
+                    ),
+                )
+                (self.profile_dir / "wbp-agent-runtime-context.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "allowed_api_route_ids": [],
+                            "agent_id_to_route": {"dip": route_id},
+                            "deepseek_live_format_check_bridge": {
+                                "enabled": True,
+                                "bridge_kind": "local_wbp_responses_bridge",
+                                "model": route_id,
+                                "method": "POST",
+                                "url_candidates": [f"{bridge_base_url}/responses"],
+                                "request_json_template": {
+                                    "model": route_id,
+                                    "input": "Answer exactly one line: <expected_text>",
+                                    "request_id": "<unique-id>",
+                                    "stream": False,
+                                },
+                                "response_text_field": "output_text",
+                            },
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                result = self.run_cli(
+                    "external-models",
+                    "live-format-check",
+                    "--json",
+                    "--route",
+                    route_id,
+                    "--prompt",
+                    "Return the marker.",
+                    "--expected-text",
+                    expected_text,
+                )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["data"]["expected_text_observed"])
+        self.assertEqual(payload["data"]["request_shape"], "openai_chat_messages")
+        self.assertNotIn("bridge_or_file_bridge_used", payload["data"])
+        self.assertEqual(bridge.request_count, 0)  # type: ignore[attr-defined]
 
     def test_check_transform_profile_records_request_and_response_metadata(self) -> None:
         route = sample_route(base_url="https://placeholder.invalid") | {
