@@ -118,7 +118,7 @@ def _read_json_mapping_file(
         return {}, metadata
     try:
         parsed = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         metadata["handoff_proof_file_error_code"] = "handoff_proof_file_invalid"
         return {}, metadata
     metadata["handoff_proof_file_read"] = True
@@ -146,7 +146,7 @@ def _read_jsonl_events_file(path: Path) -> tuple[list[dict[str, Any]], dict[str,
         return [], metadata
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         metadata["codex_exec_jsonl_file_error_code"] = "codex_exec_jsonl_file_unreadable"
         return [], metadata
 

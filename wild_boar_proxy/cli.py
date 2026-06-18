@@ -63,6 +63,11 @@ from .custom_codex_approved_visible_source_observation import (
     VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
     run_custom_codex_approved_visible_source_observation_command,
 )
+from .custom_codex_visible_source_binding_proof import (
+    APPROVED_VISIBLE_SOURCE_KINDS as BINDING_APPROVED_VISIBLE_SOURCE_KINDS,
+    VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT as BINDING_VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    run_custom_codex_visible_source_binding_proof_command,
+)
 from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
 from .observed_machine_handoff_delivery import (
     APPROVED_DELIVERY_SURFACES,
@@ -471,6 +476,28 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_visible_source.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_visible_source_binding = router_hook_subparsers.add_parser(
+        "visible-source-binding-proof"
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--visible-source-kind",
+        choices=sorted(BINDING_APPROVED_VISIBLE_SOURCE_KINDS),
+        default=BINDING_VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_visible_source_binding.add_argument("--runtime-context-file")
+    router_hook_visible_source_binding.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1073,6 +1100,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "transcript-observe",
         "assistant-continuation-proof",
         "visible-source-observe",
+        "visible-source-binding-proof",
         "user-prompt-submit-proof",
         "user-prompt-submit-ledger-proof",
         "ledger-bound-dispatch-proof",
@@ -1483,6 +1511,21 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     visible_source_kind=args.visible_source_kind,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "visible-source-binding-proof"
+        ):
+            return emit_json(
+                run_custom_codex_visible_source_binding_proof_command(
+                    paths=paths,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                    visible_source_kind=args.visible_source_kind,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
                 )
             )
         if (

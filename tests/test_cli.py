@@ -4387,6 +4387,20 @@ class CliTests(unittest.TestCase):
             (
                 [
                     "router-hook",
+                    "visible-source-binding-proof",
+                    "--working-flow-delivery-proof-file",
+                    "/tmp/wbp-working-flow.json",
+                    "--visible-source-kind",
+                    "codex_exec_json_assistant_output",
+                    "--codex-exec-jsonl-file",
+                    "/tmp/wbp-codex.jsonl",
+                    "--json",
+                ],
+                "probe",
+            ),
+            (
+                [
+                    "router-hook",
                     "user-prompt-submit-proof",
                     "--prompt",
                     "hi",
