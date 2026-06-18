@@ -160,6 +160,25 @@ class ControlledApiDispatchTests(unittest.TestCase):
         _assert_no_raw_prompt_route_or_provider_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_route_digest_is_not_computed_from_redacted_route_placeholder(self) -> None:
+        packet = dispatch.build_controlled_api_dispatch_packet(
+            prompt_text=PROMPT,
+            runtime_context=_runtime_context(),
+            secret_values=[PROMPT, ROUTE_ID],
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["selected_api_route_id_sha256"],
+            hashlib.sha256(ROUTE_ID.encode("utf-8")).hexdigest(),
+        )
+        self.assertNotEqual(
+            packet["selected_api_route_id_sha256"],
+            hashlib.sha256("<redacted>".encode("utf-8")).hexdigest(),
+        )
+        _assert_no_raw_prompt_route_or_provider_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_controlled_dispatch_blocks_without_alias_context(self) -> None:
         packet = dispatch.build_controlled_api_dispatch_packet(
             prompt_text=PROMPT,

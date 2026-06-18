@@ -61,12 +61,22 @@ def build_controlled_api_dispatch_packet(
         context_file_metadata=context_file_metadata,
         secret_values=secret_values,
     )
+    route_source_packet = (
+        build_router_hook_entry_packet(
+            prompt_text=prompt_text,
+            runtime_context=runtime_context,
+            hook_surface_kind=hook_surface_kind,
+            context_file_metadata=context_file_metadata,
+        )
+        if secret_values
+        else hook_packet
+    )
     hook_entry_proven = bool(
         hook_packet.get("status") == "ok"
         and hook_packet.get("hook_entry_proven") is True
         and hook_packet.get("route_id_allowed") is True
     )
-    route_id = _safe_text(hook_packet.get("route_candidate"), limit=80)
+    route_id = _safe_text(route_source_packet.get("route_candidate"), limit=128)
     slot = _safe_text(hook_packet.get("slot_candidate"), limit=64)
     alias = _safe_text(hook_packet.get("alias_candidate"), limit=80)
     lane = _safe_text(hook_packet.get("lane_candidate"), limit=32)

@@ -96,6 +96,9 @@ from .custom_origin_bound_api_dispatch_proof import (
     ADMITTED_CUSTOM_ORIGIN_BOUND_LAUNCH_SURFACES,
     run_custom_origin_bound_api_dispatch_proof_command,
 )
+from .custom_origin_bound_live_provider_join import (
+    run_custom_origin_bound_live_provider_join_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -530,6 +533,33 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_custom_origin_bound_dispatch.add_argument("--custom-user-data-dir")
     router_hook_custom_origin_bound_dispatch.add_argument("--custom-launcher-path")
     router_hook_custom_origin_bound_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join = router_hook_subparsers.add_parser(
+        "custom-origin-bound-live-provider-join"
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--prompt",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--custom-origin-bound-dispatch-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--live-provider-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--live-provider-expected-text",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--runtime-context-file",
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1047,6 +1077,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "user-prompt-submit-ledger-proof",
         "ledger-bound-dispatch-proof",
         "custom-origin-bound-dispatch-proof",
+        "custom-origin-bound-live-provider-join",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1510,6 +1541,22 @@ def main(argv: list[str] | None = None) -> int:
                     custom_profile_dir=args.custom_profile_dir,
                     custom_user_data_dir=args.custom_user_data_dir,
                     custom_launcher_path=args.custom_launcher_path,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-bound-live-provider-join"
+        ):
+            return emit_json(
+                run_custom_origin_bound_live_provider_join_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    custom_origin_bound_dispatch_proof_file=(
+                        args.custom_origin_bound_dispatch_proof_file
+                    ),
+                    live_provider_proof_file=args.live_provider_proof_file,
+                    live_provider_expected_text=args.live_provider_expected_text,
+                    runtime_context_file=args.runtime_context_file,
                 )
             )
         if (

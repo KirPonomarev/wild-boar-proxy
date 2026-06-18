@@ -410,6 +410,12 @@ def build_custom_origin_bound_api_dispatch_proof_packet(
         "allowed_api_route_ids_enforced": bool(
             ok and dispatch.get("allowed_api_route_ids_enforced") is True
         ),
+        "selected_api_route_id_present": bool(
+            ok and dispatch.get("selected_api_route_id_present") is True
+        ),
+        "selected_api_route_id_sha256": (
+            _hex_sha256(dispatch.get("selected_api_route_id_sha256")) if ok else ""
+        ),
         "forbidden_stale_route_ids_enforced": bool(
             ok and int(dispatch.get("forbidden_stale_route_ids_count") or 0) > 0
         ),
