@@ -92,6 +92,10 @@ from .real_custom_app_submit_ledger_proof import (
     run_real_custom_app_submit_ledger_proof_command,
 )
 from .custom_ui_origin_admission import run_custom_ui_origin_admission_command
+from .custom_origin_bound_api_dispatch_proof import (
+    ADMITTED_CUSTOM_ORIGIN_BOUND_LAUNCH_SURFACES,
+    run_custom_origin_bound_api_dispatch_proof_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -499,6 +503,33 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_ledger_bound_dispatch.add_argument("--hook-ledger-file")
     router_hook_ledger_bound_dispatch.add_argument("--runtime-context-file")
     router_hook_ledger_bound_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch = router_hook_subparsers.add_parser(
+        "custom-origin-bound-dispatch-proof"
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument("--prompt", required=True)
+    router_hook_custom_origin_bound_dispatch.add_argument(
+        "--ledger-mtime-before-ns",
+        type=int,
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument(
+        "--launch-surface",
+        choices=sorted(ADMITTED_CUSTOM_ORIGIN_BOUND_LAUNCH_SURFACES),
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument("--hook-ledger-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--runtime-context-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--process-inventory-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--stock-app-path")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-app-path")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-profile-dir")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-user-data-dir")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-launcher-path")
+    router_hook_custom_origin_bound_dispatch.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1015,6 +1046,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "user-prompt-submit-proof",
         "user-prompt-submit-ledger-proof",
         "ledger-bound-dispatch-proof",
+        "custom-origin-bound-dispatch-proof",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
         "custom-codex-auth-session-readiness",
@@ -1458,6 +1490,26 @@ def main(argv: list[str] | None = None) -> int:
                     prompt_text=args.prompt,
                     hook_ledger_file=args.hook_ledger_file,
                     runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-bound-dispatch-proof"
+        ):
+            return emit_json(
+                run_custom_origin_bound_api_dispatch_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    ledger_mtime_before_ns=args.ledger_mtime_before_ns,
+                    launch_surface=args.launch_surface,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    process_inventory_file=args.process_inventory_file,
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    custom_profile_dir=args.custom_profile_dir,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    custom_launcher_path=args.custom_launcher_path,
                 )
             )
         if (

@@ -101,6 +101,13 @@ def _safe_reason_tokens(value: object) -> list[str]:
     return sorted(reasons)
 
 
+def _hex_sha256(value: object) -> str:
+    text = _safe_text(value, limit=80)
+    if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return ""
+
+
 def _unsafe_submit_packet_failures(packet: Mapping[str, Any]) -> list[str]:
     checks = {
         "api_lane_called": "custom_app_submit_must_not_claim_api_lane_called",
@@ -247,6 +254,7 @@ def build_custom_ui_origin_admission_packet(
     unsafe_failures = _unsafe_submit_packet_failures(submit_packet)
     submit_failures = _submit_packet_failures(submit_packet)
     fresh_user_prompt_submit_ledger_proven = not submit_failures
+    prompt_digest = _hex_sha256(submit_packet.get("prompt_digest"))
 
     custom_instance_coexistence_possible = (
         custom_app_identity_distinct
@@ -299,6 +307,8 @@ def build_custom_ui_origin_admission_packet(
         "fresh_user_prompt_submit_ledger_proven": (
             fresh_user_prompt_submit_ledger_proven
         ),
+        "prompt_digest": prompt_digest,
+        "prompt_digest_present": bool(prompt_digest),
         "custom_ui_origin_admitted": ok,
         "custom_codex_flow_origin_admitted": ok,
         "real_custom_app_submit_ledger_proven": (
