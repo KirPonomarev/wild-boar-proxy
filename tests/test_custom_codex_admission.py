@@ -378,6 +378,21 @@ def _assert_no_raw_sensitive_text(testcase: unittest.TestCase, packet: dict[str,
 
 
 class CustomCodexAdmissionTests(unittest.TestCase):
+    def test_codex_exec_command_accepts_explicit_model_without_rewriting_prompt(self) -> None:
+        command = admission._codex_exec_command(
+            codex_bin="/tmp/codex",
+            codex_cwd=ROOT,
+            sandbox="danger-full-access",
+            codex_model="gpt-5.4",
+            prompt_text=PROMPT,
+        )
+
+        self.assertEqual(command[0], "/tmp/codex")
+        self.assertEqual(command[1], "exec")
+        self.assertIn("-m", command)
+        self.assertEqual(command[command.index("-m") + 1], "gpt-5.4")
+        self.assertEqual(command[-1], PROMPT)
+
     def test_runner_env_selects_server_owned_external_registry_matching_context_route(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

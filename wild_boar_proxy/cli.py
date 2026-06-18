@@ -242,6 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
     codex_runner_admission = codex_runner_subparsers.add_parser("admission")
     codex_runner_admission.add_argument("--prompt", required=True)
     codex_runner_admission.add_argument("--codex-bin")
+    codex_runner_admission.add_argument("--codex-model")
     codex_runner_admission.add_argument("--proof-dir")
     codex_runner_admission.add_argument("--codex-cwd")
     codex_runner_admission.add_argument(
@@ -261,6 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
     codex_runner_operator = codex_runner_subparsers.add_parser("operator-proof")
     codex_runner_operator.add_argument("--prompt", required=True)
     codex_runner_operator.add_argument("--codex-bin")
+    codex_runner_operator.add_argument("--codex-model")
     codex_runner_operator.add_argument("--proof-dir")
     codex_runner_operator.add_argument("--codex-cwd")
     codex_runner_operator.add_argument(
@@ -282,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_visible_source.add_argument("--prompt", required=True)
     codex_runner_visible_source.add_argument("--codex-bin")
+    codex_runner_visible_source.add_argument("--codex-model")
     codex_runner_visible_source.add_argument("--proof-dir")
     codex_runner_visible_source.add_argument("--codex-cwd")
     codex_runner_visible_source.add_argument(
@@ -1358,6 +1361,7 @@ def main(argv: list[str] | None = None) -> int:
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
                     proof_dir=args.proof_dir,
                     codex_cwd=args.codex_cwd,
                     expected_text=args.expected_text,
@@ -1374,6 +1378,7 @@ def main(argv: list[str] | None = None) -> int:
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
                     proof_dir=args.proof_dir,
                     codex_cwd=args.codex_cwd,
                     expected_text=args.expected_text,
@@ -1390,6 +1395,7 @@ def main(argv: list[str] | None = None) -> int:
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
                     proof_dir=args.proof_dir,
                     codex_cwd=args.codex_cwd,
                     expected_text=args.expected_text,

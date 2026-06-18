@@ -226,9 +226,10 @@ def _codex_exec_command(
     codex_bin: str,
     codex_cwd: Path,
     sandbox: str,
+    codex_model: str | None,
     prompt_text: str,
 ) -> list[str]:
-    return [
+    command = [
         codex_bin,
         "exec",
         "--json",
@@ -236,8 +237,11 @@ def _codex_exec_command(
         sandbox,
         "-C",
         str(codex_cwd),
-        prompt_text,
     ]
+    if codex_model:
+        command.extend(["-m", codex_model])
+    command.append(prompt_text)
+    return command
 
 
 def _redacted_command_digest(command: Sequence[str], *, prompt_text: str) -> str:
@@ -411,6 +415,7 @@ def run_custom_codex_admission_command(
     paths: RuntimePaths,
     prompt_text: str,
     codex_bin: str | None = None,
+    codex_model: str | None = None,
     proof_dir: str | None = None,
     codex_cwd: str | None = None,
     expected_text: str = DEFAULT_EXPECTED_TEXT,
@@ -447,6 +452,7 @@ def run_custom_codex_admission_command(
         codex_bin=codex_bin_value,
         codex_cwd=cwd,
         sandbox=sandbox,
+        codex_model=_safe_text(codex_model, limit=128),
         prompt_text=prompt,
     )
     stdout_path = proof_root / "codex-exec.jsonl"

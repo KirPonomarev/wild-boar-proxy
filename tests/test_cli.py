@@ -4582,6 +4582,35 @@ class CliTests(unittest.TestCase):
                 args = parser.parse_args(argv)
                 self.assertEqual(cli_mod.command_effect_from_args(args), expected_effect)
 
+    def test_codex_runner_model_override_parses_for_proof_commands(self) -> None:
+        parser = cli_mod.build_parser()
+        cases = [
+            ["codex-runner", "admission", "--prompt", "hi", "--codex-model", "gpt-5.4", "--json"],
+            [
+                "codex-runner",
+                "operator-proof",
+                "--prompt",
+                "hi",
+                "--codex-model",
+                "gpt-5.4",
+                "--json",
+            ],
+            [
+                "codex-runner",
+                "working-flow-visible-source-proof",
+                "--prompt",
+                "hi",
+                "--codex-model",
+                "gpt-5.4",
+                "--json",
+            ],
+        ]
+        for argv in cases:
+            with self.subTest(argv=" ".join(argv)):
+                args = parser.parse_args(argv)
+                self.assertEqual(args.codex_model, "gpt-5.4")
+                self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+
     def test_cli_effect_classifier_covers_external_models_route_mutations(self) -> None:
         parser = cli_mod.build_parser()
         cases = [
