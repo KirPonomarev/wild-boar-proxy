@@ -28,10 +28,16 @@ DEFAULT_TIMEOUT_SECONDS = 180
 OFFICIAL_MCP_ADMISSION_CASE_PACKET_KIND = "wbp_official_mcp_admission_case"
 OFFICIAL_MCP_ADMISSION_MATRIX_PACKET_KIND = "wbp_official_mcp_admission_matrix"
 NATURAL_ALIAS_INTENT_MATRIX_PACKET_KIND = "wbp_natural_alias_intent_matrix"
+NATURAL_INTENT_CLAIM_PACKET_KIND = "wbp_natural_intent_claim"
 OFFICIAL_MCP_ADMISSION_NOT_PROVEN = "WBP_OFFICIAL_MCP_ADMISSION_NOT_PROVEN"
 OFFICIAL_MCP_TOOL_CALL_NOT_BOUND = "WBP_OFFICIAL_MCP_TOOL_CALL_NOT_BOUND"
 NATURAL_MCP_TOOL_CALL_NOT_BOUND = "WBP_NATURAL_MCP_TOOL_CALL_NOT_BOUND"
 OFFICIAL_MCP_ALIAS_MISMATCH = "WBP_OFFICIAL_MCP_ALIAS_MISMATCH"
+NATURAL_INTENT_CLAIM_NOT_PROVEN = "WBP_NATURAL_INTENT_CLAIM_NOT_PROVEN"
+NATURAL_INTENT_ALIAS_MISSING = "WBP_NATURAL_INTENT_ALIAS_MISSING"
+NATURAL_INTENT_ALIAS_OUTSIDE_CONTEXT = "WBP_NATURAL_INTENT_ALIAS_OUTSIDE_CONTEXT"
+NATURAL_INTENT_TASK_MISSING = "WBP_NATURAL_INTENT_TASK_MISSING"
+NATURAL_INTENT_AMBIGUOUS = "WBP_NATURAL_INTENT_AMBIGUOUS"
 INTENT_TOOL_DIRECTED = "tool_directed"
 INTENT_STRICT_NATURAL = "strict_natural"
 INTENT_AMBIGUOUS_NATURAL = "ambiguous_natural"
@@ -353,6 +359,153 @@ def _expected_delegate_arguments(variant: OfficialMcpAdmissionVariant) -> dict[s
     }
 
 
+def _strict_natural_delegated_task(prompt: str, alias: str) -> str:
+    safe_prompt = mcp_delegate._safe_text(prompt, limit=4096)
+    safe_alias = mcp_delegate._safe_text(alias, limit=80)
+    if not safe_prompt or not safe_alias:
+        return ""
+    alias_index = safe_prompt.casefold().find(safe_alias.casefold())
+    if alias_index < 0:
+        return ""
+    tail = safe_prompt[alias_index + len(safe_alias) :]
+    if ":" in tail:
+        tail = tail.split(":", 1)[1]
+    return mcp_delegate._safe_text(tail.lstrip(" \t,;:-—–"), limit=4096)
+
+
+def _intent_claim_sha256(material: Mapping[str, Any]) -> str:
+    return mcp_delegate._sha256_text(
+        json.dumps(
+            dict(material),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def _delegated_task_candidate_sha256s(delegated_task: str) -> list[str]:
+    safe_task = mcp_delegate._safe_text(delegated_task, limit=4096)
+    return [mcp_delegate._sha256_text(safe_task)] if safe_task else []
+
+
+def build_natural_intent_claim_packet(
+    variant: OfficialMcpAdmissionVariant,
+) -> dict[str, Any]:
+    safe_prompt = mcp_delegate._safe_text(variant.prompt, limit=4096)
+    prompt_sha256 = mcp_delegate._sha256_text(safe_prompt) if safe_prompt else ""
+    strict_natural = variant.intent_kind == INTENT_STRICT_NATURAL
+    ambiguous_intent = variant.intent_kind == INTENT_AMBIGUOUS_NATURAL
+    alias_present = prompt_has_expected_alias(variant.prompt, variant.expected_alias)
+    alias_from_runtime_context = bool(
+        variant.expected_alias and variant.expected_alias in variant.coding_aliases
+    )
+    delegated_task = (
+        _strict_natural_delegated_task(variant.prompt, variant.expected_alias)
+        if strict_natural
+        else ""
+    )
+    delegated_task_sha256 = (
+        mcp_delegate._sha256_text(delegated_task) if delegated_task else ""
+    )
+    delegated_task_candidate_sha256s = _delegated_task_candidate_sha256s(
+        delegated_task
+    )
+    ok = bool(
+        strict_natural
+        and not ambiguous_intent
+        and alias_present
+        and alias_from_runtime_context
+        and delegated_task_sha256
+    )
+    blocking_reasons: list[str] = []
+    if ambiguous_intent:
+        blocking_reasons.append("ambiguous_intent")
+    if not strict_natural:
+        blocking_reasons.append("not_strict_natural_intent")
+    if not alias_present:
+        blocking_reasons.append("alias_not_present_in_prompt")
+    if not alias_from_runtime_context:
+        blocking_reasons.append("alias_not_from_runtime_context")
+    if not delegated_task_sha256:
+        blocking_reasons.append("delegated_task_digest_missing")
+
+    if ok:
+        machine_error_code = "OK"
+    elif ambiguous_intent:
+        machine_error_code = NATURAL_INTENT_AMBIGUOUS
+    elif not alias_present:
+        machine_error_code = NATURAL_INTENT_ALIAS_MISSING
+    elif not alias_from_runtime_context:
+        machine_error_code = NATURAL_INTENT_ALIAS_OUTSIDE_CONTEXT
+    elif not delegated_task_sha256:
+        machine_error_code = NATURAL_INTENT_TASK_MISSING
+    else:
+        machine_error_code = NATURAL_INTENT_CLAIM_NOT_PROVEN
+
+    claim_material = {
+        "packet_kind": NATURAL_INTENT_CLAIM_PACKET_KIND,
+        "prompt_sha256": prompt_sha256,
+        "alias": variant.expected_alias if alias_present else "",
+        "alias_from_runtime_context": alias_from_runtime_context,
+        "delegated_task_sha256": delegated_task_sha256,
+        "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s,
+        "delegated_task_candidate_digest_count": len(
+            delegated_task_candidate_sha256s
+        ),
+        "delegated_task_source": "natural_prompt_parser" if delegated_task_sha256 else "",
+        "ambiguous_intent": ambiguous_intent,
+    }
+    intent_claim_sha256 = _intent_claim_sha256(claim_material) if ok else ""
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "Natural prompt intent claim was produced."
+            if ok
+            else "Natural prompt intent claim was not produced."
+        ),
+        machine_error_code=machine_error_code,
+        liveness="healthy" if ok else "degraded",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=[],
+        extra={
+            "schema_version": 1,
+            "packet_kind": NATURAL_INTENT_CLAIM_PACKET_KIND,
+            "prompt_digest_present": bool(prompt_sha256),
+            "prompt_sha256": prompt_sha256 if ok else "",
+            "intent_claim_digest_present": bool(intent_claim_sha256),
+            "intent_claim_sha256": intent_claim_sha256,
+            "alias": variant.expected_alias if alias_present else "",
+            "alias_from_runtime_context": alias_from_runtime_context,
+            "delegated_task_digest_present": bool(delegated_task_sha256),
+            "delegated_task_sha256": delegated_task_sha256,
+            "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s,
+            "delegated_task_candidate_digest_count": len(
+                delegated_task_candidate_sha256s
+            ),
+            "delegated_task_source": (
+                "natural_prompt_parser" if delegated_task_sha256 else ""
+            ),
+            "ambiguous_intent": ambiguous_intent,
+            "raw_prompt_recorded": False,
+            "raw_task_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "product_ready": False,
+            "blocking_reasons": [] if ok else blocking_reasons,
+        },
+    )
+
+
+def _intent_claim_for_variant(
+    variant: OfficialMcpAdmissionVariant,
+) -> dict[str, Any]:
+    if variant.intent_kind != INTENT_STRICT_NATURAL:
+        return {}
+    return build_natural_intent_claim_packet(variant)
+
+
 def explicit_tool_instruction_used(prompt: str) -> bool:
     lowered = prompt.casefold()
     explicit_markers = (
@@ -454,12 +607,18 @@ def build_official_mcp_admission_case_packet(
         variant.prompt,
         variant.expected_alias,
     )
+    intent_claim_digest_bound = (
+        codex_tool_call_packet.get("intent_claim_digest_bound") is True
+    )
+    tool_call_task_matches_intent = (
+        codex_tool_call_packet.get("tool_call_task_matches_intent") is True
+    )
+    natural_binding_required = strict_natural_prompt
     tool_call_completed_but_prompt_not_bound = bool(
         tool_call_completed and not prompt_bound
     )
     natural_mcp_tool_call_unbound = bool(
         natural_prompt_used
-        and not explicit_tool_instruction
         and tool_call_completed_but_prompt_not_bound
     )
     positive_proof = bool(
@@ -482,6 +641,7 @@ def build_official_mcp_admission_case_packet(
         and not uses_dangerously_bypass
         and not raw_jsonl_recorded
         and not raw_prompt_recorded
+        and (not natural_binding_required or intent_claim_digest_bound)
     )
     natural_alias_intent_routed = bool(
         natural_prompt_used
@@ -513,6 +673,8 @@ def build_official_mcp_admission_case_packet(
         blocking_reasons.append("codex_delegate_to_dip_tool_call_not_completed")
     if tool_call_completed and not prompt_bound:
         blocking_reasons.append("prompt_not_bound_to_codex_mcp_tool_call")
+    if natural_binding_required and not intent_claim_digest_bound:
+        blocking_reasons.append("intent_claim_digest_not_bound")
     if not entry_ok:
         blocking_reasons.append(
             str(evidence.get("machine_error_code") or "entry_hook_evidence_not_ok")
@@ -546,14 +708,16 @@ def build_official_mcp_admission_case_packet(
 
     if positive_proof:
         proof_machine_error_code = "OK"
+    elif entry_ok and not selected_alias_matches_expected:
+        proof_machine_error_code = OFFICIAL_MCP_ALIAS_MISMATCH
     elif tool_call_completed_but_prompt_not_bound:
         proof_machine_error_code = (
             NATURAL_MCP_TOOL_CALL_NOT_BOUND
             if natural_mcp_tool_call_unbound
             else OFFICIAL_MCP_TOOL_CALL_NOT_BOUND
         )
-    elif entry_ok and not selected_alias_matches_expected:
-        proof_machine_error_code = OFFICIAL_MCP_ALIAS_MISMATCH
+    elif natural_binding_required and not intent_claim_digest_bound:
+        proof_machine_error_code = NATURAL_MCP_TOOL_CALL_NOT_BOUND
     else:
         proof_machine_error_code = _first_non_ok_machine_error_code(
             evidence.get("machine_error_code"),
@@ -614,6 +778,12 @@ def build_official_mcp_admission_case_packet(
             "tool_call_digest_present": (
                 codex_tool_call_packet.get("tool_call_digest_present") is True
             ),
+            "tool_call_task_digest_present": (
+                codex_tool_call_packet.get("tool_call_task_digest_present") is True
+            ),
+            "tool_call_task_sha256": str(
+                codex_tool_call_packet.get("tool_call_task_sha256") or ""
+            ),
             "expected_delegate_tool_call_digest_present": (
                 codex_tool_call_packet.get(
                     "expected_delegate_tool_call_digest_present"
@@ -630,6 +800,27 @@ def build_official_mcp_admission_case_packet(
             "prompt_task_digest_matched": (
                 codex_tool_call_packet.get("prompt_task_digest_matched") is True
             ),
+            "prompt_binding_mode": str(
+                codex_tool_call_packet.get("prompt_binding_mode") or ""
+            ),
+            "intent_claim_digest_present": (
+                codex_tool_call_packet.get("intent_claim_digest_present") is True
+            ),
+            "intent_claim_digest_bound": intent_claim_digest_bound,
+            "delegated_task_digest_present": (
+                codex_tool_call_packet.get("delegated_task_digest_present") is True
+            ),
+            "delegated_task_sha256": str(
+                codex_tool_call_packet.get("delegated_task_sha256") or ""
+            ),
+            "delegated_task_candidate_digest_count": int(
+                codex_tool_call_packet.get("delegated_task_candidate_digest_count")
+                or 0
+            ),
+            "delegated_task_source": str(
+                codex_tool_call_packet.get("delegated_task_source") or ""
+            ),
+            "tool_call_task_matches_intent": tool_call_task_matches_intent,
             "codex_tool_call_claim_digest_present": (
                 codex_tool_call_packet.get("codex_tool_call_claim_digest_present")
                 is True
@@ -660,6 +851,7 @@ def build_official_mcp_admission_case_packet(
             "approval_policy": variant.approval_policy,
             "raw_jsonl_recorded": raw_jsonl_recorded,
             "raw_prompt_recorded": raw_prompt_recorded,
+            "raw_task_recorded": False,
             "prompt_text_recorded": False,
             "tool_call_arguments_recorded": False,
             "raw_backend_details_exposed": False,
@@ -768,6 +960,8 @@ def build_natural_alias_intent_matrix_packet(
         for case in strict_required
         if case.get("natural_alias_intent_routed") is True
         and case.get("selected_alias_matches_expected") is True
+        and case.get("intent_claim_digest_bound") is True
+        and case.get("tool_call_task_matches_intent") is True
     ]
     required_negatives = [
         case for case in required_cases if case.get("expect_positive_proof") is False
@@ -991,6 +1185,7 @@ def run_official_mcp_admission_case(
         variant.prompt,
         source="codex_exec_json",
         expected_delegate_arguments=_expected_delegate_arguments(variant),
+        intent_claim=_intent_claim_for_variant(variant),
     )
     exec_result = _run_codex_exec(
         codex_bin=codex_bin,

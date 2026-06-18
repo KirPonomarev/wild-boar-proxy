@@ -160,7 +160,14 @@ def _natural_case_packet(
     tool_arguments: dict[str, str] | None = None,
 ) -> dict[str, object]:
     variant = _natural_variant(alias, prompt)
-    arguments = tool_arguments if tool_arguments is not None else {"task": prompt}
+    arguments = (
+        tool_arguments
+        if tool_arguments is not None
+        else {
+            "task": proof._strict_natural_delegated_task(prompt, alias),
+            "expected_alias": alias,
+        }
+    )
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         profile_dir = root / "profile"
@@ -181,6 +188,7 @@ def _natural_case_packet(
         variant.prompt,
         source="codex_exec_json",
         expected_delegate_arguments=proof._expected_delegate_arguments(variant),
+        intent_claim=proof.build_natural_intent_claim_packet(variant),
     )
     codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
         _jsonl_for_prompt_bound_tool_call(variant, arguments=arguments),
@@ -329,11 +337,77 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertTrue(packet["natural_alias_intent_routed"])
         self.assertEqual(packet["natural_alias_intent_result"], "routed")
         self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertEqual(packet["prompt_binding_mode"], "natural_intent_claim")
+        self.assertTrue(packet["intent_claim_digest_present"])
+        self.assertTrue(packet["intent_claim_digest_bound"])
+        self.assertTrue(packet["delegated_task_digest_present"])
+        self.assertEqual(packet["delegated_task_source"], "natural_prompt_parser")
+        self.assertTrue(packet["tool_call_task_matches_intent"])
+        self.assertFalse(packet["prompt_task_digest_matched"])
         self.assertEqual(packet["selected_alias"], "Worker")
         self.assertTrue(packet["selected_alias_matches_expected"])
         self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_task_recorded"])
         self.assertFalse(packet["raw_jsonl_recorded"])
         self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_natural_full_prompt_echo_does_not_bypass_intent_binding(self) -> None:
+        prompt = "Worker, сделай короткий план проверки."
+        packet = _natural_case_packet(
+            "Worker",
+            prompt,
+            tool_arguments={"task": prompt, "expected_alias": "Worker"},
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.NATURAL_MCP_TOOL_CALL_NOT_BOUND,
+        )
+        self.assertFalse(packet["positive_proof"])
+        self.assertFalse(packet["natural_alias_intent_routed"])
+        self.assertEqual(packet["prompt_binding_mode"], "natural_intent_claim")
+        self.assertFalse(packet["prompt_to_mcp_call_bound"])
+        self.assertTrue(packet["intent_claim_digest_present"])
+        self.assertFalse(packet["intent_claim_digest_bound"])
+        self.assertTrue(packet["delegated_task_digest_present"])
+        self.assertFalse(packet["tool_call_task_matches_intent"])
+        self.assertTrue(packet["prompt_task_digest_matched"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["raw_task_recorded"])
+        self.assertIn("intent_claim_digest_not_bound", packet["proof_blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_natural_exact_task_binds_to_intent_digest(self) -> None:
+        marker = "WBP_NATURAL_BINDING_CORE_PROOF_TEST"
+        prompt = f"Codex, дай задачу DIP: Ответь ровно строкой: {marker}"
+        packet = _natural_case_packet(
+            "DIP",
+            prompt,
+            tool_arguments={
+                "task": f"Ответь ровно строкой: {marker}",
+                "expected_alias": "DIP",
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["positive_proof"])
+        self.assertTrue(packet["natural_alias_intent_routed"])
+        self.assertEqual(packet["prompt_binding_mode"], "natural_intent_claim")
+        self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertTrue(packet["intent_claim_digest_bound"])
+        self.assertTrue(packet["tool_call_task_matches_intent"])
+        self.assertFalse(packet["prompt_task_digest_matched"])
+        self.assertEqual(packet["delegated_task_candidate_digest_count"], 1)
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_task_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertNotIn(marker, json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_natural_tool_call_without_prompt_binding_is_specific_red(self) -> None:
@@ -365,6 +439,11 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["prompt_to_mcp_call_bound"])
         self.assertTrue(packet["tool_call_completed_but_prompt_not_bound"])
         self.assertTrue(packet["natural_mcp_tool_call_unbound"])
+        self.assertEqual(packet["prompt_binding_mode"], "natural_intent_claim")
+        self.assertTrue(packet["intent_claim_digest_present"])
+        self.assertFalse(packet["intent_claim_digest_bound"])
+        self.assertTrue(packet["delegated_task_digest_present"])
+        self.assertFalse(packet["tool_call_task_matches_intent"])
         self.assertTrue(packet["tool_call_digest_present"])
         self.assertFalse(packet["expected_delegate_tool_call_digest_present"])
         self.assertFalse(packet["prompt_task_digest_matched"])
@@ -379,6 +458,7 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_task_recorded"])
         self.assertFalse(packet["raw_jsonl_recorded"])
         self.assertFalse(packet["product_ready"])
         self.assertIn(

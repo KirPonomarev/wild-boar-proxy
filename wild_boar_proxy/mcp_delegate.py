@@ -1037,6 +1037,7 @@ def build_prompt_observation_packet(
     *,
     source: str = "manual",
     expected_delegate_arguments: Mapping[str, Any] | None = None,
+    intent_claim: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     prompt = _safe_text(prompt_text, limit=4096)
     expected_arguments = (
@@ -1044,6 +1045,23 @@ def build_prompt_observation_packet(
         if isinstance(expected_delegate_arguments, Mapping)
         else {}
     )
+    intent = dict(intent_claim) if isinstance(intent_claim, Mapping) else {}
+    intent_claim_sha256 = _hex_sha256(intent.get("intent_claim_sha256") or "")
+    delegated_task_sha256 = _hex_sha256(intent.get("delegated_task_sha256") or "")
+    delegated_task_candidate_sha256s = [
+        digest
+        for digest in (
+            _hex_sha256(candidate)
+            for candidate in (
+                intent.get("delegated_task_candidate_sha256s")
+                if isinstance(intent.get("delegated_task_candidate_sha256s"), list)
+                else []
+            )
+        )
+        if digest
+    ]
+    if delegated_task_sha256 and delegated_task_sha256 not in delegated_task_candidate_sha256s:
+        delegated_task_candidate_sha256s.insert(0, delegated_task_sha256)
     return {
         "packet_kind": PROMPT_OBSERVATION_PACKET_KIND,
         "prompt_sha256": _sha256_text(prompt) if prompt else "",
@@ -1056,8 +1074,29 @@ def build_prompt_observation_packet(
         "expected_delegate_tool_name": (
             DELEGATE_TO_DIP_TOOL if expected_arguments else ""
         ),
+        "intent_claim_sha256": intent_claim_sha256,
+        "intent_claim_digest_present": bool(intent_claim_sha256),
+        "intent_claim_status": _safe_text(intent.get("status") or "", limit=80),
+        "intent_claim_machine_error_code": _safe_text(
+            intent.get("machine_error_code") or "",
+            limit=128,
+        ),
+        "intent_claim_alias": _safe_text(intent.get("alias") or "", limit=80),
+        "alias_from_runtime_context": intent.get("alias_from_runtime_context") is True,
+        "delegated_task_sha256": delegated_task_sha256,
+        "delegated_task_digest_present": bool(delegated_task_sha256),
+        "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s[:8],
+        "delegated_task_candidate_digest_count": len(
+            delegated_task_candidate_sha256s[:8]
+        ),
+        "delegated_task_source": _safe_text(
+            intent.get("delegated_task_source") or "",
+            limit=128,
+        ),
+        "ambiguous_intent": intent.get("ambiguous_intent") is True,
         "prompt_text_recorded": False,
         "raw_prompt_recorded": False,
+        "raw_task_recorded": False,
         "expected_delegate_arguments_recorded": False,
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
@@ -1717,6 +1756,22 @@ def build_codex_exec_tool_call_observation_packet(
     expected_call_sha256 = _hex_sha256(
         prompt.get("expected_delegate_tool_call_sha256") or ""
     )
+    intent_claim_sha256 = _hex_sha256(prompt.get("intent_claim_sha256") or "")
+    delegated_task_sha256 = _hex_sha256(prompt.get("delegated_task_sha256") or "")
+    delegated_task_candidate_sha256s = [
+        digest
+        for digest in (
+            _hex_sha256(candidate)
+            for candidate in (
+                prompt.get("delegated_task_candidate_sha256s")
+                if isinstance(prompt.get("delegated_task_candidate_sha256s"), list)
+                else []
+            )
+        )
+        if digest
+    ]
+    if delegated_task_sha256 and delegated_task_sha256 not in delegated_task_candidate_sha256s:
+        delegated_task_candidate_sha256s.insert(0, delegated_task_sha256)
     candidates = _codex_exec_mcp_tool_call_candidates(events)
     selected_call = _select_codex_exec_tool_call_candidate(candidates)
     arguments = (
@@ -1735,15 +1790,25 @@ def build_codex_exec_tool_call_observation_packet(
         expected_call_sha256 and actual_call_sha256 == expected_call_sha256
     )
     prompt_task_matches = bool(prompt_sha256 and task_sha256 == prompt_sha256)
+    intent_task_matches = bool(
+        intent_claim_sha256
+        and task_sha256
+        and task_sha256 in set(delegated_task_candidate_sha256s)
+    )
     tool_call_attempted = bool(selected_call)
     tool_call_completed = bool(
         selected_call and _codex_exec_tool_call_completed(selected_call)
     )
     tool_call_failed = bool(selected_call and not tool_call_completed)
-    prompt_to_mcp_call_bound = (
-        tool_call_completed
-        and (expected_call_matches if expected_call_sha256 else prompt_task_matches)
-    )
+    if expected_call_sha256:
+        prompt_binding_mode = "expected_delegate_tool_call"
+        prompt_to_mcp_call_bound = tool_call_completed and expected_call_matches
+    elif intent_claim_sha256 and delegated_task_candidate_sha256s:
+        prompt_binding_mode = "natural_intent_claim"
+        prompt_to_mcp_call_bound = tool_call_completed and intent_task_matches
+    else:
+        prompt_binding_mode = "full_prompt_digest"
+        prompt_to_mcp_call_bound = tool_call_completed and prompt_task_matches
     delegate_to_dip_tool_called = tool_call_completed
     events_observed = bool(events)
     real_codex_prompt_executed = any(
@@ -1836,11 +1901,31 @@ def build_codex_exec_tool_call_observation_packet(
         ),
         "tool_call_digest_present": bool(actual_call_sha256),
         "tool_call_sha256": actual_call_sha256,
+        "tool_call_task_digest_present": bool(task_sha256),
+        "tool_call_task_sha256": task_sha256,
         "prompt_sha256": prompt_sha256 if prompt_to_mcp_call_bound else "",
         "prompt_digest_present": bool(prompt_sha256),
         "expected_delegate_tool_call_digest_present": bool(expected_call_sha256),
         "expected_delegate_tool_call_matched": expected_call_matches,
         "prompt_task_digest_matched": prompt_task_matches,
+        "prompt_binding_mode": prompt_binding_mode,
+        "intent_claim_digest_present": bool(intent_claim_sha256),
+        "intent_claim_sha256": intent_claim_sha256,
+        "delegated_task_digest_present": bool(delegated_task_sha256),
+        "delegated_task_sha256": delegated_task_sha256,
+        "delegated_task_candidate_digest_count": len(
+            delegated_task_candidate_sha256s[:8]
+        ),
+        "delegated_task_source": _safe_text(
+            prompt.get("delegated_task_source") or "",
+            limit=128,
+        ),
+        "tool_call_task_matches_intent": intent_task_matches,
+        "intent_claim_digest_bound": bool(
+            prompt_binding_mode == "natural_intent_claim"
+            and prompt_to_mcp_call_bound
+            and intent_task_matches
+        ),
         "prompt_to_mcp_call_bound": prompt_to_mcp_call_bound,
         "browser_authority_fields_rejected": bool(forbidden_authority_fields),
         "browser_authority_field_count": len(forbidden_authority_fields),
@@ -1856,6 +1941,7 @@ def build_codex_exec_tool_call_observation_packet(
         "raw_jsonl_recorded": False,
         "raw_stderr_recorded": False,
         "raw_prompt_recorded": False,
+        "raw_task_recorded": False,
         "prompt_text_recorded": False,
         "tool_call_arguments_recorded": False,
         "raw_backend_details_exposed": False,
