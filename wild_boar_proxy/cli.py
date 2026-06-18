@@ -90,6 +90,7 @@ from .real_ledger_bound_api_dispatch_proof import (
 from .real_custom_app_submit_ledger_proof import (
     run_real_custom_app_submit_ledger_proof_command,
 )
+from .custom_ui_origin_admission import run_custom_ui_origin_admission_command
 from .user_prompt_submit_hook_producer import (
     build_user_prompt_submit_install_packet,
     build_user_prompt_submit_readiness_packet,
@@ -495,6 +496,28 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_custom_app_submit_ledger.add_argument("--runtime-context-file")
     router_hook_custom_app_submit_ledger.add_argument("--process-inventory-file")
     router_hook_custom_app_submit_ledger.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_ui_origin_admission = router_hook_subparsers.add_parser(
+        "custom-ui-origin-admission"
+    )
+    router_hook_custom_ui_origin_admission.add_argument("--prompt", required=True)
+    router_hook_custom_ui_origin_admission.add_argument(
+        "--ledger-mtime-before-ns",
+        type=int,
+        required=True,
+    )
+    router_hook_custom_ui_origin_admission.add_argument("--hook-ledger-file")
+    router_hook_custom_ui_origin_admission.add_argument("--runtime-context-file")
+    router_hook_custom_ui_origin_admission.add_argument("--process-inventory-file")
+    router_hook_custom_ui_origin_admission.add_argument("--stock-app-path")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-app-path")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-profile-dir")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-user-data-dir")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-launcher-path")
+    router_hook_custom_ui_origin_admission.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -957,6 +980,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "user-prompt-submit-ledger-proof",
         "ledger-bound-dispatch-proof",
         "custom-app-submit-ledger-proof",
+        "custom-ui-origin-admission",
         "handoff-working-flow-join",
         "working-flow-delivery-proof",
         "user-prompt-submit-readiness",
@@ -1398,6 +1422,25 @@ def main(argv: list[str] | None = None) -> int:
                     hook_ledger_file=args.hook_ledger_file,
                     runtime_context_file=args.runtime_context_file,
                     process_inventory_file=args.process_inventory_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-ui-origin-admission"
+        ):
+            return emit_json(
+                run_custom_ui_origin_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    ledger_mtime_before_ns=args.ledger_mtime_before_ns,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    process_inventory_file=args.process_inventory_file,
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    custom_profile_dir=args.custom_profile_dir,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    custom_launcher_path=args.custom_launcher_path,
                 )
             )
         if (

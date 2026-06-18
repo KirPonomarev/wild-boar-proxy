@@ -565,6 +565,7 @@ def run_real_custom_app_submit_ledger_proof_command(
     hook_ledger_file: str | None = None,
     runtime_context_file: str | None = None,
     process_inventory_file: str | None = None,
+    custom_user_data_dir: str | None = None,
 ) -> dict[str, Any]:
     ledger_path = (
         Path(hook_ledger_file).expanduser()
@@ -588,7 +589,8 @@ def run_real_custom_app_submit_ledger_proof_command(
     else:
         profile_paths = default_persistent_custom_profile_paths()
         process_inventory = collect_codex_process_inventory(
-            custom_user_data_dir=str(profile_paths["user_data_dir"])
+            custom_user_data_dir=custom_user_data_dir
+            or str(profile_paths["user_data_dir"])
         )
         process_inventory_live = True
     return build_real_custom_app_submit_ledger_proof_packet(

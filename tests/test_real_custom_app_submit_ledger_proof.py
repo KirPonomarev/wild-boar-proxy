@@ -6,7 +6,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import real_custom_app_submit_ledger_proof as proof
@@ -396,6 +398,36 @@ class RealCustomAppSubmitLedgerProofTests(unittest.TestCase):
         )
 
         self.assertEqual(cli_mod.command_effect_from_args(args), "probe")
+
+    def test_command_uses_explicit_custom_user_data_dir_for_live_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ledger = Path(tmp_dir) / "ledger.json"
+            ledger.write_text("{}", encoding="utf-8")
+            with (
+                mock.patch(
+                    "wild_boar_proxy.real_custom_app_submit_ledger_proof."
+                    "run_real_user_prompt_submit_ledger_proof_command",
+                    return_value=_ledger_proof(),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.real_custom_app_submit_ledger_proof."
+                    "collect_codex_process_inventory",
+                    return_value=_process_inventory(),
+                ) as collect,
+            ):
+                packet = proof.run_real_custom_app_submit_ledger_proof_command(
+                    paths=cli_mod.RuntimePaths.from_env(),
+                    prompt_text=PROMPT,
+                    ledger_mtime_before_ns=0,
+                    hook_ledger_file=str(ledger),
+                    custom_user_data_dir="/custom/profile/electron-user-data",
+                )
+
+        collect.assert_called_once_with(
+            custom_user_data_dir="/custom/profile/electron-user-data"
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
 
 if __name__ == "__main__":
