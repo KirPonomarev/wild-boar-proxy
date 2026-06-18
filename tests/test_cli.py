@@ -4308,6 +4308,20 @@ class CliTests(unittest.TestCase):
                 ],
                 "mutate",
             ),
+            (
+                [
+                    "codex-runner",
+                    "native-ui-observer-proof",
+                    "--prompt",
+                    "hi",
+                    "--request-id",
+                    "req-1",
+                    "--expected-text",
+                    "WBP_NATIVE_req-1",
+                    "--json",
+                ],
+                "mutate",
+            ),
             (["router-hook", "entry", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "dispatch", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "handoff", "--prompt", "hi", "--json"], "probe"),
@@ -4610,6 +4624,31 @@ class CliTests(unittest.TestCase):
                 args = parser.parse_args(argv)
                 self.assertEqual(args.codex_model, "gpt-5.4")
                 self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+
+    def test_codex_runner_native_ui_observer_proof_parses_bounded_inputs(self) -> None:
+        parser = cli_mod.build_parser()
+        args = parser.parse_args(
+            [
+                "codex-runner",
+                "native-ui-observer-proof",
+                "--prompt",
+                "show marker",
+                "--request-id",
+                "req-123",
+                "--expected-text",
+                "WBP_NATIVE_VISIBLE_req-123",
+                "--proof-dir",
+                "/tmp/wbp-native-ui-proof",
+                "--persistent-profile-id",
+                "wbp-custom-main",
+                "--json",
+            ]
+        )
+
+        self.assertEqual(args.codex_runner_command, "native-ui-observer-proof")
+        self.assertEqual(args.request_id, "req-123")
+        self.assertEqual(args.expected_text, "WBP_NATIVE_VISIBLE_req-123")
+        self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
 
     def test_cli_effect_classifier_covers_external_models_route_mutations(self) -> None:
         parser = cli_mod.build_parser()

@@ -371,6 +371,23 @@ class CustomCodexUiVisibilityProofTests(unittest.TestCase):
         self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_blocks_native_ui_product_ready_preclaim_as_unsafe(self) -> None:
+        packet = ui_visibility.build_custom_codex_ui_visibility_proof_packet(
+            _source_packet(),
+            _native_packet(overrides={"product_ready": True}),
+            expected_visible_text=EXPECTED_VISIBLE_TEXT,
+            request_id=REQUEST_ID,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(
+            packet["machine_error_code"],
+            ui_visibility.CUSTOM_CODEX_UI_VISIBILITY_PAYLOAD_UNSAFE,
+        )
+        self.assertIn("native_preclaimed_product_ready", packet["blocking_reasons"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_blocks_source_product_ready_preclaim_as_unsafe(self) -> None:
         packet = ui_visibility.build_custom_codex_ui_visibility_proof_packet(
             _source_packet(

@@ -12,6 +12,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 import wild_boar_proxy.native_window_probe as native_probe
+from wild_boar_proxy.custom_codex_native_ui_observer_proof import (
+    run_native_ui_observer_proof_command,
+)
 from wild_boar_proxy.native_launch_contract import build_native_custom_preflight_packet
 from wild_boar_proxy.native_launch_dispatch import (
     build_native_cleanup_rollback_execution_packet,
@@ -1705,6 +1708,12 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             packet["native_free_text_observer_machine_error_code"],
             "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
         )
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
 
     def test_submit_custom_native_window_prompt_passes_same_profile_candidate_pids_to_cdp(self) -> None:
         with (
@@ -1747,6 +1756,12 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             packet["native_free_text_observer_machine_error_code"],
             "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
         )
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
         submitter.assert_called_once_with(
             222,
             "Planner: do it",
@@ -1754,6 +1769,58 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             expected_text="",
             allowed_owner_pids=[222, 333],
         )
+
+    def test_native_ui_observer_proof_command_writes_file_backed_native_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "req-1",
+                    "prompt_sha256": "abc",
+                    "prompt_length": 8,
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                    "prompt_submitted": True,
+                    "input_text_insert_succeeded": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                    "native_free_text_observer_machine_error_code": "OK",
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ) as submitter:
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-1",
+                    expected_text="WBP_NATIVE_req-1",
+                    proof_dir=str(proof_dir),
+                    persistent_profile_id="wbp-custom-main",
+                    persistent_profile_base_dir=str(root / "profiles"),
+                )
+
+            submitter.assert_called_once()
+            self.assertEqual(packet["packet_kind"], "custom_codex_native_prompt_submit")
+            self.assertTrue(packet["native_ui_observer_packet_file_written"])
+            self.assertFalse(packet["native_ui_observer_packet_file_path_recorded"])
+            self.assertTrue(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 0)
+            self.assertFalse(packet["product_ready"])
+            written = proof_dir / "native-ui-observer.packet.json"
+            self.assertTrue(written.exists())
+            persisted = json.loads(written.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["request_id"], "req-1")
 
     def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
         response = mock.MagicMock()

@@ -22,6 +22,9 @@ from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .custom_codex_working_flow_visible_source_proof import (
     run_working_flow_visible_source_proof_command,
 )
+from .custom_codex_native_ui_observer_proof import (
+    run_native_ui_observer_proof_command,
+)
 from .interactive_custom_codex_proof import (
     run_interactive_custom_codex_collect_command,
     run_interactive_custom_codex_preflight_command,
@@ -301,6 +304,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_visible_source.add_argument("--json", action="store_true", required=True)
+    codex_runner_native_ui = codex_runner_subparsers.add_parser(
+        "native-ui-observer-proof"
+    )
+    codex_runner_native_ui.add_argument("--prompt", required=True)
+    codex_runner_native_ui.add_argument("--request-id", required=True)
+    codex_runner_native_ui.add_argument("--expected-text", required=True)
+    codex_runner_native_ui.add_argument("--proof-dir")
+    codex_runner_native_ui.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_native_ui.add_argument("--persistent-profile-base-dir")
+    codex_runner_native_ui.add_argument("--json", action="store_true", required=True)
     codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
         "interactive-preflight"
     )
@@ -1105,6 +1121,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "admission",
         "operator-proof",
         "working-flow-visible-source-proof",
+        "native-ui-observer-proof",
     }:
         return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
@@ -1401,6 +1418,21 @@ def main(argv: list[str] | None = None) -> int:
                     expected_text=args.expected_text,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "native-ui-observer-proof"
+        ):
+            return emit_json(
+                run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    request_id=args.request_id,
+                    expected_text=args.expected_text,
+                    proof_dir=args.proof_dir,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
                 )
             )
         if (

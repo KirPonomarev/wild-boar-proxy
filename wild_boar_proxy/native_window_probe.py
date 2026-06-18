@@ -1198,6 +1198,20 @@ def _native_free_text_observer_defaults() -> dict[str, Any]:
     }
 
 
+def _apply_native_prompt_submit_claim_ceiling(packet: dict[str, Any]) -> dict[str, Any]:
+    packet.setdefault("custom_codex_ui_visibility_proven", False)
+    packet.setdefault("delivery_counts_as_custom_codex_ui", False)
+    packet.setdefault("native_free_chat_router_proven", False)
+    packet.setdefault("product_ready", False)
+    packet.setdefault("fallback_used", False)
+    packet.setdefault("local_imitation_used", False)
+    packet.setdefault("raw_backend_details_exposed", False)
+    packet.setdefault("raw_provider_response_recorded", False)
+    packet.setdefault("provider_response_text_recorded", False)
+    packet.setdefault("provider_response_preview_recorded", False)
+    return packet
+
+
 def _cdp_observe_custom_response_token(
     ws_url: str,
     *,
@@ -2797,7 +2811,7 @@ def submit_custom_native_window_prompt_packet(
         or show_packet.get("native_app_usable") is not True
         or not isinstance(observed_pid, int)
     ):
-        return _cdp_prompt_submit_blocked_packet(
+        packet = _cdp_prompt_submit_blocked_packet(
             machine_error_code=str(
                 show_packet.get("machine_error_code")
                 or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
@@ -2817,6 +2831,7 @@ def submit_custom_native_window_prompt_packet(
             **_native_free_text_observer_defaults(),
             "show_window_packet": show_packet,
         }
+        return _apply_native_prompt_submit_claim_ceiling(packet)
     packet = _cdp_submit_prompt_to_app_page(
         int(observed_pid),
         prompt,
@@ -2832,7 +2847,7 @@ def submit_custom_native_window_prompt_packet(
     for key, value in _native_free_text_observer_defaults().items():
         packet.setdefault(key, value)
     packet["show_window_packet"] = show_packet
-    return packet
+    return _apply_native_prompt_submit_claim_ceiling(packet)
 
 
 def inspect_custom_native_paste_target_packet(
