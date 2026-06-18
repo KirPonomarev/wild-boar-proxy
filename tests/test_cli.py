@@ -4434,6 +4434,14 @@ class CliTests(unittest.TestCase):
                 ],
                 "probe",
             ),
+            (
+                [
+                    "router-hook",
+                    "custom-codex-auth-session-readiness",
+                    "--json",
+                ],
+                "probe",
+            ),
             (["mode", "get", "--json"], "read"),
             (["mode", "set", "stable", "--json"], "mutate"),
             (["rollback", "--latest", "--dry-run", "--json"], "read"),

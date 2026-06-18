@@ -92,6 +92,9 @@ from .real_custom_app_submit_ledger_proof import (
     run_real_custom_app_submit_ledger_proof_command,
 )
 from .custom_ui_origin_admission import run_custom_ui_origin_admission_command
+from .custom_codex_auth_session_readiness import (
+    run_custom_codex_auth_session_readiness_command,
+)
 from .user_prompt_submit_hook_producer import (
     build_user_prompt_submit_install_packet,
     build_user_prompt_submit_readiness_packet,
@@ -666,6 +669,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_custom_codex_auth_session = router_hook_subparsers.add_parser(
+        "custom-codex-auth-session-readiness"
+    )
+    router_hook_custom_codex_auth_session.add_argument("--custom-user-data-dir")
+    router_hook_custom_codex_auth_session.add_argument("--process-inventory-file")
+    router_hook_custom_codex_auth_session.add_argument(
+        "--skip-hook-readiness-probe",
+        action="store_true",
+    )
+    router_hook_custom_codex_auth_session.add_argument(
+        "--skip-account-app-server-probe",
+        action="store_true",
+    )
+    router_hook_custom_codex_auth_session.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_user_prompt_submit_trust_repair = router_hook_subparsers.add_parser(
         "user-prompt-submit-trust-repair"
     )
@@ -996,6 +1017,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "ledger-bound-dispatch-proof",
         "custom-app-submit-ledger-proof",
         "custom-ui-origin-admission",
+        "custom-codex-auth-session-readiness",
         "handoff-working-flow-join",
         "working-flow-delivery-proof",
         "user-prompt-submit-readiness",
@@ -1578,6 +1600,21 @@ def main(argv: list[str] | None = None) -> int:
                 build_user_prompt_submit_readiness_packet(
                     paths=paths,
                     probe_codex_app_server=True,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-codex-auth-session-readiness"
+        ):
+            return emit_json(
+                run_custom_codex_auth_session_readiness_command(
+                    paths=paths,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    process_inventory_file=args.process_inventory_file,
+                    probe_hook_readiness=not bool(args.skip_hook_readiness_probe),
+                    probe_account_app_server=not bool(
+                        args.skip_account_app_server_probe
+                    ),
                 )
             )
         if (
