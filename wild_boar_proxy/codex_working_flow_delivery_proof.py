@@ -31,6 +31,9 @@ from .codex_transcript_delivery_observation import (
 )
 from .command_effects import EFFECT_PROBE
 from .core import packets
+from .custom_origin_bound_live_provider_join import (
+    CUSTOM_ORIGIN_BOUND_LIVE_PROVIDER_JOIN_PACKET_KIND,
+)
 from .observed_machine_handoff_delivery import (
     DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
     DELIVERY_TRUTH_SOURCE_PROVEN,
@@ -172,7 +175,119 @@ def _integrated_source_failures(
         failures.append("integrated_live_provider_proof_file_json_not_valid")
     if metadata.get("integrated_live_provider_proof_file_mapping") is not True:
         failures.append("integrated_live_provider_proof_file_not_mapping")
-    if source.get("packet_kind") != REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND:
+    source_kind = _safe_text(source.get("packet_kind"), limit=96)
+    if source_kind == CUSTOM_ORIGIN_BOUND_LIVE_PROVIDER_JOIN_PACKET_KIND:
+        if source.get("status") != "ok":
+            failures.append("integrated_proof_packet_not_ok")
+        if source.get("machine_error_code") != "OK":
+            failures.append("integrated_proof_machine_error_not_ok")
+        if source.get("effect") != EFFECT_PROBE:
+            failures.append("integrated_proof_effect_not_probe")
+        if source.get("changed_files") not in ([], ()):
+            failures.append("integrated_proof_changed_files_not_empty")
+        for field, reason in (
+            (
+                "custom_origin_bound_dispatch_proven",
+                "custom_origin_bound_dispatch_not_proven",
+            ),
+            ("custom_origin_bound", "custom_origin_not_bound"),
+            ("custom_ui_origin_admitted", "custom_ui_origin_not_admitted"),
+            (
+                "custom_codex_flow_origin_admitted",
+                "custom_codex_flow_origin_not_admitted",
+            ),
+            (
+                "real_ledger_bound_api_dispatch_proven",
+                "ledger_bound_dispatch_not_proven",
+            ),
+            ("same_prompt_digest", "prompt_digest_not_bound"),
+            (
+                "prompt_digest_bound_to_custom_origin_dispatch",
+                "prompt_digest_not_bound_to_custom_origin_dispatch",
+            ),
+            ("alias_context_read", "alias_context_not_read"),
+            ("alias_bound", "alias_not_bound"),
+            ("alias_resolved", "alias_not_resolved"),
+            ("route_id_allowed", "route_id_not_allowed"),
+            ("allowed_api_route_ids_enforced", "allowed_api_route_ids_not_enforced"),
+            ("same_allowed_route_binding", "allowed_route_binding_not_bound"),
+            ("selected_api_route_id_present", "selected_route_not_present"),
+            ("api_lane_called", "api_lane_not_called"),
+            ("api_lane_dispatch_admitted", "api_lane_dispatch_not_admitted"),
+            ("api_lane_provider_called", "api_lane_provider_not_called"),
+            (
+                "controlled_provider_response_proven",
+                "controlled_provider_response_not_proven",
+            ),
+            ("dispatch_attempted", "dispatch_not_attempted"),
+            ("dispatch_proven", "dispatch_not_proven"),
+            ("route_bound_dispatch_proven", "route_bound_dispatch_not_proven"),
+            ("live_provider_called", "live_provider_not_called"),
+            ("live_provider_attempted", "live_provider_not_attempted"),
+            ("live_provider_cli_command_declared", "live_provider_cli_not_declared"),
+            (
+                "live_provider_cli_command_route_bound",
+                "live_provider_cli_not_route_bound",
+            ),
+            (
+                "live_provider_route_bound_to_context",
+                "live_provider_route_not_context_bound",
+            ),
+            ("live_provider_network_dependent", "live_provider_not_network_dependent"),
+            ("expected_text_observed", "live_provider_expected_text_not_observed"),
+            (
+                "live_provider_response_bound_to_expected_text",
+                "live_provider_not_expected_bound",
+            ),
+            (
+                "live_provider_response_bound_to_route",
+                "live_provider_not_route_bound",
+            ),
+            ("live_provider_changed_files_empty", "live_provider_changed_files_not_empty"),
+            ("live_provider_proven", "live_provider_not_proven"),
+            ("live_provider_response_proven", "live_provider_response_not_proven"),
+            (
+                "external_live_provider_response_proven",
+                "external_live_provider_response_not_proven",
+            ),
+        ):
+            if source.get(field) is not True:
+                failures.append(reason)
+        if _safe_text(source.get("dispatch_status"), limit=32) != "proven":
+            failures.append("dispatch_status_not_proven")
+        if _safe_text(source.get("live_provider_status"), limit=32) != "proven":
+            failures.append("live_provider_status_not_proven")
+        for field, reason in (
+            ("context_failures", "context_failures_not_empty"),
+            ("dispatch_required_failures", "dispatch_required_failures_not_empty"),
+            ("route_binding_failures", "route_binding_failures_not_empty"),
+            ("live_provider_failures", "live_provider_failures_not_empty"),
+            ("unsafe_source_failures", "unsafe_source_failures_not_empty"),
+            ("blocking_reasons", "integrated_proof_blocking_reasons_not_empty"),
+        ):
+            value = source.get(field)
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+                if list(value):
+                    failures.append(reason)
+            elif value:
+                failures.append(reason)
+        for field, reason in (
+            ("prompt_digest", "prompt_digest_missing"),
+            ("selected_api_route_id_sha256", "selected_api_route_digest_missing"),
+            ("live_provider_route_id_sha256", "live_provider_route_digest_missing"),
+            ("live_provider_cli_command_sha256", "live_provider_cli_digest_missing"),
+            ("route_bound_request_sha256", "route_bound_request_digest_missing"),
+            (
+                "controlled_provider_response_digest",
+                "controlled_provider_response_digest_missing",
+            ),
+            ("live_provider_response_digest", "live_provider_response_digest_missing"),
+        ):
+            if not _hex_sha256(source.get(field)):
+                failures.append(reason)
+        failures.extend(unsafe_failures)
+        return sorted(set(failures)), unsafe_failures
+    if source_kind != REAL_CUSTOM_CODEX_HOOK_PROOF_PACKET_KIND:
         failures.append("integrated_proof_packet_kind_invalid")
     if source.get("status") != "ok":
         failures.append("integrated_proof_packet_not_ok")
@@ -249,6 +364,10 @@ def _safe_working_flow_handoff_payload(source: Mapping[str, Any]) -> dict[str, A
     live_provider_response_digest = _hex_sha256(
         source.get("live_provider_response_digest")
     )
+    controlled_provider_response_digest = _hex_sha256(
+        source.get("provider_response_digest")
+        or source.get("controlled_provider_response_digest")
+    )
     return {
         "schema_version": 1,
         "source_packet_kind": _safe_text(source.get("packet_kind"), limit=80),
@@ -269,9 +388,7 @@ def _safe_working_flow_handoff_payload(source: Mapping[str, Any]) -> dict[str, A
         "route_bound_request_sha256": _hex_sha256(
             source.get("route_bound_request_sha256")
         ),
-        "controlled_provider_response_digest": _hex_sha256(
-            source.get("provider_response_digest")
-        ),
+        "controlled_provider_response_digest": controlled_provider_response_digest,
         "live_provider_response_digest": live_provider_response_digest,
         "provider_response_digest": live_provider_response_digest,
         "dispatch_truth_source": _safe_text(
@@ -825,6 +942,7 @@ def build_codex_working_flow_delivery_proof_packet(
     )
     controlled_provider_response_digest = _hex_sha256(
         source.get("provider_response_digest")
+        or source.get("controlled_provider_response_digest")
     )
 
     source_failures, source_unsafe_failures = _integrated_source_failures(
@@ -1006,6 +1124,8 @@ def build_codex_working_flow_delivery_proof_packet(
         and source.get("external_live_provider_response_proven") is True
         and live_provider_response_digest
     )
+    source_kind = _safe_text(source.get("packet_kind"), limit=80)
+    approved_handoff_derived_from_source = bool(not source_failures and handoff_digest)
 
     extra = {
         **metadata,
@@ -1029,6 +1149,17 @@ def build_codex_working_flow_delivery_proof_packet(
         "integrated_live_provider_proof_valid": not source_failures,
         "integrated_live_provider_proof_failures": source_failures,
         "source_unsafe_claim_failures": source_unsafe_failures,
+        "custom_origin_bound_dispatch_proven": (
+            source.get("custom_origin_bound_dispatch_proven") is True
+        ),
+        "custom_origin_bound": source.get("custom_origin_bound") is True,
+        "custom_ui_origin_admitted": source.get("custom_ui_origin_admitted") is True,
+        "custom_codex_flow_origin_admitted": (
+            source.get("custom_codex_flow_origin_admitted") is True
+        ),
+        "real_ledger_bound_api_dispatch_proven": (
+            source.get("real_ledger_bound_api_dispatch_proven") is True
+        ),
         "hook_producer_ledger_proven": (
             source.get("hook_producer_ledger_proven") is True
         ),
@@ -1095,9 +1226,17 @@ def build_codex_working_flow_delivery_proof_packet(
         "live_provider_proven": live_provider_response_proven,
         "live_provider_response_proven": live_provider_response_proven,
         "external_live_provider_response_proven": live_provider_response_proven,
-        "approved_handoff_ready": source.get("approved_handoff_ready") is True,
+        "approved_handoff_ready": (
+            source.get("approved_handoff_ready") is True
+            or approved_handoff_derived_from_source
+        ),
         "approved_handoff_payload_sanitized": (
             source.get("approved_handoff_payload_sanitized") is True
+            or approved_handoff_derived_from_source
+        ),
+        "approved_handoff_derived_from_custom_origin_live_provider_join": (
+            source_kind == CUSTOM_ORIGIN_BOUND_LIVE_PROVIDER_JOIN_PACKET_KIND
+            and approved_handoff_derived_from_source
         ),
         "source_handoff_payload_digest": source_handoff_digest,
         "working_flow_handoff_payload_digest": handoff_digest,
@@ -1111,8 +1250,12 @@ def build_codex_working_flow_delivery_proof_packet(
         "machine_response_structured_content_present": (
             source.get("machine_response_structured_content_present") is True
         ),
-        "handoff_delivered": source.get("handoff_delivered") is True,
-        "delivery_observed": source.get("delivery_observed") is True,
+        "handoff_delivered": (
+            source.get("handoff_delivered") is True or mcp_delivery_surface_proven
+        ),
+        "delivery_observed": (
+            source.get("delivery_observed") is True or approved_delivery_surface_proven
+        ),
         "live_provider_response_digest": live_provider_response_digest,
         "controlled_provider_response_digest": controlled_provider_response_digest,
         "live_provider_response_digest_bound_to_handoff": (
