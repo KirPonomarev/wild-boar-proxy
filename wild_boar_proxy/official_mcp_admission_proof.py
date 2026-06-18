@@ -42,6 +42,20 @@ INTENT_TOOL_DIRECTED = "tool_directed"
 INTENT_STRICT_NATURAL = "strict_natural"
 INTENT_AMBIGUOUS_NATURAL = "ambiguous_natural"
 INTENT_NO_ALIAS_NEGATIVE = "no_alias_negative"
+NATURAL_SHAPE_EXACT_STABLE_TASK = "exact_stable_task"
+NATURAL_SHAPE_QUOTED_PAYLOAD = "quoted_payload"
+NATURAL_SHAPE_COLON_DELIMITED_TASK = "colon_delimited_task"
+NATURAL_SHAPE_LOOSE_SEMANTIC_TASK = "loose_semantic_task"
+NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK = "ambiguous_unsafe_task"
+NATURAL_BINDING_SUPPORTED = "binding_supported"
+NATURAL_BINDING_BLOCKED = "binding_blocked"
+NATURAL_REQUIRES_EXACT_TASK_SHAPE = "requires_exact_task_shape"
+NATURAL_REQUIRES_HOOK_INTERCEPTOR = "requires_hook_interceptor"
+NATURAL_AMBIGUOUS_FAIL_CLOSED = "ambiguous_fail_closed"
+CANON_RULE_EXACT_STABLE_TASK = "exact_stable_task_v1"
+CANON_RULE_QUOTED_PAYLOAD_UNWRAP = "quoted_payload_unwrap_v1"
+CANON_RULE_COLON_DELIMITED_EXACT = "colon_delimited_exact_v1"
+CANON_RULE_UNSUPPORTED = "unsupported_v1"
 
 
 @dataclass(frozen=True)
@@ -373,6 +387,70 @@ def _strict_natural_delegated_task(prompt: str, alias: str) -> str:
     return mcp_delegate._safe_text(tail.lstrip(" \t,;:-—–"), limit=4096)
 
 
+def _strip_wrapping_quotes(value: str) -> tuple[str, bool]:
+    text = mcp_delegate._safe_text(value, limit=4096)
+    quote_pairs = (('"', '"'), ("'", "'"), ("«", "»"), ("“", "”"), ("`", "`"))
+    for left, right in quote_pairs:
+        if text.startswith(left) and text.endswith(right) and len(text) >= 2:
+            return mcp_delegate._safe_text(text[1:-1], limit=4096), True
+    return text, False
+
+
+def _natural_command_shape(
+    *,
+    variant: OfficialMcpAdmissionVariant,
+    delegated_task: str,
+    alias_present: bool,
+) -> str:
+    if variant.intent_kind == INTENT_AMBIGUOUS_NATURAL:
+        return NATURAL_SHAPE_LOOSE_SEMANTIC_TASK
+    if variant.intent_kind == INTENT_NO_ALIAS_NEGATIVE or not alias_present:
+        return NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK
+    if variant.intent_kind != INTENT_STRICT_NATURAL or not delegated_task:
+        return NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK
+    unquoted, had_wrapping_quotes = _strip_wrapping_quotes(delegated_task)
+    if had_wrapping_quotes and unquoted:
+        return NATURAL_SHAPE_QUOTED_PAYLOAD
+    task_key = unquoted.casefold()
+    if task_key.startswith("ответь ровно строкой:"):
+        return NATURAL_SHAPE_EXACT_STABLE_TASK
+    return NATURAL_SHAPE_COLON_DELIMITED_TASK
+
+
+def _binding_status_for_shape(shape: str) -> str:
+    if shape in {
+        NATURAL_SHAPE_EXACT_STABLE_TASK,
+        NATURAL_SHAPE_QUOTED_PAYLOAD,
+        NATURAL_SHAPE_COLON_DELIMITED_TASK,
+    }:
+        return NATURAL_BINDING_SUPPORTED
+    if shape == NATURAL_SHAPE_LOOSE_SEMANTIC_TASK:
+        return NATURAL_REQUIRES_HOOK_INTERCEPTOR
+    if shape == NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK:
+        return NATURAL_AMBIGUOUS_FAIL_CLOSED
+    return NATURAL_BINDING_BLOCKED
+
+
+def _canonicalize_delegated_task(
+    *,
+    shape: str,
+    delegated_task: str,
+) -> tuple[str, str, bool]:
+    safe_task = mcp_delegate._safe_text(delegated_task, limit=4096)
+    if not safe_task:
+        return "", CANON_RULE_UNSUPPORTED, False
+    if shape == NATURAL_SHAPE_QUOTED_PAYLOAD:
+        unquoted, had_wrapping_quotes = _strip_wrapping_quotes(safe_task)
+        if had_wrapping_quotes and unquoted:
+            return unquoted, CANON_RULE_QUOTED_PAYLOAD_UNWRAP, True
+        return "", CANON_RULE_UNSUPPORTED, False
+    if shape == NATURAL_SHAPE_EXACT_STABLE_TASK:
+        return safe_task, CANON_RULE_EXACT_STABLE_TASK, True
+    if shape == NATURAL_SHAPE_COLON_DELIMITED_TASK:
+        return safe_task, CANON_RULE_COLON_DELIMITED_EXACT, True
+    return "", CANON_RULE_UNSUPPORTED, False
+
+
 def _intent_claim_sha256(material: Mapping[str, Any]) -> str:
     return mcp_delegate._sha256_text(
         json.dumps(
@@ -405,17 +483,34 @@ def build_natural_intent_claim_packet(
         if strict_natural
         else ""
     )
-    delegated_task_sha256 = (
+    extracted_delegated_task_sha256 = (
         mcp_delegate._sha256_text(delegated_task) if delegated_task else ""
     )
+    natural_command_shape = _natural_command_shape(
+        variant=variant,
+        delegated_task=delegated_task,
+        alias_present=alias_present,
+    )
+    binding_status = _binding_status_for_shape(natural_command_shape)
+    canonical_task, canonicalization_rule_id, canonicalization_supported = (
+        _canonicalize_delegated_task(
+            shape=natural_command_shape,
+            delegated_task=delegated_task,
+        )
+    )
+    delegated_task_sha256 = (
+        mcp_delegate._sha256_text(canonical_task) if canonical_task else ""
+    )
     delegated_task_candidate_sha256s = _delegated_task_candidate_sha256s(
-        delegated_task
+        canonical_task
     )
     ok = bool(
         strict_natural
         and not ambiguous_intent
         and alias_present
         and alias_from_runtime_context
+        and binding_status == NATURAL_BINDING_SUPPORTED
+        and canonicalization_supported
         and delegated_task_sha256
     )
     blocking_reasons: list[str] = []
@@ -427,6 +522,10 @@ def build_natural_intent_claim_packet(
         blocking_reasons.append("alias_not_present_in_prompt")
     if not alias_from_runtime_context:
         blocking_reasons.append("alias_not_from_runtime_context")
+    if binding_status != NATURAL_BINDING_SUPPORTED:
+        blocking_reasons.append(binding_status)
+    if not canonicalization_supported:
+        blocking_reasons.append("canonicalization_not_supported")
     if not delegated_task_sha256:
         blocking_reasons.append("delegated_task_digest_missing")
 
@@ -448,6 +547,12 @@ def build_natural_intent_claim_packet(
         "prompt_sha256": prompt_sha256,
         "alias": variant.expected_alias if alias_present else "",
         "alias_from_runtime_context": alias_from_runtime_context,
+        "natural_command_shape": natural_command_shape,
+        "binding_status": binding_status,
+        "canonicalization_rule_id": canonicalization_rule_id,
+        "canonicalization_supported": canonicalization_supported,
+        "canonicalization_input_sha256": extracted_delegated_task_sha256,
+        "canonicalization_output_sha256": delegated_task_sha256,
         "delegated_task_sha256": delegated_task_sha256,
         "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s,
         "delegated_task_candidate_digest_count": len(
@@ -478,6 +583,16 @@ def build_natural_intent_claim_packet(
             "intent_claim_sha256": intent_claim_sha256,
             "alias": variant.expected_alias if alias_present else "",
             "alias_from_runtime_context": alias_from_runtime_context,
+            "natural_command_shape": natural_command_shape,
+            "binding_status": binding_status,
+            "canonicalization_rule_id": canonicalization_rule_id,
+            "canonicalization_supported": canonicalization_supported,
+            "canonicalization_input_digest_present": bool(
+                extracted_delegated_task_sha256
+            ),
+            "canonicalization_input_sha256": extracted_delegated_task_sha256,
+            "canonicalization_output_digest_present": bool(delegated_task_sha256),
+            "canonicalization_output_sha256": delegated_task_sha256,
             "delegated_task_digest_present": bool(delegated_task_sha256),
             "delegated_task_sha256": delegated_task_sha256,
             "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s,
@@ -493,6 +608,7 @@ def build_natural_intent_claim_packet(
             "raw_backend_details_exposed": False,
             "secret_value_exposed": False,
             "product_ready": False,
+            "custom_codex_ui_visibility_proven": False,
             "blocking_reasons": [] if ok else blocking_reasons,
         },
     )
@@ -501,7 +617,11 @@ def build_natural_intent_claim_packet(
 def _intent_claim_for_variant(
     variant: OfficialMcpAdmissionVariant,
 ) -> dict[str, Any]:
-    if variant.intent_kind != INTENT_STRICT_NATURAL:
+    if variant.intent_kind not in {
+        INTENT_STRICT_NATURAL,
+        INTENT_AMBIGUOUS_NATURAL,
+        INTENT_NO_ALIAS_NEGATIVE,
+    }:
         return {}
     return build_natural_intent_claim_packet(variant)
 
@@ -807,6 +927,26 @@ def build_official_mcp_admission_case_packet(
                 codex_tool_call_packet.get("intent_claim_digest_present") is True
             ),
             "intent_claim_digest_bound": intent_claim_digest_bound,
+            "natural_command_shape": str(
+                codex_tool_call_packet.get("natural_command_shape") or ""
+            ),
+            "binding_status": str(
+                codex_tool_call_packet.get("binding_status") or ""
+            ),
+            "canonicalization_rule_id": str(
+                codex_tool_call_packet.get("canonicalization_rule_id") or ""
+            ),
+            "canonicalization_supported": (
+                codex_tool_call_packet.get("canonicalization_supported") is True
+            ),
+            "canonicalization_input_digest_present": (
+                codex_tool_call_packet.get("canonicalization_input_digest_present")
+                is True
+            ),
+            "canonicalization_output_digest_present": (
+                codex_tool_call_packet.get("canonicalization_output_digest_present")
+                is True
+            ),
             "delegated_task_digest_present": (
                 codex_tool_call_packet.get("delegated_task_digest_present") is True
             ),
@@ -858,6 +998,7 @@ def build_official_mcp_admission_case_packet(
             "secret_value_exposed": False,
             "no_secret_exposed": not secrets_exposed,
             "product_ready": False,
+            "custom_codex_ui_visibility_proven": False,
             "native_free_chat_router_proven": False,
             "does_not_prove_native_free_chat_router": True,
             "prompt_observation_packet_kind": str(prompt_packet.get("packet_kind") or ""),
@@ -1006,8 +1147,65 @@ def build_natural_alias_intent_matrix_packet(
         case.get("raw_jsonl_recorded") is False
         and case.get("raw_prompt_recorded") is False
         and case.get("prompt_text_recorded") is False
+        and case.get("raw_task_recorded") is False
+        and case.get("tool_call_arguments_recorded") is False
         for case in cases
     )
+    natural_command_classes = sorted(
+        {
+            str(case.get("natural_command_shape") or "")
+            for case in cases
+            if str(case.get("natural_command_shape") or "")
+        }
+    )
+    natural_command_class_summaries: list[dict[str, Any]] = []
+    for class_name in natural_command_classes:
+        class_cases = [
+            case
+            for case in cases
+            if str(case.get("natural_command_shape") or "") == class_name
+        ]
+        positive_count = sum(
+            1 for case in class_cases if case.get("positive_proof") is True
+        )
+        bound_count = sum(
+            1
+            for case in class_cases
+            if case.get("intent_claim_digest_bound") is True
+            and case.get("tool_call_task_matches_intent") is True
+        )
+        proof_status = (
+            "binding_supported"
+            if positive_count == len(class_cases)
+            else "binding_blocked"
+            if positive_count == 0
+            else "binding_partial"
+        )
+        natural_command_class_summaries.append(
+            {
+                "class_name": class_name,
+                "case_count": len(class_cases),
+                "positive_proof_count": positive_count,
+                "intent_claim_bound_count": bound_count,
+                "proof_status": proof_status,
+                "binding_statuses": sorted(
+                    {
+                        str(case.get("binding_status") or "")
+                        for case in class_cases
+                        if str(case.get("binding_status") or "")
+                    }
+                ),
+                "machine_error_codes": sorted(
+                    {
+                        str(case.get("machine_error_code") or "")
+                        for case in class_cases
+                        if str(case.get("machine_error_code") or "")
+                    }
+                ),
+                "product_ready": False,
+                "custom_codex_ui_visibility_proven": False,
+            }
+        )
     explicit_tool_instruction_absent_in_strict = all(
         case.get("explicit_tool_instruction_used") is False
         for case in strict_required
@@ -1081,12 +1279,15 @@ def build_natural_alias_intent_matrix_packet(
             "ambiguous_routed_count": ambiguous_routed_count,
             "natural_tool_call_count": natural_tool_call_count,
             "alias_mismatch_count": alias_mismatch_count,
+            "natural_command_class_count": len(natural_command_classes),
+            "natural_command_class_summaries": natural_command_class_summaries,
             "explicit_tool_instruction_absent_in_strict": (
                 explicit_tool_instruction_absent_in_strict
             ),
             "no_dangerous_modes": no_dangerous_modes,
             "no_raw_recording": no_raw_recording,
             "product_ready": False,
+            "custom_codex_ui_visibility_proven": False,
             "native_free_chat_router_proven": False,
             "does_not_prove_native_free_chat_router": True,
             "case_packets": cases,

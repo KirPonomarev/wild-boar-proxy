@@ -228,6 +228,48 @@ def _natural_negative_case_packet(name: str) -> dict[str, object]:
         variant.prompt,
         source="codex_exec_json",
         expected_delegate_arguments=proof._expected_delegate_arguments(variant),
+        intent_claim=proof.build_natural_intent_claim_packet(variant),
+    )
+    codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+        "",
+        prompt_packet=prompt_packet,
+    )
+    return proof.build_official_mcp_admission_case_packet(
+        variant=variant,
+        config_packet=config_packet,
+        prompt_packet=prompt_packet,
+        codex_tool_call_packet=codex_packet,
+        entry_hook_evidence={},
+        codex_exec_exit_code=0,
+        codex_exec_machine_error_code="OK",
+        codex_mcp_get_exit_code=0,
+        uses_danger_full_access=False,
+        uses_dangerously_bypass=False,
+    )
+
+
+def _ambiguous_natural_case_packet() -> dict[str, object]:
+    variant = proof.OfficialMcpAdmissionVariant(
+        name="ambiguous_loose_semantic",
+        prompt="Пусть второй агент посмотрит это.",
+        expected_alias="Agent 2",
+        coding_aliases=("DIP", "Agent 2", "Worker"),
+        expect_positive_proof=True,
+        intent_kind=proof.INTENT_AMBIGUOUS_NATURAL,
+        required_for_natural_matrix=False,
+        bind_expected_delegate_arguments=False,
+    )
+    config_packet = mcp_delegate.build_codex_mcp_config_probe_packet(
+        "",
+        MCP_GET_STDOUT,
+        list_exit_code=0,
+        get_exit_code=0,
+    )
+    prompt_packet = mcp_delegate.build_prompt_observation_packet(
+        variant.prompt,
+        source="codex_exec_json",
+        expected_delegate_arguments=proof._expected_delegate_arguments(variant),
+        intent_claim=proof.build_natural_intent_claim_packet(variant),
     )
     codex_packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
         "",
@@ -294,6 +336,33 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
             )
         )
 
+    def test_natural_intent_claim_classifies_loose_semantic_as_blocked(self) -> None:
+        variant = proof.OfficialMcpAdmissionVariant(
+            name="ambiguous_loose_semantic",
+            prompt="Пусть второй агент посмотрит это.",
+            expected_alias="Agent 2",
+            coding_aliases=("DIP", "Agent 2", "Worker"),
+            expect_positive_proof=True,
+            intent_kind=proof.INTENT_AMBIGUOUS_NATURAL,
+            bind_expected_delegate_arguments=False,
+        )
+
+        packet = proof.build_natural_intent_claim_packet(variant)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], proof.NATURAL_INTENT_AMBIGUOUS)
+        self.assertEqual(packet["natural_command_shape"], proof.NATURAL_SHAPE_LOOSE_SEMANTIC_TASK)
+        self.assertEqual(packet["binding_status"], proof.NATURAL_REQUIRES_HOOK_INTERCEPTOR)
+        self.assertEqual(packet["canonicalization_rule_id"], proof.CANON_RULE_UNSUPPORTED)
+        self.assertFalse(packet["canonicalization_supported"])
+        self.assertFalse(packet["intent_claim_digest_present"])
+        self.assertFalse(packet["delegated_task_digest_present"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_task_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_positive_case_requires_codex_tool_call_and_entry_hook_evidence(self) -> None:
         packet = _positive_case_packet("DIP")
 
@@ -342,6 +411,15 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertTrue(packet["intent_claim_digest_bound"])
         self.assertTrue(packet["delegated_task_digest_present"])
         self.assertEqual(packet["delegated_task_source"], "natural_prompt_parser")
+        self.assertEqual(packet["natural_command_shape"], proof.NATURAL_SHAPE_COLON_DELIMITED_TASK)
+        self.assertEqual(packet["binding_status"], proof.NATURAL_BINDING_SUPPORTED)
+        self.assertEqual(
+            packet["canonicalization_rule_id"],
+            proof.CANON_RULE_COLON_DELIMITED_EXACT,
+        )
+        self.assertTrue(packet["canonicalization_supported"])
+        self.assertTrue(packet["canonicalization_input_digest_present"])
+        self.assertTrue(packet["canonicalization_output_digest_present"])
         self.assertTrue(packet["tool_call_task_matches_intent"])
         self.assertFalse(packet["prompt_task_digest_matched"])
         self.assertEqual(packet["selected_alias"], "Worker")
@@ -350,6 +428,34 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["raw_task_recorded"])
         self.assertFalse(packet["raw_jsonl_recorded"])
         self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_natural_quoted_payload_binds_after_unwrap(self) -> None:
+        marker = "WBP_QUOTED_PAYLOAD_TEST"
+        prompt = f'Codex, дай задачу DIP: "{marker}"'
+        packet = _natural_case_packet(
+            "DIP",
+            prompt,
+            tool_arguments={"task": marker, "expected_alias": "DIP"},
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["positive_proof"])
+        self.assertEqual(packet["natural_command_shape"], proof.NATURAL_SHAPE_QUOTED_PAYLOAD)
+        self.assertEqual(packet["binding_status"], proof.NATURAL_BINDING_SUPPORTED)
+        self.assertEqual(
+            packet["canonicalization_rule_id"],
+            proof.CANON_RULE_QUOTED_PAYLOAD_UNWRAP,
+        )
+        self.assertTrue(packet["canonicalization_supported"])
+        self.assertTrue(packet["intent_claim_digest_bound"])
+        self.assertTrue(packet["tool_call_task_matches_intent"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["raw_task_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertNotIn(marker, json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_strict_natural_full_prompt_echo_does_not_bypass_intent_binding(self) -> None:
@@ -396,6 +502,12 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["positive_proof"])
         self.assertTrue(packet["natural_alias_intent_routed"])
+        self.assertEqual(packet["natural_command_shape"], proof.NATURAL_SHAPE_EXACT_STABLE_TASK)
+        self.assertEqual(packet["binding_status"], proof.NATURAL_BINDING_SUPPORTED)
+        self.assertEqual(
+            packet["canonicalization_rule_id"],
+            proof.CANON_RULE_EXACT_STABLE_TASK,
+        )
         self.assertEqual(packet["prompt_binding_mode"], "natural_intent_claim")
         self.assertTrue(packet["prompt_to_mcp_call_bound"])
         self.assertTrue(packet["intent_claim_digest_bound"])
@@ -407,6 +519,7 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["raw_task_recorded"])
         self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         self.assertNotIn(marker, json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
@@ -608,6 +721,69 @@ class OfficialMcpAdmissionProofTests(unittest.TestCase):
         self.assertTrue(packet["no_dangerous_modes"])
         self.assertTrue(packet["no_raw_recording"])
         self.assertFalse(packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_natural_matrix_reports_command_class_breakdown(self) -> None:
+        exact = _natural_case_packet(
+            "DIP",
+            "Codex, дай задачу DIP: Ответь ровно строкой: WBP_MATRIX_EXACT_TEST",
+            tool_arguments={
+                "task": "Ответь ровно строкой: WBP_MATRIX_EXACT_TEST",
+                "expected_alias": "DIP",
+            },
+        )
+        quoted = _natural_case_packet(
+            "DIP",
+            'Codex, дай задачу DIP: "WBP_MATRIX_QUOTED_TEST"',
+            tool_arguments={"task": "WBP_MATRIX_QUOTED_TEST", "expected_alias": "DIP"},
+        )
+        colon = _natural_case_packet(
+            "Worker",
+            "Worker, сделай короткий план проверки.",
+        )
+        loose = _ambiguous_natural_case_packet()
+        negative = _natural_negative_case_packet("negative_no_alias_prompt")
+
+        packet = proof.build_natural_alias_intent_matrix_packet(
+            [exact, quoted, colon, loose, negative]
+        )
+        summaries = {
+            summary["class_name"]: summary
+            for summary in packet["natural_command_class_summaries"]
+        }
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["natural_command_class_count"], 5)
+        self.assertEqual(
+            summaries[proof.NATURAL_SHAPE_EXACT_STABLE_TASK]["proof_status"],
+            "binding_supported",
+        )
+        self.assertEqual(
+            summaries[proof.NATURAL_SHAPE_QUOTED_PAYLOAD]["proof_status"],
+            "binding_supported",
+        )
+        self.assertEqual(
+            summaries[proof.NATURAL_SHAPE_COLON_DELIMITED_TASK]["proof_status"],
+            "binding_supported",
+        )
+        self.assertEqual(
+            summaries[proof.NATURAL_SHAPE_LOOSE_SEMANTIC_TASK]["proof_status"],
+            "binding_blocked",
+        )
+        self.assertIn(
+            proof.NATURAL_REQUIRES_HOOK_INTERCEPTOR,
+            summaries[proof.NATURAL_SHAPE_LOOSE_SEMANTIC_TASK]["binding_statuses"],
+        )
+        self.assertEqual(
+            summaries[proof.NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK]["proof_status"],
+            "binding_blocked",
+        )
+        self.assertIn(
+            proof.NATURAL_AMBIGUOUS_FAIL_CLOSED,
+            summaries[proof.NATURAL_SHAPE_AMBIGUOUS_UNSAFE_TASK]["binding_statuses"],
+        )
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_natural_matrix_reports_partial_for_some_strict_routing(self) -> None:

@@ -1083,6 +1083,24 @@ def build_prompt_observation_packet(
         ),
         "intent_claim_alias": _safe_text(intent.get("alias") or "", limit=80),
         "alias_from_runtime_context": intent.get("alias_from_runtime_context") is True,
+        "natural_command_shape": _safe_text(
+            intent.get("natural_command_shape") or "",
+            limit=128,
+        ),
+        "binding_status": _safe_text(intent.get("binding_status") or "", limit=128),
+        "canonicalization_rule_id": _safe_text(
+            intent.get("canonicalization_rule_id") or "",
+            limit=128,
+        ),
+        "canonicalization_supported": (
+            intent.get("canonicalization_supported") is True
+        ),
+        "canonicalization_input_sha256": _hex_sha256(
+            intent.get("canonicalization_input_sha256") or ""
+        ),
+        "canonicalization_output_sha256": _hex_sha256(
+            intent.get("canonicalization_output_sha256") or ""
+        ),
         "delegated_task_sha256": delegated_task_sha256,
         "delegated_task_digest_present": bool(delegated_task_sha256),
         "delegated_task_candidate_sha256s": delegated_task_candidate_sha256s[:8],
@@ -1100,6 +1118,7 @@ def build_prompt_observation_packet(
         "expected_delegate_arguments_recorded": False,
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
+        "custom_codex_ui_visibility_proven": False,
     }
 
 
@@ -1758,6 +1777,22 @@ def build_codex_exec_tool_call_observation_packet(
     )
     intent_claim_sha256 = _hex_sha256(prompt.get("intent_claim_sha256") or "")
     delegated_task_sha256 = _hex_sha256(prompt.get("delegated_task_sha256") or "")
+    natural_command_shape = _safe_text(
+        prompt.get("natural_command_shape") or "",
+        limit=128,
+    )
+    binding_status = _safe_text(prompt.get("binding_status") or "", limit=128)
+    canonicalization_rule_id = _safe_text(
+        prompt.get("canonicalization_rule_id") or "",
+        limit=128,
+    )
+    canonicalization_supported = prompt.get("canonicalization_supported") is True
+    canonicalization_input_sha256 = _hex_sha256(
+        prompt.get("canonicalization_input_sha256") or ""
+    )
+    canonicalization_output_sha256 = _hex_sha256(
+        prompt.get("canonicalization_output_sha256") or ""
+    )
     delegated_task_candidate_sha256s = [
         digest
         for digest in (
@@ -1911,6 +1946,14 @@ def build_codex_exec_tool_call_observation_packet(
         "prompt_binding_mode": prompt_binding_mode,
         "intent_claim_digest_present": bool(intent_claim_sha256),
         "intent_claim_sha256": intent_claim_sha256,
+        "natural_command_shape": natural_command_shape,
+        "binding_status": binding_status,
+        "canonicalization_rule_id": canonicalization_rule_id,
+        "canonicalization_supported": canonicalization_supported,
+        "canonicalization_input_digest_present": bool(canonicalization_input_sha256),
+        "canonicalization_input_sha256": canonicalization_input_sha256,
+        "canonicalization_output_digest_present": bool(canonicalization_output_sha256),
+        "canonicalization_output_sha256": canonicalization_output_sha256,
         "delegated_task_digest_present": bool(delegated_task_sha256),
         "delegated_task_sha256": delegated_task_sha256,
         "delegated_task_candidate_digest_count": len(
@@ -1935,6 +1978,7 @@ def build_codex_exec_tool_call_observation_packet(
         "fallback_used": False,
         "local_imitation_used": local_codex_subagent_used_as_dip,
         "product_ready": False,
+        "custom_codex_ui_visibility_proven": False,
         "native_free_chat_router_proven": False,
         "does_not_prove_native_free_chat_router": True,
         "does_not_prove_api_lane_provider_dispatch": True,
