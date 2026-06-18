@@ -70,6 +70,10 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
 LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     # Repo-owned v1 launcher before same-hash clean app copy selection.
     "074dff0a0796ccc0042238caa9e1001a64c3ca4074123d86fd184bb0ad93c52d",
+    # Repo-owned v1 launcher with exact binary+asar clean app copy selection.
+    "cbfaf79d88e56d29de1f890fc1a378db8abf43e81588d25ccb98706f392f0023",
+    # Repo-owned v1 launcher before custom app identity/codesign gating.
+    "7acc33edbb42e950c2e3a43123a6da09939afd65ee3cfa0073f7aadff2616e4d",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
@@ -1088,7 +1092,14 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  preferred_bin_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
             '  primary_asar_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
             '  preferred_asar_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
-            '  if [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ]; then',
+            '  preferred_bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PREFERRED_CODEX_APP_PATH/Contents/Info.plist" 2>/dev/null || printf "")"',
+            '  preferred_codesign_ok=0',
+            '  if /usr/bin/codesign --verify --deep --strict "$PREFERRED_CODEX_APP_PATH" >/dev/null 2>&1; then',
+            '    preferred_codesign_ok=1',
+            "  fi",
+            '  if [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ] && [ "$preferred_codesign_ok" = "1" ]; then',
+            '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
+            '  elif [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ] && [ "$preferred_codesign_ok" = "1" ]; then',
             '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
             "  fi",
             "fi",

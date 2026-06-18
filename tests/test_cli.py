@@ -23441,6 +23441,16 @@ class CliTests(unittest.TestCase):
         self.assertIn('cd "$CODEX_APP_RESOURCES"', launcher_text)
         self.assertIn("primary_bin_hash=", launcher_text)
         self.assertIn("preferred_asar_hash=", launcher_text)
+        self.assertIn("preferred_bundle_id=", launcher_text)
+        self.assertIn("preferred_codesign_ok=0", launcher_text)
+        self.assertIn(
+            '[ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ]',
+            launcher_text,
+        )
+        self.assertNotIn(
+            'if [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ]; then',
+            launcher_text,
+        )
         self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', launcher_text)
         self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', launcher_text)
         self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', launcher_text)

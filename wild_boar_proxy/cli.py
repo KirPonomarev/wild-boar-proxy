@@ -45,6 +45,7 @@ from .codex_exec_assistant_continuation_proof import (
 from .codex_working_flow_delivery_proof import (
     run_codex_working_flow_delivery_proof_command,
 )
+from .custom_app_identity_repair import build_custom_app_identity_repair_packet
 from .custom_codex_hook_origin_proof import (
     run_custom_codex_hook_origin_proof_command,
 )
@@ -200,6 +201,18 @@ def build_parser() -> argparse.ArgumentParser:
     launch_client = launch_subparsers.add_parser("client")
     launch_client.add_argument("--client-path", required=True)
     launch_client.add_argument("--json", action="store_true", required=True)
+    launch_custom_app_identity = launch_subparsers.add_parser(
+        "custom-app-identity-repair"
+    )
+    launch_custom_app_identity_mode = launch_custom_app_identity.add_mutually_exclusive_group(
+        required=True
+    )
+    launch_custom_app_identity_mode.add_argument("--dry-run", action="store_true")
+    launch_custom_app_identity_mode.add_argument("--apply", action="store_true")
+    launch_custom_app_identity.add_argument("--stock-app-path")
+    launch_custom_app_identity.add_argument("--custom-app-path")
+    launch_custom_app_identity.add_argument("--backup-dir")
+    launch_custom_app_identity.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -951,6 +964,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
         if launch_command == "client":
             return EFFECT_MUTATE
+        if launch_command == "custom-app-identity-repair":
+            return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_PROBE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
@@ -1187,6 +1202,19 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_launch_smoke(paths))
         if args.command == "launch" and args.launch_command == "client":
             return emit_json(run_launch_client(paths, args.client_path))
+        if (
+            args.command == "launch"
+            and args.launch_command == "custom-app-identity-repair"
+        ):
+            return emit_json(
+                build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    backup_dir=args.backup_dir,
+                )
+            )
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
             return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
         if args.command == "codex-runner" and args.codex_runner_command == "admission":
