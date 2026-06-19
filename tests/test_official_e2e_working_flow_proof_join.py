@@ -28,6 +28,8 @@ from test_codex_working_flow_delivery_proof import (  # noqa: E402
     PROMPT,
     RAW_PROVIDER_TEXT,
     ROUTE_ID,
+    _command_assistant_event,
+    _command_execution_event,
     _events_for_packet,
     _file_metadata as _working_flow_file_metadata,
     _integrated_packet,
@@ -52,6 +54,23 @@ def _working_flow_packet(source: dict[str, object]) -> dict[str, object]:
         secret_values=_secret_values(),
     )
     assert packet["status"] == "ok"
+    return packet
+
+
+def _command_working_flow_packet(source: dict[str, object]) -> dict[str, object]:
+    packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+        source,
+        [
+            {"type": "thread.started", "thread_id": "thread-command-flow"},
+            {"type": "turn.started"},
+            _command_execution_event(source),
+            _command_assistant_event(),
+            {"type": "turn.completed"},
+        ],
+        file_metadata=_working_flow_file_metadata(),
+    )
+    assert packet["status"] == "ok"
+    assert packet["command_execution_delivery_surface_proven"] is True
     return packet
 
 
@@ -248,6 +267,100 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
         self.assertEqual(packet["source_unsafe_claim_failures"], [])
         self.assertEqual(packet["digest_binding_failures"], [])
         self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_direct_command_execution_working_flow_delivery(self) -> None:
+        real_hook = _integrated_packet()
+        delivery = _command_working_flow_packet(real_hook)
+        packet = _packet(real_hook=real_hook, delivery=delivery)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["official_e2e_working_flow_proven"])
+        self.assertTrue(packet["custom_codex_hook_to_official_working_flow_bound"])
+        self.assertTrue(packet["custom_codex_flow_origin_proven"])
+        self.assertEqual(
+            packet["official_delivery_surface_kind"],
+            working_flow.DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK,
+        )
+        self.assertTrue(packet["official_command_execution_delivery_joined_to_working_flow"])
+        self.assertTrue(packet["official_working_flow_delivery_joined_to_working_flow"])
+        self.assertFalse(packet["official_mcp_delivery_candidate_joined_to_working_flow"])
+        self.assertFalse(packet["approved_exec_source_delivery_candidate"])
+        self.assertTrue(packet["official_delivery_candidate_lineage_proven"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["prompt_digest_bound_to_working_flow"])
+        self.assertTrue(packet["runtime_context_digest_bound_to_working_flow"])
+        self.assertTrue(packet["live_provider_response_bound_to_working_flow"])
+        self.assertTrue(packet["controlled_provider_response_bound_to_working_flow"])
+        self.assertEqual(packet["real_custom_hook_failures"], [])
+        self.assertEqual(packet["official_working_flow_delivery_join_failures"], [])
+        self.assertEqual(packet["digest_binding_failures"], [])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_command_execution_working_flow_failure_list_blocks_join(self) -> None:
+        real_hook = _integrated_packet()
+        delivery = _command_working_flow_packet(real_hook)
+        delivery["command_execution_delivery_failures"] = [
+            "forged_failure_list_must_block"
+        ]
+        packet = _packet(real_hook=real_hook, delivery=delivery)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_E2E_WORKING_FLOW_PROOF_JOIN_DELIVERY_INVALID,
+        )
+        self.assertIn(
+            "working_flow_command_delivery_failures_not_empty",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        self.assertFalse(packet["official_command_execution_delivery_joined_to_working_flow"])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_command_execution_working_flow_requires_file_backed_metadata(
+        self,
+    ) -> None:
+        real_hook = _integrated_packet()
+        delivery = _command_working_flow_packet(real_hook)
+        delivery["codex_exec_jsonl_file_read"] = False
+        delivery["codex_exec_jsonl_file_valid_jsonl"] = False
+        delivery["codex_exec_event_count"] = 0
+        packet = _packet(real_hook=real_hook, delivery=delivery)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_E2E_WORKING_FLOW_PROOF_JOIN_DELIVERY_INVALID,
+        )
+        self.assertIn(
+            "working_flow_codex_exec_jsonl_not_read",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "working_flow_codex_exec_jsonl_not_valid",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "working_flow_codex_exec_event_count_missing",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        self.assertFalse(packet["official_command_execution_delivery_joined_to_working_flow"])
         _assert_no_ui_native_or_product_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)
         _assert_no_writes(self, packet)

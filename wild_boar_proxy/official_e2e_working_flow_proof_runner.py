@@ -104,13 +104,12 @@ _JOIN_REQUIRED_TRUE_FIELDS = (
     "handoff_delivered",
     "delivery_observed",
     "handoff_payload_bound_to_working_flow",
-    "approved_exec_source_delivery_candidate",
     "official_delivery_candidate_lineage_proven",
     "official_observation_lineage_file_backed",
     "approved_delivery_surface_proven",
     "codex_exec_assistant_continuation_proven",
     "codex_working_flow_delivery_proven",
-    "official_mcp_delivery_candidate_joined_to_working_flow",
+    "official_working_flow_delivery_joined_to_working_flow",
 )
 _JOIN_REQUIRED_FALSE_FIELDS = (
     "custom_codex_ui_visibility_proven",
@@ -444,6 +443,32 @@ def build_official_e2e_working_flow_proof_runner_packet(
         ),
         "codex_working_flow_delivery_proven": bool(
             ok and join_packet.get("codex_working_flow_delivery_proven") is True
+        ),
+        "official_delivery_surface_kind": _safe_text(
+            join_packet.get("official_delivery_surface_kind"),
+            limit=96,
+        )
+        if ok
+        else "",
+        "official_working_flow_delivery_joined_to_working_flow": bool(
+            ok
+            and join_packet.get("official_working_flow_delivery_joined_to_working_flow")
+            is True
+        ),
+        "official_command_execution_delivery_joined_to_working_flow": bool(
+            ok
+            and join_packet.get(
+                "official_command_execution_delivery_joined_to_working_flow"
+            )
+            is True
+        ),
+        "official_mcp_delivery_candidate_joined_to_working_flow": bool(
+            ok
+            and join_packet.get("official_mcp_delivery_candidate_joined_to_working_flow")
+            is True
+        ),
+        "approved_exec_source_delivery_candidate": bool(
+            ok and join_packet.get("approved_exec_source_delivery_candidate") is True
         ),
         "official_delivery_candidate_lineage_proven": bool(
             ok and join_packet.get("official_delivery_candidate_lineage_proven") is True

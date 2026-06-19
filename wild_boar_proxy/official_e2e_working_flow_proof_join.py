@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from .codex_transcript_delivery_observation import _hex_sha256
+from .codex_working_flow_delivery_proof import (
+    CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND,
+    DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK,
+    WORKING_FLOW_DELIVERY_TRUTH_SOURCE,
+)
 from .command_effects import EFFECT_PROBE
 from .core import packets
 from .official_mcp_working_flow_delivery_join import (
@@ -220,6 +225,8 @@ def _delivery_join_contract_failures(
     delivery: Mapping[str, Any],
     metadata: Mapping[str, Any],
 ) -> list[str]:
+    if delivery.get("packet_kind") == CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND:
+        return _direct_working_flow_contract_failures(delivery, metadata)
     failures: list[str] = []
     if metadata.get("official_working_flow_delivery_join_file_read") is not True:
         failures.append("official_working_flow_delivery_join_file_not_read")
@@ -378,6 +385,222 @@ def _delivery_join_contract_failures(
     return sorted(set(failures))
 
 
+def _direct_working_flow_contract_failures(
+    working_flow: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    if metadata.get("official_working_flow_delivery_join_file_read") is not True:
+        failures.append("official_working_flow_delivery_join_file_not_read")
+    if metadata.get("official_working_flow_delivery_join_file_valid_json") is not True:
+        failures.append("official_working_flow_delivery_join_file_json_not_valid")
+    if metadata.get("official_working_flow_delivery_join_file_mapping") is not True:
+        failures.append("official_working_flow_delivery_join_file_not_mapping")
+    if working_flow.get("packet_kind") != CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND:
+        failures.append("official_working_flow_delivery_join_packet_kind_invalid")
+    if working_flow.get("status") != "ok":
+        failures.append("official_working_flow_delivery_join_packet_not_ok")
+    if working_flow.get("machine_error_code") != "OK":
+        failures.append("official_working_flow_delivery_join_machine_error_not_ok")
+    if working_flow.get("effect") != EFFECT_PROBE:
+        failures.append("official_working_flow_delivery_join_effect_not_probe")
+    if working_flow.get("changed_files") not in ([], ()):
+        failures.append("official_working_flow_delivery_join_changed_files_not_empty")
+    if (
+        working_flow.get("working_flow_delivery_truth_source")
+        != WORKING_FLOW_DELIVERY_TRUTH_SOURCE
+    ):
+        failures.append("working_flow_delivery_truth_source_not_file_backed")
+    for field, reason in (
+        (
+            "integrated_live_provider_proof_file_read",
+            "working_flow_integrated_source_file_not_read",
+        ),
+        (
+            "integrated_live_provider_proof_file_valid_json",
+            "working_flow_integrated_source_file_json_not_valid",
+        ),
+        (
+            "integrated_live_provider_proof_file_mapping",
+            "working_flow_integrated_source_file_not_mapping",
+        ),
+        ("codex_exec_jsonl_file_read", "working_flow_codex_exec_jsonl_not_read"),
+        (
+            "codex_exec_jsonl_file_valid_jsonl",
+            "working_flow_codex_exec_jsonl_not_valid",
+        ),
+        ("codex_exec_json_events_observed", "working_flow_codex_exec_events_missing"),
+        (
+            "live_provider_response_digest_bound_to_delivery",
+            "working_flow_live_response_not_bound_to_delivery",
+        ),
+        (
+            "controlled_provider_response_digest_bound_to_delivery",
+            "working_flow_controlled_response_not_bound_to_delivery",
+        ),
+    ):
+        if working_flow.get(field) is not True:
+            failures.append(reason)
+    if working_flow.get("codex_exec_jsonl_parse_error_count") != 0:
+        failures.append("working_flow_codex_exec_jsonl_parse_errors")
+    event_count = working_flow.get("codex_exec_event_count")
+    if not isinstance(event_count, int) or event_count <= 0:
+        failures.append("working_flow_codex_exec_event_count_missing")
+    for field, reason in (
+        ("codex_working_flow_delivery_proven", "codex_working_flow_delivery_not_proven"),
+        ("approved_delivery_surface_proven", "approved_delivery_surface_not_proven"),
+        ("command_execution_delivery_surface_proven", "command_execution_delivery_surface_not_proven"),
+        ("live_provider_proven", "working_flow_live_provider_not_proven"),
+        ("live_provider_response_proven", "working_flow_live_provider_response_not_proven"),
+        (
+            "external_live_provider_response_proven",
+            "working_flow_external_live_provider_response_not_proven",
+        ),
+        (
+            "codex_exec_assistant_continuation_proven",
+            "codex_exec_assistant_continuation_not_proven",
+        ),
+        ("approved_handoff_ready", "working_flow_approved_handoff_not_ready"),
+        (
+            "approved_handoff_payload_sanitized",
+            "working_flow_approved_handoff_payload_not_sanitized",
+        ),
+        ("handoff_delivered", "working_flow_handoff_not_delivered"),
+        ("delivery_observed", "working_flow_delivery_not_observed"),
+        (
+            "command_execution_live_format_observed",
+            "working_flow_command_live_format_not_observed",
+        ),
+        (
+            "command_execution_live_format_event_index_present",
+            "working_flow_command_event_missing",
+        ),
+        (
+            "command_execution_live_format_route_digest_bound",
+            "working_flow_command_route_digest_not_bound",
+        ),
+        (
+            "command_execution_live_format_extra_args_allowed",
+            "working_flow_command_extra_args_not_allowed",
+        ),
+        (
+            "command_execution_live_format_exit_code_zero",
+            "working_flow_command_exit_nonzero",
+        ),
+        (
+            "command_execution_live_format_status_completed",
+            "working_flow_command_not_completed",
+        ),
+        (
+            "command_execution_live_format_expected_text_observed",
+            "working_flow_command_expected_text_not_observed",
+        ),
+        (
+            "command_assistant_response_after_command",
+            "working_flow_command_assistant_not_after_command",
+        ),
+        (
+            "command_assistant_response_bound_to_live_provider_digest",
+            "working_flow_command_assistant_not_bound",
+        ),
+    ):
+        if working_flow.get(field) is not True:
+            failures.append(reason)
+    if (
+        working_flow.get("working_flow_delivery_surface_kind")
+        != DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK
+    ):
+        failures.append("working_flow_delivery_surface_kind_not_command_execution")
+    if working_flow.get("mcp_delivery_surface_proven") is True:
+        failures.append("direct_working_flow_must_not_claim_mcp_delivery_surface")
+    if working_flow.get("command_execution_file_bridge_response_bound") is not True:
+        if working_flow.get("command_execution_live_format_cli_command_digest_bound") is not True:
+            failures.append("working_flow_command_cli_digest_not_bound")
+    if working_flow.get("command_execution_live_format_fallback_used") is True:
+        failures.append("working_flow_command_fallback_used")
+    if _safe_text(
+        working_flow.get("command_execution_live_format_packet_status"),
+        limit=32,
+    ) != "ok":
+        failures.append("working_flow_command_packet_status_not_ok")
+    if _safe_text(
+        working_flow.get("command_execution_live_format_machine_error_code"),
+        limit=96,
+    ) != "OK":
+        failures.append("working_flow_command_machine_error_not_ok")
+    if _hex_sha256(
+        working_flow.get("command_execution_live_format_response_digest")
+    ) != _hex_sha256(working_flow.get("live_provider_response_digest")):
+        failures.append("working_flow_command_response_digest_mismatch")
+    if _hex_sha256(
+        working_flow.get("command_execution_live_format_route_digest")
+    ) != _hex_sha256(working_flow.get("selected_api_route_id_sha256")):
+        failures.append("working_flow_command_route_digest_mismatch")
+    for field, reason in (
+        ("blocking_reasons", "delivery_join_blocking_reasons_not_empty"),
+        ("integrated_live_provider_proof_failures", "working_flow_integrated_failures_not_empty"),
+        ("transcript_delivery_failures", "working_flow_transcript_failures_not_empty"),
+        ("assistant_binding_failures", "delivery_binding_failures_not_empty"),
+        ("source_unsafe_claim_failures", "delivery_source_unsafe_claims_not_empty"),
+        ("transcript_unsafe_claim_failures", "delivery_transcript_unsafe_claims_not_empty"),
+        (
+            "command_execution_delivery_failures",
+            "working_flow_command_delivery_failures_not_empty",
+        ),
+        (
+            "command_assistant_binding_failures",
+            "working_flow_command_assistant_failures_not_empty",
+        ),
+    ):
+        if _sequence_nonempty(working_flow.get(field)):
+            failures.append(reason)
+    for field, reason in (
+        ("source_prompt_digest", "working_flow_source_prompt_digest_missing"),
+        (
+            "source_runtime_context_digest",
+            "working_flow_source_runtime_context_digest_missing",
+        ),
+        (
+            "source_hook_event_digest",
+            "working_flow_source_hook_event_digest_missing",
+        ),
+        (
+            "source_hook_session_digest",
+            "working_flow_source_hook_session_digest_missing",
+        ),
+        (
+            "selected_api_route_id_sha256",
+            "working_flow_selected_route_digest_missing",
+        ),
+        (
+            "route_bound_request_sha256",
+            "working_flow_route_bound_request_digest_missing",
+        ),
+        (
+            "live_provider_response_digest",
+            "working_flow_live_provider_response_digest_missing",
+        ),
+        (
+            "controlled_provider_response_digest",
+            "working_flow_controlled_provider_response_digest_missing",
+        ),
+        ("handoff_payload_digest", "handoff_payload_digest_missing"),
+        ("codex_exec_transcript_sha256", "codex_exec_transcript_digest_missing"),
+        (
+            "machine_response_envelope_sha256",
+            "machine_response_envelope_digest_missing",
+        ),
+    ):
+        if not _hex_sha256(working_flow.get(field)):
+            failures.append(reason)
+    if not (
+        _hex_sha256(working_flow.get("source_hook_thread_digest"))
+        or _hex_sha256(working_flow.get("source_hook_turn_digest"))
+    ):
+        failures.append("working_flow_source_hook_thread_or_turn_digest_missing")
+    return sorted(set(failures))
+
+
 def _source_unsafe_claim_failures(
     *,
     real_hook: Mapping[str, Any],
@@ -456,6 +679,20 @@ def _source_unsafe_claim_failures(
     return sorted(set(failures))
 
 
+def _is_direct_working_flow_delivery(delivery: Mapping[str, Any]) -> bool:
+    return delivery.get("packet_kind") == CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND
+
+
+def _delivery_value(
+    delivery: Mapping[str, Any],
+    join_field: str,
+    direct_field: str,
+) -> object:
+    if _is_direct_working_flow_delivery(delivery):
+        return delivery.get(direct_field)
+    return delivery.get(join_field)
+
+
 def _digest_binding_failures(
     real_hook: Mapping[str, Any],
     delivery: Mapping[str, Any],
@@ -465,60 +702,80 @@ def _digest_binding_failures(
         (
             "prompt_digest",
             "working_flow_source_prompt_digest",
+            "source_prompt_digest",
             "prompt_digest_mismatch",
         ),
         (
             "runtime_context_digest",
             "working_flow_source_runtime_context_digest",
+            "source_runtime_context_digest",
             "runtime_context_digest_mismatch",
         ),
         (
             "selected_api_route_id_sha256",
             "working_flow_selected_api_route_id_sha256",
+            "selected_api_route_id_sha256",
             "selected_route_digest_mismatch",
         ),
         (
             "route_bound_request_sha256",
             "working_flow_route_bound_request_sha256",
+            "route_bound_request_sha256",
             "route_bound_request_digest_mismatch",
         ),
         (
             "live_provider_response_digest",
             "working_flow_live_provider_response_digest",
+            "live_provider_response_digest",
             "live_provider_response_digest_mismatch",
         ),
         (
             "provider_response_digest",
             "working_flow_controlled_provider_response_digest",
+            "controlled_provider_response_digest",
             "controlled_provider_response_digest_mismatch",
         ),
         (
             "hook_event_digest",
             "working_flow_source_hook_event_digest",
+            "source_hook_event_digest",
             "hook_event_digest_mismatch",
         ),
         (
             "hook_session_digest",
             "working_flow_source_hook_session_digest",
+            "source_hook_session_digest",
             "hook_session_digest_mismatch",
         ),
     )
-    for source_field, delivery_field, reason in bindings:
+    for source_field, join_field, direct_field, reason in bindings:
         source_digest = _hex_sha256(real_hook.get(source_field))
-        delivery_digest = _hex_sha256(delivery.get(delivery_field))
+        delivery_digest = _hex_sha256(
+            _delivery_value(delivery, join_field, direct_field)
+        )
         if not source_digest:
             failures.append(f"{source_field}_missing")
         elif not delivery_digest:
-            failures.append(f"{delivery_field}_missing")
+            failures.append(
+                f"{direct_field if _is_direct_working_flow_delivery(delivery) else join_field}_missing"
+            )
         elif source_digest != delivery_digest:
             failures.append(reason)
     hook_thread_digest = _hex_sha256(real_hook.get("hook_thread_digest"))
     hook_turn_digest = _hex_sha256(real_hook.get("hook_turn_digest"))
     working_flow_thread_digest = _hex_sha256(
-        delivery.get("working_flow_source_hook_thread_digest")
+        _delivery_value(
+            delivery,
+            "working_flow_source_hook_thread_digest",
+            "source_hook_thread_digest",
+        )
     )
     working_flow_turn_digest = _hex_sha256(
-        delivery.get("working_flow_source_hook_turn_digest")
+        _delivery_value(
+            delivery,
+            "working_flow_source_hook_turn_digest",
+            "source_hook_turn_digest",
+        )
     )
     thread_bound = bool(hook_thread_digest and hook_thread_digest == working_flow_thread_digest)
     turn_bound = bool(hook_turn_digest and hook_turn_digest == working_flow_turn_digest)
@@ -588,10 +845,21 @@ def build_official_e2e_working_flow_proof_join_packet(
     live_response_digest = _hex_sha256(real_hook.get("live_provider_response_digest"))
     controlled_response_digest = _hex_sha256(real_hook.get("provider_response_digest"))
     source_handoff_digest = _hex_sha256(real_hook.get("handoff_payload_digest"))
+    direct_working_flow_delivery = _is_direct_working_flow_delivery(delivery)
     working_flow_handoff_digest = _hex_sha256(
-        delivery.get("working_flow_handoff_payload_digest")
+        _delivery_value(
+            delivery,
+            "working_flow_handoff_payload_digest",
+            "handoff_payload_digest",
+        )
     )
-    transcript_digest = _hex_sha256(delivery.get("codex_exec_transcript_sha256"))
+    transcript_digest = _hex_sha256(
+        _delivery_value(
+            delivery,
+            "codex_exec_transcript_sha256",
+            "codex_exec_transcript_sha256",
+        )
+    )
     hook_event_digest = _hex_sha256(real_hook.get("hook_event_digest"))
     hook_thread_digest = _hex_sha256(real_hook.get("hook_thread_digest"))
     hook_turn_digest = _hex_sha256(real_hook.get("hook_turn_digest"))
@@ -606,6 +874,13 @@ def build_official_e2e_working_flow_proof_join_packet(
         if ok
         else "not_proven",
         "source_kind_claim_ceiling": E2E_WORKING_FLOW_CLAIM_CEILING,
+        "official_delivery_surface_kind": (
+            _safe_text(delivery.get("working_flow_delivery_surface_kind"), limit=96)
+            if direct_working_flow_delivery
+            else "mcp_tool_response"
+            if ok
+            else ""
+        ),
         "real_custom_hook_packet_kind": _safe_text(real_hook.get("packet_kind"), limit=96),
         "real_custom_hook_status": _safe_text(real_hook.get("status"), limit=32),
         "real_custom_hook_machine_error_code": _safe_text(
@@ -658,7 +933,13 @@ def build_official_e2e_working_flow_proof_join_packet(
         "hook_event_digest_bound_to_working_flow": bool(
             ok
             and hook_event_digest
-            == _hex_sha256(delivery.get("working_flow_source_hook_event_digest"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_source_hook_event_digest",
+                    "source_hook_event_digest",
+                )
+            )
         ),
         "hook_thread_or_turn_digest_bound_to_working_flow": bool(
             ok
@@ -666,35 +947,81 @@ def build_official_e2e_working_flow_proof_join_packet(
                 (
                     hook_thread_digest
                     and hook_thread_digest
-                    == _hex_sha256(delivery.get("working_flow_source_hook_thread_digest"))
+                    == _hex_sha256(
+                        _delivery_value(
+                            delivery,
+                            "working_flow_source_hook_thread_digest",
+                            "source_hook_thread_digest",
+                        )
+                    )
                 )
                 or (
                     hook_turn_digest
                     and hook_turn_digest
-                    == _hex_sha256(delivery.get("working_flow_source_hook_turn_digest"))
+                    == _hex_sha256(
+                        _delivery_value(
+                            delivery,
+                            "working_flow_source_hook_turn_digest",
+                            "source_hook_turn_digest",
+                        )
+                    )
                 )
             )
         ),
         "hook_session_digest_bound_to_working_flow": bool(
             ok
             and hook_session_digest
-            == _hex_sha256(delivery.get("working_flow_source_hook_session_digest"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_source_hook_session_digest",
+                    "source_hook_session_digest",
+                )
+            )
         ),
         "working_flow_hook_prompt_digest_bound": bool(
-            ok and delivery.get("working_flow_hook_prompt_digest_bound") is True
+            ok
+            and (
+                delivery.get("working_flow_hook_prompt_digest_bound") is True
+                or (
+                    direct_working_flow_delivery
+                    and delivery.get("hook_prompt_digest_bound") is True
+                )
+            )
         ),
         "working_flow_hook_runtime_context_digest_bound": bool(
-            ok and delivery.get("working_flow_hook_runtime_context_digest_bound") is True
+            ok
+            and (
+                delivery.get("working_flow_hook_runtime_context_digest_bound") is True
+                or (
+                    direct_working_flow_delivery
+                    and delivery.get("hook_runtime_context_digest_bound") is True
+                )
+            )
         ),
         "prompt_digest": prompt_digest if ok else "",
         "runtime_context_digest": runtime_context_digest if ok else "",
         "prompt_digest_bound_to_working_flow": bool(
-            ok and prompt_digest == _hex_sha256(delivery.get("working_flow_source_prompt_digest"))
+            ok
+            and prompt_digest
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_source_prompt_digest",
+                    "source_prompt_digest",
+                )
+            )
         ),
         "runtime_context_digest_bound_to_working_flow": bool(
             ok
             and runtime_context_digest
-            == _hex_sha256(delivery.get("working_flow_source_runtime_context_digest"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_source_runtime_context_digest",
+                    "source_runtime_context_digest",
+                )
+            )
         ),
         "alias_context_read": bool(ok and real_hook.get("alias_context_read") is True),
         "allowed_api_route_ids_enforced": bool(
@@ -706,12 +1033,24 @@ def build_official_e2e_working_flow_proof_join_packet(
         "selected_route_bound_to_working_flow": bool(
             ok
             and selected_route_digest
-            == _hex_sha256(delivery.get("working_flow_selected_api_route_id_sha256"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_selected_api_route_id_sha256",
+                    "selected_api_route_id_sha256",
+                )
+            )
         ),
         "route_bound_request_bound_to_working_flow": bool(
             ok
             and route_bound_request_digest
-            == _hex_sha256(delivery.get("working_flow_route_bound_request_sha256"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_route_bound_request_sha256",
+                    "route_bound_request_sha256",
+                )
+            )
         ),
         "api_lane_called": bool(ok and real_hook.get("api_lane_called") is True),
         "dispatch_proven": bool(ok and real_hook.get("dispatch_proven") is True),
@@ -733,12 +1072,24 @@ def build_official_e2e_working_flow_proof_join_packet(
         "live_provider_response_bound_to_working_flow": bool(
             ok
             and live_response_digest
-            == _hex_sha256(delivery.get("working_flow_live_provider_response_digest"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_live_provider_response_digest",
+                    "live_provider_response_digest",
+                )
+            )
         ),
         "controlled_provider_response_bound_to_working_flow": bool(
             ok
             and controlled_response_digest
-            == _hex_sha256(delivery.get("working_flow_controlled_provider_response_digest"))
+            == _hex_sha256(
+                _delivery_value(
+                    delivery,
+                    "working_flow_controlled_provider_response_digest",
+                    "controlled_provider_response_digest",
+                )
+            )
         ),
         "approved_handoff_ready": bool(
             ok
@@ -764,17 +1115,32 @@ def build_official_e2e_working_flow_proof_join_packet(
         "working_flow_handoff_payload_digest": working_flow_handoff_digest if ok else "",
         "handoff_payload_digest": working_flow_handoff_digest if ok else "",
         "handoff_payload_bound_to_working_flow": bool(
-            ok and delivery.get("candidate_handoff_bound_to_working_flow_handoff") is True
+            ok
+            and (
+                delivery.get("candidate_handoff_bound_to_working_flow_handoff") is True
+                or (
+                    direct_working_flow_delivery
+                    and _hex_sha256(delivery.get("handoff_payload_digest"))
+                )
+            )
         ),
         "codex_exec_transcript_sha256": transcript_digest if ok else "",
         "approved_exec_source_delivery_candidate": bool(
             ok and delivery.get("approved_exec_source_delivery_candidate") is True
         ),
         "official_delivery_candidate_lineage_proven": bool(
-            ok and delivery.get("official_delivery_candidate_lineage_proven") is True
+            ok
+            and (
+                delivery.get("official_delivery_candidate_lineage_proven") is True
+                or direct_working_flow_delivery
+            )
         ),
         "official_observation_lineage_file_backed": bool(
-            ok and delivery.get("official_observation_lineage_file_backed") is True
+            ok
+            and (
+                delivery.get("official_observation_lineage_file_backed") is True
+                or direct_working_flow_delivery
+            )
         ),
         "approved_delivery_surface_proven": bool(
             ok and delivery.get("approved_delivery_surface_proven") is True
@@ -789,6 +1155,10 @@ def build_official_e2e_working_flow_proof_join_packet(
             ok and delivery.get("official_mcp_delivery_candidate_joined_to_working_flow")
             is True
         ),
+        "official_command_execution_delivery_joined_to_working_flow": bool(
+            ok and direct_working_flow_delivery
+        ),
+        "official_working_flow_delivery_joined_to_working_flow": bool(ok),
         "custom_codex_ui_visibility_proven": False,
         "delivery_counts_as_custom_codex_ui": False,
         "native_free_chat_router_proven": False,

@@ -28,6 +28,8 @@ from test_codex_working_flow_delivery_proof import (  # noqa: E402
     PROMPT,
     RAW_PROVIDER_TEXT,
     ROUTE_ID,
+    _command_assistant_event,
+    _command_execution_event,
     _events_for_packet,
     _integrated_packet,
     _jsonl_from_events,
@@ -82,6 +84,32 @@ def _write_fresh_fixture(
     source_packet = _integrated_packet() if source is None else source
     events = _events_for_packet(source_packet)
     start_ns = time.time_ns() - 1_000_000 if started_at_ns is None else started_at_ns
+    real_hook_file = root / "real-hook.json"
+    jsonl_file = root / "codex-exec.jsonl"
+    inputs_file = root / "fresh-runner-inputs.json"
+    _write_json(real_hook_file, source_packet)
+    _write_jsonl(jsonl_file, events)
+    _write_json(
+        inputs_file,
+        _fresh_inputs_payload(
+            started_at_ns=start_ns,
+            expected_real_hook_sha256=_file_sha256(real_hook_file),
+            expected_jsonl_sha256=_file_sha256(jsonl_file),
+        ),
+    )
+    return source_packet, inputs_file, real_hook_file, jsonl_file
+
+
+def _write_command_fresh_fixture(root: Path) -> tuple[dict[str, object], Path, Path, Path]:
+    source_packet = _integrated_packet()
+    events = [
+        {"type": "thread.started", "thread_id": "thread-command-flow"},
+        {"type": "turn.started"},
+        _command_execution_event(source_packet),
+        _command_assistant_event(),
+        {"type": "turn.completed"},
+    ]
+    start_ns = time.time_ns() - 1_000_000
     real_hook_file = root / "real-hook.json"
     jsonl_file = root / "codex-exec.jsonl"
     inputs_file = root / "fresh-runner-inputs.json"
@@ -195,6 +223,54 @@ class OfficialE2EFreshWorkingFlowProofRunnerTests(unittest.TestCase):
         self.assertFalse(packet["proof_output_dir_path_recorded"])
         self.assertIn("official-e2e-runner.packet.json", artifact_names)
         self.assertEqual(artifact_names, set(written_artifacts))
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_product_ui_or_native_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_fresh_command_execution_working_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, inputs_file, _, _ = _write_command_fresh_fixture(root)
+            proof_dir = root / "proof"
+
+            packet = fresh.run_official_e2e_fresh_working_flow_proof_runner_command(
+                inputs_file=str(inputs_file),
+                proof_output_dir=str(proof_dir),
+            )
+
+            official_inputs = json.loads(
+                (proof_dir / "official-e2e-runner-inputs.packet.json").read_text(
+                    encoding="utf-8",
+                )
+            )
+            official_runner = json.loads(
+                (proof_dir / "official-e2e-runner.packet.json").read_text(
+                    encoding="utf-8",
+                )
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["fresh_e2e_working_flow_proven"])
+        self.assertTrue(packet["official_e2e_working_flow_proven"])
+        self.assertTrue(packet["official_e2e_runner_valid"])
+        self.assertTrue(packet["custom_codex_hook_to_official_working_flow_bound"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["dispatch_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["official_delivery_candidate_lineage_proven"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertEqual(
+            official_inputs["official_working_flow_delivery_join_file"],
+            "working-flow-delivery-proof.packet.json",
+        )
+        self.assertTrue(
+            official_runner["official_command_execution_delivery_joined_to_working_flow"]
+        )
+        self.assertFalse(
+            official_runner["official_mcp_delivery_candidate_joined_to_working_flow"]
+        )
         self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_product_ui_or_native_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)

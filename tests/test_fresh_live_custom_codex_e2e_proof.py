@@ -174,6 +174,7 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
         self.assertTrue(packet["hook_ledger_fresh"])
         self.assertTrue(packet["user_prompt_submit_hook_ran"])
         self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["dispatch_proven"])
         self.assertTrue(packet["live_provider_response_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
         self.assertTrue(packet["official_fresh_runner_valid"])
@@ -201,6 +202,106 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
         self.assertIn("codex-exec.jsonl", changed_names)
         _assert_no_product_ui_or_native_claim(self, packet)
         _assert_no_raw_sensitive_text(self, packet)
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(
+                packet,
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            ),
+            [],
+        )
+
+    def test_final_packet_uses_admission_dispatch_when_legacy_field_is_absent(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_proof = root / "proof" / "admission" / "source.json"
+            codex_jsonl = root / "proof" / "admission" / "codex-exec.jsonl"
+            inputs_file = root / "proof" / "fresh-runner-inputs.packet.json"
+            runner_file = root / "proof" / "official-fresh-runner.packet.json"
+            final_file = root / "proof" / "fresh-live-e2e-proof.packet.json"
+            for path in (source_proof, codex_jsonl, inputs_file, runner_file):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding="utf-8")
+            admission = dict(_admission_ok_packet())
+            admission.pop("route_bound_dispatch_proven", None)
+            admission["dispatch_proven"] = True
+            packet = fresh_live.build_fresh_live_custom_codex_e2e_packet(
+                admission_packet=admission,
+                fresh_runner_packet=_fresh_runner_ok_packet(dispatch_proven=True),
+                proof_run_id="WBP_FRESH_LIVE_E2E_TEST_DISPATCH_PASSTHROUGH",
+                proof_run_started_at_ns=1,
+                proof_root=root / "proof",
+                admission_dir=root / "proof" / "admission",
+                fresh_runner_inputs_file=inputs_file,
+                fresh_runner_packet_file=runner_file,
+                source_proof_path=source_proof,
+                codex_exec_jsonl_path=codex_jsonl,
+                final_packet_path=final_file,
+                changed_files=[],
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["fresh_live_custom_codex_e2e_proven"])
+        self.assertTrue(packet["dispatch_proven"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(
+                packet,
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            ),
+            [],
+        )
+
+    def test_final_packet_blocks_runner_only_dispatch_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_proof = root / "proof" / "admission" / "source.json"
+            codex_jsonl = root / "proof" / "admission" / "codex-exec.jsonl"
+            inputs_file = root / "proof" / "fresh-runner-inputs.packet.json"
+            runner_file = root / "proof" / "official-fresh-runner.packet.json"
+            final_file = root / "proof" / "fresh-live-e2e-proof.packet.json"
+            for path in (source_proof, codex_jsonl, inputs_file, runner_file):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding="utf-8")
+            admission = dict(_admission_ok_packet())
+            admission.pop("route_bound_dispatch_proven", None)
+            admission.pop("dispatch_proven", None)
+            admission["api_lane_called"] = False
+            packet = fresh_live.build_fresh_live_custom_codex_e2e_packet(
+                admission_packet=admission,
+                fresh_runner_packet=_fresh_runner_ok_packet(dispatch_proven=True),
+                proof_run_id="WBP_FRESH_LIVE_E2E_TEST_RUNNER_ONLY_DISPATCH_BLOCKED",
+                proof_run_started_at_ns=1,
+                proof_root=root / "proof",
+                admission_dir=root / "proof" / "admission",
+                fresh_runner_inputs_file=inputs_file,
+                fresh_runner_packet_file=runner_file,
+                source_proof_path=source_proof,
+                codex_exec_jsonl_path=codex_jsonl,
+                final_packet_path=final_file,
+                changed_files=[],
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            fresh_live.FRESH_LIVE_E2E_ADMISSION_FAILED,
+        )
+        self.assertTrue(packet["admission_proven"])
+        self.assertTrue(packet["official_fresh_runner_valid"])
+        self.assertNotIn(
+            "fresh_live_official_fresh_runner_not_proven",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["fresh_live_custom_codex_e2e_proven"])
+        self.assertFalse(packet["dispatch_proven"])
+        self.assertIn(
+            "fresh_live_admission_dispatch_not_proven",
+            packet["blocking_reasons"],
+        )
         self.assertEqual(
             packets.inspect_command_packet_semantics(
                 packet,

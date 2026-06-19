@@ -78,13 +78,14 @@ def _fresh_runner_inputs(
 def _machine_error_code(
     *,
     admission_ok: bool,
+    admission_dispatch_proven: bool,
     artifacts_present: bool,
     fresh_runner_ok: bool,
     unsafe: bool,
 ) -> str:
     if unsafe:
         return FRESH_LIVE_E2E_UNSAFE_PACKET
-    if not admission_ok:
+    if not admission_ok or not admission_dispatch_proven:
         return FRESH_LIVE_E2E_ADMISSION_FAILED
     if not artifacts_present:
         return FRESH_LIVE_E2E_ARTIFACT_MISSING
@@ -174,6 +175,16 @@ def build_fresh_live_custom_codex_e2e_packet(
         and admission.get("machine_error_code") == "OK"
         and admission.get("admission_proven") is True
     )
+    admission_dispatch_proven = bool(
+        admission.get("route_bound_dispatch_proven") is True
+        or admission.get("dispatch_proven") is True
+        or (
+            admission.get("user_prompt_submit_hook_ran") is True
+            and admission.get("hook_ledger_fresh") is True
+            and admission.get("api_lane_called") is True
+            and admission.get("live_provider_response_proven") is True
+        )
+    )
     artifacts_present = bool(source_proof_path.is_file() and codex_exec_jsonl_path.is_file())
     fresh_runner_failures = _fresh_runner_acceptance_failures(fresh_runner)
     fresh_runner_ok = bool(not fresh_runner_failures)
@@ -189,13 +200,24 @@ def build_fresh_live_custom_codex_e2e_packet(
         unsafe_payload,
         secret_values=list(secret_values or []),
     )
-    ok = bool(admission_ok and artifacts_present and fresh_runner_ok and not unsafe)
+    ok = bool(
+        admission_ok
+        and admission_dispatch_proven
+        and artifacts_present
+        and fresh_runner_ok
+        and not unsafe
+    )
     blocking_reasons = sorted(
         set(
             list(admission.get("blocking_reasons") or [])
             + list(fresh_runner.get("blocking_reasons") or [])
             + fresh_runner_failures
             + ([] if admission_ok else ["fresh_live_admission_not_proven"])
+            + (
+                []
+                if admission_dispatch_proven
+                else ["fresh_live_admission_dispatch_not_proven"]
+            )
             + ([] if artifacts_present else ["fresh_live_required_artifacts_missing"])
             + ([] if fresh_runner_ok else ["fresh_live_official_fresh_runner_not_proven"])
             + (["fresh_live_packet_secret_leak"] if unsafe else [])
@@ -203,6 +225,7 @@ def build_fresh_live_custom_codex_e2e_packet(
     )
     machine_error_code = _machine_error_code(
         admission_ok=admission_ok,
+        admission_dispatch_proven=admission_dispatch_proven,
         artifacts_present=artifacts_present,
         fresh_runner_ok=fresh_runner_ok,
         unsafe=unsafe,
@@ -236,7 +259,11 @@ def build_fresh_live_custom_codex_e2e_packet(
             ok and admission.get("user_prompt_submit_hook_ran") is True
         ),
         "api_lane_called": bool(ok and admission.get("api_lane_called") is True),
-        "dispatch_proven": bool(ok and admission.get("route_bound_dispatch_proven") is True),
+        "dispatch_proven": bool(
+            ok
+            and admission_dispatch_proven
+            and fresh_runner.get("dispatch_proven") is True
+        ),
         "live_provider_response_proven": bool(
             ok and admission.get("live_provider_response_proven") is True
         ),

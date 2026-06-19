@@ -540,19 +540,27 @@ def _run_official_chain(
             delivery_join_packet,
         )
 
+        official_delivery_source = artifacts["official-working-flow-delivery-join.packet.json"]
+        if (
+            delivery_join_packet.get("status") != "ok"
+            and working_flow_packet.get("status") == "ok"
+            and working_flow_packet.get("machine_error_code") == "OK"
+            and working_flow_packet.get("command_execution_delivery_surface_proven")
+            is True
+        ):
+            official_delivery_source = artifacts["working-flow-delivery-proof.packet.json"]
+
         official_runner_inputs = {
             "schema_version": 1,
             "packet_kind": OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_INPUTS_PACKET_KIND,
             "proof_run_id": proof_run_id,
             "real_custom_hook_proof_file": real_hook_snapshot.name,
-            "official_working_flow_delivery_join_file": (
-                artifacts["official-working-flow-delivery-join.packet.json"].name
-            ),
+            "official_working_flow_delivery_join_file": official_delivery_source.name,
             "expected_real_custom_hook_proof_file_sha256": _file_sha256(
                 real_hook_snapshot
             ),
             "expected_official_working_flow_delivery_join_file_sha256": _file_sha256(
-                artifacts["official-working-flow-delivery-join.packet.json"]
+                official_delivery_source
             ),
         }
         _write_json_artifact(
