@@ -141,6 +141,9 @@ from .official_e2e_working_flow_proof_join import (
 from .official_e2e_working_flow_proof_runner import (
     run_official_e2e_working_flow_proof_runner_command,
 )
+from .official_e2e_fresh_working_flow_proof_runner import (
+    run_official_e2e_fresh_working_flow_proof_runner_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -827,6 +830,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_official_e2e_fresh_working_flow_proof_runner = (
+        router_hook_subparsers.add_parser(
+            "official-e2e-fresh-working-flow-proof-runner"
+        )
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--inputs-file",
+        required=True,
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--proof-output-dir",
+        required=True,
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
         "custom-app-submit-ledger-proof"
     )
@@ -1390,6 +1411,12 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "user-prompt-submit-readiness",
     }:
         return EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        == "official-e2e-fresh-working-flow-proof-runner"
+    ):
+        return EFFECT_MUTATE
     if (
         command == "router-hook"
         and getattr(args, "router_hook_command", None) == "user-prompt-submit-trust-repair"
@@ -2023,6 +2050,17 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_official_e2e_working_flow_proof_runner_command(
                     inputs_file=args.inputs_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-e2e-fresh-working-flow-proof-runner"
+        ):
+            return emit_json(
+                run_official_e2e_fresh_working_flow_proof_runner_command(
+                    inputs_file=args.inputs_file,
+                    proof_output_dir=args.proof_output_dir,
                 )
             )
         if (
