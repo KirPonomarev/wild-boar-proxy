@@ -467,6 +467,17 @@ def _command_packet(
 
 ENTRY_HOOK_EVIDENCE_PACKET_KIND = "wbp_entry_hook_tool_call_evidence"
 ENTRY_HOOK_EVIDENCE_ENV_PATH = "WBP_ENTRY_HOOK_EVIDENCE_PATH"
+WORKING_FLOW_SOURCE_PROOF_ENV_PATH = "WBP_MCP_WORKING_FLOW_SOURCE_PROOF_FILE"
+WORKING_FLOW_HANDOFF_RESPONSE_PACKET_KIND = (
+    "wbp_mcp_delegate_to_dip_working_flow_handoff_response"
+)
+WORKING_FLOW_HANDOFF_BLOCKED = "WBP_MCP_DELEGATE_TO_DIP_HANDOFF_BLOCKED"
+WORKING_FLOW_SOURCE_INVALID = "WBP_MCP_WORKING_FLOW_SOURCE_INVALID"
+WORKING_FLOW_SOURCE_NOT_BOUND = "WBP_MCP_WORKING_FLOW_SOURCE_NOT_BOUND"
+SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE = (
+    "server_owned_controlled_route_bound_dispatch"
+)
+SOURCE_APPROVED_HANDOFF_SURFACE_KIND = "mcp_tool_response"
 
 
 def _entry_hook_evidence_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
@@ -590,6 +601,320 @@ def _write_entry_hook_evidence_if_requested(
         encoding="utf-8",
     )
     tmp_path.replace(evidence_path)
+
+
+def _read_working_flow_source_proof(
+    env: Mapping[str, str] | None,
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    source = env if isinstance(env, Mapping) else {}
+    raw_path = _safe_text(
+        source.get(WORKING_FLOW_SOURCE_PROOF_ENV_PATH) or "",
+        limit=2048,
+    )
+    metadata: dict[str, Any] = {
+        "working_flow_source_proof_requested": bool(raw_path),
+        "working_flow_source_proof_file_required": bool(raw_path),
+        "working_flow_source_proof_file_present": False,
+        "working_flow_source_proof_file_read": False,
+        "working_flow_source_proof_file_valid_json": False,
+        "working_flow_source_proof_file_mapping": False,
+        "working_flow_source_proof_file_path_recorded": False,
+        "working_flow_source_proof_file_error_code": "",
+        "integrated_live_provider_proof_file_read": False,
+        "integrated_live_provider_proof_file_valid_json": False,
+        "integrated_live_provider_proof_file_mapping": False,
+    }
+    if not raw_path:
+        return {}, metadata, False
+    source_path = Path(raw_path).expanduser()
+    if not source_path.is_absolute():
+        metadata["working_flow_source_proof_file_error_code"] = (
+            "working_flow_source_proof_path_not_absolute"
+        )
+        return {}, metadata, True
+    metadata["working_flow_source_proof_file_present"] = source_path.exists()
+    if not source_path.exists():
+        metadata["working_flow_source_proof_file_error_code"] = (
+            "working_flow_source_proof_file_missing"
+        )
+        return {}, metadata, True
+    try:
+        parsed = json.loads(source_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata["working_flow_source_proof_file_error_code"] = (
+            "working_flow_source_proof_file_invalid"
+        )
+        return {}, metadata, True
+    metadata["working_flow_source_proof_file_read"] = True
+    metadata["working_flow_source_proof_file_valid_json"] = True
+    metadata["integrated_live_provider_proof_file_read"] = True
+    metadata["integrated_live_provider_proof_file_valid_json"] = True
+    if not isinstance(parsed, Mapping):
+        metadata["working_flow_source_proof_file_error_code"] = (
+            "working_flow_source_proof_file_not_mapping"
+        )
+        return {}, metadata, True
+    metadata["working_flow_source_proof_file_mapping"] = True
+    metadata["integrated_live_provider_proof_file_mapping"] = True
+    return dict(parsed), metadata, True
+
+
+def _working_flow_source_binding_failures(
+    *,
+    delegate_packet: Mapping[str, Any],
+    source_packet: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    if delegate_packet.get("status") != "ok":
+        failures.append("delegate_packet_not_ok")
+    if delegate_packet.get("machine_error_code") != "OK":
+        failures.append("delegate_packet_machine_error_not_ok")
+    if delegate_packet.get("delegate_to_dip_tool_called") is not True:
+        failures.append("delegate_tool_call_not_proven")
+    if delegate_packet.get("route_bound_dispatch_proven") is not True:
+        failures.append("delegate_route_bound_dispatch_not_proven")
+    if delegate_packet.get("api_lane_called") is not True:
+        failures.append("delegate_api_lane_not_called")
+    if delegate_packet.get("fallback_used") is not False:
+        failures.append("delegate_fallback_used")
+    if delegate_packet.get("local_imitation_used") is not False:
+        failures.append("delegate_local_imitation_used")
+    if delegate_packet.get("native_free_chat_router_proven") is not False:
+        failures.append("delegate_native_router_must_not_be_preclaimed")
+    if delegate_packet.get("product_ready") is not False:
+        failures.append("delegate_product_ready_must_not_be_preclaimed")
+
+    source_prompt_digest = _hex_sha256(source_packet.get("prompt_digest"))
+    delegate_task_digest = _hex_sha256(delegate_packet.get("task_sha256"))
+    if not source_prompt_digest:
+        failures.append("source_prompt_digest_missing")
+    elif not delegate_task_digest:
+        failures.append("delegate_task_digest_missing")
+    elif source_prompt_digest != delegate_task_digest:
+        failures.append("source_prompt_digest_not_bound_to_delegate_task")
+
+    for source_field, delegate_field, reason in (
+        ("selected_alias", "selected_alias", "selected_alias_mismatch"),
+        (
+            "selected_alias_lane",
+            "selected_alias_lane",
+            "selected_alias_lane_mismatch",
+        ),
+        (
+            "selected_api_route_id_sha256",
+            "selected_api_route_id_sha256",
+            "selected_api_route_digest_mismatch",
+        ),
+        (
+            "route_bound_request_sha256",
+            "route_bound_request_sha256",
+            "route_bound_request_digest_mismatch",
+        ),
+    ):
+        source_value = _safe_text(source_packet.get(source_field), limit=128)
+        delegate_value = _safe_text(delegate_packet.get(delegate_field), limit=128)
+        if not source_value:
+            failures.append(f"source_{source_field}_missing")
+        elif not delegate_value:
+            failures.append(f"delegate_{delegate_field}_missing")
+        elif source_value != delegate_value:
+            failures.append(reason)
+
+    source_provider_digest = _hex_sha256(source_packet.get("provider_response_digest"))
+    delegate_provider_digest = _hex_sha256(
+        delegate_packet.get("controlled_provider_response_sha256")
+    )
+    if not source_provider_digest:
+        failures.append("source_provider_response_digest_missing")
+    elif not delegate_provider_digest:
+        failures.append("delegate_provider_response_digest_missing")
+    elif source_provider_digest != delegate_provider_digest:
+        failures.append("provider_response_digest_mismatch")
+    if not _hex_sha256(source_packet.get("live_provider_response_digest")):
+        failures.append("source_live_provider_response_digest_missing")
+    declared_handoff_digest = _hex_sha256(source_packet.get("handoff_payload_digest"))
+    if not declared_handoff_digest:
+        failures.append("source_handoff_payload_digest_missing")
+    else:
+        source_handoff_payload = {
+            "schema_version": 1,
+            "source_packet_kind": _safe_text(
+                source_packet.get("dispatch_packet_kind")
+                or source_packet.get("source_dispatch_packet_kind"),
+                limit=80,
+            ),
+            "source_prompt_digest": source_prompt_digest,
+            "selected_alias": _safe_text(source_packet.get("selected_alias"), limit=80),
+            "selected_alias_lane": _safe_text(
+                source_packet.get("selected_alias_lane"),
+                limit=32,
+            ),
+            "selected_slot": _safe_text(source_packet.get("selected_slot"), limit=64),
+            "selected_api_route_id_sha256": _hex_sha256(
+                source_packet.get("selected_api_route_id_sha256")
+            ),
+            "route_bound_request_sha256": _hex_sha256(
+                source_packet.get("route_bound_request_sha256")
+            ),
+            "provider_response_digest": source_provider_digest,
+            "dispatch_truth_source": _safe_text(
+                source_packet.get("dispatch_truth_source"),
+                limit=80,
+            ),
+            "api_lane_truth_source": SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE,
+            "handoff_surface_kind": SOURCE_APPROVED_HANDOFF_SURFACE_KIND,
+        }
+        expected_handoff_digest = _sha256_text(
+            json.dumps(
+                source_handoff_payload,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        if declared_handoff_digest != expected_handoff_digest:
+            failures.append("source_handoff_payload_digest_mismatch")
+    claimed_api_lane_truth = _safe_text(
+        source_packet.get("api_lane_truth_source"),
+        limit=80,
+    )
+    if (
+        claimed_api_lane_truth
+        and claimed_api_lane_truth != SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE
+    ):
+        failures.append("source_api_lane_truth_source_invalid")
+    return sorted(set(failures))
+
+
+def _working_flow_handoff_error_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    blocking_reasons: list[str],
+    delegate_packet: Mapping[str, Any],
+    source_metadata: Mapping[str, Any],
+    source_failures: list[str] | None = None,
+) -> dict[str, Any]:
+    delegate_json = json.dumps(
+        dict(delegate_packet),
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return _command_packet_for_kind(
+        ok=False,
+        machine_error_code=machine_error_code,
+        human_message=human_message,
+        blocking_reasons=sorted(set(blocking_reasons)),
+        extra={
+            "delegate_packet_kind": _safe_text(
+                delegate_packet.get("packet_kind"),
+                limit=96,
+            ),
+            "delegate_packet_status": _safe_text(
+                delegate_packet.get("status"),
+                limit=32,
+            ),
+            "delegate_packet_sha256": _sha256_text(delegate_json),
+            "working_flow_source_proof_requested": (
+                source_metadata.get("working_flow_source_proof_requested") is True
+            ),
+            "working_flow_source_proof_file_present": (
+                source_metadata.get("working_flow_source_proof_file_present") is True
+            ),
+            "working_flow_source_proof_file_read": (
+                source_metadata.get("working_flow_source_proof_file_read") is True
+            ),
+            "working_flow_source_proof_file_valid_json": (
+                source_metadata.get("working_flow_source_proof_file_valid_json")
+                is True
+            ),
+            "working_flow_source_proof_file_mapping": (
+                source_metadata.get("working_flow_source_proof_file_mapping") is True
+            ),
+            "working_flow_source_proof_file_path_recorded": False,
+            "working_flow_source_proof_file_error_code": _safe_text(
+                source_metadata.get("working_flow_source_proof_file_error_code"),
+                limit=96,
+            ),
+            "working_flow_source_failures": list(source_failures or []),
+            "api_lane_called": delegate_packet.get("api_lane_called") is True,
+            "fallback_used": delegate_packet.get("fallback_used") is True,
+            "local_imitation_used": delegate_packet.get("local_imitation_used") is True,
+            "native_codex_subagent_used_as_dip": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "tool_call_arguments_recorded": False,
+            "raw_provider_response_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "custom_codex_ui_visibility_proven": False,
+            "codex_working_flow_delivery_proven": False,
+            "native_free_chat_router_proven": False,
+            "product_ready": False,
+            "does_not_prove_custom_codex_ui": True,
+            "does_not_prove_native_free_chat_router": True,
+            "does_not_prove_product_ready": True,
+        },
+        packet_kind=WORKING_FLOW_HANDOFF_RESPONSE_PACKET_KIND,
+        final_status=WORKING_FLOW_HANDOFF_BLOCKED,
+        result_status="blocked",
+    )
+
+
+def _working_flow_handoff_payload_if_requested(
+    *,
+    delegate_packet: Mapping[str, Any],
+    env: Mapping[str, str] | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    source_packet, source_metadata, requested = _read_working_flow_source_proof(env)
+    if not requested:
+        return None, None
+    if not source_packet:
+        error_code = _safe_text(
+            source_metadata.get("working_flow_source_proof_file_error_code"),
+            limit=96,
+        )
+        return None, _working_flow_handoff_error_packet(
+            machine_error_code=WORKING_FLOW_SOURCE_INVALID,
+            human_message="WBP MCP handoff source proof is missing or invalid.",
+            blocking_reasons=[error_code or "working_flow_source_proof_invalid"],
+            delegate_packet=delegate_packet,
+            source_metadata=source_metadata,
+        )
+
+    from .codex_working_flow_delivery_proof import (
+        _integrated_source_failures,
+        _safe_working_flow_delivery_payload,
+    )
+
+    integrated_failures, unsafe_failures = _integrated_source_failures(
+        source_packet,
+        source_metadata,
+    )
+    binding_failures = _working_flow_source_binding_failures(
+        delegate_packet=delegate_packet,
+        source_packet=source_packet,
+    )
+    source_failures = sorted(set(integrated_failures + binding_failures))
+    if source_failures:
+        machine_error_code = (
+            "WBP_MCP_WORKING_FLOW_SOURCE_UNSAFE"
+            if unsafe_failures
+            else WORKING_FLOW_SOURCE_NOT_BOUND
+            if binding_failures
+            else WORKING_FLOW_SOURCE_INVALID
+        )
+        return None, _working_flow_handoff_error_packet(
+            machine_error_code=machine_error_code,
+            human_message="WBP MCP handoff source proof is not bound to this delegate call.",
+            blocking_reasons=source_failures,
+            delegate_packet=delegate_packet,
+            source_metadata=source_metadata,
+            source_failures=source_failures,
+        )
+    payload = _safe_working_flow_delivery_payload(source_packet)
+    return payload, None
 
 
 def build_api_lane_adapter_admission_packet(
@@ -5080,6 +5405,32 @@ def mcp_tools_call_result(
         mcp_tool_called=True,
     )
     _write_entry_hook_evidence_if_requested(packet, env)
+    handoff_payload, handoff_error = _working_flow_handoff_payload_if_requested(
+        delegate_packet=packet,
+        env=env,
+    )
+    if handoff_error is not None:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(handoff_error, sort_keys=True),
+                }
+            ],
+            "structuredContent": handoff_error,
+            "isError": True,
+        }
+    if handoff_payload is not None:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(handoff_payload, sort_keys=True),
+                }
+            ],
+            "structuredContent": handoff_payload,
+            "isError": False,
+        }
     return {
         "content": [{"type": "text", "text": json.dumps(packet, sort_keys=True)}],
         "structuredContent": packet,

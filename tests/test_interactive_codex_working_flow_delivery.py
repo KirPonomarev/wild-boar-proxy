@@ -14,6 +14,7 @@ import unittest
 from wild_boar_proxy import codex_working_flow_delivery_proof as working_flow
 from wild_boar_proxy import interactive_codex_working_flow_delivery as join
 from wild_boar_proxy import interactive_custom_codex_proof as interactive
+from wild_boar_proxy import mcp_delegate
 from wild_boar_proxy import router_hook_entry as hook_entry
 from wild_boar_proxy import user_prompt_submit_hook_producer as producer
 from wild_boar_proxy.core import packets
@@ -50,6 +51,7 @@ def _runtime_context(*, route_id: str = ROUTE_ID) -> dict[str, object]:
     return {
         "schema_version": 1,
         "packet_kind": "codex_custom_native_agent_runtime_context",
+        "execution_mode": "chatgpt_plus_api",
         "context_truth_source": "server_launch_selection_packet",
         "agent_bindings_status": "ok",
         "agent_bindings": [
@@ -175,6 +177,7 @@ def _write_fresh_custom_ledger(paths: RuntimePaths, prompt: str = PROMPT) -> Non
         trusted_hook_config_sha256=digest,
         loaded_hook_config_sha256=digest,
         origin_state=ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+        event_metadata={"hook_event_stdin_read": True},
     )
     assert packet["status"] == "ok"
 
@@ -255,6 +258,37 @@ def _tool_result_event(structured_content: dict[str, object]) -> dict[str, objec
     }
 
 
+def _real_codex_mcp_tool_call_completed_event(
+    structured_content: dict[str, object],
+) -> dict[str, object]:
+    text = json.dumps(
+        structured_content,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-delegate-call",
+            "type": "mcp_tool_call",
+            "server": "wbp",
+            "tool": "delegate_to_dip",
+            "arguments": {
+                "expected_alias": "DIP",
+                "task_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
+            },
+            "result": {
+                "content": [{"type": "text", "text": text}],
+                "structured_content": structured_content,
+                "isError": False,
+            },
+            "error": None,
+            "status": "completed",
+        },
+    }
+
+
 def _assistant_event(digest: str) -> dict[str, object]:
     return {
         "type": "item.completed",
@@ -265,6 +299,17 @@ def _assistant_event(digest: str) -> dict[str, object]:
             "status": "completed",
             "text": "WBP working-flow receipt.",
             "metadata": {"wbp_handoff_digest": digest},
+        },
+    }
+
+
+def _agent_message_event(digest: str) -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-agent-message-continuation",
+            "type": "agent_message",
+            "text": f"wbp_handoff_digest={digest}",
         },
     }
 
@@ -373,7 +418,7 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
     def test_positive_joins_interactive_proof_to_file_backed_codex_working_flow(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
@@ -431,10 +476,121 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
             [],
         )
 
+    def test_positive_accepts_real_codex_agent_message_continuation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            root = Path(temp_dir)
+            _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
+            source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
+            source = json.loads(source_file.read_text(encoding="utf-8"))
+            structured = working_flow._safe_working_flow_delivery_payload(source)
+            handoff_digest = str(structured["handoff_payload_sha256"])
+            jsonl_file = root / "codex-exec-agent-message.jsonl"
+            _write_jsonl(
+                jsonl_file,
+                [
+                    {"type": "thread.started", "thread_id": "thread-working-flow"},
+                    {"type": "turn.started"},
+                    _tool_result_event(structured),
+                    _agent_message_event(handoff_digest),
+                    {"type": "turn.completed"},
+                ],
+            )
+
+            packet = join.run_interactive_codex_working_flow_delivery_command(
+                interactive_proof_file=str(interactive_file),
+                integrated_live_provider_proof_file=str(source_file),
+                codex_exec_jsonl_file=str(jsonl_file),
+                proof_dir=str(proof_dir),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["assistant_continuation_bound"])
+        self.assertTrue(packet["handoff_digest_bound"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_exec_working_flow_delivery_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_raw_sensitive_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_joins_file_backed_mcp_delegate_to_real_codex_jsonl_shape(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+            root = Path(temp_dir)
+            paths, interactive_file, proof_dir = _prepare_interactive_proof(root)
+            source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
+            response = mcp_delegate.handle_jsonrpc_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 71,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "delegate_to_dip",
+                        "arguments": {"expected_alias": "DIP", "task": PROMPT},
+                    },
+                },
+                env={
+                    "WBP_PROFILE_DIR": str(paths.profile_dir),
+                    mcp_delegate.WORKING_FLOW_SOURCE_PROOF_ENV_PATH: str(source_file),
+                },
+            )
+            assert response is not None
+            result = response["result"]
+            assert isinstance(result, dict)
+            self.assertFalse(result["isError"])
+            structured = result["structuredContent"]
+            assert isinstance(structured, dict)
+            handoff_digest = str(structured["handoff_payload_sha256"])
+            jsonl_file = root / "codex-exec-real-shape.jsonl"
+            _write_jsonl(
+                jsonl_file,
+                [
+                    {"type": "thread.started", "thread_id": "thread-real-codex-shape"},
+                    {"type": "turn.started"},
+                    _real_codex_mcp_tool_call_completed_event(structured),
+                    _agent_message_event(handoff_digest),
+                    {"type": "turn.completed"},
+                ],
+            )
+
+            packet = join.run_interactive_codex_working_flow_delivery_command(
+                interactive_proof_file=str(interactive_file),
+                integrated_live_provider_proof_file=str(source_file),
+                codex_exec_jsonl_file=str(jsonl_file),
+                proof_dir=str(proof_dir),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["source_proof_sha256_bound_to_interactive_proof"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertTrue(packet["assistant_continuation_bound"])
+        self.assertTrue(packet["handoff_digest_bound"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_exec_working_flow_delivery_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_raw_sensitive_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_forged_self_consistent_seal_input_hashes_block_strict_evidence(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
@@ -517,7 +673,7 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
         _assert_no_product_or_ui_claim(self, final)
 
     def test_source_digest_mismatch_blocks_join(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             interactive_packet = json.loads(interactive_file.read_text(encoding="utf-8"))
@@ -554,7 +710,7 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
         _assert_no_raw_sensitive_text(self, packet)
 
     def test_missing_assistant_continuation_blocks_working_flow_claim(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
@@ -583,7 +739,7 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
         _assert_no_raw_sensitive_text(self, packet)
 
     def test_local_codex_subagent_as_dip_blocks_join(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"
@@ -610,7 +766,7 @@ class InteractiveCodexWorkingFlowDeliveryTests(unittest.TestCase):
         _assert_no_product_or_ui_claim(self, packet)
 
     def test_cli_interactive_working_flow_delivery_emits_strict_packet(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             _paths_obj, interactive_file, proof_dir = _prepare_interactive_proof(root)
             source_file = proof_dir / "interactive-user-prompt-submit-proof.packet.json"

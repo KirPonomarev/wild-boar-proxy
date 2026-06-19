@@ -12,6 +12,9 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy import mcp_delegate
+from wild_boar_proxy.codex_working_flow_delivery_proof import (
+    _safe_working_flow_delivery_payload,
+)
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.custom_agent_bindings import API_ROUTE_LANE, PRIMARY_CHATGPT_LANE
 
@@ -111,6 +114,133 @@ ROUTER_HOOK_PACKET = {
     "hook_can_enforce_router": True,
     "hook_can_route_delegate_to_dip": True,
 }
+
+
+def _source_level_handoff_digest(source_packet: dict[str, object]) -> str:
+    payload = {
+        "schema_version": 1,
+        "source_packet_kind": source_packet.get("dispatch_packet_kind", ""),
+        "source_prompt_digest": source_packet.get("prompt_digest", ""),
+        "selected_alias": source_packet.get("selected_alias", ""),
+        "selected_alias_lane": source_packet.get("selected_alias_lane", ""),
+        "selected_slot": source_packet.get("selected_slot", ""),
+        "selected_api_route_id_sha256": source_packet.get(
+            "selected_api_route_id_sha256",
+            "",
+        ),
+        "route_bound_request_sha256": source_packet.get(
+            "route_bound_request_sha256",
+            "",
+        ),
+        "provider_response_digest": source_packet.get(
+            "provider_response_digest",
+            "",
+        )
+        or source_packet.get("controlled_provider_response_sha256", ""),
+        "dispatch_truth_source": source_packet.get("dispatch_truth_source", ""),
+        "api_lane_truth_source": "server_owned_controlled_route_bound_dispatch",
+        "handoff_surface_kind": "mcp_tool_response",
+    }
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _working_flow_source_packet(
+    delegate_packet: dict[str, object],
+    *,
+    expected_text: str = "WBP_DIP_DISPATCH_OK",
+    **overrides: object,
+) -> dict[str, object]:
+    live_response_digest = hashlib.sha256(expected_text.encode("utf-8")).hexdigest()
+    provider_response_digest = str(
+        delegate_packet["controlled_provider_response_sha256"]
+    )
+    packet: dict[str, object] = {
+        "schema_version": 1,
+        "packet_kind": "wbp_real_custom_codex_hook_proof",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "effect": "probe",
+        "changed_files": [],
+        "hook_producer_ledger_proven": True,
+        "user_prompt_submit_hook_ran": True,
+        "hook_ledger_written": True,
+        "hook_prompt_digest_bound": True,
+        "hook_runtime_context_digest_bound": True,
+        "thread_or_turn_digest_bound": True,
+        "alias_context_read": True,
+        "allowed_api_route_ids_enforced": True,
+        "route_id_allowed": True,
+        "api_lane_called": True,
+        "dispatch_proven": True,
+        "route_bound_dispatch_proven": True,
+        "provider_response_proven": True,
+        "live_provider_requested": True,
+        "live_provider_attempted": True,
+        "live_provider_cli_command_declared": True,
+        "live_provider_cli_command_route_bound": True,
+        "live_provider_route_bound_to_context": True,
+        "live_provider_network_dependent": True,
+        "expected_text_observed": True,
+        "live_provider_response_bound_to_expected_text": True,
+        "live_provider_response_bound_to_route": True,
+        "live_provider_changed_files_empty": True,
+        "live_provider_proven": True,
+        "live_provider_response_proven": True,
+        "external_live_provider_response_proven": True,
+        "approved_handoff_ready": True,
+        "approved_handoff_payload_sanitized": True,
+        "machine_response_envelope_observed": True,
+        "machine_response_structured_content_present": True,
+        "handoff_delivered": True,
+        "delivery_observed": True,
+        "dispatch_status": "proven",
+        "hook_ledger_failures": [],
+        "dispatch_failures": [],
+        "handoff_failures": [],
+        "live_provider_failures": [],
+        "blocking_reasons": [],
+        "prompt_digest": delegate_packet["task_sha256"],
+        "dispatch_packet_kind": "wbp_controlled_api_dispatch_proof",
+        "selected_alias": delegate_packet["selected_alias"],
+        "selected_alias_lane": delegate_packet["selected_alias_lane"],
+        "selected_slot": "dip",
+        "selected_api_route_id_sha256": delegate_packet[
+            "selected_api_route_id_sha256"
+        ],
+        "route_bound_request_sha256": delegate_packet["route_bound_request_sha256"],
+        "provider_response_digest": provider_response_digest,
+        "controlled_provider_response_sha256": provider_response_digest,
+        "live_provider_response_digest": live_response_digest,
+        "machine_response_envelope_sha256": hashlib.sha256(b"envelope").hexdigest(),
+        "dispatch_truth_source": delegate_packet["dispatch_truth_source"],
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "native_codex_subagent_used_as_dip": False,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "tool_call_arguments_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "custom_codex_ui_visibility_proven": False,
+        "codex_working_flow_delivery_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "native_free_chat_router_proven": False,
+        "product_ready": False,
+    }
+    packet.update(overrides)
+    if "handoff_payload_digest" not in overrides:
+        packet["handoff_payload_digest"] = _source_level_handoff_digest(packet)
+    return packet
 
 
 def _direct_mcp_reality_packet(
@@ -670,6 +800,190 @@ class McpDelegateToDipTests(unittest.TestCase):
             packets.inspect_command_packet_semantics(proof),
             [],
         )
+
+    def test_delegate_to_dip_can_return_bound_working_flow_handoff_payload(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            base_env = {"WBP_PROFILE_DIR": str(profile_dir)}
+            delegate_packet = mcp_delegate.build_delegate_to_dip_packet(
+                PROMPT_DELEGATE_ARGUMENTS,
+                env=base_env,
+                mcp_tool_called=True,
+            )
+            source_packet = _working_flow_source_packet(delegate_packet)
+            source_file = profile_dir / "source-proof.json"
+            source_file.write_text(
+                json.dumps(source_packet, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            call_request = {
+                "jsonrpc": "2.0",
+                "id": 33,
+                "method": "tools/call",
+                "params": {
+                    "name": "delegate_to_dip",
+                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                },
+            }
+            response = mcp_delegate.handle_jsonrpc_message(
+                call_request,
+                env={
+                    **base_env,
+                    mcp_delegate.WORKING_FLOW_SOURCE_PROOF_ENV_PATH: str(source_file),
+                },
+            )
+
+        assert response is not None
+        result = response["result"]
+        assert isinstance(result, dict)
+        self.assertFalse(result["isError"])
+        structured = result["structuredContent"]
+        assert isinstance(structured, dict)
+        text_packet = json.loads(result["content"][0]["text"])
+        self.assertEqual(text_packet, structured)
+        expected_payload = _safe_working_flow_delivery_payload(source_packet)
+        self.assertEqual(structured, expected_payload)
+        self.assertEqual(
+            structured["packet_kind"],
+            "wbp_machine_handoff_delivery_payload",
+        )
+        handoff = structured["handoff_payload"]
+        assert isinstance(handoff, dict)
+        self.assertEqual(
+            handoff["selected_api_route_id_sha256"],
+            delegate_packet["selected_api_route_id_sha256"],
+        )
+        self.assertEqual(
+            handoff["route_bound_request_sha256"],
+            delegate_packet["route_bound_request_sha256"],
+        )
+        serialized = json.dumps(structured, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("wbp-deepseek-chat", serialized)
+        self.assertNotIn(PROMPT_DELEGATE_ARGUMENTS["task"], serialized)
+
+    def test_delegate_to_dip_handoff_payload_rejects_unbound_source_proof(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            base_env = {"WBP_PROFILE_DIR": str(profile_dir)}
+            delegate_packet = mcp_delegate.build_delegate_to_dip_packet(
+                PROMPT_DELEGATE_ARGUMENTS,
+                env=base_env,
+                mcp_tool_called=True,
+            )
+            source_packet = _working_flow_source_packet(
+                delegate_packet,
+                prompt_digest=hashlib.sha256(b"wrong-prompt").hexdigest(),
+            )
+            source_file = profile_dir / "source-proof.json"
+            source_file.write_text(
+                json.dumps(source_packet, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            call_request = {
+                "jsonrpc": "2.0",
+                "id": 34,
+                "method": "tools/call",
+                "params": {
+                    "name": "delegate_to_dip",
+                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                },
+            }
+            response = mcp_delegate.handle_jsonrpc_message(
+                call_request,
+                env={
+                    **base_env,
+                    mcp_delegate.WORKING_FLOW_SOURCE_PROOF_ENV_PATH: str(source_file),
+                },
+            )
+
+        assert response is not None
+        result = response["result"]
+        assert isinstance(result, dict)
+        self.assertTrue(result["isError"])
+        packet = _tool_packet(response)
+        self.assertEqual(
+            packet["packet_kind"],
+            "wbp_mcp_delegate_to_dip_working_flow_handoff_response",
+        )
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_MCP_WORKING_FLOW_SOURCE_NOT_BOUND",
+        )
+        self.assertIn(
+            "source_prompt_digest_not_bound_to_delegate_task",
+            packet["blocking_reasons"],
+        )
+        self.assertTrue(packet["working_flow_source_proof_file_read"])
+        self.assertFalse(packet["working_flow_source_proof_file_path_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(packet),
+            [],
+        )
+
+    def test_delegate_to_dip_handoff_payload_rejects_unbound_source_handoff_digest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            _write_context(profile_dir, _context_payload())
+            base_env = {"WBP_PROFILE_DIR": str(profile_dir)}
+            delegate_packet = mcp_delegate.build_delegate_to_dip_packet(
+                PROMPT_DELEGATE_ARGUMENTS,
+                env=base_env,
+                mcp_tool_called=True,
+            )
+            source_packet = _working_flow_source_packet(
+                delegate_packet,
+                handoff_payload_digest="f" * 64,
+            )
+            source_file = profile_dir / "source-proof.json"
+            source_file.write_text(
+                json.dumps(source_packet, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            call_request = {
+                "jsonrpc": "2.0",
+                "id": 35,
+                "method": "tools/call",
+                "params": {
+                    "name": "delegate_to_dip",
+                    "arguments": PROMPT_DELEGATE_ARGUMENTS,
+                },
+            }
+            response = mcp_delegate.handle_jsonrpc_message(
+                call_request,
+                env={
+                    **base_env,
+                    mcp_delegate.WORKING_FLOW_SOURCE_PROOF_ENV_PATH: str(source_file),
+                },
+            )
+
+        assert response is not None
+        result = response["result"]
+        assert isinstance(result, dict)
+        self.assertTrue(result["isError"])
+        packet = _tool_packet(response)
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_MCP_WORKING_FLOW_SOURCE_NOT_BOUND",
+        )
+        self.assertIn(
+            "source_handoff_payload_digest_mismatch",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_delegate_to_dip_can_write_sanitized_entry_hook_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

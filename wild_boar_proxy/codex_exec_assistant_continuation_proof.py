@@ -50,7 +50,13 @@ _DIGEST_MARKER_PATTERN = re.compile(
     r"\b(?:wbp_handoff_digest|handoff_payload_digest|handoff_receipt_sha256)="
     r"([0-9a-f]{64})\b"
 )
-_ASSISTANT_ITEM_HINTS = ("assistant", "output_text", "output-message", "output_message")
+_ASSISTANT_ITEM_HINTS = (
+    "assistant",
+    "agent_message",
+    "output_text",
+    "output-message",
+    "output_message",
+)
 _DIP_ALIAS_PATTERN = re.compile(r"(?i)\b(dip|agent\s*2)\b")
 
 
@@ -190,7 +196,7 @@ def _mapping_is_assistant_output(event_type: str, mapping: Mapping[str, Any]) ->
     event_type_key = event_type.casefold()
     if "mcp" in item_type or "tool" in item_type:
         return False
-    if "subagent" in item_type or item_type == "agent_message":
+    if "subagent" in item_type:
         return False
     if role == "assistant":
         return True

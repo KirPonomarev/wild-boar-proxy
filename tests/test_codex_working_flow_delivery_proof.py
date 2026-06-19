@@ -918,6 +918,31 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         _assert_no_secret_or_raw_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_blocks_integrated_proof_with_unbound_source_handoff_digest(self) -> None:
+        source = _integrated_packet()
+        source["handoff_payload_digest"] = "f" * 64
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            _events_for_packet(source),
+            file_metadata=_file_metadata(),
+            secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT, RAW_PROVIDER_TEXT],
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            working_flow.CODEX_WORKING_FLOW_INTEGRATED_PROOF_INVALID,
+        )
+        self.assertIn(
+            "source_handoff_payload_digest_mismatch",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["product_ready"])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_blocks_unbound_or_missing_assistant_marker(self) -> None:
         source = _integrated_packet()
         cases = [

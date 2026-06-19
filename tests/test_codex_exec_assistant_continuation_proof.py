@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -181,6 +182,37 @@ def _tool_result_event(structured_content: dict[str, object]) -> dict[str, objec
     }
 
 
+def _real_codex_tool_call_completed_event(
+    structured_content: dict[str, object],
+) -> dict[str, object]:
+    text = json.dumps(
+        structured_content,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-delegate-call",
+            "type": "mcp_tool_call",
+            "server": "wbp",
+            "tool": "delegate_to_dip",
+            "arguments": {
+                "expected_alias": "DIP",
+                "task_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
+            },
+            "result": {
+                "content": [{"type": "text", "text": text}],
+                "structured_content": structured_content,
+                "isError": False,
+            },
+            "error": None,
+            "status": "completed",
+        },
+    }
+
+
 def _assistant_event(
     digest: str,
     *,
@@ -344,6 +376,54 @@ class CodexExecAssistantContinuationProofTests(unittest.TestCase):
         self.assertFalse(packet["transcript_secret_value_present"])
         _assert_no_product_or_native_claim(self, packet)
         _assert_no_raw_payload_data(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_real_codex_agent_message_marker_counts_as_assistant_continuation(
+        self,
+    ) -> None:
+        dispatch_packet = _dispatch_packet()
+        handoff_packet = _handoff_packet(dispatch_packet=dispatch_packet)
+        structured = _delivery_payload_for_dispatch(dispatch_packet)
+        digest = str(handoff_packet["handoff_payload_digest"])
+        agent_message_events = [
+            {"type": "thread.started", "thread_id": "thread-real-codex-shape"},
+            {"type": "turn.started"},
+            _real_codex_tool_call_completed_event(structured),
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item-agent-message-continuation",
+                    "type": "agent_message",
+                    "text": f"wbp_handoff_digest={digest}",
+                },
+            },
+            {"type": "turn.completed"},
+        ]
+        observation = transcript.build_codex_transcript_delivery_observation_packet(
+            handoff_packet,
+            agent_message_events,
+            secret_values=[PROMPT, ROUTE_ID, RAW_PROVIDER_TEXT],
+        )
+        self.assertEqual(observation["status"], "ok")
+        self.assertEqual(observation["mcp_tool_result_item_type"], "mcp_tool_call")
+
+        packet = continuation.build_codex_exec_assistant_continuation_proof_packet(
+            observation,
+            agent_message_events,
+            secret_values=[PROMPT, ROUTE_ID, RAW_PROVIDER_TEXT],
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["assistant_response_item_type"], "agent_message")
+        self.assertTrue(packet["assistant_machine_marker_observed"])
+        self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
+        self.assertEqual(
+            packet["binding_method"],
+            continuation.BINDING_METHOD_SAFE_DIGEST_MARKER,
+        )
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_blocks_invalid_observation_and_missing_or_early_assistant_response(self) -> None:

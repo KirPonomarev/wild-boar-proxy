@@ -62,6 +62,10 @@ LIVE_PROVIDER_HANDOFF_TRUTH_SOURCE = "server_owned_external_live_provider_respon
 DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK = (
     "codex_command_execution_external_models_live_format_check"
 )
+SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE = (
+    "server_owned_controlled_route_bound_dispatch"
+)
+SOURCE_APPROVED_HANDOFF_SURFACE_KIND = DELIVERY_SURFACE_MCP_TOOL_RESPONSE
 
 
 def _sha256_text(value: str) -> str:
@@ -161,6 +165,57 @@ def _source_unsafe_claim_failures(source: Mapping[str, Any]) -> list[str]:
     if source.get("live_provider_file_mutation_attempted") is True:
         failures.append("live_provider_file_mutation_attempted")
     return sorted(set(failures))
+
+
+def _source_approved_handoff_payload(source: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "source_packet_kind": _safe_text(
+            source.get("dispatch_packet_kind") or source.get("source_dispatch_packet_kind"),
+            limit=80,
+        ),
+        "source_prompt_digest": _hex_sha256(source.get("prompt_digest")),
+        "selected_alias": _safe_text(source.get("selected_alias"), limit=80),
+        "selected_alias_lane": _safe_text(
+            source.get("selected_alias_lane"),
+            limit=32,
+        ),
+        "selected_slot": _safe_text(source.get("selected_slot"), limit=64),
+        "selected_api_route_id_sha256": _hex_sha256(
+            source.get("selected_api_route_id_sha256")
+        ),
+        "route_bound_request_sha256": _hex_sha256(
+            source.get("route_bound_request_sha256")
+        ),
+        "provider_response_digest": _hex_sha256(
+            source.get("provider_response_digest")
+            or source.get("controlled_provider_response_digest")
+            or source.get("controlled_provider_response_sha256")
+        ),
+        "dispatch_truth_source": _safe_text(
+            source.get("dispatch_truth_source"),
+            limit=80,
+        ),
+        "api_lane_truth_source": SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE,
+        "handoff_surface_kind": SOURCE_APPROVED_HANDOFF_SURFACE_KIND,
+    }
+
+
+def _source_handoff_digest_failures(source: Mapping[str, Any]) -> list[str]:
+    declared_digest = _hex_sha256(source.get("handoff_payload_digest"))
+    if not declared_digest:
+        return ["handoff_payload_digest_missing"]
+    claimed_api_lane_truth = _safe_text(source.get("api_lane_truth_source"), limit=80)
+    failures: list[str] = []
+    if (
+        claimed_api_lane_truth
+        and claimed_api_lane_truth != SOURCE_APPROVED_HANDOFF_API_LANE_TRUTH_SOURCE
+    ):
+        failures.append("source_api_lane_truth_source_invalid")
+    expected_digest = _canonical_json_digest(_source_approved_handoff_payload(source))
+    if declared_digest != expected_digest:
+        failures.append("source_handoff_payload_digest_mismatch")
+    return failures
 
 
 def _integrated_source_failures(
@@ -348,8 +403,7 @@ def _integrated_source_failures(
                 failures.append(reason)
         elif value:
             failures.append(reason)
-    if not _hex_sha256(source.get("handoff_payload_digest")):
-        failures.append("handoff_payload_digest_missing")
+    failures.extend(_source_handoff_digest_failures(source))
     if not _hex_sha256(source.get("machine_response_envelope_sha256")):
         failures.append("machine_response_envelope_digest_missing")
     if not _hex_sha256(source.get("live_provider_response_digest")):
