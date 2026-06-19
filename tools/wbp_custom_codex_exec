@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Kirill Ponomarev
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+set -euo pipefail
+
+default_profile_dir="$HOME/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main"
+profile_dir="${WBP_PROFILE_DIR:-${CODEX_HOME:-$default_profile_dir}}"
+default_app_path="$HOME/Applications/Codex WBP Clean.app"
+app_path="${WBP_CODEX_APP_COPY_PATH:-$default_app_path}"
+codex_bin="${WBP_CODEX_BIN:-$app_path/Contents/Resources/codex}"
+
+if [[ ! -x "$codex_bin" ]]; then
+  echo "WBP custom Codex binary is not executable: $codex_bin" >&2
+  exit 127
+fi
+
+export CODEX_HOME="$profile_dir"
+export WBP_PROFILE_DIR="$profile_dir"
+export WBP_MANAGED_DIR="${WBP_MANAGED_DIR:-$profile_dir/managed}"
+export WBP_CONFIG_TOML="${WBP_CONFIG_TOML:-$profile_dir/config.toml}"
+
+exec "$codex_bin" exec "$@"
