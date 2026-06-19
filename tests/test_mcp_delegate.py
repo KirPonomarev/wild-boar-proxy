@@ -3649,6 +3649,78 @@ class McpDelegateToDipTests(unittest.TestCase):
             fallback_packet["blocking_reasons"],
         )
 
+    def test_codex_exec_jsonl_observation_prefers_call_arguments_over_tool_result(
+        self,
+    ) -> None:
+        delegated_task = "верни короткий план."
+        intent_claim = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "intent_claim_sha256": hashlib.sha256(
+                b"test-natural-intent-claim-with-result"
+            ).hexdigest(),
+            "delegated_task_sha256": mcp_delegate._sha256_text(delegated_task),
+            "delegated_task_source": "natural_prompt_parser",
+            "alias": "DIP",
+            "alias_from_runtime_context": True,
+            "ambiguous_intent": False,
+        }
+        prompt_packet = mcp_delegate.build_prompt_observation_packet(
+            "Codex, дай задачу DIP: верни короткий план.",
+            source="codex_exec_json",
+            intent_claim=intent_claim,
+        )
+
+        packet = mcp_delegate.build_codex_exec_tool_call_observation_packet(
+            "\n".join(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "t1"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "mcp_tool_call",
+                                "server": "wbp",
+                                "name": "delegate_to_dip",
+                                "status": "completed",
+                                "arguments": {
+                                    "task": delegated_task,
+                                    "expected_alias": "DIP",
+                                },
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps(
+                        {
+                            "type": "item.completed",
+                            "item": {
+                                "type": "mcp_tool_result",
+                                "server": "wbp",
+                                "name": "delegate_to_dip",
+                                "status": "completed",
+                                "result": {
+                                    "structuredContent": {
+                                        "packet_kind": "safe_result_without_arguments"
+                                    }
+                                },
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    json.dumps({"type": "turn.completed"}),
+                ]
+            ),
+            prompt_packet=prompt_packet,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["delegate_to_dip_tool_call_completed"])
+        self.assertTrue(packet["tool_call_task_matches_intent"])
+        self.assertTrue(packet["prompt_to_mcp_call_bound"])
+        self.assertFalse(packet["tool_call_arguments_recorded"])
+
     def test_codex_exec_jsonl_observation_prefers_expected_call_over_intent_claim(self) -> None:
         delegated_task = "верни короткий план."
         expected_arguments = {

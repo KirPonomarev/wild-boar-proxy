@@ -2015,6 +2015,9 @@ def _select_codex_exec_tool_call_candidate(
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
     for candidate in reversed(candidates):
+        if _codex_exec_tool_call_completed(candidate) and candidate.get("arguments"):
+            return candidate
+    for candidate in reversed(candidates):
         if _codex_exec_tool_call_completed(candidate):
             return candidate
     return candidates[-1] if candidates else {}

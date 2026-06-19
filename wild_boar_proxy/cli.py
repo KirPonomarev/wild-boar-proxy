@@ -58,6 +58,9 @@ from .native_free_chat_router_dispatch_admission import (
 from .native_free_chat_router_handoff_working_flow_join import (
     run_handoff_to_working_flow_join_command,
 )
+from .natural_free_chat_router_proof import (
+    run_natural_free_chat_router_proof_command,
+)
 from .codex_transcript_delivery_observation import (
     run_codex_transcript_delivery_observation_command,
 )
@@ -872,6 +875,34 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_handoff_working_flow_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof = router_hook_subparsers.add_parser(
+        "natural-free-chat-router-proof"
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--prompt", required=True)
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--hook-proof-file",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--runtime-context-file")
+    router_hook_natural_free_chat_router_proof.add_argument("--entry-evidence-file")
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--handoff-working-flow-join-file"
+    )
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--codex-exec-exit-code",
+        type=int,
+        default=0,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--codex-exec-stderr-file")
+    router_hook_natural_free_chat_router_proof.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -2021,6 +2052,25 @@ def main(argv: list[str] | None = None) -> int:
                     dispatch_admission_file=args.dispatch_admission_file,
                     dispatch_handoff_file=args.dispatch_handoff_file,
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "natural-free-chat-router-proof"
+        ):
+            return emit_json(
+                run_natural_free_chat_router_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_proof_file=args.hook_proof_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                    entry_evidence_file=args.entry_evidence_file,
+                    handoff_working_flow_join_file=(
+                        args.handoff_working_flow_join_file
+                    ),
+                    codex_exec_exit_code=args.codex_exec_exit_code,
+                    codex_exec_stderr_file=args.codex_exec_stderr_file,
                 )
             )
         if (
