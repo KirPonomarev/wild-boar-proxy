@@ -22,6 +22,9 @@ from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .custom_codex_working_flow_visible_source_proof import (
     run_working_flow_visible_source_proof_command,
 )
+from .fresh_live_custom_codex_e2e_proof import (
+    run_fresh_live_custom_codex_e2e_proof_command,
+)
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -338,6 +341,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_visible_source.add_argument("--json", action="store_true", required=True)
+    codex_runner_fresh_live_e2e = codex_runner_subparsers.add_parser(
+        "fresh-live-e2e-proof"
+    )
+    codex_runner_fresh_live_e2e.add_argument("--prompt", required=True)
+    codex_runner_fresh_live_e2e.add_argument("--codex-bin")
+    codex_runner_fresh_live_e2e.add_argument("--codex-model")
+    codex_runner_fresh_live_e2e.add_argument("--proof-dir")
+    codex_runner_fresh_live_e2e.add_argument("--codex-cwd")
+    codex_runner_fresh_live_e2e.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     codex_runner_native_ui = codex_runner_subparsers.add_parser(
         "native-ui-observer-proof"
     )
@@ -1366,6 +1395,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "admission",
         "operator-proof",
         "working-flow-visible-source-proof",
+        "fresh-live-e2e-proof",
         "native-ui-observer-proof",
     }:
         return EFFECT_MUTATE
@@ -1670,6 +1700,23 @@ def main(argv: list[str] | None = None) -> int:
         ):
             return emit_json(
                 run_working_flow_visible_source_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-live-e2e-proof"
+        ):
+            return emit_json(
+                run_fresh_live_custom_codex_e2e_proof_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     codex_bin=args.codex_bin,

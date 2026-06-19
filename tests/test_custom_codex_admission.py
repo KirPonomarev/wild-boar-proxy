@@ -451,10 +451,14 @@ def _write_fake_codex(path: Path) -> Path:
                 {
                     "type": "item.completed",
                     "item": {
-                        "id": "item-delegate-result",
-                        "type": "mcp_tool_result",
-                        "server_name": "wbp",
-                        "tool_name": "delegate_to_dip",
+                        "id": "item-delegate-call",
+                        "type": "mcp_tool_call",
+                        "server": "wbp",
+                        "tool": "delegate_to_dip",
+                        "arguments": {
+                            "expected_alias": "DIP",
+                            "task_sha256": producer._sha256_text(prompt),
+                        },
                         "status": "completed",
                         "result": {
                             "content": [
@@ -468,6 +472,7 @@ def _write_fake_codex(path: Path) -> Path:
                                     ),
                                 }
                             ],
+                            "structured_content": structured,
                             "structuredContent": structured,
                             "isError": False,
                         },
