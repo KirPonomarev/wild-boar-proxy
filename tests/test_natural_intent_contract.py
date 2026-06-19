@@ -160,6 +160,40 @@ class NaturalIntentContractTests(unittest.TestCase):
                 _assert_no_dispatch(self, packet)
                 self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_parser_does_not_match_numeric_alias_inside_machine_marker(self) -> None:
+        runtime_context = _runtime_context()
+        runtime_context["agent_bindings"][0]["aliases"].append("1")
+        runtime_context["agent_bindings"][1]["aliases"].append("2")
+        runtime_context["alias_to_agent_id"]["1"] = "codex"
+        runtime_context["alias_to_agent_id"]["2"] = "dip"
+
+        packet = _parser_packet(
+            prompt=(
+                "DIP: prove bridge response WBP_REPEATABLE_FRESH_LIVE_"
+                "20260619T204138Z_2"
+            ),
+            runtime_context=runtime_context,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(packet["alias_candidate"], "DIP")
+        self.assertEqual(packet["parser_api_alias_match_count"], 1)
+        self.assertFalse(packet["ambiguous_intent"])
+        self.assertEqual(packet["intent_status"], contract.INTENT_PASS)
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+        direct_numeric = _parser_packet(
+            prompt="2, проверь контракт.",
+            runtime_context=runtime_context,
+        )
+        self.assertEqual(direct_numeric["status"], "ok")
+        self.assertEqual(direct_numeric["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(direct_numeric["alias_candidate"], "2")
+        self.assertEqual(direct_numeric["slot_candidate"], "dip")
+        self.assertEqual(direct_numeric["intent_status"], contract.INTENT_PASS)
+
     def test_parser_accepts_custom_alias_from_runtime_context_only(self) -> None:
         runtime_context = _runtime_context()
         runtime_context["agent_bindings"][1]["aliases"] = [

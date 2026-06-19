@@ -135,6 +135,26 @@ def _fresh_runner_ok_packet(**overrides: object) -> dict[str, object]:
 
 
 class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
+    def test_canonical_prompt_builder_requires_exact_final_marker(self) -> None:
+        raw_task = "manual repeatability proof with alias-like token 2"
+        prompt = fresh_live.build_canonical_fresh_live_prompt(
+            task_text=raw_task,
+            expected_text=EXPECTED_TEXT,
+        )
+
+        self.assertNotIn(raw_task, prompt)
+        self.assertIn("Task digest:", prompt)
+        self.assertIn("$WBP_PROFILE_DIR/wbp-agent-runtime-context.json", prompt)
+        self.assertIn("deepseek_live_format_check_file_bridge", prompt)
+        self.assertIn("Replace only <expected_text>", prompt)
+        self.assertIn("Do not imitate DIP locally.", prompt)
+        self.assertIn("Do not use a native Codex subagent as DIP.", prompt)
+        self.assertIn(
+            "final assistant message must be exactly one line",
+            prompt,
+        )
+        self.assertTrue(prompt.rstrip().endswith(EXPECTED_TEXT))
+
     def test_positive_runs_admission_then_fresh_official_e2e_runner(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -169,6 +189,9 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
         )
         self.assertTrue(packet["fresh_live_custom_codex_e2e_proven"])
         self.assertTrue(packet["fresh_live_e2e_working_flow_proven"])
+        self.assertTrue(packet["canonical_prompt_builder_used"])
+        self.assertTrue(packet["canonical_prompt_digest"])
+        self.assertFalse(packet["canonical_prompt_raw_recorded"])
         self.assertTrue(packet["admission_proven"])
         self.assertTrue(packet["same_turn_custom_codex_flow_proven"])
         self.assertTrue(packet["hook_ledger_fresh"])
@@ -209,6 +232,45 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_stale_profile_model_is_overridden_without_mutating_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            paths.config_toml.write_text('model = "gpt-5.3-codex"\n', encoding="utf-8")
+            fake_codex = _write_fake_codex(root / "fake-codex")
+
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ):
+                packet = fresh_live.run_fresh_live_custom_codex_e2e_proof_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+            config_text = paths.config_toml.read_text(encoding="utf-8")
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["configured_codex_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["effective_codex_model"], "gpt-5.4")
+        self.assertEqual(packet["codex_model_source"], "proof_default_override")
+        self.assertTrue(packet["stale_profile_model_detected"])
+        self.assertTrue(packet["codex_model_override_applied"])
+        self.assertFalse(packet["profile_config_mutated"])
+        self.assertEqual(
+            config_text,
+            'model = "gpt-5.3-codex"\n',
+        )
+        self.assertEqual(packet["runtime_effective_truth_written"], False)
 
     def test_final_packet_uses_admission_dispatch_when_legacy_field_is_absent(
         self,
@@ -309,6 +371,134 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_final_packet_classifies_stale_model_provider_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            admission_dir = root / "proof" / "admission"
+            admission_dir.mkdir(parents=True)
+            source_proof = admission_dir / "user-prompt-submit-proof.packet.json"
+            codex_jsonl = admission_dir / "codex-exec.jsonl"
+            source_proof.write_text("{}\n", encoding="utf-8")
+            codex_jsonl.write_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": (
+                            "unexpected status 502 Bad Gateway: unknown provider "
+                            "for model gpt-5.3-codex"
+                        ),
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            packet = fresh_live.build_fresh_live_custom_codex_e2e_packet(
+                admission_packet={
+                    "status": "error",
+                    "machine_error_code": (
+                        "WBP_CUSTOM_CODEX_ADMISSION_CODEX_LAUNCH_FAILED"
+                    ),
+                    "packet_kind": "wbp_repeatable_custom_codex_admission",
+                    "admission_proven": False,
+                    "blocking_reasons": ["codex_exec_failed"],
+                },
+                fresh_runner_packet={},
+                proof_run_id="WBP_FRESH_LIVE_E2E_TEST_STALE_MODEL",
+                proof_run_started_at_ns=1,
+                proof_root=root / "proof",
+                admission_dir=admission_dir,
+                fresh_runner_inputs_file=root / "proof" / "fresh-runner-inputs.packet.json",
+                fresh_runner_packet_file=root / "proof" / "official-fresh-runner.packet.json",
+                source_proof_path=source_proof,
+                codex_exec_jsonl_path=codex_jsonl,
+                final_packet_path=root / "proof" / "fresh-live-e2e-proof.packet.json",
+                changed_files=[],
+                launch_preflight={
+                    "configured_codex_model": "gpt-5.3-codex",
+                    "effective_codex_model": "gpt-5.4",
+                    "codex_model_source": "proof_default_override",
+                    "stale_profile_model_detected": True,
+                    "codex_model_override_applied": True,
+                    "profile_config_mutated": False,
+                },
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            fresh_live.FRESH_LIVE_E2E_STALE_MODEL_PROVIDER_MISMATCH,
+        )
+        self.assertTrue(packet["fresh_live_stale_model_provider_mismatch"])
+        self.assertTrue(packet["stale_profile_model_detected"])
+        self.assertTrue(packet["codex_model_override_applied"])
+        self.assertFalse(packet["profile_config_mutated"])
+        self.assertFalse(packet["fresh_live_custom_codex_e2e_proven"])
+
+    def test_final_packet_classifies_assistant_output_not_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            admission_dir = root / "proof" / "admission"
+            admission_dir.mkdir(parents=True)
+            source_proof = admission_dir / "user-prompt-submit-proof.packet.json"
+            codex_jsonl = admission_dir / "codex-exec.jsonl"
+            working_flow = admission_dir / "working-flow-delivery-proof.packet.json"
+            source_proof.write_text("{}\n", encoding="utf-8")
+            codex_jsonl.write_text('{"type":"turn.completed"}\n', encoding="utf-8")
+            working_flow.write_text(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "machine_error_code": (
+                            "WBP_CODEX_WORKING_FLOW_DELIVERY_NOT_BOUND"
+                        ),
+                        "blocking_reasons": [
+                            "command_assistant_response_not_bound_to_live_provider_digest"
+                        ],
+                        "command_assistant_binding_failures": [
+                            "command_assistant_response_not_bound_to_live_provider_digest"
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            packet = fresh_live.build_fresh_live_custom_codex_e2e_packet(
+                admission_packet={
+                    "status": "error",
+                    "machine_error_code": (
+                        "WBP_CUSTOM_CODEX_ADMISSION_WORKING_FLOW_FAILED"
+                    ),
+                    "packet_kind": "wbp_repeatable_custom_codex_admission",
+                    "admission_proven": False,
+                    "hook_ledger_fresh": True,
+                    "user_prompt_submit_hook_ran": True,
+                    "api_lane_called": True,
+                    "live_provider_response_proven": True,
+                    "blocking_reasons": ["working_flow_delivery_proof_not_ok"],
+                },
+                fresh_runner_packet={},
+                proof_run_id="WBP_FRESH_LIVE_E2E_TEST_ASSISTANT_NOT_BOUND",
+                proof_run_started_at_ns=1,
+                proof_root=root / "proof",
+                admission_dir=admission_dir,
+                fresh_runner_inputs_file=root / "proof" / "fresh-runner-inputs.packet.json",
+                fresh_runner_packet_file=root / "proof" / "official-fresh-runner.packet.json",
+                source_proof_path=source_proof,
+                codex_exec_jsonl_path=codex_jsonl,
+                final_packet_path=root / "proof" / "fresh-live-e2e-proof.packet.json",
+                changed_files=[],
+                secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT],
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            fresh_live.FRESH_LIVE_E2E_ASSISTANT_OUTPUT_NOT_BOUND,
+        )
+        self.assertTrue(packet["fresh_live_assistant_output_not_bound"])
+        self.assertFalse(packet["fresh_live_custom_codex_e2e_proven"])
 
     def test_missing_admission_artifacts_block_even_when_admission_claims_ok(
         self,

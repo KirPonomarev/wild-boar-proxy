@@ -192,8 +192,8 @@ def _alias_boundary_match_positions(
         before = prompt_key[position - 1] if position > 0 else ""
         after_index = position + len(alias_key)
         after = prompt_key[after_index] if after_index < len(prompt_key) else ""
-        before_boundary = not before or not before.isalnum()
-        after_boundary = not after or not after.isalnum()
+        before_boundary = not before or not (before.isalnum() or before == "_")
+        after_boundary = not after or not (after.isalnum() or after == "_")
         if before_boundary and after_boundary:
             positions.append((position, after_index))
         search_from = position + 1
