@@ -159,6 +159,7 @@ def _write_fresh_custom_ledger(paths: RuntimePaths, prompt: str = PROMPT) -> Non
         trusted_hook_config_sha256=digest,
         loaded_hook_config_sha256=digest,
         origin_state=ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+        event_metadata={"hook_event_stdin_read": True},
     )
     assert packet["status"] == "ok"
 
