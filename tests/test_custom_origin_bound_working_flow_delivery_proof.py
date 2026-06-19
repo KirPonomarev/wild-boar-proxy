@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -29,6 +30,10 @@ from test_custom_origin_bound_live_provider_join import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _file_metadata() -> dict[str, object]:
@@ -65,14 +70,18 @@ def _tool_result_event(structured_content: dict[str, object]) -> dict[str, objec
     return {
         "type": "item.completed",
         "item": {
-            "id": "item-custom-origin-live-provider-result",
-            "type": "mcp_tool_result",
-            "server_name": "wbp",
-            "tool_name": "delegate_to_dip",
+            "id": "item-custom-origin-live-provider-call",
+            "type": "mcp_tool_call",
+            "server": "wbp",
+            "tool": "delegate_to_dip",
+            "arguments": {
+                "expected_alias": "DIP",
+                "task_sha256": _sha256_text(PROMPT),
+            },
             "status": "completed",
             "result": {
                 "content": [{"type": "text", "text": text}],
-                "structuredContent": structured_content,
+                "structured_content": structured_content,
                 "isError": False,
             },
         },

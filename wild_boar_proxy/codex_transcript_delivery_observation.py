@@ -258,6 +258,7 @@ def _codex_exec_mcp_tool_result_candidates(
     candidates: list[dict[str, Any]] = []
     for event in events:
         event_type = _safe_text(event.get("type"), limit=128)
+        event_type_key = event_type.casefold()
         for mapping in _iter_mappings(event):
             structured = _structured_content_from_mapping(mapping)
             if not isinstance(structured, Mapping):
@@ -275,6 +276,21 @@ def _codex_exec_mcp_tool_result_candidates(
                 ("server_name", "serverName", "mcp_server", "mcpServer", "server"),
             )
             item_type_key = item_type.casefold()
+            status = _first_text_field(mapping, ("status", "state"))
+            status_key = status.casefold()
+            mcp_tool_call_lineage = bool(
+                "mcp" in item_type_key
+                and "tool" in item_type_key
+                and "call" in item_type_key
+            )
+            mcp_tool_call_completed = bool(
+                mcp_tool_call_lineage
+                and (
+                    event_type_key.endswith(".completed")
+                    or event_type_key == "item.completed"
+                    or status_key == "completed"
+                )
+            )
             delivery_payload = (
                 structured.get("packet_kind") == MACHINE_HANDOFF_DELIVERY_PAYLOAD_KIND
             )
@@ -316,6 +332,8 @@ def _codex_exec_mcp_tool_result_candidates(
                     "item_type": item_type,
                     "server_name": server_name,
                     "tool_name": tool_name,
+                    "mcp_tool_call_lineage_observed": mcp_tool_call_lineage,
+                    "mcp_tool_call_completed_observed": mcp_tool_call_completed,
                     "is_error": is_error,
                     "content_text_present": bool(content_text),
                     "content_text_json_mapping_present": isinstance(
@@ -539,6 +557,12 @@ def build_codex_transcript_delivery_observation_packet(
         "mcp_tool_result_structured_content_present": bool(structured_content),
         "mcp_tool_result_event_type": _safe_text(selected.get("event_type"), limit=128),
         "mcp_tool_result_item_type": _safe_text(selected.get("item_type"), limit=128),
+        "mcp_tool_call_lineage_observed": (
+            selected.get("mcp_tool_call_lineage_observed") is True
+        ),
+        "mcp_tool_call_completed_observed": (
+            selected.get("mcp_tool_call_completed_observed") is True
+        ),
         "mcp_server_name_observed": _safe_text(selected.get("server_name"), limit=128),
         "mcp_tool_name_observed": _safe_text(selected.get("tool_name"), limit=128),
         "mcp_tool_result_is_error": selected.get("is_error") is True,

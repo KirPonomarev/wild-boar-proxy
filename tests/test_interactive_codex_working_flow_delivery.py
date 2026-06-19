@@ -234,10 +234,14 @@ def _tool_result_event(structured_content: dict[str, object]) -> dict[str, objec
     return {
         "type": "item.completed",
         "item": {
-            "id": "item-delegate-result",
-            "type": "mcp_tool_result",
-            "server_name": "wbp",
-            "tool_name": "delegate_to_dip",
+            "id": "item-delegate-call",
+            "type": "mcp_tool_call",
+            "server": "wbp",
+            "tool": "delegate_to_dip",
+            "arguments": {
+                "expected_alias": "DIP",
+                "task_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
+            },
             "status": "completed",
             "result": {
                 "content": [
@@ -251,7 +255,7 @@ def _tool_result_event(structured_content: dict[str, object]) -> dict[str, objec
                         ),
                     }
                 ],
-                "structuredContent": structured_content,
+                "structured_content": structured_content,
                 "isError": False,
             },
         },

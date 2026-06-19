@@ -245,15 +245,45 @@ def _tool_result_event(
     return {
         "type": "item.completed",
         "item": {
-            "id": "item-delegate-result",
+            "id": "item-delegate-call",
+            "type": "mcp_tool_call",
+            "server": server_name,
+            "tool": tool_name,
+            "arguments": {
+                "expected_alias": "DIP",
+                "task_sha256": _sha256(PROMPT),
+            },
+            "status": "completed",
+            "result": {
+                "content": [{"type": "text", "text": text}],
+                "structured_content": structured_content,
+                "isError": is_error,
+            },
+        },
+    }
+
+
+def _legacy_result_only_event(
+    structured_content: dict[str, object],
+) -> dict[str, object]:
+    text = json.dumps(
+        structured_content,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-delegate-result-only",
             "type": "mcp_tool_result",
-            "server_name": server_name,
-            "tool_name": tool_name,
+            "server_name": "wbp",
+            "tool_name": "delegate_to_dip",
             "status": "completed",
             "result": {
                 "content": [{"type": "text", "text": text}],
                 "structuredContent": structured_content,
-                "isError": is_error,
+                "isError": False,
             },
         },
     }
@@ -535,6 +565,8 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertTrue(packet["live_provider_response_digest_bound_to_handoff"])
         self.assertTrue(packet["controlled_provider_response_digest_bound_to_handoff"])
         self.assertTrue(packet["matching_mcp_tool_result_observed"])
+        self.assertTrue(packet["mcp_tool_call_lineage_observed"])
+        self.assertTrue(packet["mcp_tool_call_completed_observed"])
         self.assertTrue(packet["mcp_tool_result_structured_content_present"])
         self.assertTrue(packet["structured_content_matches_handoff"])
         self.assertEqual(
@@ -560,6 +592,40 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["transcript_secret_value_present"])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_result_only_mcp_jsonl_without_tool_call_lineage(self) -> None:
+        source = _integrated_packet()
+        structured = _delivery_payload(source=source)
+        events = [
+            {"type": "thread.started", "thread_id": "thread-result-only-flow"},
+            {"type": "turn.started"},
+            _legacy_result_only_event(structured),
+            _assistant_event(str(structured["handoff_payload_sha256"])),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+            secret_values=[PROMPT, ROUTE_ID, EXPECTED_TEXT, RAW_PROVIDER_TEXT],
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            working_flow.CODEX_WORKING_FLOW_TRANSCRIPT_NOT_OBSERVED,
+        )
+        self.assertTrue(packet["matching_mcp_tool_result_observed"])
+        self.assertFalse(packet["mcp_tool_call_lineage_observed"])
+        self.assertFalse(packet["mcp_tool_call_completed_observed"])
+        self.assertFalse(packet["mcp_delivery_surface_proven"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertIn("mcp_tool_call_lineage_not_observed", packet["blocking_reasons"])
+        self.assertIn("mcp_tool_call_completed_not_observed", packet["blocking_reasons"])
         _assert_no_product_or_ui_claim(self, packet)
         _assert_no_secret_or_raw_text(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])

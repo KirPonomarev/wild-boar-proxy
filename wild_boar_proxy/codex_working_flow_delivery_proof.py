@@ -507,6 +507,16 @@ def _transcript_delivery_failures(
     )
     if tool_result_index is not None and not structured_content:
         failures.append("mcp_tool_result_structured_content_missing")
+    if (
+        tool_result_index is not None
+        and selected_tool_result.get("mcp_tool_call_lineage_observed") is not True
+    ):
+        failures.append("mcp_tool_call_lineage_not_observed")
+    if (
+        tool_result_index is not None
+        and selected_tool_result.get("mcp_tool_call_completed_observed") is not True
+    ):
+        failures.append("mcp_tool_call_completed_not_observed")
     if structured_content:
         server_name = _safe_text(selected_tool_result.get("server_name"), limit=128)
         tool_name = _safe_text(selected_tool_result.get("tool_name"), limit=128)
@@ -1556,6 +1566,12 @@ def build_codex_working_flow_delivery_proof_packet(
         "matching_mcp_tool_result_event_index_present": tool_result_index is not None,
         "mcp_tool_result_event_type": _safe_text(tool_result.get("event_type"), limit=128),
         "mcp_tool_result_item_type": _safe_text(tool_result.get("item_type"), limit=128),
+        "mcp_tool_call_lineage_observed": (
+            tool_result.get("mcp_tool_call_lineage_observed") is True
+        ),
+        "mcp_tool_call_completed_observed": (
+            tool_result.get("mcp_tool_call_completed_observed") is True
+        ),
         "mcp_server_name_observed": _safe_text(tool_result.get("server_name"), limit=128),
         "mcp_tool_name_observed": _safe_text(tool_result.get("tool_name"), limit=128),
         "mcp_tool_result_name_allowed": _safe_text(
