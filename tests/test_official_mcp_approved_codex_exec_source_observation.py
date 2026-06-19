@@ -39,11 +39,32 @@ def _positive_source_and_events() -> tuple[dict[str, object], list[dict[str, obj
     return _assistant_continuation_packet(events=events), events
 
 
+def _file_metadata(event_count: int) -> dict[str, object]:
+    return {
+        "official_assistant_continuation_observation_file_required": True,
+        "official_assistant_continuation_observation_file_present": True,
+        "official_assistant_continuation_observation_file_read": True,
+        "official_assistant_continuation_observation_file_valid_json": True,
+        "official_assistant_continuation_observation_file_mapping": True,
+        "official_assistant_continuation_observation_file_error_code": "",
+        "official_assistant_continuation_observation_file_path_recorded": False,
+        "codex_exec_jsonl_file_required": True,
+        "codex_exec_jsonl_file_present": True,
+        "codex_exec_jsonl_file_read": True,
+        "codex_exec_jsonl_file_valid_jsonl": True,
+        "codex_exec_jsonl_file_error_code": "",
+        "codex_exec_jsonl_file_path_recorded": False,
+        "codex_exec_jsonl_parse_error_count": 0,
+        "codex_exec_event_count": event_count,
+    }
+
+
 def _packet(
     *,
     source: dict[str, object] | None = None,
     events: list[dict[str, object]] | None = None,
     approved_source_kind: str = proof.VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if source is None or events is None:
         default_source, default_events = _positive_source_and_events()
@@ -53,6 +74,7 @@ def _packet(
         assistant_continuation_observation_packet=source,
         codex_exec_events=events,
         approved_source_kind=approved_source_kind,
+        file_metadata=_file_metadata(len(events)) if metadata is None else metadata,
         secret_values=[PROMPT, ROUTE_ID, RAW_PROVIDER_TEXT],
     )
 
@@ -131,9 +153,14 @@ class OfficialMcpApprovedCodexExecSourceObservationTests(unittest.TestCase):
             packet["approved_source_kind"],
             proof.VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
         )
+        self.assertTrue(packet["official_assistant_continuation_observation_file_backed"])
+        self.assertTrue(packet["official_codex_exec_jsonl_file_backed"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertTrue(packet["official_observation_lineage_proven"])
+        self.assertEqual(packet["official_observation_lineage_failures"], [])
         self.assertTrue(packet["approved_source_kind_allowed"])
         self.assertTrue(packet["approved_codex_exec_source_observed"])
-        self.assertFalse(packet["approved_source_read"])
+        self.assertTrue(packet["approved_source_read"])
         self.assertTrue(packet["approved_source_events_observed"])
         self.assertTrue(packet["approved_source_digest"])
         self.assertTrue(packet["assistant_continuation_source_digest"])
@@ -163,6 +190,33 @@ class OfficialMcpApprovedCodexExecSourceObservationTests(unittest.TestCase):
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["codex_native_subagent_used_as_dip"])
         self.assertFalse(packet["approved_source_secret_value_present"])
+        _assert_no_product_ui_live_or_working_flow_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_non_file_backed_observation_cannot_be_approved_source(self) -> None:
+        source, events = _positive_source_and_events()
+
+        packet = _packet(source=source, events=events, metadata={})
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_MCP_APPROVED_CODEX_EXEC_SOURCE_OBSERVATION_SOURCE_INVALID,
+        )
+        self.assertIn(
+            "official_assistant_continuation_observation_file_not_read",
+            packet["blocking_reasons"],
+        )
+        self.assertIn("codex_exec_jsonl_file_not_read", packet["blocking_reasons"])
+        self.assertIn(
+            "approved_exec_source_observation_not_file_backed",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["official_observation_lineage_file_backed"])
+        self.assertFalse(packet["official_observation_lineage_proven"])
+        self.assertFalse(packet["approved_codex_exec_source_observed"])
+        self.assertFalse(packet["assistant_continuation_source_bound"])
         _assert_no_product_ui_live_or_working_flow_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
@@ -337,6 +391,8 @@ class OfficialMcpApprovedCodexExecSourceObservationTests(unittest.TestCase):
         self.assertTrue(packet["codex_exec_jsonl_file_present"])
         self.assertTrue(packet["codex_exec_jsonl_file_read"])
         self.assertFalse(packet["codex_exec_jsonl_file_path_recorded"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertTrue(packet["official_observation_lineage_proven"])
         self.assertTrue(packet["approved_codex_exec_source_observed"])
         self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         self.assertFalse(packet["codex_working_flow_delivery_proven"])

@@ -103,6 +103,8 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
         self.assertTrue(packet["api_lane_called"])
         self.assertTrue(packet["live_provider_response_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["official_delivery_candidate_lineage_proven"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
         self.assertFalse(packet["official_e2e_runner_inputs_file_path_recorded"])
         self.assertEqual(len(packet["official_e2e_runner_inputs_file_sha256"]), 64)
         self.assertTrue(packet["real_custom_hook_proof_file_sha256_bound_to_runner_inputs"])
@@ -197,6 +199,41 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_build_blocks_ok_join_without_propagated_official_lineage(self) -> None:
+        payload = _inputs_payload()
+        join_packet = _join_packet()
+        join_packet["official_delivery_candidate_lineage_proven"] = False
+        packet = runner.build_official_e2e_working_flow_proof_runner_packet(
+            runner_inputs_packet=payload,
+            official_e2e_join_packet=join_packet,
+            file_metadata={
+                "official_e2e_runner_inputs_file_read": True,
+                "official_e2e_runner_inputs_file_valid_json": True,
+                "official_e2e_runner_inputs_file_mapping": True,
+                "official_e2e_runner_inputs_file_path_recorded": False,
+                "official_e2e_runner_inputs_file_sha256": "c" * 64,
+                "real_custom_hook_proof_file_sha256": "a" * 64,
+                "official_working_flow_delivery_join_file_sha256": "b" * 64,
+            },
+            secret_values=_secret_values(),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_JOIN_INVALID,
+        )
+        self.assertIn(
+            "official_e2e_join_official_delivery_candidate_lineage_proven_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["official_e2e_join_valid"])
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_runner_does_not_call_join_when_manifest_is_invalid(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -397,6 +434,40 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
             runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_JOIN_INVALID,
         )
         self.assertIn("prompt_digest_mismatch", packet["blocking_reasons"])
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_runner_blocks_delivery_join_without_official_lineage(self) -> None:
+        real_hook, delivery = _positive_pair()
+        delivery = {**delivery, "official_delivery_candidate_lineage_proven": False}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _write_json(root / "real-hook.json", real_hook)
+            _write_json(root / "delivery-join.json", delivery)
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256=_file_sha256(root / "real-hook.json"),
+                    expected_delivery_join_sha256=_file_sha256(root / "delivery-join.json"),
+                ),
+            )
+
+            packet = runner.run_official_e2e_working_flow_proof_runner_command(
+                inputs_file=str(root / "runner-inputs.json"),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_JOIN_INVALID,
+        )
+        self.assertIn(
+            "official_working_flow_delivery_join_lineage_not_proven",
+            packet["blocking_reasons"],
+        )
         self.assertFalse(packet["official_e2e_working_flow_proven"])
         _assert_no_ui_native_or_product_claim(self, packet)
         _assert_no_writes(self, packet)

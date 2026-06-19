@@ -122,6 +122,14 @@ def _source_contract_failures(
     for field, reason in (
         ("source_valid", "approved_exec_source_source_not_valid"),
         (
+            "official_observation_lineage_file_backed",
+            "approved_exec_source_observation_not_file_backed",
+        ),
+        (
+            "official_observation_lineage_proven",
+            "approved_exec_source_observation_lineage_not_proven",
+        ),
+        (
             "official_assistant_continuation_observation_valid",
             "official_assistant_continuation_observation_not_valid",
         ),
@@ -324,6 +332,12 @@ def build_official_mcp_delivery_candidate_join_packet(
         "source_failures": source_failures,
         "source_binding_failures": binding_failures,
         "source_unsafe_claim_failures": unsafe_failures,
+        "official_observation_lineage_file_backed": bool(
+            ok and source.get("official_observation_lineage_file_backed") is True
+        ),
+        "official_observation_lineage_proven": bool(
+            ok and source.get("official_observation_lineage_proven") is True
+        ),
         "approved_exec_source_delivery_candidate": ok,
         "delivery_candidate_source_file_backed": metadata.get(
             "official_approved_exec_source_file_read"

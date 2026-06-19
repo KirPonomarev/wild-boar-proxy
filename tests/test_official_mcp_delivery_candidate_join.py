@@ -128,6 +128,8 @@ class OfficialMcpDeliveryCandidateJoinTests(unittest.TestCase):
         self.assertEqual(packet["source_failures"], [])
         self.assertEqual(packet["source_binding_failures"], [])
         self.assertEqual(packet["source_unsafe_claim_failures"], [])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertTrue(packet["official_observation_lineage_proven"])
         self.assertTrue(packet["approved_exec_source_delivery_candidate"])
         self.assertTrue(packet["delivery_candidate_source_file_backed"])
         self.assertEqual(
@@ -207,6 +209,16 @@ class OfficialMcpDeliveryCandidateJoinTests(unittest.TestCase):
                 {**source, "approved_codex_exec_source_observed": False},
                 _file_metadata(),
                 "approved_codex_exec_source_not_observed",
+            ),
+            "lineage_not_file_backed": (
+                {**source, "official_observation_lineage_file_backed": False},
+                _file_metadata(),
+                "approved_exec_source_observation_not_file_backed",
+            ),
+            "lineage_not_proven": (
+                {**source, "official_observation_lineage_proven": False},
+                _file_metadata(),
+                "approved_exec_source_observation_lineage_not_proven",
             ),
         }
         for name, (candidate_source, metadata, reason) in cases.items():

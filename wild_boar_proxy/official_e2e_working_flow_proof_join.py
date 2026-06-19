@@ -242,6 +242,14 @@ def _delivery_join_contract_failures(
         ("canonical_working_flow_delivery_valid", "canonical_working_flow_delivery_not_valid"),
         ("candidate_bound_to_working_flow", "candidate_not_bound_to_working_flow"),
         ("approved_exec_source_delivery_candidate", "approved_exec_source_not_candidate"),
+        (
+            "official_delivery_candidate_lineage_proven",
+            "official_working_flow_delivery_join_lineage_not_proven",
+        ),
+        (
+            "official_observation_lineage_file_backed",
+            "official_working_flow_delivery_join_lineage_not_file_backed",
+        ),
         ("delivery_candidate_source_file_backed", "delivery_candidate_source_not_file_backed"),
         (
             "official_approved_exec_source_observation_valid",
@@ -761,6 +769,12 @@ def build_official_e2e_working_flow_proof_join_packet(
         "codex_exec_transcript_sha256": transcript_digest if ok else "",
         "approved_exec_source_delivery_candidate": bool(
             ok and delivery.get("approved_exec_source_delivery_candidate") is True
+        ),
+        "official_delivery_candidate_lineage_proven": bool(
+            ok and delivery.get("official_delivery_candidate_lineage_proven") is True
+        ),
+        "official_observation_lineage_file_backed": bool(
+            ok and delivery.get("official_observation_lineage_file_backed") is True
         ),
         "approved_delivery_surface_proven": bool(
             ok and delivery.get("approved_delivery_surface_proven") is True

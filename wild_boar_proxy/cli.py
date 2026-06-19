@@ -118,6 +118,7 @@ from .official_mcp_ledger_bound_dispatch_join import (
 )
 from .official_mcp_handoff_source_proof import (
     run_official_mcp_handoff_source_proof_command,
+    run_official_mcp_working_flow_handoff_source_proof_command,
 )
 from .official_mcp_transcript_tool_result_observation import (
     run_official_mcp_transcript_tool_result_observation_command,
@@ -685,6 +686,20 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_official_mcp_handoff_source_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-working-flow-handoff-source-proof"
+        )
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1359,6 +1374,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "custom-origin-bound-live-provider-join",
         "official-mcp-ledger-bound-dispatch-join",
         "official-mcp-handoff-source-proof",
+        "official-mcp-working-flow-handoff-source-proof",
         "official-mcp-transcript-tool-result-observe",
         "official-mcp-assistant-continuation-observe",
         "official-mcp-approved-codex-exec-source-observe",
@@ -1915,6 +1931,18 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_official_mcp_handoff_source_proof_command(
                     dispatch_join_file=args.dispatch_join_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-working-flow-handoff-source-proof"
+        ):
+            return emit_json(
+                run_official_mcp_working_flow_handoff_source_proof_command(
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
                 )
             )
         if (

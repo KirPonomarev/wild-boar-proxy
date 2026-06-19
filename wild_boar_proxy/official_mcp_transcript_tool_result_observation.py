@@ -33,6 +33,7 @@ from .observed_machine_handoff_delivery import (
 )
 from .official_mcp_handoff_source_proof import (
     OFFICIAL_MCP_HANDOFF_SOURCE_PACKET_KIND,
+    OFFICIAL_WORKING_FLOW_HANDOFF_SOURCE_TRUTH_SOURCE,
 )
 from .router_hook_entry import _safe_text
 
@@ -163,6 +164,117 @@ def _source_required_failures(source: Mapping[str, Any]) -> list[str]:
         failures.append("handoff_source_effect_not_probe")
     if source.get("changed_files") not in ([], ()):
         failures.append("handoff_source_changed_files_not_empty")
+    if source.get("official_working_flow_delivery_source_proven") is True:
+        for field, reason in (
+            (
+                "working_flow_delivery_source_valid",
+                "working_flow_delivery_source_not_valid",
+            ),
+            (
+                "working_flow_delivery_source_file_backed",
+                "working_flow_delivery_source_not_file_backed",
+            ),
+            ("approved_handoff_ready", "approved_handoff_not_ready"),
+            (
+                "approved_handoff_payload_sanitized",
+                "approved_handoff_payload_not_sanitized",
+            ),
+            ("approved_handoff_surface_used", "approved_handoff_surface_not_used"),
+            ("handoff_source_digest_bound", "handoff_source_digest_not_bound"),
+            ("working_flow_source_bound", "working_flow_source_not_bound"),
+            (
+                "approved_working_flow_source_bound",
+                "approved_working_flow_source_not_bound",
+            ),
+            ("handoff_payload_prepared", "handoff_payload_not_prepared"),
+            ("transcript_tool_result_observed", "transcript_tool_result_not_observed"),
+            (
+                "codex_transcript_delivery_observed",
+                "codex_transcript_delivery_not_observed",
+            ),
+            ("mcp_tool_result_observed", "mcp_tool_result_not_observed"),
+            (
+                "mcp_tool_result_structured_content_present",
+                "mcp_tool_result_structured_content_missing",
+            ),
+            ("mcp_server_allowed", "mcp_server_not_allowed"),
+            ("mcp_tool_allowed", "mcp_tool_not_allowed"),
+            (
+                "content_text_json_matches_structured_content",
+                "content_text_not_bound_to_structured_content",
+            ),
+            (
+                "structured_content_matches_handoff",
+                "structured_content_not_bound_to_handoff",
+            ),
+        ):
+            if source.get(field) is not True:
+                failures.append(reason)
+        if (
+            source.get("handoff_source_truth_source")
+            != OFFICIAL_WORKING_FLOW_HANDOFF_SOURCE_TRUTH_SOURCE
+        ):
+            failures.append("working_flow_handoff_source_truth_source_invalid")
+        for field, reason in (
+            ("prompt_digest", "prompt_digest_missing"),
+            ("source_prompt_digest", "source_prompt_digest_missing"),
+            ("source_runtime_context_digest", "source_runtime_context_digest_missing"),
+            ("selected_api_route_id_sha256", "selected_api_route_digest_missing"),
+            ("route_bound_request_sha256", "route_bound_request_digest_missing"),
+            ("provider_response_digest", "provider_response_digest_missing"),
+            ("live_provider_response_digest", "live_provider_response_digest_missing"),
+            (
+                "controlled_provider_response_sha256",
+                "controlled_provider_response_digest_missing",
+            ),
+            (
+                "controlled_provider_response_digest",
+                "controlled_provider_response_digest_missing",
+            ),
+            ("handoff_payload_digest", "handoff_payload_digest_missing"),
+            (
+                "expected_handoff_payload_digest",
+                "expected_handoff_payload_digest_missing",
+            ),
+            (
+                "working_flow_handoff_payload_digest",
+                "working_flow_handoff_payload_digest_missing",
+            ),
+            ("structured_content_digest", "structured_content_digest_missing"),
+            (
+                "declared_handoff_payload_digest",
+                "declared_handoff_payload_digest_missing",
+            ),
+            (
+                "observed_handoff_payload_digest",
+                "observed_handoff_payload_digest_missing",
+            ),
+            ("codex_exec_transcript_sha256", "codex_exec_transcript_digest_missing"),
+        ):
+            if not _hex_sha256(source.get(field)):
+                failures.append(reason)
+        handoff_digest = _hex_sha256(source.get("handoff_payload_digest"))
+        for reason, digest in (
+            (
+                "expected_handoff_payload_digest_mismatch",
+                _hex_sha256(source.get("expected_handoff_payload_digest")),
+            ),
+            (
+                "working_flow_handoff_payload_digest_mismatch",
+                _hex_sha256(source.get("working_flow_handoff_payload_digest")),
+            ),
+            (
+                "declared_handoff_payload_digest_mismatch",
+                _hex_sha256(source.get("declared_handoff_payload_digest")),
+            ),
+            (
+                "observed_handoff_payload_digest_mismatch",
+                _hex_sha256(source.get("observed_handoff_payload_digest")),
+            ),
+        ):
+            if handoff_digest and digest and handoff_digest != digest:
+                failures.append(reason)
+        return sorted(set(failures))
     for field, reason in (
         ("dispatch_join_valid", "dispatch_join_not_valid"),
         ("official_natural_mcp_case_proven", "official_natural_mcp_case_not_proven"),
@@ -340,6 +452,47 @@ def _normalized_controlled_dispatch(source: Mapping[str, Any]) -> dict[str, Any]
 def _adapter_handoff_proof_packet(
     source: Mapping[str, Any],
 ) -> tuple[dict[str, Any], str, str]:
+    if source.get("official_working_flow_delivery_source_proven") is True:
+        source_handoff_digest = _hex_sha256(source.get("handoff_payload_digest"))
+        adapter = {
+            "schema_version": 1,
+            "packet_kind": CONTROLLED_DISPATCH_HANDOFF_PACKET_KIND,
+            "status": "ok",
+            "machine_error_code": "OK",
+            "effect": EFFECT_PROBE,
+            "changed_files": [],
+            "handoff_completed": True,
+            "handoff_envelope_built": True,
+            "machine_response_envelope_observed": True,
+            "machine_response_structured_content_present": True,
+            "handoff_surface_kind": HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
+            "handoff_payload_digest": source_handoff_digest,
+            "codex_working_flow_delivery_proven": False,
+            "delivery_counts_as_custom_codex_ui": False,
+            "native_free_chat_router_proven": False,
+            "live_provider_proven": False,
+            "product_ready": False,
+            "state_written": False,
+            "evidence_written": False,
+            "file_mutation_attempted": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "natural_phrase_recorded": False,
+            "raw_jsonl_recorded": False,
+            "tool_call_arguments_recorded": False,
+            "route_candidate_recorded": False,
+            "selected_api_route_id_recorded": False,
+            "raw_provider_response_recorded": False,
+            "provider_response_text_recorded": False,
+            "provider_response_preview_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "native_codex_subagent_used_as_dip": False,
+            "codex_native_subagent_used_as_dip": False,
+        }
+        return adapter, source_handoff_digest, source_handoff_digest
     normalized_dispatch = _normalized_controlled_dispatch(source)
     approved_packet = build_approved_handoff_packet(
         normalized_dispatch,
@@ -555,6 +708,18 @@ def build_official_mcp_transcript_tool_result_observation_packet(
         "handoff_source_valid": not source_failures,
         "handoff_source_failures": source_failures,
         "source_unsafe_claim_failures": source_unsafe_failures,
+        "official_working_flow_delivery_source_proven": bool(
+            ok and source.get("official_working_flow_delivery_source_proven") is True
+        ),
+        "working_flow_delivery_source_file_backed": bool(
+            ok and source.get("working_flow_delivery_source_file_backed") is True
+        ),
+        "handoff_source_truth_source": _safe_text(
+            source.get("handoff_source_truth_source"),
+            limit=96,
+        )
+        if ok
+        else "",
         "handoff_source_proven": bool(ok and source.get("status") == "ok"),
         "approved_handoff_ready": bool(
             ok and source.get("approved_handoff_ready") is True

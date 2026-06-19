@@ -206,6 +206,8 @@ class OfficialMcpWorkingFlowDeliveryJoinTests(unittest.TestCase):
         self.assertEqual(packet["source_unsafe_claim_failures"], [])
         self.assertTrue(packet["approved_exec_source_delivery_candidate"])
         self.assertTrue(packet["delivery_candidate_source_file_backed"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
+        self.assertTrue(packet["official_delivery_candidate_lineage_proven"])
         self.assertTrue(packet["official_approved_exec_source_observation_valid"])
         self.assertTrue(packet["approved_codex_exec_source_observed"])
         self.assertTrue(packet["approved_delivery_surface_proven"])
@@ -323,6 +325,16 @@ class OfficialMcpWorkingFlowDeliveryJoinTests(unittest.TestCase):
                 {**candidate, "approved_exec_source_delivery_candidate": False},
                 _file_metadata(),
                 "approved_exec_source_delivery_candidate_not_true",
+            ),
+            "lineage_not_file_backed": (
+                {**candidate, "official_observation_lineage_file_backed": False},
+                _file_metadata(),
+                "official_observation_lineage_not_file_backed",
+            ),
+            "lineage_not_proven": (
+                {**candidate, "official_observation_lineage_proven": False},
+                _file_metadata(),
+                "official_delivery_candidate_lineage_not_proven",
             ),
         }
         for name, (candidate_source, metadata, reason) in cases.items():

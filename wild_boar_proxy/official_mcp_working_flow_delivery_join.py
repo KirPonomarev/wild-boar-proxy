@@ -119,6 +119,14 @@ def _candidate_contract_failures(
         ("approved_exec_source_delivery_candidate", "approved_exec_source_delivery_candidate_not_true"),
         ("delivery_candidate_source_file_backed", "delivery_candidate_source_not_file_backed"),
         (
+            "official_observation_lineage_file_backed",
+            "official_observation_lineage_not_file_backed",
+        ),
+        (
+            "official_observation_lineage_proven",
+            "official_delivery_candidate_lineage_not_proven",
+        ),
+        (
             "official_approved_exec_source_observation_valid",
             "official_approved_exec_source_observation_not_valid",
         ),
@@ -572,6 +580,12 @@ def build_official_mcp_working_flow_delivery_join_packet(
         ),
         "delivery_candidate_source_file_backed": bool(
             ok and candidate.get("delivery_candidate_source_file_backed") is True
+        ),
+        "official_observation_lineage_file_backed": bool(
+            ok and candidate.get("official_observation_lineage_file_backed") is True
+        ),
+        "official_delivery_candidate_lineage_proven": bool(
+            ok and candidate.get("official_observation_lineage_proven") is True
         ),
         "official_approved_exec_source_observation_valid": bool(
             ok and candidate.get("official_approved_exec_source_observation_valid") is True

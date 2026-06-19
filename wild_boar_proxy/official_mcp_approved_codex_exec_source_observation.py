@@ -170,6 +170,28 @@ def _source_required_failures(source: Mapping[str, Any]) -> list[str]:
     return sorted(set(failures))
 
 
+def _file_backed_lineage_failures(
+    metadata: Mapping[str, Any],
+    exec_source_packet: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    if metadata.get("official_assistant_continuation_observation_file_read") is not True:
+        failures.append("official_assistant_continuation_observation_file_not_read")
+    if metadata.get("official_assistant_continuation_observation_file_valid_json") is not True:
+        failures.append("official_assistant_continuation_observation_file_json_not_valid")
+    if metadata.get("official_assistant_continuation_observation_file_mapping") is not True:
+        failures.append("official_assistant_continuation_observation_file_not_mapping")
+    if metadata.get("codex_exec_jsonl_file_read") is not True:
+        failures.append("codex_exec_jsonl_file_not_read")
+    if metadata.get("codex_exec_jsonl_file_valid_jsonl") is not True:
+        failures.append("codex_exec_jsonl_file_jsonl_not_valid")
+    if metadata.get("codex_exec_jsonl_parse_error_count") not in (0, None):
+        failures.append("codex_exec_jsonl_file_jsonl_not_valid")
+    if exec_source_packet.get("visible_source_read") is not True:
+        failures.append("approved_exec_source_observation_not_file_backed")
+    return sorted(set(failures))
+
+
 def _source_unsafe_claim_failures(source: Mapping[str, Any]) -> list[str]:
     failures = set(_unsafe_flag_failures(source))
     for field, reason in (
@@ -357,12 +379,12 @@ def build_official_mcp_approved_codex_exec_source_observation_packet(
     metadata = dict(file_metadata or {})
     source_kind = _safe_text(approved_source_kind, limit=80)
 
-    source_failures = _source_required_failures(source)
+    source_contract_failures = _source_required_failures(source)
     source_unsafe_failures = _source_unsafe_claim_failures(source)
     adapter_packet = _adapter_assistant_continuation(source)
 
     exec_source_packet: Mapping[str, Any] = {}
-    if not source_failures and not source_unsafe_failures:
+    if not source_contract_failures and not source_unsafe_failures:
         exec_source_packet = build_custom_codex_approved_visible_source_observation_packet(
             adapter_packet,
             events,
@@ -370,6 +392,8 @@ def build_official_mcp_approved_codex_exec_source_observation_packet(
             file_metadata=metadata,
             secret_values=secret_values,
         )
+    lineage_failures = _file_backed_lineage_failures(metadata, exec_source_packet)
+    source_failures = sorted(set(source_contract_failures + lineage_failures))
     exec_source_failures = _exec_source_required_failures(exec_source_packet)
     exec_source_unsafe_failures = _exec_source_unsafe_failures(exec_source_packet)
     blocking_reasons = sorted(
@@ -412,6 +436,21 @@ def build_official_mcp_approved_codex_exec_source_observation_packet(
         "source_valid": not source_failures,
         "source_failures": source_failures,
         "source_unsafe_claim_failures": source_unsafe_failures,
+        "official_observation_lineage_failures": lineage_failures,
+        "official_assistant_continuation_observation_file_backed": bool(
+            metadata.get("official_assistant_continuation_observation_file_read") is True
+            and metadata.get("official_assistant_continuation_observation_file_valid_json")
+            is True
+            and metadata.get("official_assistant_continuation_observation_file_mapping")
+            is True
+        ),
+        "official_codex_exec_jsonl_file_backed": bool(
+            metadata.get("codex_exec_jsonl_file_read") is True
+            and metadata.get("codex_exec_jsonl_file_valid_jsonl") is True
+            and metadata.get("codex_exec_jsonl_parse_error_count") in (0, None)
+        ),
+        "official_observation_lineage_file_backed": not lineage_failures,
+        "official_observation_lineage_proven": bool(ok and not lineage_failures),
         "official_assistant_continuation_observation_valid": (
             not source_failures and not source_unsafe_failures
         ),

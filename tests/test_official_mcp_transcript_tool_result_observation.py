@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from wild_boar_proxy import cli as cli_mod
+from wild_boar_proxy import codex_working_flow_delivery_proof as working_flow
 from wild_boar_proxy import official_mcp_transcript_tool_result_observation as proof
 from wild_boar_proxy import codex_transcript_delivery_observation as transcript
 from wild_boar_proxy.core import packets
@@ -35,6 +36,16 @@ from test_official_mcp_handoff_source_proof import (  # noqa: E402
     RAW_PROVIDER_TEXT,
     ROUTE_ID,
     _packet as _handoff_source_packet,
+    _working_flow_source_packet,
+)
+from test_codex_working_flow_delivery_proof import (  # noqa: E402
+    EXPECTED_TEXT as WORKING_FLOW_EXPECTED_TEXT,
+    PROMPT as WORKING_FLOW_PROMPT,
+    RAW_PROVIDER_TEXT as WORKING_FLOW_RAW_PROVIDER_TEXT,
+    ROUTE_ID as WORKING_FLOW_ROUTE_ID,
+    _events_for_packet as _working_flow_events_for_packet,
+    _file_metadata as _working_flow_delivery_file_metadata,
+    _integrated_packet as _working_flow_integrated_packet,
 )
 
 
@@ -146,6 +157,50 @@ def _packet(
     )
 
 
+def _working_flow_source_events_and_packet() -> tuple[
+    dict[str, object],
+    list[dict[str, object]],
+    dict[str, object],
+]:
+    integrated_source = _working_flow_integrated_packet()
+    events = _working_flow_events_for_packet(integrated_source)
+    working_flow_packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+        integrated_source,
+        events,
+        file_metadata=_working_flow_delivery_file_metadata(),
+        secret_values=[
+            WORKING_FLOW_PROMPT,
+            WORKING_FLOW_ROUTE_ID,
+            WORKING_FLOW_RAW_PROVIDER_TEXT,
+            WORKING_FLOW_EXPECTED_TEXT,
+        ],
+    )
+    source = _working_flow_source_packet(
+        working_flow_delivery_packet=working_flow_packet
+    )
+    return source, events, working_flow_packet
+
+
+def _working_flow_transcript_metadata(events: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "handoff_source_file_required": True,
+        "handoff_source_file_present": True,
+        "handoff_source_file_read": True,
+        "handoff_source_file_valid_json": True,
+        "handoff_source_file_mapping": True,
+        "handoff_source_file_error_code": "",
+        "handoff_source_file_path_recorded": False,
+        "codex_exec_jsonl_file_required": True,
+        "codex_exec_jsonl_file_present": True,
+        "codex_exec_jsonl_file_read": True,
+        "codex_exec_jsonl_file_valid_jsonl": True,
+        "codex_exec_jsonl_file_error_code": "",
+        "codex_exec_jsonl_file_path_recorded": False,
+        "codex_exec_jsonl_parse_error_count": 0,
+        "codex_exec_event_count": len(events),
+    }
+
+
 def _assert_no_raw_prompt_route_or_provider(
     testcase: unittest.TestCase,
     packet: dict[str, object],
@@ -248,6 +303,109 @@ class OfficialMcpTranscriptToolResultObservationTests(unittest.TestCase):
         self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_assistant_ui_live_or_product_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_observes_working_flow_handoff_source_in_transcript(
+        self,
+    ) -> None:
+        source, events, working_flow_packet = _working_flow_source_events_and_packet()
+        packet = proof.build_official_mcp_transcript_tool_result_observation_packet(
+            handoff_source_packet=source,
+            codex_exec_events=events,
+            file_metadata=_working_flow_transcript_metadata(events),
+            secret_values=[
+                WORKING_FLOW_PROMPT,
+                WORKING_FLOW_ROUTE_ID,
+                WORKING_FLOW_RAW_PROVIDER_TEXT,
+                WORKING_FLOW_EXPECTED_TEXT,
+            ],
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["handoff_source_valid"])
+        self.assertTrue(packet["official_working_flow_delivery_source_proven"])
+        self.assertTrue(packet["working_flow_delivery_source_file_backed"])
+        self.assertEqual(
+            packet["handoff_source_truth_source"],
+            "file_backed_codex_working_flow_delivery_proof",
+        )
+        self.assertTrue(packet["handoff_source_proven"])
+        self.assertTrue(packet["approved_handoff_ready"])
+        self.assertTrue(packet["approved_handoff_payload_sanitized"])
+        self.assertEqual(
+            packet["handoff_payload_digest"],
+            working_flow_packet["handoff_payload_digest"],
+        )
+        self.assertEqual(
+            packet["expected_handoff_payload_digest"],
+            working_flow_packet["handoff_payload_digest"],
+        )
+        self.assertTrue(packet["handoff_payload_digest_bound"])
+        self.assertTrue(packet["handoff_source_digest_bound"])
+        self.assertTrue(packet["working_flow_source_bound"])
+        self.assertTrue(packet["adapter_handoff_completed"])
+        self.assertTrue(packet["adapter_handoff_envelope_built"])
+        self.assertTrue(packet["transcript_observation_valid"])
+        self.assertTrue(packet["mcp_tool_result_observed"])
+        self.assertTrue(packet["mcp_tool_allowed"])
+        self.assertTrue(packet["mcp_server_allowed"])
+        self.assertTrue(packet["structured_content_matches_handoff"])
+        self.assertTrue(packet["transcript_tool_result_observed"])
+        self.assertTrue(packet["codex_transcript_delivery_observed"])
+        self.assertFalse(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["live_provider_proven"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        for forbidden in (
+            WORKING_FLOW_PROMPT,
+            WORKING_FLOW_ROUTE_ID,
+            WORKING_FLOW_RAW_PROVIDER_TEXT,
+            WORKING_FLOW_EXPECTED_TEXT,
+        ):
+            self.assertNotIn(forbidden, serialized)
+            self.assertFalse(packet_contains_text(packet, forbidden))
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_working_flow_source_without_file_backed_claim_blocks_observation(
+        self,
+    ) -> None:
+        source, events, _working_flow_packet = _working_flow_source_events_and_packet()
+        source["working_flow_delivery_source_file_backed"] = False
+        packet = proof.build_official_mcp_transcript_tool_result_observation_packet(
+            handoff_source_packet=source,
+            codex_exec_events=events,
+            file_metadata=_working_flow_transcript_metadata(events),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_MCP_TRANSCRIPT_TOOL_RESULT_OBSERVATION_SOURCE_INVALID,
+        )
+        self.assertIn(
+            "working_flow_delivery_source_not_file_backed",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["official_working_flow_delivery_source_proven"])
+        self.assertFalse(packet["transcript_tool_result_observed"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_controlled_source_digest_mismatch_blocks_observation(self) -> None:
+        source = _source_packet()
+        source["controlled_provider_response_sha256"] = "f" * 64
+        packet = _packet(source=source, events=_events_for_source(_source_packet()))
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.OFFICIAL_MCP_TRANSCRIPT_TOOL_RESULT_OBSERVATION_SOURCE_INVALID,
+        )
+        self.assertIn("provider_response_digest_mismatch", packet["blocking_reasons"])
+        self.assertFalse(packet["handoff_source_proven"])
+        self.assertFalse(packet["transcript_tool_result_observed"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_direct_official_handoff_source_is_not_transcript_verifier_input(self) -> None:

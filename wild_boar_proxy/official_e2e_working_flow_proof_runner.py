@@ -105,6 +105,8 @@ _JOIN_REQUIRED_TRUE_FIELDS = (
     "delivery_observed",
     "handoff_payload_bound_to_working_flow",
     "approved_exec_source_delivery_candidate",
+    "official_delivery_candidate_lineage_proven",
+    "official_observation_lineage_file_backed",
     "approved_delivery_surface_proven",
     "codex_exec_assistant_continuation_proven",
     "codex_working_flow_delivery_proven",
@@ -442,6 +444,12 @@ def build_official_e2e_working_flow_proof_runner_packet(
         ),
         "codex_working_flow_delivery_proven": bool(
             ok and join_packet.get("codex_working_flow_delivery_proven") is True
+        ),
+        "official_delivery_candidate_lineage_proven": bool(
+            ok and join_packet.get("official_delivery_candidate_lineage_proven") is True
+        ),
+        "official_observation_lineage_file_backed": bool(
+            ok and join_packet.get("official_observation_lineage_file_backed") is True
         ),
         "custom_codex_ui_visibility_proven": False,
         "delivery_counts_as_custom_codex_ui": False,

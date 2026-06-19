@@ -237,6 +237,8 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
         self.assertTrue(packet["delivery_observed"])
         self.assertTrue(packet["handoff_payload_bound_to_working_flow"])
         self.assertTrue(packet["approved_exec_source_delivery_candidate"])
+        self.assertTrue(packet["official_delivery_candidate_lineage_proven"])
+        self.assertTrue(packet["official_observation_lineage_file_backed"])
         self.assertTrue(packet["approved_delivery_surface_proven"])
         self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
@@ -315,6 +317,16 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
                 {**delivery, "codex_working_flow_delivery_proven": False},
                 _file_metadata(),
                 "codex_working_flow_delivery_not_proven",
+            ),
+            "lineage_not_proven": (
+                {**delivery, "official_delivery_candidate_lineage_proven": False},
+                _file_metadata(),
+                "official_working_flow_delivery_join_lineage_not_proven",
+            ),
+            "lineage_not_file_backed": (
+                {**delivery, "official_observation_lineage_file_backed": False},
+                _file_metadata(),
+                "official_working_flow_delivery_join_lineage_not_file_backed",
             ),
             "missing_pass_through_digest": (
                 {**delivery, "working_flow_source_prompt_digest": ""},
