@@ -510,6 +510,18 @@ def build_official_mcp_working_flow_delivery_join_packet(
     working_flow_source_runtime_context_digest = _hex_sha256(
         working_flow.get("source_runtime_context_digest")
     )
+    working_flow_source_hook_event_digest = _hex_sha256(
+        working_flow.get("source_hook_event_digest")
+    )
+    working_flow_source_hook_thread_digest = _hex_sha256(
+        working_flow.get("source_hook_thread_digest")
+    )
+    working_flow_source_hook_turn_digest = _hex_sha256(
+        working_flow.get("source_hook_turn_digest")
+    )
+    working_flow_source_hook_session_digest = _hex_sha256(
+        working_flow.get("source_hook_session_digest")
+    )
     working_flow_selected_route_digest = _hex_sha256(
         working_flow.get("selected_api_route_id_sha256")
     )
@@ -613,6 +625,18 @@ def build_official_mcp_working_flow_delivery_join_packet(
         ),
         "working_flow_source_runtime_context_digest": (
             working_flow_source_runtime_context_digest if ok else ""
+        ),
+        "working_flow_source_hook_event_digest": (
+            working_flow_source_hook_event_digest if ok else ""
+        ),
+        "working_flow_source_hook_thread_digest": (
+            working_flow_source_hook_thread_digest if ok else ""
+        ),
+        "working_flow_source_hook_turn_digest": (
+            working_flow_source_hook_turn_digest if ok else ""
+        ),
+        "working_flow_source_hook_session_digest": (
+            working_flow_source_hook_session_digest if ok else ""
         ),
         "working_flow_selected_api_route_id_sha256": (
             working_flow_selected_route_digest if ok else ""

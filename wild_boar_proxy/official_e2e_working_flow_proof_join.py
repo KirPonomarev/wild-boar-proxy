@@ -209,6 +209,10 @@ def _real_hook_contract_failures(
         or _hex_sha256(source.get("hook_turn_digest"))
     ):
         failures.append("hook_thread_or_turn_digest_missing")
+    if not _hex_sha256(source.get("hook_event_digest")):
+        failures.append("hook_event_digest_missing")
+    if not _hex_sha256(source.get("hook_session_digest")):
+        failures.append("hook_session_digest_missing")
     return sorted(set(failures))
 
 
@@ -332,6 +336,14 @@ def _delivery_join_contract_failures(
             "working_flow_source_runtime_context_digest_missing",
         ),
         (
+            "working_flow_source_hook_event_digest",
+            "working_flow_source_hook_event_digest_missing",
+        ),
+        (
+            "working_flow_source_hook_session_digest",
+            "working_flow_source_hook_session_digest_missing",
+        ),
+        (
             "working_flow_selected_api_route_id_sha256",
             "working_flow_selected_route_digest_missing",
         ),
@@ -350,6 +362,11 @@ def _delivery_join_contract_failures(
     ):
         if not _hex_sha256(delivery.get(field)):
             failures.append(reason)
+    if not (
+        _hex_sha256(delivery.get("working_flow_source_hook_thread_digest"))
+        or _hex_sha256(delivery.get("working_flow_source_hook_turn_digest"))
+    ):
+        failures.append("working_flow_source_hook_thread_or_turn_digest_missing")
     return sorted(set(failures))
 
 
@@ -467,6 +484,16 @@ def _digest_binding_failures(
             "working_flow_controlled_provider_response_digest",
             "controlled_provider_response_digest_mismatch",
         ),
+        (
+            "hook_event_digest",
+            "working_flow_source_hook_event_digest",
+            "hook_event_digest_mismatch",
+        ),
+        (
+            "hook_session_digest",
+            "working_flow_source_hook_session_digest",
+            "hook_session_digest_mismatch",
+        ),
     )
     for source_field, delivery_field, reason in bindings:
         source_digest = _hex_sha256(real_hook.get(source_field))
@@ -477,6 +504,22 @@ def _digest_binding_failures(
             failures.append(f"{delivery_field}_missing")
         elif source_digest != delivery_digest:
             failures.append(reason)
+    hook_thread_digest = _hex_sha256(real_hook.get("hook_thread_digest"))
+    hook_turn_digest = _hex_sha256(real_hook.get("hook_turn_digest"))
+    working_flow_thread_digest = _hex_sha256(
+        delivery.get("working_flow_source_hook_thread_digest")
+    )
+    working_flow_turn_digest = _hex_sha256(
+        delivery.get("working_flow_source_hook_turn_digest")
+    )
+    thread_bound = bool(hook_thread_digest and hook_thread_digest == working_flow_thread_digest)
+    turn_bound = bool(hook_turn_digest and hook_turn_digest == working_flow_turn_digest)
+    if hook_thread_digest and working_flow_thread_digest and not thread_bound:
+        failures.append("hook_thread_digest_mismatch")
+    if hook_turn_digest and working_flow_turn_digest and not turn_bound:
+        failures.append("hook_turn_digest_mismatch")
+    if not (thread_bound or turn_bound):
+        failures.append("hook_thread_or_turn_digest_mismatch")
     return sorted(set(failures))
 
 
@@ -541,6 +584,10 @@ def build_official_e2e_working_flow_proof_join_packet(
         delivery.get("working_flow_handoff_payload_digest")
     )
     transcript_digest = _hex_sha256(delivery.get("codex_exec_transcript_sha256"))
+    hook_event_digest = _hex_sha256(real_hook.get("hook_event_digest"))
+    hook_thread_digest = _hex_sha256(real_hook.get("hook_thread_digest"))
+    hook_turn_digest = _hex_sha256(real_hook.get("hook_turn_digest"))
+    hook_session_digest = _hex_sha256(real_hook.get("hook_session_digest"))
 
     extra = {
         **metadata,
@@ -595,6 +642,35 @@ def build_official_e2e_working_flow_proof_join_packet(
         ),
         "thread_or_turn_digest_bound": bool(
             ok and real_hook.get("thread_or_turn_digest_bound") is True
+        ),
+        "hook_event_digest": hook_event_digest if ok else "",
+        "hook_thread_digest": hook_thread_digest if ok else "",
+        "hook_turn_digest": hook_turn_digest if ok else "",
+        "hook_session_digest": hook_session_digest if ok else "",
+        "hook_event_digest_bound_to_working_flow": bool(
+            ok
+            and hook_event_digest
+            == _hex_sha256(delivery.get("working_flow_source_hook_event_digest"))
+        ),
+        "hook_thread_or_turn_digest_bound_to_working_flow": bool(
+            ok
+            and (
+                (
+                    hook_thread_digest
+                    and hook_thread_digest
+                    == _hex_sha256(delivery.get("working_flow_source_hook_thread_digest"))
+                )
+                or (
+                    hook_turn_digest
+                    and hook_turn_digest
+                    == _hex_sha256(delivery.get("working_flow_source_hook_turn_digest"))
+                )
+            )
+        ),
+        "hook_session_digest_bound_to_working_flow": bool(
+            ok
+            and hook_session_digest
+            == _hex_sha256(delivery.get("working_flow_source_hook_session_digest"))
         ),
         "working_flow_hook_prompt_digest_bound": bool(
             ok and delivery.get("working_flow_hook_prompt_digest_bound") is True

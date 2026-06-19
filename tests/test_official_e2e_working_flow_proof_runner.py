@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -37,11 +38,17 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _inputs_payload(
     *,
     real_hook_file: str = "real-hook.json",
     delivery_join_file: str = "delivery-join.json",
     proof_run_id: str = "WBP_REPEATABLE_E2E_RUN_001",
+    expected_real_hook_sha256: str = "a" * 64,
+    expected_delivery_join_sha256: str = "b" * 64,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -49,6 +56,10 @@ def _inputs_payload(
         "proof_run_id": proof_run_id,
         "real_custom_hook_proof_file": real_hook_file,
         "official_working_flow_delivery_join_file": delivery_join_file,
+        "expected_real_custom_hook_proof_file_sha256": expected_real_hook_sha256,
+        "expected_official_working_flow_delivery_join_file_sha256": (
+            expected_delivery_join_sha256
+        ),
     }
 
 
@@ -60,7 +71,13 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
             root = Path(temp_dir)
             _write_json(root / "real-hook.json", real_hook)
             _write_json(root / "delivery-join.json", delivery)
-            _write_json(root / "runner-inputs.json", _inputs_payload())
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256=_file_sha256(root / "real-hook.json"),
+                    expected_delivery_join_sha256=_file_sha256(root / "delivery-join.json"),
+                ),
+            )
 
             packet = runner.run_official_e2e_working_flow_proof_runner_command(
                 inputs_file=str(root / "runner-inputs.json"),
@@ -80,11 +97,26 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
         self.assertTrue(packet["user_prompt_submit_hook_ran"])
         self.assertTrue(packet["hook_prompt_digest_bound"])
         self.assertTrue(packet["hook_runtime_context_digest_bound"])
+        self.assertTrue(packet["hook_event_digest_bound_to_working_flow"])
+        self.assertTrue(packet["hook_thread_or_turn_digest_bound_to_working_flow"])
+        self.assertTrue(packet["hook_session_digest_bound_to_working_flow"])
         self.assertTrue(packet["api_lane_called"])
         self.assertTrue(packet["live_provider_response_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
         self.assertFalse(packet["official_e2e_runner_inputs_file_path_recorded"])
         self.assertEqual(len(packet["official_e2e_runner_inputs_file_sha256"]), 64)
+        self.assertTrue(packet["real_custom_hook_proof_file_sha256_bound_to_runner_inputs"])
+        self.assertTrue(
+            packet["official_working_flow_delivery_join_file_sha256_bound_to_runner_inputs"]
+        )
+        self.assertEqual(
+            packet["expected_real_custom_hook_proof_file_sha256"],
+            packet["observed_real_custom_hook_proof_file_sha256"],
+        )
+        self.assertEqual(
+            packet["expected_official_working_flow_delivery_join_file_sha256"],
+            packet["observed_official_working_flow_delivery_join_file_sha256"],
+        )
         self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_ui_native_or_product_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)
@@ -103,6 +135,8 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
                 "official_e2e_runner_inputs_file_mapping": True,
                 "official_e2e_runner_inputs_file_path_recorded": False,
                 "official_e2e_runner_inputs_file_sha256": "a" * 64,
+                "real_custom_hook_proof_file_sha256": "a" * 64,
+                "official_working_flow_delivery_join_file_sha256": "b" * 64,
             },
             secret_values=_secret_values(),
         )
@@ -136,6 +170,8 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
                 "official_e2e_runner_inputs_file_mapping": True,
                 "official_e2e_runner_inputs_file_path_recorded": False,
                 "official_e2e_runner_inputs_file_sha256": "a" * 64,
+                "real_custom_hook_proof_file_sha256": "a" * 64,
+                "official_working_flow_delivery_join_file_sha256": "b" * 64,
             },
             secret_values=[str(payload["proof_run_id"])],
         )
@@ -236,14 +272,101 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
             packet["machine_error_code"],
-            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_JOIN_INVALID,
+            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_INPUT_INVALID,
         )
-        self.assertTrue(packet["runner_inputs_valid"])
+        self.assertFalse(packet["runner_inputs_valid"])
         self.assertFalse(packet["official_e2e_join_valid"])
-        self.assertIn("real_custom_hook_proof_file_not_read", packet["blocking_reasons"])
+        self.assertIn(
+            "real_custom_hook_proof_file_sha256_not_bound_to_runner_inputs",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "official_working_flow_delivery_join_file_sha256_not_bound_to_runner_inputs",
+            packet["blocking_reasons"],
+        )
         self.assertFalse(packet["official_e2e_working_flow_proven"])
         _assert_no_ui_native_or_product_claim(self, packet)
         _assert_no_raw_prompt_route_or_provider(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_runner_blocks_real_hook_file_sha_mismatch_before_join(self) -> None:
+        real_hook, delivery = _positive_pair()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _write_json(root / "real-hook.json", real_hook)
+            _write_json(root / "delivery-join.json", delivery)
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256="0" * 64,
+                    expected_delivery_join_sha256=_file_sha256(root / "delivery-join.json"),
+                ),
+            )
+
+            with mock.patch(
+                "wild_boar_proxy.official_e2e_working_flow_proof_runner."
+                "run_official_e2e_working_flow_proof_join_command"
+            ) as join_command:
+                packet = runner.run_official_e2e_working_flow_proof_runner_command(
+                    inputs_file=str(root / "runner-inputs.json"),
+                )
+
+        join_command.assert_not_called()
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_INPUT_INVALID,
+        )
+        self.assertIn(
+            "real_custom_hook_proof_file_sha256_not_bound_to_runner_inputs",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["real_custom_hook_proof_file_sha256_bound_to_runner_inputs"])
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        _assert_no_ui_native_or_product_claim(self, packet)
+        _assert_no_writes(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_runner_blocks_delivery_join_file_sha_mismatch_before_join(self) -> None:
+        real_hook, delivery = _positive_pair()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _write_json(root / "real-hook.json", real_hook)
+            _write_json(root / "delivery-join.json", delivery)
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256=_file_sha256(root / "real-hook.json"),
+                    expected_delivery_join_sha256="0" * 64,
+                ),
+            )
+
+            with mock.patch(
+                "wild_boar_proxy.official_e2e_working_flow_proof_runner."
+                "run_official_e2e_working_flow_proof_join_command"
+            ) as join_command:
+                packet = runner.run_official_e2e_working_flow_proof_runner_command(
+                    inputs_file=str(root / "runner-inputs.json"),
+                )
+
+        join_command.assert_not_called()
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            runner.OFFICIAL_E2E_WORKING_FLOW_PROOF_RUNNER_INPUT_INVALID,
+        )
+        self.assertIn(
+            "official_working_flow_delivery_join_file_sha256_not_bound_to_runner_inputs",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(
+            packet["official_working_flow_delivery_join_file_sha256_bound_to_runner_inputs"]
+        )
+        self.assertFalse(packet["official_e2e_working_flow_proven"])
+        _assert_no_ui_native_or_product_claim(self, packet)
         _assert_no_writes(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
@@ -256,7 +379,13 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
             root = Path(temp_dir)
             _write_json(root / "real-hook.json", real_hook)
             _write_json(root / "delivery-join.json", delivery)
-            _write_json(root / "runner-inputs.json", _inputs_payload())
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256=_file_sha256(root / "real-hook.json"),
+                    expected_delivery_join_sha256=_file_sha256(root / "delivery-join.json"),
+                ),
+            )
 
             packet = runner.run_official_e2e_working_flow_proof_runner_command(
                 inputs_file=str(root / "runner-inputs.json"),
@@ -281,7 +410,13 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
             root = Path(temp_dir)
             _write_json(root / "real-hook.json", real_hook)
             _write_json(root / "delivery-join.json", delivery)
-            _write_json(root / "runner-inputs.json", _inputs_payload())
+            _write_json(
+                root / "runner-inputs.json",
+                _inputs_payload(
+                    expected_real_hook_sha256=_file_sha256(root / "real-hook.json"),
+                    expected_delivery_join_sha256=_file_sha256(root / "delivery-join.json"),
+                ),
+            )
 
             packet = runner.run_official_e2e_working_flow_proof_runner_command(
                 inputs_file=str(root / "runner-inputs.json"),
@@ -323,6 +458,8 @@ class OfficialE2EWorkingFlowProofRunnerTests(unittest.TestCase):
                 "official_e2e_runner_inputs_file_mapping": True,
                 "official_e2e_runner_inputs_file_path_recorded": False,
                 "official_e2e_runner_inputs_file_sha256": "a" * 64,
+                "real_custom_hook_proof_file_sha256": "a" * 64,
+                "official_working_flow_delivery_join_file_sha256": "b" * 64,
             },
             secret_values=_secret_values(),
         )

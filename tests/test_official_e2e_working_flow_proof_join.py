@@ -206,6 +206,13 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
         self.assertTrue(packet["hook_prompt_digest_bound"])
         self.assertTrue(packet["hook_runtime_context_digest_bound"])
         self.assertTrue(packet["thread_or_turn_digest_bound"])
+        self.assertEqual(packet["hook_event_digest"], real_hook["hook_event_digest"])
+        self.assertEqual(packet["hook_thread_digest"], real_hook["hook_thread_digest"])
+        self.assertEqual(packet["hook_turn_digest"], real_hook["hook_turn_digest"])
+        self.assertEqual(packet["hook_session_digest"], real_hook["hook_session_digest"])
+        self.assertTrue(packet["hook_event_digest_bound_to_working_flow"])
+        self.assertTrue(packet["hook_thread_or_turn_digest_bound_to_working_flow"])
+        self.assertTrue(packet["hook_session_digest_bound_to_working_flow"])
         self.assertTrue(packet["working_flow_hook_prompt_digest_bound"])
         self.assertTrue(packet["working_flow_hook_runtime_context_digest_bound"])
         self.assertEqual(packet["prompt_digest"], real_hook["prompt_digest"])
@@ -314,6 +321,20 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
                 _file_metadata(),
                 "working_flow_source_prompt_digest_missing",
             ),
+            "missing_hook_event_digest": (
+                {**delivery, "working_flow_source_hook_event_digest": ""},
+                _file_metadata(),
+                "working_flow_source_hook_event_digest_missing",
+            ),
+            "missing_hook_thread_and_turn_digest": (
+                {
+                    **delivery,
+                    "working_flow_source_hook_thread_digest": "",
+                    "working_flow_source_hook_turn_digest": "",
+                },
+                _file_metadata(),
+                "working_flow_source_hook_thread_or_turn_digest_missing",
+            ),
         }
         for name, (delivery_source, metadata, reason) in cases.items():
             with self.subTest(name=name):
@@ -360,6 +381,18 @@ class OfficialE2EWorkingFlowProofJoinTests(unittest.TestCase):
             "route_bound_request_mismatch": (
                 {**delivery, "working_flow_route_bound_request_sha256": "b" * 64},
                 "route_bound_request_digest_mismatch",
+            ),
+            "hook_event_mismatch": (
+                {**delivery, "working_flow_source_hook_event_digest": "a" * 64},
+                "hook_event_digest_mismatch",
+            ),
+            "hook_thread_mismatch": (
+                {**delivery, "working_flow_source_hook_thread_digest": "9" * 64},
+                "hook_thread_digest_mismatch",
+            ),
+            "hook_session_mismatch": (
+                {**delivery, "working_flow_source_hook_session_digest": "8" * 64},
+                "hook_session_digest_mismatch",
             ),
         }
         for name, (delivery_source, reason) in cases.items():

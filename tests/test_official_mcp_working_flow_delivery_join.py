@@ -237,6 +237,22 @@ class OfficialMcpWorkingFlowDeliveryJoinTests(unittest.TestCase):
             positive_working_flow["source_runtime_context_digest"],
         )
         self.assertEqual(
+            packet["working_flow_source_hook_event_digest"],
+            positive_working_flow["source_hook_event_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_source_hook_thread_digest"],
+            positive_working_flow["source_hook_thread_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_source_hook_turn_digest"],
+            positive_working_flow["source_hook_turn_digest"],
+        )
+        self.assertEqual(
+            packet["working_flow_source_hook_session_digest"],
+            positive_working_flow["source_hook_session_digest"],
+        )
+        self.assertEqual(
             packet["working_flow_selected_api_route_id_sha256"],
             positive_working_flow["selected_api_route_id_sha256"],
         )

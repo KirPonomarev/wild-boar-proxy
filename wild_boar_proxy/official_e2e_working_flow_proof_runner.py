@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .command_effects import EFFECT_PROBE
+from .codex_transcript_delivery_observation import _hex_sha256
 from .core import packets
 from .official_e2e_working_flow_proof_join import (
     OFFICIAL_E2E_WORKING_FLOW_PROOF_JOIN_OK,
@@ -43,6 +44,8 @@ _INPUT_ALLOWED_FIELDS = {
     "proof_run_id",
     "real_custom_hook_proof_file",
     "official_working_flow_delivery_join_file",
+    "expected_real_custom_hook_proof_file_sha256",
+    "expected_official_working_flow_delivery_join_file_sha256",
 }
 _INPUT_RAW_OR_SECRET_FIELDS = {
     "prompt",
@@ -77,6 +80,9 @@ _JOIN_REQUIRED_TRUE_FIELDS = (
     "hook_prompt_digest_bound",
     "hook_runtime_context_digest_bound",
     "thread_or_turn_digest_bound",
+    "hook_event_digest_bound_to_working_flow",
+    "hook_thread_or_turn_digest_bound_to_working_flow",
+    "hook_session_digest_bound_to_working_flow",
     "working_flow_hook_prompt_digest_bound",
     "working_flow_hook_runtime_context_digest_bound",
     "prompt_digest_bound_to_working_flow",
@@ -199,6 +205,39 @@ def _input_contract_failures(
     proof_run_id = inputs.get("proof_run_id")
     if proof_run_id is not None and not packets.is_command_value_token(proof_run_id):
         failures.append("proof_run_id_not_machine_token")
+    for field, reason in (
+        (
+            "expected_real_custom_hook_proof_file_sha256",
+            "runner_inputs_expected_real_custom_hook_proof_file_sha256",
+        ),
+        (
+            "expected_official_working_flow_delivery_join_file_sha256",
+            "runner_inputs_expected_official_working_flow_delivery_join_file_sha256",
+        ),
+    ):
+        expected_digest = inputs.get(field)
+        if not expected_digest:
+            failures.append(f"{reason}_missing")
+        elif not _hex_sha256(expected_digest):
+            failures.append(f"{reason}_invalid")
+    expected_real_hook_sha = _hex_sha256(
+        inputs.get("expected_real_custom_hook_proof_file_sha256")
+    )
+    observed_real_hook_sha = _hex_sha256(
+        metadata.get("real_custom_hook_proof_file_sha256")
+    )
+    if expected_real_hook_sha and expected_real_hook_sha != observed_real_hook_sha:
+        failures.append("real_custom_hook_proof_file_sha256_not_bound_to_runner_inputs")
+    expected_delivery_sha = _hex_sha256(
+        inputs.get("expected_official_working_flow_delivery_join_file_sha256")
+    )
+    observed_delivery_sha = _hex_sha256(
+        metadata.get("official_working_flow_delivery_join_file_sha256")
+    )
+    if expected_delivery_sha and expected_delivery_sha != observed_delivery_sha:
+        failures.append(
+            "official_working_flow_delivery_join_file_sha256_not_bound_to_runner_inputs"
+        )
     return sorted(set(failures))
 
 
@@ -308,6 +347,18 @@ def build_official_e2e_working_flow_proof_runner_packet(
         join_failures=join_failures,
     )
     proof_run_id = _safe_text(inputs.get("proof_run_id"), limit=96)
+    expected_real_hook_sha = _hex_sha256(
+        inputs.get("expected_real_custom_hook_proof_file_sha256")
+    )
+    observed_real_hook_sha = _hex_sha256(
+        metadata.get("real_custom_hook_proof_file_sha256")
+    )
+    expected_delivery_sha = _hex_sha256(
+        inputs.get("expected_official_working_flow_delivery_join_file_sha256")
+    )
+    observed_delivery_sha = _hex_sha256(
+        metadata.get("official_working_flow_delivery_join_file_sha256")
+    )
 
     extra = {
         **metadata,
@@ -321,6 +372,22 @@ def build_official_e2e_working_flow_proof_runner_packet(
         and not isinstance(inputs.get("schema_version"), bool)
         else 0,
         "runner_inputs_valid": not input_failures,
+        "expected_real_custom_hook_proof_file_sha256": expected_real_hook_sha,
+        "observed_real_custom_hook_proof_file_sha256": observed_real_hook_sha,
+        "real_custom_hook_proof_file_sha256_bound_to_runner_inputs": bool(
+            not input_failures
+            and expected_real_hook_sha
+            and observed_real_hook_sha
+            and expected_real_hook_sha == observed_real_hook_sha
+        ),
+        "expected_official_working_flow_delivery_join_file_sha256": expected_delivery_sha,
+        "observed_official_working_flow_delivery_join_file_sha256": observed_delivery_sha,
+        "official_working_flow_delivery_join_file_sha256_bound_to_runner_inputs": bool(
+            not input_failures
+            and expected_delivery_sha
+            and observed_delivery_sha
+            and expected_delivery_sha == observed_delivery_sha
+        ),
         "runner_inputs_unsafe": bool(unsafe_failures),
         "runner_input_failures": input_failures,
         "runner_unsafe_failures": unsafe_failures,
@@ -356,6 +423,17 @@ def build_official_e2e_working_flow_proof_runner_packet(
         ),
         "hook_runtime_context_digest_bound": bool(
             ok and join_packet.get("hook_runtime_context_digest_bound") is True
+        ),
+        "hook_event_digest_bound_to_working_flow": bool(
+            ok and join_packet.get("hook_event_digest_bound_to_working_flow") is True
+        ),
+        "hook_thread_or_turn_digest_bound_to_working_flow": bool(
+            ok
+            and join_packet.get("hook_thread_or_turn_digest_bound_to_working_flow")
+            is True
+        ),
+        "hook_session_digest_bound_to_working_flow": bool(
+            ok and join_packet.get("hook_session_digest_bound_to_working_flow") is True
         ),
         "api_lane_called": bool(ok and join_packet.get("api_lane_called") is True),
         "dispatch_proven": bool(ok and join_packet.get("dispatch_proven") is True),
@@ -430,19 +508,27 @@ def run_official_e2e_working_flow_proof_runner_command(
         **inputs_metadata,
         "official_e2e_runner_inputs_file_sha256": _file_sha256(inputs_path),
     }
+    real_custom_hook_path = _resolve_declared_file(
+        inputs_file=inputs_path,
+        declared=inputs_packet.get("real_custom_hook_proof_file"),
+    )
+    delivery_join_path = _resolve_declared_file(
+        inputs_file=inputs_path,
+        declared=inputs_packet.get("official_working_flow_delivery_join_file"),
+    )
+    metadata["real_custom_hook_proof_file_sha256"] = (
+        _file_sha256(Path(real_custom_hook_path)) if real_custom_hook_path else ""
+    )
+    metadata["official_working_flow_delivery_join_file_sha256"] = (
+        _file_sha256(Path(delivery_join_path)) if delivery_join_path else ""
+    )
     input_failures = _input_contract_failures(inputs_packet, metadata)
     unsafe_failures = _input_unsafe_failures(inputs_packet)
     join_packet: dict[str, Any] = {}
     if not input_failures and not unsafe_failures:
         join_packet = run_official_e2e_working_flow_proof_join_command(
-            real_custom_hook_proof_file=_resolve_declared_file(
-                inputs_file=inputs_path,
-                declared=inputs_packet.get("real_custom_hook_proof_file"),
-            ),
-            official_working_flow_delivery_join_file=_resolve_declared_file(
-                inputs_file=inputs_path,
-                declared=inputs_packet.get("official_working_flow_delivery_join_file"),
-            ),
+            real_custom_hook_proof_file=real_custom_hook_path,
+            official_working_flow_delivery_join_file=delivery_join_path,
         )
     return build_official_e2e_working_flow_proof_runner_packet(
         runner_inputs_packet=inputs_packet,

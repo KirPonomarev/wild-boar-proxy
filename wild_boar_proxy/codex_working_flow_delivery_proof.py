@@ -1423,6 +1423,10 @@ def build_codex_working_flow_delivery_proof_packet(
         "source_runtime_context_digest": _hex_sha256(
             source.get("runtime_context_digest")
         ),
+        "source_hook_event_digest": _hex_sha256(source.get("hook_event_digest")),
+        "source_hook_thread_digest": _hex_sha256(source.get("hook_thread_digest")),
+        "source_hook_turn_digest": _hex_sha256(source.get("hook_turn_digest")),
+        "source_hook_session_digest": _hex_sha256(source.get("hook_session_digest")),
         "thread_or_turn_digest_bound": (
             source.get("thread_or_turn_digest_bound") is True
         ),
