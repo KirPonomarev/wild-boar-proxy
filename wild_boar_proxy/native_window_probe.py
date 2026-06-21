@@ -81,6 +81,8 @@ CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
 CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
 CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 12.0
 CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
+CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
+CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS = 0.25
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
     {
         "cdp_renderer_input_surface_not_observed",
@@ -1185,6 +1187,156 @@ def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _cdp_wait_for_prompt_acceptance(
+    ws_url: str,
+    *,
+    expected_prompt: str,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    expected_prompt = str(expected_prompt or "")
+    expected_literal = json.dumps(expected_prompt, ensure_ascii=False)
+    expression = f"""
+(() => {{
+  const expectedPrompt = {expected_literal};
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').replace(/\\r\\n/g, '\\n').trim();
+  const inputText = (node) => (
+    ('value' in node ? node.value : (node.innerText || node.textContent || '')) || ''
+  );
+  const nodes = Array.from(document.querySelectorAll(selector)).filter((node) => visible(node));
+  const promptInputs = nodes.filter((node) => {{
+    const text = inputText(node);
+    const normalizedText = normalize(text);
+    return expectedPrompt.length > 0 && (
+      text === expectedPrompt ||
+      normalizedText === expectedPrompt ||
+      text.includes(expectedPrompt)
+    );
+  }});
+  const inputLengths = nodes.map((node) => inputText(node).length);
+  const submitLikeButtons = Array.from(document.querySelectorAll('button')).filter((button) => {{
+    const label = [
+      button.getAttribute('aria-label') || '',
+      button.getAttribute('title') || '',
+      button.innerText || '',
+      button.textContent || ''
+    ].join(' ').toLowerCase();
+    return visible(button) && (
+      button.type === 'submit' ||
+      label.includes('send') ||
+      label.includes('submit') ||
+      label.includes('отправ') ||
+      label.includes('arrow')
+    );
+  }});
+  return {{
+    promptAcceptanceScanPerformed: true,
+    promptAccepted: promptInputs.length === 0,
+    promptStillInInput: promptInputs.length > 0,
+    inputCandidateCount: nodes.length,
+    inputContainingPromptCandidateCount: promptInputs.length,
+    maxVisibleInputLength: inputLengths.length ? Math.max(...inputLengths) : 0,
+    disabledSubmitLikeButtonCount: submitLikeButtons.filter((button) => button.disabled).length,
+    submitLikeButtonCount: submitLikeButtons.length,
+    textValueCaptured: false,
+    rawDomExposed: false,
+    rawPromptRecorded: false
+  }};
+}})()
+""".strip()
+    if timeout_seconds is None:
+        timeout_seconds = CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS
+    timeout_seconds = max(0.0, min(float(timeout_seconds), CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS))
+    last_packet: dict[str, Any] = {}
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3650,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            return {
+                "native_prompt_turn_accepted": False,
+                "native_prompt_acceptance_scan_performed": False,
+                "native_prompt_acceptance_machine_error_code": (
+                    f"CUSTOM_NATIVE_PROMPT_ACCEPTANCE_CDP_FAILED:{type(exc).__name__}"
+                ),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        last_packet = _cdp_result_value(packet)
+        if last_packet.get("promptAccepted") is True:
+            return {
+                "native_prompt_turn_accepted": True,
+                "native_prompt_still_in_input": False,
+                "native_prompt_acceptance_scan_performed": (
+                    last_packet.get("promptAcceptanceScanPerformed") is True
+                ),
+                "native_prompt_acceptance_machine_error_code": "OK",
+                "native_prompt_acceptance_input_candidate_count": int(
+                    last_packet.get("inputCandidateCount") or 0
+                ),
+                "native_prompt_acceptance_input_containing_prompt_candidate_count": int(
+                    last_packet.get("inputContainingPromptCandidateCount") or 0
+                ),
+                "native_prompt_acceptance_max_visible_input_length": int(
+                    last_packet.get("maxVisibleInputLength") or 0
+                ),
+                "native_prompt_acceptance_disabled_submit_like_button_count": int(
+                    last_packet.get("disabledSubmitLikeButtonCount") or 0
+                ),
+                "native_prompt_acceptance_submit_like_button_count": int(
+                    last_packet.get("submitLikeButtonCount") or 0
+                ),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        if timeout_seconds <= 0 or time.monotonic() >= deadline:
+            break
+        time.sleep(CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS)
+    return {
+        "native_prompt_turn_accepted": False,
+        "native_prompt_still_in_input": last_packet.get("promptStillInInput") is True,
+        "native_prompt_acceptance_scan_performed": bool(last_packet),
+        "native_prompt_acceptance_machine_error_code": "CUSTOM_NATIVE_PROMPT_NOT_ACCEPTED_BY_CODEX_FLOW",
+        "native_prompt_acceptance_input_candidate_count": int(
+            last_packet.get("inputCandidateCount") or 0
+        ),
+        "native_prompt_acceptance_input_containing_prompt_candidate_count": int(
+            last_packet.get("inputContainingPromptCandidateCount") or 0
+        ),
+        "native_prompt_acceptance_max_visible_input_length": int(
+            last_packet.get("maxVisibleInputLength") or 0
+        ),
+        "native_prompt_acceptance_disabled_submit_like_button_count": int(
+            last_packet.get("disabledSubmitLikeButtonCount") or 0
+        ),
+        "native_prompt_acceptance_submit_like_button_count": int(
+            last_packet.get("submitLikeButtonCount") or 0
+        ),
+        "raw_dom_exposed": False,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "text_value_captured": False,
+    }
+
+
 def _native_free_text_observer_defaults() -> dict[str, Any]:
     return {
         "native_agent_provider_call_directly_observed": False,
@@ -1272,15 +1424,28 @@ def _cdp_observe_custom_response_token(
     const text = normalize(node.innerText || node.textContent);
     return text.includes(expectedText) && !hasVisibleChildWith(node, expectedText);
   }});
-  const promptEchoLeafs = tokenLeafs.filter((node) => {{
-    const text = normalize(node.innerText || node.textContent);
-    return promptMarkers.some((marker) => marker && text.includes(marker));
-  }});
-  const exactLeafs = tokenLeafs.filter((node) => normalize(node.innerText || node.textContent) === expectedText);
-  const responseLikeLeafs = tokenLeafs.filter((node) => {{
-    const text = normalize(node.innerText || node.textContent);
-    return text === expectedText && !promptMarkers.some((marker) => marker && text.includes(marker));
-  }});
+      const textLines = (text) => text.split('\\n').map((line) => line.trim()).filter(Boolean);
+      const promptSuffixEchoLeafs = tokenLeafs.filter((node) => {{
+        const text = normalize(node.innerText || node.textContent);
+        const beforeChars = text.indexOf(expectedText);
+        const afterChars = text.length - beforeChars - expectedText.length;
+        return beforeChars > 0 && afterChars === 0 && text.length > expectedText.length;
+      }});
+      const promptEchoLeafs = tokenLeafs.filter((node) => {{
+        const text = normalize(node.innerText || node.textContent);
+        return promptMarkers.some((marker) => marker && text.includes(marker)) ||
+          promptSuffixEchoLeafs.includes(node);
+      }});
+      const exactLeafs = tokenLeafs.filter((node) => {{
+        const text = normalize(node.innerText || node.textContent);
+        return text === expectedText || textLines(text).some((line) => line === expectedText);
+      }});
+      const responseLikeLeafs = tokenLeafs.filter((node) => {{
+        const text = normalize(node.innerText || node.textContent);
+        const tokenLineExact = text === expectedText ||
+          textLines(text).some((line) => line === expectedText);
+        return tokenLineExact && !promptEchoLeafs.includes(node);
+      }});
   const subagentMarkerLeafs = textElements.filter((node) => {{
     if (hasVisibleChildWith(node, 'Subagents') || hasVisibleChildWith(node, 'Субагенты')) return false;
     const text = normalize(node.innerText || node.textContent).toLowerCase();
@@ -1296,10 +1461,11 @@ def _cdp_observe_custom_response_token(
     textValueCaptured: false,
     rawDomExposed: false,
     rawPromptRecorded: false,
-    tokenLeafCandidateCount: tokenLeafs.length,
-    promptEchoCandidateCount: promptEchoLeafs.length,
-    exactTokenCandidateCount: exactLeafs.length,
-    responseLikeCandidateCount: responseLikeLeafs.length,
+      tokenLeafCandidateCount: tokenLeafs.length,
+      promptEchoCandidateCount: promptEchoLeafs.length,
+      promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
+      exactTokenCandidateCount: exactLeafs.length,
+      responseLikeCandidateCount: responseLikeLeafs.length,
     subagentMarkerCandidateCount: subagentMarkerLeafs.length,
     customResponseExactTokenObserved: responseExactTokenObserved,
     nativeCodexSubagentUsedAsDip: subagentMarkerLeafs.length > 0,
@@ -1354,6 +1520,9 @@ def _cdp_observe_custom_response_token(
                 "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
                 "custom_response_token_leaf_candidate_count": int(value.get("tokenLeafCandidateCount") or 0),
                 "custom_response_prompt_echo_candidate_count": int(value.get("promptEchoCandidateCount") or 0),
+                "custom_response_prompt_suffix_echo_candidate_count": int(
+                    value.get("promptSuffixEchoCandidateCount") or 0
+                ),
                 "custom_response_exact_token_candidate_count": int(value.get("exactTokenCandidateCount") or 0),
                 "custom_response_like_candidate_count": int(value.get("responseLikeCandidateCount") or 0),
                 "native_codex_subagent_marker_candidate_count": int(value.get("subagentMarkerCandidateCount") or 0),
@@ -1371,8 +1540,14 @@ def _cdp_observe_custom_response_token(
         "native_free_text_observer_source": "bounded_cdp_response_token_scan",
         "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
         "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
+        "custom_response_text_read_without_storing": (
+            last_packet.get("responseTextReadWithoutStoring") is True
+        ),
         "custom_response_token_leaf_candidate_count": int(last_packet.get("tokenLeafCandidateCount") or 0),
         "custom_response_prompt_echo_candidate_count": int(last_packet.get("promptEchoCandidateCount") or 0),
+        "custom_response_prompt_suffix_echo_candidate_count": int(
+            last_packet.get("promptSuffixEchoCandidateCount") or 0
+        ),
         "custom_response_exact_token_candidate_count": int(last_packet.get("exactTokenCandidateCount") or 0),
         "custom_response_like_candidate_count": int(last_packet.get("responseLikeCandidateCount") or 0),
         "native_codex_subagent_marker_candidate_count": int(last_packet.get("subagentMarkerCandidateCount") or 0),
@@ -2576,6 +2751,38 @@ def _cdp_submit_prompt_to_app_page(
   };
 })()
 """.strip()
+    enter_submit_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const textNode = document.activeElement && visible(document.activeElement)
+    ? document.activeElement
+    : Array.from(document.querySelectorAll(selector)).find((node) => visible(node));
+  if (!textNode) {
+    return {
+      submitted: false,
+      submitButtonObserved: false,
+      submitMechanism: 'none',
+      textValueCaptured: false
+    };
+  }
+  textNode.focus();
+  textNode.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+  textNode.dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+  return {
+    submitted: true,
+    submitButtonObserved: false,
+    submitMechanism: 'cdp_keyboard_event_enter',
+    textValueCaptured: false
+  };
+})()
+""".strip()
 
     last_error = ""
     for index, page in enumerate(pages, start=1):
@@ -2728,6 +2935,57 @@ def _cdp_submit_prompt_to_app_page(
             if submit_value.get("submitted") is not True:
                 last_error = "cdp_submit_event_failed"
                 continue
+            acceptance_packet = _cdp_wait_for_prompt_acceptance(
+                ws_url,
+                expected_prompt=prompt,
+            )
+            if acceptance_packet.get("native_prompt_turn_accepted") is not True:
+                enter_submit_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3625 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": enter_submit_expression, "returnByValue": True},
+                    },
+                )
+                enter_submit_value = _cdp_result_value(enter_submit_packet)
+                if enter_submit_value.get("submitted") is True:
+                    submit_value["submitMechanism"] = (
+                        f"{str(submit_value.get('submitMechanism') or '')}+"
+                        f"{str(enter_submit_value.get('submitMechanism') or '')}"
+                    ).strip("+")
+                    acceptance_packet = _cdp_wait_for_prompt_acceptance(
+                        ws_url,
+                        expected_prompt=prompt,
+                    )
+            if acceptance_packet.get("native_prompt_turn_accepted") is not True:
+                return _cdp_prompt_submit_blocked_packet(
+                    machine_error_code="CUSTOM_NATIVE_PROMPT_NOT_ACCEPTED_BY_CODEX_FLOW",
+                    human_message="Custom Codex native prompt text remained in the input surface after submit attempts.",
+                    prompt=prompt,
+                    request_id=request_id,
+                    blocking_reasons=["custom_native_prompt_not_accepted_by_codex_flow"],
+                    observed_pid=observed_pid,
+                    cdp_port=port,
+                    cdp_result=str(
+                        acceptance_packet.get("native_prompt_acceptance_machine_error_code") or ""
+                    ),
+                    allowed_owner_pids=allowed_pid_set,
+                ) | {
+                    "cdp_port_owner_pids": owner_result,
+                    "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+                    "cdp_page_target_count": len(pages),
+                    "cdp_target_url": str(page.get("url") or ""),
+                    "cdp_target_type": str(page.get("type") or ""),
+                    "cdp_target_bound_to_custom_launch": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "input_text_insert_method": insert_method,
+                    "submit_button_observed": submit_value.get("submitButtonObserved") is True,
+                    "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
+                    **acceptance_packet,
+                    **_native_free_text_observer_defaults(),
+                }
             observer_packet = (
                 _cdp_observe_custom_response_token(
                     ws_url,
@@ -2774,6 +3032,7 @@ def _cdp_submit_prompt_to_app_page(
             "clipboard_restore_attempted": clipboard_restore_attempted,
             "clipboard_restored": clipboard_restored,
             "prompt_submitted": True,
+            **acceptance_packet,
             "submit_button_observed": submit_value.get("submitButtonObserved") is True,
             "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
             **observer_packet,

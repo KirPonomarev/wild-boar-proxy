@@ -511,8 +511,14 @@ def build_custom_codex_ui_visibility_proof_packet(
         "custom_response_like_candidate_count": int(
             native.get("custom_response_like_candidate_count") or 0
         ),
+        "custom_response_token_leaf_candidate_count": int(
+            native.get("custom_response_token_leaf_candidate_count") or 0
+        ),
         "custom_response_prompt_echo_candidate_count": int(
             native.get("custom_response_prompt_echo_candidate_count") or 0
+        ),
+        "custom_response_prompt_suffix_echo_candidate_count": int(
+            native.get("custom_response_prompt_suffix_echo_candidate_count") or 0
         ),
         "native_codex_subagent_absence_proven": (
             native.get("native_codex_subagent_absence_proven") is True

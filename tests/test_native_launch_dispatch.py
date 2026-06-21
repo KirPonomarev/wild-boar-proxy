@@ -1385,6 +1385,26 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     }
                 },
             },
+            {
+                "id": 3650,
+                "result": {
+                    "result": {
+                        "value": {
+                            "promptAcceptanceScanPerformed": True,
+                            "promptAccepted": True,
+                            "promptStillInInput": False,
+                            "inputCandidateCount": 1,
+                            "inputContainingPromptCandidateCount": 0,
+                            "maxVisibleInputLength": 0,
+                            "disabledSubmitLikeButtonCount": 0,
+                            "submitLikeButtonCount": 1,
+                            "textValueCaptured": False,
+                            "rawDomExposed": False,
+                            "rawPromptRecorded": False,
+                        }
+                    }
+                },
+            },
         ]
         with (
             mock.patch(
@@ -1418,6 +1438,8 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["input_text_insert_attempted"])
         self.assertTrue(packet["input_text_insert_succeeded"])
         self.assertTrue(packet["prompt_submitted"])
+        self.assertTrue(packet["native_prompt_turn_accepted"])
+        self.assertFalse(packet["native_prompt_still_in_input"])
         self.assertEqual(packet["submit_mechanism"], "cdp_button_click")
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["raw_dom_exposed"])
@@ -1432,7 +1454,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
         )
         self.assertFalse(packet["secret_value_exposed"])
-        self.assertEqual(cdp_command.call_count, 4)
+        self.assertEqual(cdp_command.call_count, 5)
 
     def test_cdp_prompt_submit_observes_exact_response_token_without_raw_text(self) -> None:
         cdp_packets = [
@@ -1480,6 +1502,26 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 },
             },
             {
+                "id": 3650,
+                "result": {
+                    "result": {
+                        "value": {
+                            "promptAcceptanceScanPerformed": True,
+                            "promptAccepted": True,
+                            "promptStillInInput": False,
+                            "inputCandidateCount": 1,
+                            "inputContainingPromptCandidateCount": 0,
+                            "maxVisibleInputLength": 0,
+                            "disabledSubmitLikeButtonCount": 0,
+                            "submitLikeButtonCount": 1,
+                            "textValueCaptured": False,
+                            "rawDomExposed": False,
+                            "rawPromptRecorded": False,
+                        }
+                    }
+                },
+            },
+            {
                 "id": 3700,
                 "result": {
                     "result": {
@@ -1488,6 +1530,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseTextReadWithoutStoring": True,
                             "tokenLeafCandidateCount": 1,
                             "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
                             "exactTokenCandidateCount": 1,
                             "responseLikeCandidateCount": 1,
                             "subagentMarkerCandidateCount": 0,
@@ -1533,6 +1576,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["prompt_submitted"])
+        self.assertTrue(packet["native_prompt_turn_accepted"])
         self.assertFalse(packet["native_agent_provider_call_directly_observed"])
         self.assertTrue(packet["custom_codex_response_text_read_proven"])
         self.assertTrue(packet["custom_response_exact_token_observed"])
@@ -1546,10 +1590,165 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["raw_dom_exposed"])
         self.assertFalse(packet["raw_prompt_recorded"])
-        self.assertEqual(cdp_command.call_count, 5)
+        self.assertEqual(cdp_command.call_count, 6)
         observer_expression = cdp_command.call_args_list[-1].args[1]["params"]["expression"]
         self.assertIn("expectedText.includes(requestId)", observer_expression)
         self.assertNotIn("requestId,\n    'expected_token'", observer_expression)
+
+    def test_cdp_prompt_submit_blocks_when_prompt_stays_in_input_after_click(self) -> None:
+        cdp_packets = [
+            {
+                "id": 3001,
+                "result": {
+                    "result": {
+                        "value": {
+                            "focused": True,
+                            "readyState": "complete",
+                            "url": "app://-/index.html",
+                            "inputCandidateCount": 1,
+                            "visibleInputCandidateCount": 1,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {"id": 3101, "result": {}},
+            {
+                "id": 3201,
+                "result": {
+                    "result": {
+                        "value": {
+                            "inputFocused": True,
+                            "insertedLengthMatches": True,
+                            "insertedLength": 11,
+                            "expectedLength": 11,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3301,
+                "result": {
+                    "result": {
+                        "value": {
+                            "submitted": True,
+                            "submitButtonObserved": True,
+                            "submitMechanism": "cdp_button_click",
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3650,
+                "result": {
+                    "result": {
+                        "value": {
+                            "promptAcceptanceScanPerformed": True,
+                            "promptAccepted": False,
+                            "promptStillInInput": True,
+                            "inputCandidateCount": 1,
+                            "inputContainingPromptCandidateCount": 1,
+                            "maxVisibleInputLength": 11,
+                            "disabledSubmitLikeButtonCount": 0,
+                            "submitLikeButtonCount": 1,
+                            "textValueCaptured": False,
+                            "rawDomExposed": False,
+                            "rawPromptRecorded": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3626,
+                "result": {
+                    "result": {
+                        "value": {
+                            "submitted": True,
+                            "submitButtonObserved": False,
+                            "submitMechanism": "cdp_keyboard_event_enter",
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3650,
+                "result": {
+                    "result": {
+                        "value": {
+                            "promptAcceptanceScanPerformed": True,
+                            "promptAccepted": False,
+                            "promptStillInInput": True,
+                            "inputCandidateCount": 1,
+                            "inputContainingPromptCandidateCount": 1,
+                            "maxVisibleInputLength": 11,
+                            "disabledSubmitLikeButtonCount": 0,
+                            "submitLikeButtonCount": 1,
+                            "textValueCaptured": False,
+                            "rawDomExposed": False,
+                            "rawPromptRecorded": False,
+                        }
+                    }
+                },
+            },
+        ]
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._devtools_port_owned_by_pid",
+                return_value=(True, "222"),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_app_page_targets",
+                return_value=([
+                    {
+                        "type": "page",
+                        "url": "app://-/index.html",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/1",
+                    }
+                ], ""),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS",
+                0.0,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=cdp_packets,
+            ) as cdp_command,
+        ):
+            packet = native_probe._cdp_submit_prompt_to_app_page(
+                222,
+                "hello world",
+                request_id="native-submit-not-accepted",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-not-accepted",
+                port=9223,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_PROMPT_NOT_ACCEPTED_BY_CODEX_FLOW",
+        )
+        self.assertTrue(packet["input_text_insert_attempted"])
+        self.assertTrue(packet["input_text_insert_succeeded"])
+        self.assertFalse(packet["prompt_submitted"])
+        self.assertFalse(packet["native_prompt_turn_accepted"])
+        self.assertTrue(packet["native_prompt_still_in_input"])
+        self.assertEqual(
+            packet["native_prompt_acceptance_input_containing_prompt_candidate_count"],
+            1,
+        )
+        self.assertEqual(
+            packet["submit_mechanism"],
+            "cdp_button_click+cdp_keyboard_event_enter",
+        )
+        self.assertFalse(packet["custom_codex_response_text_read_proven"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertEqual(cdp_command.call_count, 7)
 
     def test_cdp_response_observer_blocks_subagent_marker(self) -> None:
         with mock.patch(
@@ -1563,6 +1762,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseTextReadWithoutStoring": True,
                             "tokenLeafCandidateCount": 1,
                             "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
                             "exactTokenCandidateCount": 1,
                             "responseLikeCandidateCount": 1,
                             "subagentMarkerCandidateCount": 1,
@@ -1604,6 +1804,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseTextReadWithoutStoring": True,
                             "tokenLeafCandidateCount": 1,
                             "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
                             "exactTokenCandidateCount": 1,
                             "responseLikeCandidateCount": 1,
                             "subagentMarkerCandidateCount": 0,
@@ -1646,6 +1847,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseTextReadWithoutStoring": True,
                             "tokenLeafCandidateCount": 1,
                             "promptEchoCandidateCount": 1,
+                            "promptSuffixEchoCandidateCount": 1,
                             "exactTokenCandidateCount": 0,
                             "responseLikeCandidateCount": 0,
                             "subagentMarkerCandidateCount": 0,
@@ -1669,8 +1871,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["custom_codex_response_text_read_proven"])
         self.assertFalse(packet["custom_response_exact_token_observed"])
         self.assertFalse(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_text_read_without_storing"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
+        self.assertEqual(packet["custom_response_prompt_suffix_echo_candidate_count"], 1)
         self.assertEqual(
             packet["native_free_text_observer_machine_error_code"],
             "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",

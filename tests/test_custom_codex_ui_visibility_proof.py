@@ -158,7 +158,9 @@ def _native_packet(
         ).hexdigest(),
         "custom_response_exact_token_candidate_count": 1,
         "custom_response_like_candidate_count": 1,
+        "custom_response_token_leaf_candidate_count": 1,
         "custom_response_prompt_echo_candidate_count": 0,
+        "custom_response_prompt_suffix_echo_candidate_count": 0,
         "blocking_reasons": [],
         "raw_dom_exposed": False,
         "raw_ax_tree_exposed": False,
@@ -205,6 +207,45 @@ class CustomCodexUiVisibilityProofTests(unittest.TestCase):
         self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
         self.assertFalse(packet["native_free_chat_router_proven"])
         self.assertFalse(packet["expected_visible_text_recorded"])
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn(EXPECTED_VISIBLE_TEXT, serialized)
+        self.assertFalse(packet_contains_text(packet, EXPECTED_VISIBLE_TEXT))
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_blocks_token_leaf_without_exact_response_as_prompt_echo_diagnostic(self) -> None:
+        packet = ui_visibility.build_custom_codex_ui_visibility_proof_packet(
+            _source_packet(),
+            _native_packet(
+                overrides={
+                    "custom_codex_response_text_read_proven": False,
+                    "custom_response_exact_token_observed": False,
+                    "custom_response_bound_to_request": False,
+                    "native_codex_subagent_absence_proven": False,
+                    "native_free_text_observer_machine_error_code": (
+                        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                    ),
+                    "custom_response_token_leaf_candidate_count": 1,
+                    "custom_response_prompt_echo_candidate_count": 1,
+                    "custom_response_prompt_suffix_echo_candidate_count": 1,
+                    "custom_response_exact_token_candidate_count": 0,
+                    "custom_response_like_candidate_count": 0,
+                }
+            ),
+            expected_visible_text=EXPECTED_VISIBLE_TEXT,
+            request_id=REQUEST_ID,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(
+            packet["machine_error_code"],
+            ui_visibility.CUSTOM_CODEX_UI_VISIBILITY_NATIVE_UI_NOT_OBSERVED,
+        )
+        self.assertIn("custom_response_exact_token_not_observed", packet["blocking_reasons"])
+        self.assertIn("custom_response_exact_token_candidate_missing", packet["blocking_reasons"])
+        self.assertEqual(packet["custom_response_token_leaf_candidate_count"], 1)
+        self.assertEqual(packet["custom_response_prompt_echo_candidate_count"], 1)
+        self.assertEqual(packet["custom_response_prompt_suffix_echo_candidate_count"], 1)
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
         self.assertNotIn(EXPECTED_VISIBLE_TEXT, serialized)
         self.assertFalse(packet_contains_text(packet, EXPECTED_VISIBLE_TEXT))
