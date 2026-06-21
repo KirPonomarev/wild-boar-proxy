@@ -37,6 +37,7 @@ from .interactive_codex_working_flow_delivery import (
     DELIVERY_SOURCE_CODEX_EXEC_JSONL,
     run_interactive_codex_working_flow_delivery_command,
 )
+from .live_manual_gate_proof import run_live_manual_gate_proof_command
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
 from .controlled_dispatch_handoff_proof import (
@@ -431,6 +432,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=DELIVERY_SOURCE_CODEX_EXEC_JSONL,
     )
     codex_runner_interactive_working_flow.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_live_manual_gate = codex_runner_subparsers.add_parser(
+        "live-manual-gate-proof"
+    )
+    codex_runner_live_manual_gate.add_argument(
+        "--interactive-working-flow-delivery-file",
+        required=True,
+    )
+    codex_runner_live_manual_gate.add_argument("--proof-dir")
+    codex_runner_live_manual_gate.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1403,6 +1417,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "interactive-preflight",
         "interactive-collect",
         "interactive-working-flow-delivery",
+        "live-manual-gate-proof",
     }:
         return EFFECT_MUTATE
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
@@ -1781,6 +1796,19 @@ def main(argv: list[str] | None = None) -> int:
                     codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                     proof_dir=args.proof_dir,
                     delivery_source_kind=args.delivery_source_kind,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "live-manual-gate-proof"
+        ):
+            return emit_json(
+                run_live_manual_gate_proof_command(
+                    paths=paths,
+                    interactive_working_flow_delivery_file=(
+                        args.interactive_working_flow_delivery_file
+                    ),
+                    proof_dir=args.proof_dir,
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "entry":
