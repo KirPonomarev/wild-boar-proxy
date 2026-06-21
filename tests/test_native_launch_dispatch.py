@@ -1613,11 +1613,120 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertNotIn("WBP_NATIVE_RESPONSE_OK_native-submit-response-ok", serialized)
         self.assertEqual(cdp_command.call_count, 6)
         observer_expression = cdp_command.call_args_list[-1].args[1]["params"]["expression"]
+        self.assertTrue(observer_expression.startswith("(async () => {"))
         self.assertIn("expectedText.includes(requestId)", observer_expression)
         self.assertNotIn("progressCandidateCount > 0", observer_expression)
         self.assertNotIn("requestId,\n    'expected_token'", observer_expression)
         self.assertNotIn("'model',", observer_expression)
         self.assertNotIn("'runtime',", observer_expression)
+        acceptance_params = [
+            call.args[1]["params"]
+            for call in cdp_command.call_args_list
+            if call.args[1].get("id") == 3650
+        ]
+        self.assertTrue(acceptance_params)
+        self.assertTrue(
+            all(params.get("awaitPromise") is True for params in acceptance_params)
+        )
+        observer_params = cdp_command.call_args_list[-1].args[1]["params"]
+        self.assertTrue(observer_params.get("awaitPromise"))
+
+    def test_cdp_response_observer_exports_bounded_hashed_candidate_map(self) -> None:
+        expected_text = "WBP_NATIVE_RESPONSE_OK_native-submit-candidate-map"
+        text_sha256 = "a" * 64
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._cdp_command",
+            return_value={
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 0,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 1,
+                            "promptSuffixEchoCandidateCount": 1,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                            "responseCandidateMapTotalCount": 1,
+                            "responseCandidateMapTruncated": False,
+                            "responseCandidateMap": [
+                                {
+                                    "candidateKind": "prompt_echo",
+                                    "tagName": "DIV<script>",
+                                    "role": "article",
+                                    "textSha256": text_sha256,
+                                    "textLength": 72,
+                                    "lineCount": 2,
+                                    "childCount": 0,
+                                    "containsExpectedText": True,
+                                    "containsRequestId": True,
+                                    "containsPromptMarker": True,
+                                    "promptEcho": True,
+                                    "promptSuffixEcho": True,
+                                    "exactToken": False,
+                                    "responseLike": False,
+                                    "responseSurface": False,
+                                    "insideButton": False,
+                                    "visibleChildContainsExpected": False,
+                                    "expectedTextOffsetClass": "suffix",
+                                    "bounds": {
+                                        "x": 12,
+                                        "y": 34,
+                                        "width": 560,
+                                        "height": 44,
+                                    },
+                                    "rawText": expected_text,
+                                    "selector": "#raw-secret-selector",
+                                }
+                            ],
+                        }
+                    }
+                },
+            },
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text=expected_text,
+                request_id="native-submit-candidate-map",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["custom_response_candidate_map_available"])
+        self.assertEqual(packet["custom_response_candidate_map_candidate_count"], 1)
+        self.assertFalse(packet["custom_response_candidate_map_truncated"])
+        candidate = packet["custom_response_candidate_map"][0]
+        self.assertEqual(candidate["candidate_kind"], "prompt_echo")
+        self.assertEqual(candidate["tag_name"], "divscript")
+        self.assertEqual(candidate["role"], "article")
+        self.assertEqual(candidate["text_sha256"], text_sha256)
+        self.assertTrue(candidate["prompt_echo"])
+        self.assertTrue(candidate["prompt_suffix_echo"])
+        self.assertFalse(candidate["response_like"])
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn(expected_text, serialized)
+        self.assertNotIn("rawText", serialized)
+        self.assertNotIn("selector", serialized)
+        self.assertNotIn("raw-secret-selector", serialized)
+        self.assertFalse(packet["raw_dom_exposed"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["text_value_captured"])
 
     def test_cdp_prompt_submit_blocks_when_prompt_stays_in_input_after_click(self) -> None:
         cdp_packets = [
@@ -2145,7 +2254,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         )
         self.assertFalse(packet["custom_response_exact_token_observed"])
 
-    def test_cdp_response_observer_prefers_prompt_echo_over_completion_without_exact(
+    def test_cdp_response_observer_reports_completion_without_exact_even_with_prompt_echo(
         self,
     ) -> None:
         cdp_packets = [
@@ -2237,7 +2346,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["assistant_turn_post_completion_scan_performed"])
         self.assertEqual(
             packet["assistant_turn_machine_error_code"],
-            "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY",
+            "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN",
         )
         self.assertFalse(packet["custom_response_exact_token_observed"])
         self.assertEqual(packet["custom_response_prompt_echo_candidate_count"], 1)
@@ -2446,6 +2555,73 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             )
             self.assertFalse(persisted["native_ui_observer_packet_proven"])
             self.assertEqual(persisted["exit_code"], 1)
+
+    def test_native_ui_observer_proof_command_does_not_greenwash_candidate_map_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "req-map-only",
+                    "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": (
+                        "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN"
+                    ),
+                    "native_free_text_observer_machine_error_code": (
+                        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                    ),
+                    "custom_response_exact_token_observed": False,
+                    "custom_response_bound_to_request": False,
+                    "custom_response_candidate_map_available": True,
+                    "custom_response_candidate_map_candidate_count": 2,
+                    "custom_response_candidate_map": [
+                        {
+                            "candidate_kind": "prompt_echo",
+                            "text_sha256": "a" * 64,
+                            "contains_expected_text": True,
+                        },
+                        {
+                            "candidate_kind": "response_surface",
+                            "text_sha256": "b" * 64,
+                            "contains_expected_text": False,
+                        },
+                    ],
+                    "native_codex_subagent_used_as_dip": False,
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-map-only",
+                    expected_text="WBP_NATIVE_req-map-only",
+                    proof_dir=str(proof_dir),
+                )
+
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+            self.assertFalse(packet["product_ready"])
+            persisted = json.loads(
+                (proof_dir / "native-ui-observer.packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertFalse(persisted["native_ui_observer_packet_proven"])
+            self.assertEqual(persisted["exit_code"], 1)
+            self.assertTrue(persisted["custom_response_candidate_map_available"])
 
     def test_cdp_response_observer_allows_explicit_bounded_wait_above_default(self) -> None:
         scan_count: list[int] = []

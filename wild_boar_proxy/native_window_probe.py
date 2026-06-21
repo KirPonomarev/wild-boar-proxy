@@ -82,6 +82,7 @@ CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
 CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 12.0
 CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS = 90.0
 CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
+CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS = 24
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS = 0.25
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
@@ -1197,7 +1198,7 @@ def _cdp_wait_for_prompt_acceptance(
     expected_prompt = str(expected_prompt or "")
     expected_literal = json.dumps(expected_prompt, ensure_ascii=False)
     expression = f"""
-(() => {{
+(async () => {{
   const expectedPrompt = {expected_literal};
   const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
   const visible = (node, minWidth = 1, minHeight = 1) => {{
@@ -1264,7 +1265,11 @@ def _cdp_wait_for_prompt_acceptance(
                 {
                     "id": 3650,
                     "method": "Runtime.evaluate",
-                    "params": {"expression": expression, "returnByValue": True},
+                    "params": {
+                        "expression": expression,
+                        "returnByValue": True,
+                        "awaitPromise": True,
+                    },
                 },
             )
         except (OSError, json.JSONDecodeError) as exc:
@@ -1359,10 +1364,116 @@ def _native_free_text_observer_defaults() -> dict[str, Any]:
         "custom_codex_response_text_read_proven": False,
         "custom_response_exact_token_observed": False,
         "custom_response_bound_to_request": False,
+        "custom_response_candidate_map_available": False,
+        "custom_response_candidate_map_schema_version": 1,
+        "custom_response_candidate_map_truncated": False,
+        "custom_response_candidate_map_candidate_count": 0,
+        "custom_response_candidate_map": [],
         "native_codex_subagent_used_as_dip": False,
         "native_codex_subagent_absence_proven": False,
         "native_free_text_observer_source": "not_observable_by_prompt_submit",
         "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+    }
+
+
+def _safe_bool(value: object) -> bool:
+    return value is True
+
+
+def _safe_non_negative_int(value: object, *, limit: int = 1_000_000) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(parsed, limit))
+
+
+def _safe_response_candidate_label(value: object, *, limit: int = 48) -> str:
+    text = str(value or "").lower()[:limit]
+    return "".join(ch for ch in text if ch.isalnum() or ch in {"-", "_", ":"})
+
+
+def _safe_sha256_hex(value: object) -> str:
+    text = str(value or "").lower()
+    if len(text) != 64:
+        return ""
+    if any(ch not in "0123456789abcdef" for ch in text):
+        return ""
+    return text
+
+
+def _safe_candidate_bounds(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {"x": 0, "y": 0, "width": 0, "height": 0}
+    return {
+        "x": _safe_non_negative_int(value.get("x"), limit=100_000),
+        "y": _safe_non_negative_int(value.get("y"), limit=100_000),
+        "width": _safe_non_negative_int(value.get("width"), limit=100_000),
+        "height": _safe_non_negative_int(value.get("height"), limit=100_000),
+    }
+
+
+def _bounded_response_candidate_map(value: dict[str, Any]) -> dict[str, Any]:
+    raw_candidates = value.get("responseCandidateMap")
+    if not isinstance(raw_candidates, list):
+        return {
+            "custom_response_candidate_map_available": False,
+            "custom_response_candidate_map_schema_version": 1,
+            "custom_response_candidate_map_truncated": False,
+            "custom_response_candidate_map_candidate_count": 0,
+            "custom_response_candidate_map": [],
+        }
+    candidates: list[dict[str, Any]] = []
+    for raw_candidate in raw_candidates[:CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS]:
+        if not isinstance(raw_candidate, dict):
+            continue
+        candidates.append({
+            "candidate_kind": _safe_response_candidate_label(
+                raw_candidate.get("candidateKind")
+            ),
+            "tag_name": _safe_response_candidate_label(
+                raw_candidate.get("tagName"),
+                limit=32,
+            ),
+            "role": _safe_response_candidate_label(raw_candidate.get("role")),
+            "text_sha256": _safe_sha256_hex(raw_candidate.get("textSha256")),
+            "text_length": _safe_non_negative_int(raw_candidate.get("textLength")),
+            "line_count": _safe_non_negative_int(raw_candidate.get("lineCount")),
+            "child_count": _safe_non_negative_int(raw_candidate.get("childCount")),
+            "contains_expected_text": _safe_bool(raw_candidate.get("containsExpectedText")),
+            "contains_request_id": _safe_bool(raw_candidate.get("containsRequestId")),
+            "contains_prompt_marker": _safe_bool(raw_candidate.get("containsPromptMarker")),
+            "prompt_echo": _safe_bool(raw_candidate.get("promptEcho")),
+            "prompt_suffix_echo": _safe_bool(raw_candidate.get("promptSuffixEcho")),
+            "exact_token": _safe_bool(raw_candidate.get("exactToken")),
+            "response_like": _safe_bool(raw_candidate.get("responseLike")),
+            "response_surface": _safe_bool(raw_candidate.get("responseSurface")),
+            "inside_button": _safe_bool(raw_candidate.get("insideButton")),
+            "visible_child_contains_expected": _safe_bool(
+                raw_candidate.get("visibleChildContainsExpected")
+            ),
+            "expected_text_offset_class": _safe_response_candidate_label(
+                raw_candidate.get("expectedTextOffsetClass")
+            ),
+            "bounds": _safe_candidate_bounds(raw_candidate.get("bounds")),
+        })
+    total_count = _safe_non_negative_int(
+        value.get("responseCandidateMapTotalCount"),
+        limit=10_000,
+    )
+    if total_count < len(candidates):
+        total_count = len(candidates)
+    return {
+        "custom_response_candidate_map_available": bool(candidates),
+        "custom_response_candidate_map_schema_version": 1,
+        "custom_response_candidate_map_truncated": _safe_bool(
+            value.get("responseCandidateMapTruncated")
+        )
+        or total_count > len(candidates),
+        "custom_response_candidate_map_candidate_count": total_count,
+        "custom_response_candidate_map": candidates,
     }
 
 
@@ -1401,7 +1512,7 @@ def _cdp_observe_custom_response_token(
     expected_literal = json.dumps(expected_text, ensure_ascii=False)
     request_id_literal = json.dumps(request_id, ensure_ascii=False)
     expression = f"""
-(() => {{
+(async () => {{
   const expectedText = {expected_literal};
   const requestId = {request_id_literal};
   const visible = (node, minWidth = 1, minHeight = 1) => {{
@@ -1536,6 +1647,71 @@ def _cdp_observe_custom_response_token(
     const text = normalize(node.innerText || node.textContent).toLowerCase();
     return subagentMarkers.some((marker) => text.includes(marker));
   }});
+  const canHash = !!(globalThis.crypto && crypto.subtle && globalThis.TextEncoder);
+  const sha256Hex = async (text) => {{
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }};
+  const nodeSet = new Set();
+  const addNodes = (nodes) => nodes.forEach((node) => nodeSet.add(node));
+  addNodes(tokenLeafs);
+  addNodes(exactLeafs);
+  addNodes(responseLikeLeafs);
+  addNodes(promptEchoLeafs);
+  addNodes(responseSurfaceLeafs.slice(0, 12));
+  const candidateNodes = Array.from(nodeSet);
+  const responseCandidateMapMaxItems = {CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS};
+  const expectedOffsetClass = (text) => {{
+    const beforeChars = text.indexOf(expectedText);
+    if (beforeChars < 0) return 'absent';
+    const afterChars = text.length - beforeChars - expectedText.length;
+    if (beforeChars === 0 && afterChars === 0) return 'standalone';
+    if (beforeChars > 0 && afterChars === 0) return 'suffix';
+    if (beforeChars === 0 && afterChars > 0) return 'prefix';
+    return 'surrounded';
+  }};
+  const candidateKind = (node) => {{
+    if (responseLikeLeafs.includes(node)) return 'response_like';
+    if (exactLeafs.includes(node)) return 'exact';
+    if (promptEchoLeafs.includes(node)) return 'prompt_echo';
+    if (tokenLeafs.includes(node)) return 'token_leaf';
+    if (responseSurfaceLeafs.includes(node)) return 'response_surface';
+    return 'text_surface';
+  }};
+  const summarizeCandidate = async (node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const rect = node.getBoundingClientRect();
+    return {{
+      candidateKind: candidateKind(node),
+      tagName: String(node.tagName || '').toLowerCase().slice(0, 32),
+      role: String(node.getAttribute('role') || '').toLowerCase().slice(0, 48),
+      textSha256: await sha256Hex(text),
+      textLength: text.length,
+      lineCount: textLines(text).length,
+      childCount: Array.from(node.children || []).length,
+      containsExpectedText: text.includes(expectedText),
+      containsRequestId: !!requestId && text.includes(requestId),
+      containsPromptMarker: promptMarkers.some((marker) => marker && text.includes(marker)),
+      promptEcho: promptEchoLeafs.includes(node),
+      promptSuffixEcho: promptSuffixEchoLeafs.includes(node),
+      exactToken: exactLeafs.includes(node),
+      responseLike: responseLikeLeafs.includes(node),
+      responseSurface: responseSurfaceLeafs.includes(node),
+      insideButton: !!(node.closest && node.closest('button')),
+      visibleChildContainsExpected: hasVisibleChildWith(node, expectedText),
+      expectedTextOffsetClass: expectedOffsetClass(text),
+      bounds: {{
+        x: Math.max(0, Math.round(rect.x || 0)),
+        y: Math.max(0, Math.round(rect.y || 0)),
+        width: Math.max(0, Math.round(rect.width || 0)),
+        height: Math.max(0, Math.round(rect.height || 0))
+      }}
+    }};
+  }};
+  const responseCandidateMap = canHash
+    ? await Promise.all(candidateNodes.slice(0, responseCandidateMapMaxItems).map(summarizeCandidate))
+    : [];
   const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
   const requestBoundExpectedToken = !!requestId && expectedText.includes(requestId);
   const assistantTurnActivityObserved = responseExactTokenObserved ||
@@ -1566,6 +1742,9 @@ def _cdp_observe_custom_response_token(
     promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
     exactTokenCandidateCount: exactLeafs.length,
     responseLikeCandidateCount: responseLikeLeafs.length,
+    responseCandidateMap,
+    responseCandidateMapTotalCount: candidateNodes.length,
+    responseCandidateMapTruncated: candidateNodes.length > responseCandidateMap.length,
     subagentMarkerCandidateCount: subagentMarkerLeafs.length,
     customResponseExactTokenObserved: responseExactTokenObserved,
     nativeCodexSubagentUsedAsDip: subagentMarkerLeafs.length > 0,
@@ -1594,7 +1773,11 @@ def _cdp_observe_custom_response_token(
                 {
                     "id": 3700,
                     "method": "Runtime.evaluate",
-                    "params": {"expression": expression, "returnByValue": True},
+                    "params": {
+                        "expression": expression,
+                        "returnByValue": True,
+                        "awaitPromise": True,
+                    },
                 },
             )
         except (OSError, json.JSONDecodeError) as exc:
@@ -1716,6 +1899,7 @@ def _cdp_observe_custom_response_token(
                 "custom_response_like_candidate_count": int(
                     value.get("responseLikeCandidateCount") or 0
                 ),
+                **_bounded_response_candidate_map(value),
                 "native_codex_subagent_marker_candidate_count": int(
                     value.get("subagentMarkerCandidateCount") or 0
                 ),
@@ -1740,12 +1924,12 @@ def _cdp_observe_custom_response_token(
         assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_FAILED_OR_BLOCKED"
     elif assistant_turn_activity_observed and not assistant_turn_completion_observed:
         assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_STILL_RUNNING"
-    elif prompt_echo_only:
-        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY"
     elif assistant_turn_completion_observed:
         assistant_turn_machine_error_code = (
             "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN"
         )
+    elif prompt_echo_only:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY"
     return _native_free_text_observer_defaults() | {
         "assistant_turn_probe_attempted": True,
         "assistant_turn_probe_scan_performed": bool(last_packet),
@@ -1791,6 +1975,7 @@ def _cdp_observe_custom_response_token(
         "custom_response_like_candidate_count": int(
             last_packet.get("responseLikeCandidateCount") or 0
         ),
+        **_bounded_response_candidate_map(last_packet),
         "native_codex_subagent_marker_candidate_count": int(
             last_packet.get("subagentMarkerCandidateCount") or 0
         ),
