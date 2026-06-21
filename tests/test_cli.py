@@ -4449,6 +4449,18 @@ class CliTests(unittest.TestCase):
             (
                 [
                     "router-hook",
+                    "full-runtime-dispatch-proof",
+                    "--official-e2e-working-flow-proof-file",
+                    "/tmp/wbp-official-e2e.json",
+                    "--custom-codex-ui-visibility-proof-file",
+                    "/tmp/wbp-ui.json",
+                    "--json",
+                ],
+                "probe",
+            ),
+            (
+                [
+                    "router-hook",
                     "user-prompt-submit-install",
                     "--dry-run",
                     "--json",
@@ -4691,6 +4703,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.expected_prefix, "WBP_NATIVE_VISIBLE_RESPONSE")
         self.assertEqual(args.observer_timeout_seconds, 45.0)
         self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+
+    def test_router_hook_full_runtime_dispatch_proof_parses_inputs(self) -> None:
+        parser = cli_mod.build_parser()
+        args = parser.parse_args(
+            [
+                "router-hook",
+                "full-runtime-dispatch-proof",
+                "--official-e2e-working-flow-proof-file",
+                "/tmp/wbp-official-e2e.json",
+                "--custom-codex-ui-visibility-proof-file",
+                "/tmp/wbp-ui.json",
+                "--proof-dir",
+                "/tmp/wbp-full-runtime-proof",
+                "--json",
+            ]
+        )
+
+        self.assertEqual(args.router_hook_command, "full-runtime-dispatch-proof")
+        self.assertEqual(args.official_e2e_working_flow_proof_file, "/tmp/wbp-official-e2e.json")
+        self.assertEqual(args.custom_codex_ui_visibility_proof_file, "/tmp/wbp-ui.json")
+        self.assertEqual(args.proof_dir, "/tmp/wbp-full-runtime-proof")
+        self.assertEqual(cli_mod.command_effect_from_args(args), "probe")
 
     def test_cli_effect_classifier_covers_external_models_route_mutations(self) -> None:
         parser = cli_mod.build_parser()
