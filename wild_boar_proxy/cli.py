@@ -156,6 +156,9 @@ from .official_e2e_fresh_working_flow_proof_runner import (
 from .full_runtime_dispatch_proof import (
     run_full_runtime_dispatch_proof_command,
 )
+from .full_runtime_dispatch_proof_runner import (
+    run_full_runtime_dispatch_proof_runner_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -673,6 +676,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     router_hook_full_runtime_dispatch.add_argument("--proof-dir")
     router_hook_full_runtime_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner = router_hook_subparsers.add_parser(
+        "full-runtime-dispatch-proof-runner"
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--real-custom-hook-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--custom-codex-ui-visibility-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1519,7 +1550,10 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     if (
         command == "router-hook"
         and getattr(args, "router_hook_command", None)
-        == "official-e2e-fresh-working-flow-proof-runner"
+        in {
+            "official-e2e-fresh-working-flow-proof-runner",
+            "full-runtime-dispatch-proof-runner",
+        }
     ):
         return EFFECT_MUTATE
     if (
@@ -2026,6 +2060,23 @@ def main(argv: list[str] | None = None) -> int:
                     official_e2e_working_flow_proof_file=(
                         args.official_e2e_working_flow_proof_file
                     ),
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-proof-runner"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_proof_runner_command(
+                    real_custom_hook_proof_file=args.real_custom_hook_proof_file,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
                     custom_codex_ui_visibility_proof_file=(
                         args.custom_codex_ui_visibility_proof_file
                     ),
