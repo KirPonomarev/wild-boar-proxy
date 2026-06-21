@@ -4322,6 +4322,16 @@ class CliTests(unittest.TestCase):
                 ],
                 "mutate",
             ),
+            (
+                [
+                    "codex-runner",
+                    "native-response-matrix",
+                    "--matrix-id",
+                    "matrix-1",
+                    "--json",
+                ],
+                "mutate",
+            ),
             (["router-hook", "entry", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "dispatch", "--prompt", "hi", "--json"], "probe"),
             (["router-hook", "handoff", "--prompt", "hi", "--json"], "probe"),
@@ -4650,6 +4660,35 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.codex_runner_command, "native-ui-observer-proof")
         self.assertEqual(args.request_id, "req-123")
         self.assertEqual(args.expected_text, "WBP_NATIVE_VISIBLE_req-123")
+        self.assertEqual(args.observer_timeout_seconds, 45.0)
+        self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+
+    def test_codex_runner_native_response_matrix_parses_bounded_inputs(self) -> None:
+        parser = cli_mod.build_parser()
+        args = parser.parse_args(
+            [
+                "codex-runner",
+                "native-response-matrix",
+                "--proof-dir",
+                "/tmp/wbp-native-response-matrix",
+                "--matrix-id",
+                "matrix-123",
+                "--request-prefix",
+                "req",
+                "--expected-prefix",
+                "WBP_NATIVE_VISIBLE_RESPONSE",
+                "--persistent-profile-id",
+                "wbp-custom-main",
+                "--observer-timeout-seconds",
+                "45",
+                "--json",
+            ]
+        )
+
+        self.assertEqual(args.codex_runner_command, "native-response-matrix")
+        self.assertEqual(args.matrix_id, "matrix-123")
+        self.assertEqual(args.request_prefix, "req")
+        self.assertEqual(args.expected_prefix, "WBP_NATIVE_VISIBLE_RESPONSE")
         self.assertEqual(args.observer_timeout_seconds, 45.0)
         self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
 

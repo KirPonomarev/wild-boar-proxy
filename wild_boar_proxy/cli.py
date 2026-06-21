@@ -28,6 +28,11 @@ from .fresh_live_custom_codex_e2e_proof import (
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
+from .custom_codex_native_response_matrix import (
+    DEFAULT_NATIVE_RESPONSE_MATRIX_EXPECTED_PREFIX,
+    DEFAULT_NATIVE_RESPONSE_MATRIX_REQUEST_PREFIX,
+    run_native_response_matrix_command,
+)
 from .interactive_custom_codex_proof import (
     run_interactive_custom_codex_collect_command,
     run_interactive_custom_codex_preflight_command,
@@ -386,6 +391,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
     )
     codex_runner_native_ui.add_argument("--json", action="store_true", required=True)
+    codex_runner_native_response_matrix = codex_runner_subparsers.add_parser(
+        "native-response-matrix"
+    )
+    codex_runner_native_response_matrix.add_argument("--proof-dir")
+    codex_runner_native_response_matrix.add_argument("--matrix-id")
+    codex_runner_native_response_matrix.add_argument(
+        "--request-prefix",
+        default=DEFAULT_NATIVE_RESPONSE_MATRIX_REQUEST_PREFIX,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--expected-prefix",
+        default=DEFAULT_NATIVE_RESPONSE_MATRIX_EXPECTED_PREFIX,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_native_response_matrix.add_argument("--persistent-profile-base-dir")
+    codex_runner_native_response_matrix.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
         "interactive-preflight"
     )
@@ -1416,6 +1449,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "working-flow-visible-source-proof",
         "fresh-live-e2e-proof",
         "native-ui-observer-proof",
+        "native-response-matrix",
     }:
         return EFFECT_MUTATE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
@@ -1759,6 +1793,22 @@ def main(argv: list[str] | None = None) -> int:
                     request_id=args.request_id,
                     expected_text=args.expected_text,
                     proof_dir=args.proof_dir,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "native-response-matrix"
+        ):
+            return emit_json(
+                run_native_response_matrix_command(
+                    paths=paths,
+                    proof_dir=args.proof_dir,
+                    matrix_id=args.matrix_id,
+                    request_prefix=args.request_prefix,
+                    expected_prefix=args.expected_prefix,
                     persistent_profile_id=args.persistent_profile_id,
                     persistent_profile_base_dir=args.persistent_profile_base_dir,
                     observer_timeout_seconds=args.observer_timeout_seconds,
