@@ -148,6 +148,7 @@ _UNSAFE_TRUE_FIELDS = (
     "provider_response_preview_recorded",
     "raw_backend_details_exposed",
     "secret_value_exposed",
+    "raw_freshness_anchor_recorded",
     "state_written",
 )
 
@@ -191,10 +192,27 @@ def _input_file_metadata(path: Path, *, prefix: str) -> dict[str, Any]:
     }
 
 
+def _freshness_anchor_metadata(freshness_anchor_digest: str | None) -> dict[str, Any]:
+    provided = bool(freshness_anchor_digest)
+    digest = _hex_sha256(freshness_anchor_digest)
+    return {
+        "freshness_anchor_digest_provided": provided,
+        "freshness_anchor_digest_valid": bool(digest) if provided else True,
+        "freshness_anchor_digest_present": bool(digest),
+        "freshness_anchor_digest": digest,
+        "raw_freshness_anchor_recorded": False,
+    }
+
+
 def _input_failures(metadata: Mapping[str, Any], *, proof_dir: str) -> list[str]:
     failures: list[str] = []
     if not proof_dir:
         failures.append("proof_dir_missing")
+    if (
+        metadata.get("freshness_anchor_digest_provided") is True
+        and metadata.get("freshness_anchor_digest_valid") is not True
+    ):
+        failures.append("freshness_anchor_digest_invalid")
     for prefix, _arg_name in _INPUTS:
         if metadata.get(f"{prefix}_file_present") is not True:
             failures.append(f"{prefix}_file_missing")
@@ -300,6 +318,7 @@ def _build_manifest(
     runner_status: str,
     runner_machine_error_code: str,
 ) -> dict[str, Any]:
+    freshness_anchor_digest = _hex_sha256(input_metadata.get("freshness_anchor_digest"))
     input_files = []
     for prefix, _arg_name in _INPUTS:
         input_files.append(
@@ -332,6 +351,13 @@ def _build_manifest(
         ),
         "runner_status": runner_status,
         "runner_machine_error_code": runner_machine_error_code,
+        "freshness_anchor_required": False,
+        "freshness_anchor_digest_present": bool(freshness_anchor_digest),
+        "freshness_anchor_digest": freshness_anchor_digest,
+        "freshness_anchor_bound_to_manifest": bool(freshness_anchor_digest),
+        "expected_freshness_anchor_digest_bound": False,
+        "external_freshness_proven": False,
+        "raw_freshness_anchor_recorded": False,
         "product_ready": False,
         "fallback_used": False,
         "local_imitation_used": False,
@@ -543,6 +569,10 @@ def build_full_runtime_dispatch_proof_runner_packet(
     evidence_written = bool(
         runner_packet_file_written or manifest_file_written or artifact_files_written
     )
+    freshness_anchor_digest = _hex_sha256(metadata.get("freshness_anchor_digest"))
+    manifest_freshness_anchor_digest = _hex_sha256(
+        manifest.get("freshness_anchor_digest")
+    )
 
     extra = {
         **metadata,
@@ -563,6 +593,17 @@ def build_full_runtime_dispatch_proof_runner_packet(
         "manifest_file_path_recorded": False,
         "runner_packet_file_written": runner_packet_file_written,
         "runner_packet_file_path_recorded": False,
+        "freshness_anchor_required": False,
+        "freshness_anchor_digest_present": bool(freshness_anchor_digest),
+        "freshness_anchor_digest": freshness_anchor_digest,
+        "freshness_anchor_bound_to_runner": bool(freshness_anchor_digest),
+        "freshness_anchor_bound_to_manifest": bool(
+            freshness_anchor_digest
+            and manifest_freshness_anchor_digest == freshness_anchor_digest
+        ),
+        "expected_freshness_anchor_digest_bound": False,
+        "external_freshness_proven": False,
+        "raw_freshness_anchor_recorded": False,
         "full_runtime_dispatch_runner_proven": ok,
         "full_runtime_dispatch_proven": bool(
             ok and final.get("full_runtime_dispatch_proven") is True
@@ -637,6 +678,7 @@ def run_full_runtime_dispatch_proof_runner_command(
     codex_exec_jsonl_file: str,
     custom_codex_ui_visibility_proof_file: str,
     proof_dir: str,
+    freshness_anchor_digest: str | None = None,
 ) -> dict[str, Any]:
     proof_root = Path(proof_dir).expanduser()
     input_paths = {
@@ -651,10 +693,12 @@ def run_full_runtime_dispatch_proof_runner_command(
         "proof_dir_present": bool(proof_dir),
         "proof_dir_path_recorded": False,
     }
+    metadata.update(_freshness_anchor_metadata(freshness_anchor_digest))
     for prefix, path in input_paths.items():
         metadata.update(_input_file_metadata(path, prefix=prefix))
 
-    if proof_dir:
+    initial_input_failures = _input_failures(metadata, proof_dir=proof_dir)
+    if proof_dir and not initial_input_failures:
         final_packet, packets_by_name, artifact_failures = _run_chain(
             real_custom_hook_proof_file=real_custom_hook_proof_file,
             working_flow_delivery_proof_file=working_flow_delivery_proof_file,

@@ -41,6 +41,7 @@ from test_custom_codex_ui_visibility_proof import (  # noqa: E402
 
 
 REQUEST_ID = "wbp-full-runtime-runner-001"
+FRESHNESS_ANCHOR_DIGEST = "a" * 64
 
 
 def _secret_values() -> list[str]:
@@ -124,13 +125,19 @@ def _write_fixture(
     }
 
 
-def _run_fixture(root: Path, fixture: dict[str, Path | dict[str, object]]) -> dict[str, object]:
+def _run_fixture(
+    root: Path,
+    fixture: dict[str, Path | dict[str, object]],
+    *,
+    freshness_anchor_digest: str | None = None,
+) -> dict[str, object]:
     return runner.run_full_runtime_dispatch_proof_runner_command(
         real_custom_hook_proof_file=str(fixture["real_hook_file"]),
         working_flow_delivery_proof_file=str(fixture["working_flow_file"]),
         codex_exec_jsonl_file=str(fixture["jsonl_file"]),
         custom_codex_ui_visibility_proof_file=str(fixture["ui_file"]),
         proof_dir=str(root / "proof"),
+        freshness_anchor_digest=freshness_anchor_digest,
     )
 
 
@@ -212,6 +219,19 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
         self.assertFalse(packet["manifest_file_path_recorded"])
         self.assertFalse(packet["runner_packet_file_path_recorded"])
         self.assertFalse(packet["proof_dir_path_recorded"])
+        self.assertFalse(packet["freshness_anchor_required"])
+        self.assertFalse(packet["freshness_anchor_digest_present"])
+        self.assertEqual(packet["freshness_anchor_digest"], "")
+        self.assertFalse(packet["freshness_anchor_bound_to_runner"])
+        self.assertFalse(packet["freshness_anchor_bound_to_manifest"])
+        self.assertFalse(packet["expected_freshness_anchor_digest_bound"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
+        self.assertFalse(manifest["freshness_anchor_digest_present"])
+        self.assertEqual(manifest["freshness_anchor_digest"], "")
+        self.assertFalse(manifest["freshness_anchor_bound_to_manifest"])
+        self.assertFalse(manifest["external_freshness_proven"])
+        self.assertFalse(manifest["raw_freshness_anchor_recorded"])
         self.assertEqual(packet["blocking_reasons"], [])
         self.assertEqual(packet["changed_files"], [])
         self.assertTrue(packet["evidence_written"])
@@ -237,6 +257,59 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
             self.assertNotIn(str(root), serialized)
         _assert_no_raw_prompt_route_or_provider(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_binds_freshness_anchor_digest_to_runner_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = _write_fixture(root)
+
+            packet = _run_fixture(
+                root,
+                fixture,
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+            proof_dir = root / "proof"
+            manifest = json.loads(
+                (
+                    proof_dir
+                    / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_MANIFEST_FILE_NAME
+                ).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["freshness_anchor_digest_present"])
+        self.assertEqual(packet["freshness_anchor_digest"], FRESHNESS_ANCHOR_DIGEST)
+        self.assertTrue(packet["freshness_anchor_bound_to_runner"])
+        self.assertTrue(packet["freshness_anchor_bound_to_manifest"])
+        self.assertFalse(packet["expected_freshness_anchor_digest_bound"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
+        self.assertTrue(manifest["freshness_anchor_digest_present"])
+        self.assertEqual(manifest["freshness_anchor_digest"], FRESHNESS_ANCHOR_DIGEST)
+        self.assertTrue(manifest["freshness_anchor_bound_to_manifest"])
+        self.assertFalse(manifest["external_freshness_proven"])
+        self.assertFalse(manifest["raw_freshness_anchor_recorded"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_invalid_freshness_anchor_digest_blocks_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = _write_fixture(root)
+
+            packet = _run_fixture(root, fixture, freshness_anchor_digest="not-a-digest")
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_INPUT_INVALID,
+        )
+        self.assertIn("freshness_anchor_digest_invalid", packet["blocking_reasons"])
+        self.assertFalse(packet["full_runtime_dispatch_runner_proven"])
+        self.assertFalse(packet["freshness_anchor_digest_present"])
+        self.assertEqual(packet["freshness_anchor_digest"], "")
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
 
     def test_missing_proof_dir_does_not_claim_evidence_written(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -387,11 +460,14 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
                 "ui.json",
                 "--proof-dir",
                 "proof",
+                "--freshness-anchor-digest",
+                FRESHNESS_ANCHOR_DIGEST,
                 "--json",
             ]
         )
         self.assertEqual(args.router_hook_command, "full-runtime-dispatch-proof-runner")
         self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
+        self.assertEqual(args.freshness_anchor_digest, FRESHNESS_ANCHOR_DIGEST)
 
         expected = runner.build_full_runtime_dispatch_proof_runner_packet(
             input_metadata={"proof_dir_present": True, "proof_dir_path_recorded": False},
@@ -421,6 +497,8 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
                     "ui.json",
                     "--proof-dir",
                     "proof",
+                    "--freshness-anchor-digest",
+                    FRESHNESS_ANCHOR_DIGEST,
                     "--json",
                 ]
             )
@@ -433,7 +511,25 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
             codex_exec_jsonl_file="codex.jsonl",
             custom_codex_ui_visibility_proof_file="ui.json",
             proof_dir="proof",
+            freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
         )
+
+    def test_cli_does_not_accept_freshness_anchor_on_final_runtime_proof(self) -> None:
+        parser = cli_mod.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "router-hook",
+                    "full-runtime-dispatch-proof",
+                    "--official-e2e-working-flow-proof-file",
+                    "e2e.json",
+                    "--custom-codex-ui-visibility-proof-file",
+                    "ui.json",
+                    "--freshness-anchor-digest",
+                    FRESHNESS_ANCHOR_DIGEST,
+                    "--json",
+                ]
+            )
 
 
 if __name__ == "__main__":

@@ -707,6 +707,9 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_full_runtime_dispatch_runner.add_argument(
+        "--freshness-anchor-digest",
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -717,6 +720,9 @@ def build_parser() -> argparse.ArgumentParser:
     router_hook_full_runtime_dispatch_admission.add_argument(
         "--proof-dir",
         required=True,
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
+        "--expected-freshness-anchor-digest",
     )
     router_hook_full_runtime_dispatch_admission.add_argument(
         "--json",
@@ -2102,6 +2108,7 @@ def main(argv: list[str] | None = None) -> int:
                         args.custom_codex_ui_visibility_proof_file
                     ),
                     proof_dir=args.proof_dir,
+                    freshness_anchor_digest=args.freshness_anchor_digest,
                 )
             )
         if (
@@ -2111,6 +2118,9 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_full_runtime_dispatch_admission_command(
                     proof_dir=args.proof_dir,
+                    expected_freshness_anchor_digest=(
+                        args.expected_freshness_anchor_digest
+                    ),
                 )
             )
         if (

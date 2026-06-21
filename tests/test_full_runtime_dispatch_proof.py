@@ -156,6 +156,8 @@ class FullRuntimeDispatchProofTests(unittest.TestCase):
         self.assertTrue(packet["custom_codex_ui_visibility_proven"])
         self.assertEqual(packet["handoff_payload_digest"], upstream["handoff_payload_digest"])
         self.assertEqual(packet["blocking_reasons"], [])
+        self.assertFalse(any("freshness_anchor" in key for key in packet))
+        self.assertNotIn("external_freshness_proven", packet)
         _assert_no_product_or_raw_claims(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

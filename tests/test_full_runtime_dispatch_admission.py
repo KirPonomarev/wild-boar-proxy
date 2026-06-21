@@ -34,6 +34,10 @@ from test_full_runtime_dispatch_proof_runner import (  # noqa: E402
 )
 
 
+FRESHNESS_ANCHOR_DIGEST = "a" * 64
+OTHER_FRESHNESS_ANCHOR_DIGEST = "b" * 64
+
+
 def _secret_values() -> list[str]:
     return [PROMPT, ROUTE_ID, EXPECTED_TEXT, RAW_PROVIDER_TEXT]
 
@@ -53,17 +57,27 @@ def _write_valid_proof(
     root: Path,
     *,
     source_overrides: dict[str, object] | None = None,
+    freshness_anchor_digest: str | None = None,
 ) -> tuple[Path, dict[str, object]]:
     root.mkdir(parents=True, exist_ok=True)
     fixture = _write_fixture(root, source_overrides=source_overrides)
-    packet = _run_fixture(root, fixture)
+    packet = _run_fixture(
+        root,
+        fixture,
+        freshness_anchor_digest=freshness_anchor_digest,
+    )
     assert packet["status"] == "ok"
     return root / "proof", packet
 
 
-def _admit(proof_dir: Path) -> dict[str, object]:
+def _admit(
+    proof_dir: Path,
+    *,
+    expected_freshness_anchor_digest: str | None = None,
+) -> dict[str, object]:
     return admission.run_full_runtime_dispatch_admission_command(
         proof_dir=str(proof_dir),
+        expected_freshness_anchor_digest=expected_freshness_anchor_digest,
     )
 
 
@@ -113,6 +127,16 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
         self.assertTrue(packet["feature_proof_admitted"])
         self.assertTrue(packet["fresh_session_bound"])
         self.assertTrue(packet["artifact_set_coherent"])
+        self.assertFalse(packet["freshness_anchor_required"])
+        self.assertFalse(packet["expected_freshness_anchor_digest_present"])
+        self.assertEqual(packet["expected_freshness_anchor_digest"], "")
+        self.assertFalse(packet["expected_freshness_anchor_digest_bound"])
+        self.assertFalse(packet["freshness_anchor_digest_present"])
+        self.assertEqual(packet["freshness_anchor_digest"], "")
+        self.assertFalse(packet["freshness_anchor_bound_to_runner"])
+        self.assertFalse(packet["freshness_anchor_bound_to_manifest"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
         self.assertTrue(packet["runner_packet_present"])
         self.assertTrue(packet["manifest_present"])
         self.assertTrue(packet["final_full_runtime_packet_present"])
@@ -142,6 +166,183 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
         self.assertEqual(before, after)
         _assert_no_raw_prompt_route_or_provider(self, packet, root)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_expected_freshness_anchor_digest_admits_matching_proof_dir(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            proof_dir, runner_packet = _write_valid_proof(
+                root,
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["proof_admitted"])
+        self.assertTrue(packet["freshness_anchor_required"])
+        self.assertTrue(packet["expected_freshness_anchor_digest_present"])
+        self.assertEqual(
+            packet["expected_freshness_anchor_digest"],
+            FRESHNESS_ANCHOR_DIGEST,
+        )
+        self.assertTrue(packet["expected_freshness_anchor_digest_bound"])
+        self.assertTrue(packet["freshness_anchor_digest_present"])
+        self.assertEqual(packet["freshness_anchor_digest"], FRESHNESS_ANCHOR_DIGEST)
+        self.assertTrue(packet["freshness_anchor_bound_to_runner"])
+        self.assertTrue(packet["freshness_anchor_bound_to_manifest"])
+        self.assertTrue(packet["external_freshness_proven"])
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
+        self.assertEqual(packet["handoff_payload_digest"], runner_packet["handoff_payload_digest"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["evidence_written"])
+        self.assertFalse(packet["file_mutation_attempted"])
+        _assert_no_raw_prompt_route_or_provider(self, packet, root)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_strict_expected_freshness_anchor_digest_blocks_old_non_fresh_proof_dir(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(Path(temp_dir))
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertTrue(packet["freshness_anchor_required"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn(
+            "runner_freshness_anchor_digest_missing",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "manifest_freshness_anchor_digest_missing",
+            packet["blocking_reasons"],
+        )
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_wrong_expected_freshness_anchor_digest_blocks_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(
+                Path(temp_dir),
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=OTHER_FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn(
+            "runner_freshness_anchor_digest_mismatch",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "manifest_freshness_anchor_digest_mismatch",
+            packet["blocking_reasons"],
+        )
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_invalid_expected_freshness_anchor_digest_blocks_as_input_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(
+                Path(temp_dir),
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest="not-a-digest",
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_INPUT_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn(
+            "expected_freshness_anchor_digest_invalid",
+            packet["blocking_reasons"],
+        )
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_runner_freshness_anchor_digest_tamper_blocks_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(
+                Path(temp_dir),
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+            runner_path = proof_dir / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_FILE_NAME
+            runner_payload = _read_json(runner_path)
+            runner_payload["freshness_anchor_digest"] = OTHER_FRESHNESS_ANCHOR_DIGEST
+            _write_json(runner_path, runner_payload)
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn("runner_freshness_anchor_digest_mismatch", packet["blocking_reasons"])
+        self.assertIn("freshness_anchor_digest_runner_manifest_mismatch", packet["blocking_reasons"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_manifest_freshness_anchor_digest_tamper_blocks_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(
+                Path(temp_dir),
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+            manifest_path = (
+                proof_dir / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_MANIFEST_FILE_NAME
+            )
+            manifest_payload = _read_json(manifest_path)
+            manifest_payload["freshness_anchor_digest"] = OTHER_FRESHNESS_ANCHOR_DIGEST
+            _write_json(manifest_path, manifest_payload)
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn("manifest_file_sha256_mismatch", packet["blocking_reasons"])
+        self.assertIn("manifest_freshness_anchor_digest_mismatch", packet["blocking_reasons"])
+        self.assertIn("freshness_anchor_digest_runner_manifest_mismatch", packet["blocking_reasons"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
 
     def test_missing_manifest_blocks_admission(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -198,6 +399,56 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
         )
         self.assertFalse(packet["proof_admitted"])
         self.assertIn("manifest_file_sha256_mismatch", packet["blocking_reasons"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_runner_manifest_packet_kind_mismatch_blocks_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(Path(temp_dir))
+            runner_path = proof_dir / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_FILE_NAME
+            runner_payload = _read_json(runner_path)
+            runner_payload["manifest_packet_kind"] = "wrong_manifest_kind"
+            _write_json(runner_path, runner_payload)
+
+            packet = _admit(proof_dir)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertIn(
+            "runner_manifest_packet_kind_mismatch",
+            packet["blocking_reasons"],
+        )
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
+    def test_runner_artifact_file_names_summary_mismatch_blocks_admission(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(Path(temp_dir))
+            runner_path = proof_dir / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_FILE_NAME
+            runner_payload = _read_json(runner_path)
+            runner_payload["artifact_file_names"] = []
+            _write_json(runner_path, runner_payload)
+
+            packet = _admit(proof_dir)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_COHERENCE_INVALID,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertIn(
+            "runner_artifact_file_names_invalid",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "runner_artifact_file_names_summary_mismatch",
+            packet["blocking_reasons"],
+        )
         _assert_no_raw_prompt_route_or_provider(self, packet)
 
     def test_post_write_artifact_substitution_blocks_admission(self) -> None:
@@ -268,6 +519,36 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
         _assert_no_raw_prompt_route_or_provider(self, packet)
 
+    def test_raw_freshness_anchor_recorded_tamper_blocks_as_unsafe(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_dir, _runner_packet = _write_valid_proof(
+                Path(temp_dir),
+                freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+            runner_path = proof_dir / runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_FILE_NAME
+            runner_payload = _read_json(runner_path)
+            runner_payload["raw_freshness_anchor_recorded"] = True
+            _write_json(runner_path, runner_payload)
+
+            packet = _admit(
+                proof_dir,
+                expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            admission.FULL_RUNTIME_DISPATCH_ADMISSION_UNSAFE_SOURCE,
+        )
+        self.assertFalse(packet["proof_admitted"])
+        self.assertFalse(packet["external_freshness_proven"])
+        self.assertIn(
+            "full_runtime_dispatch_proof_runner_raw_freshness_anchor_recorded_unsafe",
+            packet["blocking_reasons"],
+        )
+        self.assertFalse(packet["raw_freshness_anchor_recorded"])
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+
     def test_raw_route_or_provider_leak_tamper_blocks_as_unsafe(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             proof_dir, _runner_packet = _write_valid_proof(Path(temp_dir))
@@ -322,14 +603,18 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
                 "full-runtime-dispatch-admission",
                 "--proof-dir",
                 "proof",
+                "--expected-freshness-anchor-digest",
+                FRESHNESS_ANCHOR_DIGEST,
                 "--json",
             ]
         )
         self.assertEqual(args.router_hook_command, "full-runtime-dispatch-admission")
         self.assertEqual(cli_mod.command_effect_from_args(args), "read")
+        self.assertEqual(args.expected_freshness_anchor_digest, FRESHNESS_ANCHOR_DIGEST)
 
         expected = admission.build_full_runtime_dispatch_admission_packet(
             proof_dir="proof",
+            expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
             metadata={"proof_dir_present": False, "proof_dir_path_recorded": False},
             runner_packet={},
             manifest_packet={},
@@ -351,6 +636,8 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
                     "full-runtime-dispatch-admission",
                     "--proof-dir",
                     "proof",
+                    "--expected-freshness-anchor-digest",
+                    FRESHNESS_ANCHOR_DIGEST,
                     "--json",
                 ]
             )
@@ -358,7 +645,10 @@ class FullRuntimeDispatchAdmissionTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(exit_code, payload["exit_code"])
         self.assertEqual(payload["effect"], "read")
-        run_command.assert_called_once_with(proof_dir="proof")
+        run_command.assert_called_once_with(
+            proof_dir="proof",
+            expected_freshness_anchor_digest=FRESHNESS_ANCHOR_DIGEST,
+        )
 
 
 if __name__ == "__main__":

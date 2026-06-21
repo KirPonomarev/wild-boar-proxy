@@ -208,6 +208,11 @@ def _summary_map(value: object) -> tuple[dict[str, Mapping[str, Any]], list[str]
 
 def _input_failures(metadata: Mapping[str, Any]) -> list[str]:
     failures: list[str] = []
+    if (
+        metadata.get("expected_freshness_anchor_digest_provided") is True
+        and metadata.get("expected_freshness_anchor_digest_valid") is not True
+    ):
+        failures.append("expected_freshness_anchor_digest_invalid")
     if metadata.get("proof_dir_present") is not True:
         failures.append("proof_dir_missing")
     if metadata.get("proof_dir_is_dir") is not True:
@@ -398,9 +403,42 @@ def _unsafe_failures(
                 failures.append(f"{safe_name}_{field}_unsafe")
         if packet.get("runtime_effective_truth_written") is True:
             failures.append(f"{safe_name}_runtime_effective_truth_written_unsafe")
+        if packet.get("raw_freshness_anchor_recorded") is True:
+            failures.append(f"{safe_name}_raw_freshness_anchor_recorded_unsafe")
         failures.extend(_walk_path_recording_failures(packet, prefix=safe_name))
         if packets.command_packet_has_secret_leak(packet, secret_values=list(secret_values or [])):
             failures.append(f"{safe_name}_secret_material_present")
+    return sorted(set(failures))
+
+
+def _freshness_coherence_failures(
+    *,
+    runner_packet: Mapping[str, Any],
+    manifest_packet: Mapping[str, Any],
+    expected_freshness_anchor_digest: str,
+) -> list[str]:
+    failures: list[str] = []
+    expected_digest = _hex_sha256(expected_freshness_anchor_digest)
+    freshness_required = bool(expected_freshness_anchor_digest)
+    runner_digest = _hex_sha256(runner_packet.get("freshness_anchor_digest"))
+    manifest_digest = _hex_sha256(manifest_packet.get("freshness_anchor_digest"))
+    if runner_digest and manifest_digest and runner_digest != manifest_digest:
+        failures.append("freshness_anchor_digest_runner_manifest_mismatch")
+    if runner_packet.get("freshness_anchor_digest_present") is True and not runner_digest:
+        failures.append("runner_freshness_anchor_digest_invalid")
+    if manifest_packet.get("freshness_anchor_digest_present") is True and not manifest_digest:
+        failures.append("manifest_freshness_anchor_digest_invalid")
+    if freshness_required:
+        if not expected_digest:
+            failures.append("expected_freshness_anchor_digest_invalid")
+        if not runner_digest:
+            failures.append("runner_freshness_anchor_digest_missing")
+        if not manifest_digest:
+            failures.append("manifest_freshness_anchor_digest_missing")
+        if runner_digest and expected_digest and runner_digest != expected_digest:
+            failures.append("runner_freshness_anchor_digest_mismatch")
+        if manifest_digest and expected_digest and manifest_digest != expected_digest:
+            failures.append("manifest_freshness_anchor_digest_mismatch")
     return sorted(set(failures))
 
 
@@ -516,6 +554,7 @@ def _machine_error_code(
 def build_full_runtime_dispatch_admission_packet(
     *,
     proof_dir: str,
+    expected_freshness_anchor_digest: str | None = None,
     metadata: Mapping[str, Any] | None,
     runner_packet: Mapping[str, Any] | None,
     manifest_packet: Mapping[str, Any] | None,
@@ -554,6 +593,31 @@ def build_full_runtime_dispatch_admission_packet(
         )
     )
     artifact_names = sorted(artifacts)
+    expected_digest = _hex_sha256(expected_freshness_anchor_digest)
+    freshness_required = bool(expected_freshness_anchor_digest)
+    runner_freshness_digest = _hex_sha256(runner.get("freshness_anchor_digest"))
+    manifest_freshness_digest = _hex_sha256(manifest.get("freshness_anchor_digest"))
+    freshness_digest = (
+        runner_freshness_digest
+        if runner_freshness_digest
+        else manifest_freshness_digest
+    )
+    freshness_runner_bound = bool(
+        runner_freshness_digest
+        and (not expected_digest or runner_freshness_digest == expected_digest)
+    )
+    freshness_manifest_bound = bool(
+        manifest_freshness_digest
+        and (not expected_digest or manifest_freshness_digest == expected_digest)
+    )
+    external_freshness_proven = bool(
+        ok
+        and freshness_required
+        and expected_digest
+        and freshness_runner_bound
+        and freshness_manifest_bound
+        and runner_freshness_digest == manifest_freshness_digest
+    )
     extra = {
         **metadata_dict,
         "schema_version": 1,
@@ -580,6 +644,16 @@ def build_full_runtime_dispatch_admission_packet(
         "admission_coherence_failures": coherence_failure_list,
         "admission_proof_failures": proof_failure_list,
         "admission_unsafe_failures": unsafe_failure_list,
+        "freshness_anchor_required": freshness_required,
+        "expected_freshness_anchor_digest_present": bool(expected_digest),
+        "expected_freshness_anchor_digest": expected_digest,
+        "expected_freshness_anchor_digest_bound": external_freshness_proven,
+        "freshness_anchor_digest_present": bool(freshness_digest),
+        "freshness_anchor_digest": freshness_digest,
+        "freshness_anchor_bound_to_runner": bool(ok and freshness_runner_bound),
+        "freshness_anchor_bound_to_manifest": bool(ok and freshness_manifest_bound),
+        "external_freshness_proven": external_freshness_proven,
+        "raw_freshness_anchor_recorded": False,
         "artifact_file_names": artifact_names,
         "artifact_count": len(artifact_names),
         "artifact_file_paths_recorded": False,
@@ -661,12 +735,22 @@ def build_full_runtime_dispatch_admission_packet(
 def run_full_runtime_dispatch_admission_command(
     *,
     proof_dir: str,
+    expected_freshness_anchor_digest: str | None = None,
 ) -> dict[str, Any]:
     proof_root = Path(proof_dir).expanduser()
+    expected_digest = _hex_sha256(expected_freshness_anchor_digest)
     metadata: dict[str, Any] = {
         "proof_dir_present": bool(proof_dir),
         "proof_dir_is_dir": bool(proof_dir) and proof_root.exists() and proof_root.is_dir(),
         "proof_dir_path_recorded": False,
+        "expected_freshness_anchor_digest_provided": bool(
+            expected_freshness_anchor_digest
+        ),
+        "expected_freshness_anchor_digest_valid": (
+            bool(expected_digest) if expected_freshness_anchor_digest else True
+        ),
+        "expected_freshness_anchor_digest_present": bool(expected_digest),
+        "expected_freshness_anchor_digest": expected_digest,
     }
     runner_path = proof_root / FULL_RUNTIME_DISPATCH_PROOF_RUNNER_FILE_NAME
     manifest_path = proof_root / FULL_RUNTIME_DISPATCH_PROOF_RUNNER_MANIFEST_FILE_NAME
@@ -722,6 +806,13 @@ def run_full_runtime_dispatch_admission_command(
                 final_packet=final_packet,
                 artifact_packets=artifact_packets,
             )
+            + _freshness_coherence_failures(
+                runner_packet=runner_packet,
+                manifest_packet=manifest_packet,
+                expected_freshness_anchor_digest=(
+                    expected_freshness_anchor_digest or ""
+                ),
+            )
         )
     )
     proof_failure_list = _proof_failures(
@@ -739,6 +830,7 @@ def run_full_runtime_dispatch_admission_command(
     )
     return build_full_runtime_dispatch_admission_packet(
         proof_dir=proof_dir,
+        expected_freshness_anchor_digest=expected_freshness_anchor_digest,
         metadata=metadata,
         runner_packet=runner_packet,
         manifest_packet=manifest_packet,
