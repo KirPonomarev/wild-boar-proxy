@@ -1339,6 +1339,17 @@ def _cdp_wait_for_prompt_acceptance(
 
 def _native_free_text_observer_defaults() -> dict[str, Any]:
     return {
+        "assistant_turn_probe_attempted": False,
+        "assistant_turn_probe_scan_performed": False,
+        "assistant_turn_started_observed": False,
+        "assistant_turn_completed_observed": False,
+        "assistant_turn_failed_observed": False,
+        "assistant_turn_machine_error_code": "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
+        "assistant_turn_progress_candidate_count": 0,
+        "assistant_turn_stop_generating_candidate_count": 0,
+        "auth_or_backend_blocker_observed": False,
+        "model_or_runtime_blocker_observed": False,
+        "response_surface_candidate_count": 0,
         "native_agent_provider_call_directly_observed": False,
         "custom_codex_response_text_read_proven": False,
         "custom_response_exact_token_observed": False,
@@ -1411,6 +1422,39 @@ def _cdp_observe_custom_response_token(
     'создано 1 агент',
     'created 1 agent'
   ];
+  const authOrBackendMarkers = [
+    'sign in',
+    'login',
+    'auth',
+    'authentication',
+    'network error',
+    'backend',
+    'войдите',
+    'авторизац',
+    'сеть'
+  ];
+  const modelOrRuntimeMarkers = [
+    'rate limit',
+    'quota',
+    'model unavailable',
+    'model overloaded',
+    'runtime error',
+    'try again',
+    'please try again',
+    'лимит',
+    'модель недоступ',
+    'ошибка выполнения',
+    'попробуйте ещё',
+    'попробуйте позже'
+  ];
+  const stopMarkers = [
+    'stop',
+    'interrupt',
+    'cancel',
+    'останов',
+    'прервать',
+    'отмена'
+  ];
   const hasVisibleChildWith = (node, needle) => (
     Array.from(node.children || []).some((child) => visible(child) && normalize(child.innerText || child.textContent).includes(needle))
   );
@@ -1424,28 +1468,61 @@ def _cdp_observe_custom_response_token(
     const text = normalize(node.innerText || node.textContent);
     return text.includes(expectedText) && !hasVisibleChildWith(node, expectedText);
   }});
-      const textLines = (text) => text.split('\\n').map((line) => line.trim()).filter(Boolean);
-      const promptSuffixEchoLeafs = tokenLeafs.filter((node) => {{
-        const text = normalize(node.innerText || node.textContent);
-        const beforeChars = text.indexOf(expectedText);
-        const afterChars = text.length - beforeChars - expectedText.length;
-        return beforeChars > 0 && afterChars === 0 && text.length > expectedText.length;
-      }});
-      const promptEchoLeafs = tokenLeafs.filter((node) => {{
-        const text = normalize(node.innerText || node.textContent);
-        return promptMarkers.some((marker) => marker && text.includes(marker)) ||
-          promptSuffixEchoLeafs.includes(node);
-      }});
-      const exactLeafs = tokenLeafs.filter((node) => {{
-        const text = normalize(node.innerText || node.textContent);
-        return text === expectedText || textLines(text).some((line) => line === expectedText);
-      }});
-      const responseLikeLeafs = tokenLeafs.filter((node) => {{
-        const text = normalize(node.innerText || node.textContent);
-        const tokenLineExact = text === expectedText ||
-          textLines(text).some((line) => line === expectedText);
-        return tokenLineExact && !promptEchoLeafs.includes(node);
-      }});
+  const textLines = (text) => text.split('\\n').map((line) => line.trim()).filter(Boolean);
+  const promptSuffixEchoLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const beforeChars = text.indexOf(expectedText);
+    const afterChars = text.length - beforeChars - expectedText.length;
+    return beforeChars > 0 && afterChars === 0 && text.length > expectedText.length;
+  }});
+  const promptEchoLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return promptMarkers.some((marker) => marker && text.includes(marker)) ||
+      promptSuffixEchoLeafs.includes(node);
+  }});
+  const exactLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text === expectedText || textLines(text).some((line) => line === expectedText);
+  }});
+  const responseLikeLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const tokenLineExact = text === expectedText ||
+      textLines(text).some((line) => line === expectedText);
+    return tokenLineExact && !promptEchoLeafs.includes(node);
+  }});
+  const visibleSelectorCount = (selector) => (
+    Array.from(document.querySelectorAll(selector)).filter((node) => visible(node)).length
+  );
+  const buttonLabel = (button) => ([
+    button.getAttribute('aria-label') || '',
+    button.getAttribute('title') || '',
+    button.innerText || '',
+    button.textContent || ''
+  ].join(' ').toLowerCase());
+  const visibleButtons = Array.from(document.querySelectorAll('button')).filter((button) => visible(button));
+  const stopGeneratingButtons = visibleButtons.filter((button) => (
+    stopMarkers.some((marker) => buttonLabel(button).includes(marker))
+  ));
+  const progressCandidateCount = (
+    visibleSelectorCount('[aria-busy="true"]') +
+    visibleSelectorCount('[role="progressbar"]') +
+    visibleSelectorCount('[data-testid*="spinner"]')
+  );
+  const bodyText = normalize(document.body && document.body.innerText).toLowerCase();
+  const authOrBackendBlockerCandidateCount = authOrBackendMarkers.filter((marker) => (
+    marker && bodyText.includes(marker)
+  )).length;
+  const modelOrRuntimeBlockerCandidateCount = modelOrRuntimeMarkers.filter((marker) => (
+    marker && bodyText.includes(marker)
+  )).length;
+  const responseSurfaceLeafs = textElements.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    if (text.length < 20) return false;
+    if (text.includes(expectedText)) return false;
+    if (node.closest && node.closest('button')) return false;
+    if (promptMarkers.some((marker) => marker && text.includes(marker))) return false;
+    return true;
+  }});
   const subagentMarkerLeafs = textElements.filter((node) => {{
     if (hasVisibleChildWith(node, 'Subagents') || hasVisibleChildWith(node, 'Субагенты')) return false;
     const text = normalize(node.innerText || node.textContent).toLowerCase();
@@ -1453,19 +1530,32 @@ def _cdp_observe_custom_response_token(
   }});
   const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
   const requestBoundExpectedToken = !!requestId && expectedText.includes(requestId);
+  const assistantTurnStartedObserved = responseExactTokenObserved ||
+    stopGeneratingButtons.length > 0;
+  const assistantTurnFailedObserved = authOrBackendBlockerCandidateCount > 0 ||
+    modelOrRuntimeBlockerCandidateCount > 0;
   return {{
     readyState: document.readyState,
     url: location.href,
+    assistantTurnProbeScanPerformed: true,
+    assistantTurnStartedObserved: assistantTurnStartedObserved,
+    assistantTurnCompletedObserved: responseExactTokenObserved,
+    assistantTurnFailedObserved: assistantTurnFailedObserved && !responseExactTokenObserved,
+    authOrBackendBlockerObserved: authOrBackendBlockerCandidateCount > 0,
+    modelOrRuntimeBlockerObserved: modelOrRuntimeBlockerCandidateCount > 0,
+    progressCandidateCount,
+    stopGeneratingCandidateCount: stopGeneratingButtons.length,
+    responseSurfaceCandidateCount: responseSurfaceLeafs.length,
     responseObserverScanPerformed: true,
     responseTextReadWithoutStoring: true,
     textValueCaptured: false,
     rawDomExposed: false,
     rawPromptRecorded: false,
-      tokenLeafCandidateCount: tokenLeafs.length,
-      promptEchoCandidateCount: promptEchoLeafs.length,
-      promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
-      exactTokenCandidateCount: exactLeafs.length,
-      responseLikeCandidateCount: responseLikeLeafs.length,
+    tokenLeafCandidateCount: tokenLeafs.length,
+    promptEchoCandidateCount: promptEchoLeafs.length,
+    promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
+    exactTokenCandidateCount: exactLeafs.length,
+    responseLikeCandidateCount: responseLikeLeafs.length,
     subagentMarkerCandidateCount: subagentMarkerLeafs.length,
     customResponseExactTokenObserved: responseExactTokenObserved,
     nativeCodexSubagentUsedAsDip: subagentMarkerLeafs.length > 0,
@@ -1475,6 +1565,13 @@ def _cdp_observe_custom_response_token(
 }})()
 """.strip()
     last_packet: dict[str, Any] = {}
+    assistant_turn_started = False
+    assistant_turn_failed = False
+    auth_or_backend_blocker = False
+    model_or_runtime_blocker = False
+    max_progress_candidate_count = 0
+    max_stop_generating_candidate_count = 0
+    max_response_surface_candidate_count = 0
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() <= deadline:
         try:
@@ -1499,6 +1596,32 @@ def _cdp_observe_custom_response_token(
         subagent_used = value.get("nativeCodexSubagentUsedAsDip") is True
         absence_proven = value.get("nativeCodexSubagentAbsenceProven") is True
         request_bound = token_observed and value.get("customResponseBoundToRequest") is True
+        assistant_turn_started = (
+            assistant_turn_started
+            or value.get("assistantTurnStartedObserved") is True
+            or token_observed
+        )
+        auth_or_backend_blocker = (
+            auth_or_backend_blocker or value.get("authOrBackendBlockerObserved") is True
+        )
+        model_or_runtime_blocker = (
+            model_or_runtime_blocker or value.get("modelOrRuntimeBlockerObserved") is True
+        )
+        assistant_turn_failed = (
+            assistant_turn_failed or value.get("assistantTurnFailedObserved") is True
+        )
+        max_progress_candidate_count = max(
+            max_progress_candidate_count,
+            int(value.get("progressCandidateCount") or 0),
+        )
+        max_stop_generating_candidate_count = max(
+            max_stop_generating_candidate_count,
+            int(value.get("stopGeneratingCandidateCount") or 0),
+        )
+        max_response_surface_candidate_count = max(
+            max_response_surface_candidate_count,
+            int(value.get("responseSurfaceCandidateCount") or 0),
+        )
         if token_observed or subagent_used:
             machine_code = "OK"
             if subagent_used:
@@ -1506,6 +1629,25 @@ def _cdp_observe_custom_response_token(
             elif not absence_proven or not request_bound:
                 machine_code = "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
             return {
+                "assistant_turn_probe_attempted": True,
+                "assistant_turn_probe_scan_performed": (
+                    value.get("assistantTurnProbeScanPerformed") is True
+                ),
+                "assistant_turn_started_observed": assistant_turn_started,
+                "assistant_turn_completed_observed": token_observed,
+                "assistant_turn_failed_observed": assistant_turn_failed,
+                "assistant_turn_machine_error_code": (
+                    "OK"
+                    if token_observed and absence_proven and request_bound
+                    else "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_PROVEN"
+                ),
+                "assistant_turn_progress_candidate_count": max_progress_candidate_count,
+                "assistant_turn_stop_generating_candidate_count": (
+                    max_stop_generating_candidate_count
+                ),
+                "auth_or_backend_blocker_observed": auth_or_backend_blocker,
+                "model_or_runtime_blocker_observed": model_or_runtime_blocker,
+                "response_surface_candidate_count": max_response_surface_candidate_count,
                 "native_agent_provider_call_directly_observed": False,
                 "custom_codex_response_text_read_proven": token_observed,
                 "custom_response_exact_token_observed": token_observed,
@@ -1515,17 +1657,33 @@ def _cdp_observe_custom_response_token(
                 "native_free_text_observer_source": "bounded_cdp_response_token_scan",
                 "native_free_text_observer_machine_error_code": machine_code,
                 "custom_response_observer_attempted": True,
-                "custom_response_observer_scan_performed": value.get("responseObserverScanPerformed") is True,
-                "custom_response_text_read_without_storing": value.get("responseTextReadWithoutStoring") is True,
-                "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
-                "custom_response_token_leaf_candidate_count": int(value.get("tokenLeafCandidateCount") or 0),
-                "custom_response_prompt_echo_candidate_count": int(value.get("promptEchoCandidateCount") or 0),
+                "custom_response_observer_scan_performed": (
+                    value.get("responseObserverScanPerformed") is True
+                ),
+                "custom_response_text_read_without_storing": (
+                    value.get("responseTextReadWithoutStoring") is True
+                ),
+                "custom_response_expected_sha256": hashlib.sha256(
+                    expected_text.encode("utf-8")
+                ).hexdigest(),
+                "custom_response_token_leaf_candidate_count": int(
+                    value.get("tokenLeafCandidateCount") or 0
+                ),
+                "custom_response_prompt_echo_candidate_count": int(
+                    value.get("promptEchoCandidateCount") or 0
+                ),
                 "custom_response_prompt_suffix_echo_candidate_count": int(
                     value.get("promptSuffixEchoCandidateCount") or 0
                 ),
-                "custom_response_exact_token_candidate_count": int(value.get("exactTokenCandidateCount") or 0),
-                "custom_response_like_candidate_count": int(value.get("responseLikeCandidateCount") or 0),
-                "native_codex_subagent_marker_candidate_count": int(value.get("subagentMarkerCandidateCount") or 0),
+                "custom_response_exact_token_candidate_count": int(
+                    value.get("exactTokenCandidateCount") or 0
+                ),
+                "custom_response_like_candidate_count": int(
+                    value.get("responseLikeCandidateCount") or 0
+                ),
+                "native_codex_subagent_marker_candidate_count": int(
+                    value.get("subagentMarkerCandidateCount") or 0
+                ),
                 "raw_dom_exposed": False,
                 "prompt_text_recorded": False,
                 "raw_prompt_recorded": False,
@@ -1534,23 +1692,53 @@ def _cdp_observe_custom_response_token(
         if timeout_seconds <= 0:
             break
         time.sleep(CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS)
+    assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+    if assistant_turn_failed:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_FAILED_OR_BLOCKED"
+    elif assistant_turn_started:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_RESPONSE_NOT_PROVEN"
     return _native_free_text_observer_defaults() | {
+        "assistant_turn_probe_attempted": True,
+        "assistant_turn_probe_scan_performed": bool(last_packet),
+        "assistant_turn_started_observed": assistant_turn_started,
+        "assistant_turn_completed_observed": False,
+        "assistant_turn_failed_observed": assistant_turn_failed,
+        "assistant_turn_machine_error_code": assistant_turn_machine_error_code,
+        "assistant_turn_progress_candidate_count": max_progress_candidate_count,
+        "assistant_turn_stop_generating_candidate_count": (
+            max_stop_generating_candidate_count
+        ),
+        "auth_or_backend_blocker_observed": auth_or_backend_blocker,
+        "model_or_runtime_blocker_observed": model_or_runtime_blocker,
+        "response_surface_candidate_count": max_response_surface_candidate_count,
         "custom_response_observer_attempted": True,
         "custom_response_observer_scan_performed": bool(last_packet),
         "native_free_text_observer_source": "bounded_cdp_response_token_scan",
         "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
-        "custom_response_expected_sha256": hashlib.sha256(expected_text.encode("utf-8")).hexdigest(),
+        "custom_response_expected_sha256": hashlib.sha256(
+            expected_text.encode("utf-8")
+        ).hexdigest(),
         "custom_response_text_read_without_storing": (
             last_packet.get("responseTextReadWithoutStoring") is True
         ),
-        "custom_response_token_leaf_candidate_count": int(last_packet.get("tokenLeafCandidateCount") or 0),
-        "custom_response_prompt_echo_candidate_count": int(last_packet.get("promptEchoCandidateCount") or 0),
+        "custom_response_token_leaf_candidate_count": int(
+            last_packet.get("tokenLeafCandidateCount") or 0
+        ),
+        "custom_response_prompt_echo_candidate_count": int(
+            last_packet.get("promptEchoCandidateCount") or 0
+        ),
         "custom_response_prompt_suffix_echo_candidate_count": int(
             last_packet.get("promptSuffixEchoCandidateCount") or 0
         ),
-        "custom_response_exact_token_candidate_count": int(last_packet.get("exactTokenCandidateCount") or 0),
-        "custom_response_like_candidate_count": int(last_packet.get("responseLikeCandidateCount") or 0),
-        "native_codex_subagent_marker_candidate_count": int(last_packet.get("subagentMarkerCandidateCount") or 0),
+        "custom_response_exact_token_candidate_count": int(
+            last_packet.get("exactTokenCandidateCount") or 0
+        ),
+        "custom_response_like_candidate_count": int(
+            last_packet.get("responseLikeCandidateCount") or 0
+        ),
+        "native_codex_subagent_marker_candidate_count": int(
+            last_packet.get("subagentMarkerCandidateCount") or 0
+        ),
         "raw_dom_exposed": False,
         "prompt_text_recorded": False,
         "raw_prompt_recorded": False,

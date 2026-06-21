@@ -251,6 +251,10 @@ def _native_ui_failures(
         ("input_text_insert_attempted", "native_prompt_insert_not_attempted"),
         ("input_text_insert_succeeded", "native_prompt_insert_not_succeeded"),
         ("prompt_submitted", "native_prompt_not_submitted"),
+        ("assistant_turn_probe_attempted", "assistant_turn_probe_not_attempted"),
+        ("assistant_turn_probe_scan_performed", "assistant_turn_probe_scan_not_performed"),
+        ("assistant_turn_started_observed", "assistant_turn_not_started"),
+        ("assistant_turn_completed_observed", "assistant_turn_not_completed"),
         ("custom_response_observer_attempted", "custom_response_observer_not_attempted"),
         (
             "custom_response_observer_scan_performed",
@@ -275,6 +279,10 @@ def _native_ui_failures(
             failures.append(reason)
     if native.get("native_codex_subagent_used_as_dip") is not False:
         failures.append("native_codex_subagent_used_as_dip")
+    if native.get("assistant_turn_failed_observed") is not False:
+        failures.append("assistant_turn_failed_or_blocked")
+    if native.get("assistant_turn_machine_error_code") != "OK":
+        failures.append("assistant_turn_machine_error_code_not_ok")
 
     native_expected_sha = _hex_sha256(native.get("custom_response_expected_sha256"))
     expected_sha_match = bool(
@@ -476,6 +484,38 @@ def build_custom_codex_ui_visibility_proof_packet(
         "custom_codex_native_app_usable": native.get("native_app_usable") is True,
         "input_capable_ui_observed": native.get("input_capable_ui_observed") is True,
         "native_prompt_submitted": native.get("prompt_submitted") is True,
+        "assistant_turn_probe_attempted": (
+            native.get("assistant_turn_probe_attempted") is True
+        ),
+        "assistant_turn_probe_scan_performed": (
+            native.get("assistant_turn_probe_scan_performed") is True
+        ),
+        "assistant_turn_started_observed": (
+            native.get("assistant_turn_started_observed") is True
+        ),
+        "assistant_turn_completed_observed": (
+            native.get("assistant_turn_completed_observed") is True
+        ),
+        "assistant_turn_failed_observed": native.get("assistant_turn_failed_observed") is True,
+        "assistant_turn_machine_error_code": _safe_text(
+            native.get("assistant_turn_machine_error_code"),
+            limit=96,
+        ),
+        "assistant_turn_progress_candidate_count": int(
+            native.get("assistant_turn_progress_candidate_count") or 0
+        ),
+        "assistant_turn_stop_generating_candidate_count": int(
+            native.get("assistant_turn_stop_generating_candidate_count") or 0
+        ),
+        "auth_or_backend_blocker_observed": (
+            native.get("auth_or_backend_blocker_observed") is True
+        ),
+        "model_or_runtime_blocker_observed": (
+            native.get("model_or_runtime_blocker_observed") is True
+        ),
+        "response_surface_candidate_count": int(
+            native.get("response_surface_candidate_count") or 0
+        ),
         "native_ui_observer_source": _safe_text(
             native.get("native_free_text_observer_source"),
             limit=96,

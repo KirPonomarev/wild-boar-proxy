@@ -143,6 +143,17 @@ def _native_packet(
         "input_text_insert_attempted": True,
         "input_text_insert_succeeded": True,
         "prompt_submitted": True,
+        "assistant_turn_probe_attempted": True,
+        "assistant_turn_probe_scan_performed": True,
+        "assistant_turn_started_observed": True,
+        "assistant_turn_completed_observed": True,
+        "assistant_turn_failed_observed": False,
+        "assistant_turn_machine_error_code": "OK",
+        "assistant_turn_progress_candidate_count": 0,
+        "assistant_turn_stop_generating_candidate_count": 1,
+        "auth_or_backend_blocker_observed": False,
+        "model_or_runtime_blocker_observed": False,
+        "response_surface_candidate_count": 1,
         "custom_response_observer_attempted": True,
         "custom_response_observer_scan_performed": True,
         "custom_response_text_read_without_storing": True,
@@ -220,6 +231,15 @@ class CustomCodexUiVisibilityProofTests(unittest.TestCase):
                     "custom_codex_response_text_read_proven": False,
                     "custom_response_exact_token_observed": False,
                     "custom_response_bound_to_request": False,
+                    "assistant_turn_started_observed": True,
+                    "assistant_turn_completed_observed": False,
+                    "assistant_turn_failed_observed": False,
+                    "assistant_turn_machine_error_code": (
+                        "CUSTOM_NATIVE_ASSISTANT_TURN_RESPONSE_NOT_PROVEN"
+                    ),
+                    "assistant_turn_progress_candidate_count": 3,
+                    "assistant_turn_stop_generating_candidate_count": 1,
+                    "response_surface_candidate_count": 0,
                     "native_codex_subagent_absence_proven": False,
                     "native_free_text_observer_machine_error_code": (
                         "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
@@ -245,6 +265,14 @@ class CustomCodexUiVisibilityProofTests(unittest.TestCase):
         self.assertEqual(packet["custom_response_token_leaf_candidate_count"], 1)
         self.assertEqual(packet["custom_response_prompt_echo_candidate_count"], 1)
         self.assertEqual(packet["custom_response_prompt_suffix_echo_candidate_count"], 1)
+        self.assertTrue(packet["assistant_turn_started_observed"])
+        self.assertFalse(packet["assistant_turn_completed_observed"])
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_RESPONSE_NOT_PROVEN",
+        )
+        self.assertEqual(packet["assistant_turn_progress_candidate_count"], 3)
+        self.assertEqual(packet["assistant_turn_stop_generating_candidate_count"], 1)
         self.assertFalse(packet["custom_codex_ui_visibility_proven"])
         serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
         self.assertNotIn(EXPECTED_VISIBLE_TEXT, serialized)
