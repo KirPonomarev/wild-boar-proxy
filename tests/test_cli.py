@@ -4641,6 +4641,8 @@ class CliTests(unittest.TestCase):
                 "/tmp/wbp-native-ui-proof",
                 "--persistent-profile-id",
                 "wbp-custom-main",
+                "--observer-timeout-seconds",
+                "45",
                 "--json",
             ]
         )
@@ -4648,6 +4650,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.codex_runner_command, "native-ui-observer-proof")
         self.assertEqual(args.request_id, "req-123")
         self.assertEqual(args.expected_text, "WBP_NATIVE_VISIBLE_req-123")
+        self.assertEqual(args.observer_timeout_seconds, 45.0)
         self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
 
     def test_cli_effect_classifier_covers_external_models_route_mutations(self) -> None:

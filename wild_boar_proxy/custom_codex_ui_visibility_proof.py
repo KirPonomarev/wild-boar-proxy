@@ -253,8 +253,14 @@ def _native_ui_failures(
         ("prompt_submitted", "native_prompt_not_submitted"),
         ("assistant_turn_probe_attempted", "assistant_turn_probe_not_attempted"),
         ("assistant_turn_probe_scan_performed", "assistant_turn_probe_scan_not_performed"),
+        ("assistant_turn_activity_observed", "assistant_turn_activity_not_observed"),
         ("assistant_turn_started_observed", "assistant_turn_not_started"),
         ("assistant_turn_completed_observed", "assistant_turn_not_completed"),
+        ("assistant_turn_activity_ended_observed", "assistant_turn_activity_not_ended"),
+        (
+            "assistant_turn_post_completion_scan_performed",
+            "assistant_turn_post_completion_scan_not_performed",
+        ),
         ("custom_response_observer_attempted", "custom_response_observer_not_attempted"),
         (
             "custom_response_observer_scan_performed",
@@ -490,12 +496,22 @@ def build_custom_codex_ui_visibility_proof_packet(
         "assistant_turn_probe_scan_performed": (
             native.get("assistant_turn_probe_scan_performed") is True
         ),
+        "assistant_turn_activity_observed": (
+            native.get("assistant_turn_activity_observed") is True
+        ),
         "assistant_turn_started_observed": (
             native.get("assistant_turn_started_observed") is True
         ),
         "assistant_turn_completed_observed": (
             native.get("assistant_turn_completed_observed") is True
         ),
+        "assistant_turn_activity_ended_observed": (
+            native.get("assistant_turn_activity_ended_observed") is True
+        ),
+        "assistant_turn_post_completion_scan_performed": (
+            native.get("assistant_turn_post_completion_scan_performed") is True
+        ),
+        "assistant_turn_last_scan_active": native.get("assistant_turn_last_scan_active") is True,
         "assistant_turn_failed_observed": native.get("assistant_turn_failed_observed") is True,
         "assistant_turn_machine_error_code": _safe_text(
             native.get("assistant_turn_machine_error_code"),

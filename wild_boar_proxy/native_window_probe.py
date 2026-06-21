@@ -80,6 +80,7 @@ CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
 CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
 CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
 CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 12.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS = 90.0
 CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS = 0.25
@@ -1341,8 +1342,12 @@ def _native_free_text_observer_defaults() -> dict[str, Any]:
     return {
         "assistant_turn_probe_attempted": False,
         "assistant_turn_probe_scan_performed": False,
+        "assistant_turn_activity_observed": False,
         "assistant_turn_started_observed": False,
         "assistant_turn_completed_observed": False,
+        "assistant_turn_activity_ended_observed": False,
+        "assistant_turn_post_completion_scan_performed": False,
+        "assistant_turn_last_scan_active": False,
         "assistant_turn_failed_observed": False,
         "assistant_turn_machine_error_code": "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
         "assistant_turn_progress_candidate_count": 0,
@@ -1389,7 +1394,10 @@ def _cdp_observe_custom_response_token(
             "custom_response_observer_attempted": False,
             "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_EXPECTED_TEXT_REQUIRED",
         }
-    timeout_seconds = max(0.0, min(float(timeout_seconds), CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS))
+    timeout_seconds = max(
+        0.0,
+        min(float(timeout_seconds), CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS),
+    )
     expected_literal = json.dumps(expected_text, ensure_ascii=False)
     request_id_literal = json.dumps(request_id, ensure_ascii=False)
     expression = f"""
@@ -1530,7 +1538,7 @@ def _cdp_observe_custom_response_token(
   }});
   const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
   const requestBoundExpectedToken = !!requestId && expectedText.includes(requestId);
-  const assistantTurnStartedObserved = responseExactTokenObserved ||
+  const assistantTurnActivityObserved = responseExactTokenObserved ||
     stopGeneratingButtons.length > 0;
   const assistantTurnFailedObserved = authOrBackendBlockerCandidateCount > 0 ||
     modelOrRuntimeBlockerCandidateCount > 0;
@@ -1538,7 +1546,8 @@ def _cdp_observe_custom_response_token(
     readyState: document.readyState,
     url: location.href,
     assistantTurnProbeScanPerformed: true,
-    assistantTurnStartedObserved: assistantTurnStartedObserved,
+    assistantTurnActivityObserved: assistantTurnActivityObserved,
+    assistantTurnStartedObserved: assistantTurnActivityObserved,
     assistantTurnCompletedObserved: responseExactTokenObserved,
     assistantTurnFailedObserved: assistantTurnFailedObserved && !responseExactTokenObserved,
     authOrBackendBlockerObserved: authOrBackendBlockerCandidateCount > 0,
@@ -1551,6 +1560,7 @@ def _cdp_observe_custom_response_token(
     textValueCaptured: false,
     rawDomExposed: false,
     rawPromptRecorded: false,
+    assistantTurnActiveSignalCount: stopGeneratingButtons.length,
     tokenLeafCandidateCount: tokenLeafs.length,
     promptEchoCandidateCount: promptEchoLeafs.length,
     promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
@@ -1565,7 +1575,11 @@ def _cdp_observe_custom_response_token(
 }})()
 """.strip()
     last_packet: dict[str, Any] = {}
-    assistant_turn_started = False
+    assistant_turn_activity_observed = False
+    assistant_turn_completion_observed = False
+    assistant_turn_activity_ended_observed = False
+    assistant_turn_post_completion_scan_performed = False
+    assistant_turn_last_scan_active = False
     assistant_turn_failed = False
     auth_or_backend_blocker = False
     model_or_runtime_blocker = False
@@ -1596,11 +1610,20 @@ def _cdp_observe_custom_response_token(
         subagent_used = value.get("nativeCodexSubagentUsedAsDip") is True
         absence_proven = value.get("nativeCodexSubagentAbsenceProven") is True
         request_bound = token_observed and value.get("customResponseBoundToRequest") is True
-        assistant_turn_started = (
-            assistant_turn_started
+        current_active_signal = (
+            value.get("assistantTurnActivityObserved") is True
             or value.get("assistantTurnStartedObserved") is True
             or token_observed
         )
+        if current_active_signal:
+            assistant_turn_activity_observed = True
+        elif assistant_turn_activity_observed:
+            assistant_turn_completion_observed = True
+            assistant_turn_activity_ended_observed = True
+            assistant_turn_post_completion_scan_performed = (
+                value.get("assistantTurnProbeScanPerformed") is True
+            )
+        assistant_turn_last_scan_active = current_active_signal
         auth_or_backend_blocker = (
             auth_or_backend_blocker or value.get("authOrBackendBlockerObserved") is True
         )
@@ -1623,6 +1646,10 @@ def _cdp_observe_custom_response_token(
             int(value.get("responseSurfaceCandidateCount") or 0),
         )
         if token_observed or subagent_used:
+            assistant_turn_activity_observed = (
+                assistant_turn_activity_observed or token_observed
+            )
+            assistant_turn_completion_observed = token_observed
             machine_code = "OK"
             if subagent_used:
                 machine_code = "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"
@@ -1633,8 +1660,16 @@ def _cdp_observe_custom_response_token(
                 "assistant_turn_probe_scan_performed": (
                     value.get("assistantTurnProbeScanPerformed") is True
                 ),
-                "assistant_turn_started_observed": assistant_turn_started,
-                "assistant_turn_completed_observed": token_observed,
+                "assistant_turn_activity_observed": assistant_turn_activity_observed,
+                "assistant_turn_started_observed": assistant_turn_activity_observed,
+                "assistant_turn_completed_observed": assistant_turn_completion_observed,
+                "assistant_turn_activity_ended_observed": (
+                    assistant_turn_activity_ended_observed or token_observed
+                ),
+                "assistant_turn_post_completion_scan_performed": (
+                    assistant_turn_post_completion_scan_performed or token_observed
+                ),
+                "assistant_turn_last_scan_active": current_active_signal,
                 "assistant_turn_failed_observed": assistant_turn_failed,
                 "assistant_turn_machine_error_code": (
                     "OK"
@@ -1689,19 +1724,39 @@ def _cdp_observe_custom_response_token(
                 "raw_prompt_recorded": False,
                 "text_value_captured": False,
             }
+        if assistant_turn_completion_observed:
+            break
         if timeout_seconds <= 0:
             break
         time.sleep(CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS)
     assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+    prompt_echo_only = (
+        int(last_packet.get("tokenLeafCandidateCount") or 0) > 0
+        and int(last_packet.get("promptEchoCandidateCount") or 0) > 0
+        and int(last_packet.get("exactTokenCandidateCount") or 0) == 0
+        and int(last_packet.get("responseLikeCandidateCount") or 0) == 0
+    )
     if assistant_turn_failed:
         assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_FAILED_OR_BLOCKED"
-    elif assistant_turn_started:
-        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_RESPONSE_NOT_PROVEN"
+    elif assistant_turn_activity_observed and not assistant_turn_completion_observed:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_STILL_RUNNING"
+    elif prompt_echo_only:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY"
+    elif assistant_turn_completion_observed:
+        assistant_turn_machine_error_code = (
+            "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN"
+        )
     return _native_free_text_observer_defaults() | {
         "assistant_turn_probe_attempted": True,
         "assistant_turn_probe_scan_performed": bool(last_packet),
-        "assistant_turn_started_observed": assistant_turn_started,
-        "assistant_turn_completed_observed": False,
+        "assistant_turn_activity_observed": assistant_turn_activity_observed,
+        "assistant_turn_started_observed": assistant_turn_activity_observed,
+        "assistant_turn_completed_observed": assistant_turn_completion_observed,
+        "assistant_turn_activity_ended_observed": assistant_turn_activity_ended_observed,
+        "assistant_turn_post_completion_scan_performed": (
+            assistant_turn_post_completion_scan_performed
+        ),
+        "assistant_turn_last_scan_active": assistant_turn_last_scan_active,
         "assistant_turn_failed_observed": assistant_turn_failed,
         "assistant_turn_machine_error_code": assistant_turn_machine_error_code,
         "assistant_turn_progress_candidate_count": max_progress_candidate_count,
@@ -2752,6 +2807,7 @@ def _cdp_submit_prompt_to_app_page(
     expected_text: str = "",
     port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
     allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    observer_timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
 ) -> dict[str, Any]:
     if not prompt:
         return _cdp_prompt_submit_blocked_packet(
@@ -3179,6 +3235,7 @@ def _cdp_submit_prompt_to_app_page(
                     ws_url,
                     expected_text=expected_text,
                     request_id=request_id,
+                    timeout_seconds=observer_timeout_seconds,
                 )
                 if expected_text
                 else _native_free_text_observer_defaults()
@@ -3247,6 +3304,7 @@ def submit_custom_native_window_prompt_packet(
     expected_text: str = "",
     persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     persistent_profile_base_dir: Path | None = None,
+    observer_timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
 ) -> dict[str, Any]:
     show_packet = show_custom_native_window_packet(
         persistent_profile_id=persistent_profile_id,
@@ -3287,6 +3345,7 @@ def submit_custom_native_window_prompt_packet(
         allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
         if isinstance(show_packet.get("custom_window_candidate_pids"), list)
         else None,
+        observer_timeout_seconds=observer_timeout_seconds,
     )
     packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True

@@ -380,6 +380,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="wbp-custom-main",
     )
     codex_runner_native_ui.add_argument("--persistent-profile-base-dir")
+    codex_runner_native_ui.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
     codex_runner_native_ui.add_argument("--json", action="store_true", required=True)
     codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
         "interactive-preflight"
@@ -1756,6 +1761,7 @@ def main(argv: list[str] | None = None) -> int:
                     proof_dir=args.proof_dir,
                     persistent_profile_id=args.persistent_profile_id,
                     persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
                 )
             )
         if (

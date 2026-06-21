@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest import mock
 
 import wild_boar_proxy.native_window_probe as native_probe
@@ -1529,6 +1530,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseObserverScanPerformed": True,
                             "responseTextReadWithoutStoring": True,
                             "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
                             "assistantTurnStartedObserved": True,
                             "assistantTurnCompletedObserved": True,
                             "assistantTurnFailedObserved": False,
@@ -1595,8 +1597,11 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["custom_response_observer_scan_performed"])
         self.assertTrue(packet["assistant_turn_probe_attempted"])
         self.assertTrue(packet["assistant_turn_probe_scan_performed"])
+        self.assertTrue(packet["assistant_turn_activity_observed"])
         self.assertTrue(packet["assistant_turn_started_observed"])
         self.assertTrue(packet["assistant_turn_completed_observed"])
+        self.assertTrue(packet["assistant_turn_activity_ended_observed"])
+        self.assertTrue(packet["assistant_turn_post_completion_scan_performed"])
         self.assertFalse(packet["assistant_turn_failed_observed"])
         self.assertEqual(packet["assistant_turn_machine_error_code"], "OK")
         self.assertTrue(packet["custom_response_text_read_without_storing"])
@@ -1780,6 +1785,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseObserverScanPerformed": True,
                             "responseTextReadWithoutStoring": True,
                             "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
                             "assistantTurnStartedObserved": True,
                             "assistantTurnCompletedObserved": True,
                             "assistantTurnFailedObserved": False,
@@ -1829,6 +1835,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseObserverScanPerformed": True,
                             "responseTextReadWithoutStoring": True,
                             "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
                             "assistantTurnStartedObserved": True,
                             "assistantTurnCompletedObserved": True,
                             "assistantTurnFailedObserved": False,
@@ -1879,6 +1886,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseObserverScanPerformed": True,
                             "responseTextReadWithoutStoring": True,
                             "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
                             "assistantTurnStartedObserved": False,
                             "assistantTurnCompletedObserved": False,
                             "assistantTurnFailedObserved": False,
@@ -1915,7 +1923,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["assistant_turn_completed_observed"])
         self.assertEqual(
             packet["assistant_turn_machine_error_code"],
-            "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
+            "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY",
         )
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
         self.assertFalse(packet["native_codex_subagent_absence_proven"])
@@ -1938,6 +1946,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                             "responseObserverScanPerformed": True,
                             "responseTextReadWithoutStoring": True,
                             "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
                             "assistantTurnStartedObserved": False,
                             "assistantTurnCompletedObserved": False,
                             "assistantTurnFailedObserved": False,
@@ -1981,6 +1990,257 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["prompt_text_recorded"])
         self.assertFalse(packet["raw_dom_exposed"])
         self.assertFalse(packet["raw_prompt_recorded"])
+
+    def test_cdp_response_observer_reports_stop_button_as_turn_still_running(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_window_probe._cdp_command",
+            return_value={
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
+                            "assistantTurnStartedObserved": True,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 1,
+                            "responseSurfaceCandidateCount": 2,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-still-running",
+                request_id="native-submit-still-running",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["assistant_turn_activity_observed"])
+        self.assertTrue(packet["assistant_turn_started_observed"])
+        self.assertFalse(packet["assistant_turn_completed_observed"])
+        self.assertFalse(packet["assistant_turn_activity_ended_observed"])
+        self.assertFalse(packet["assistant_turn_post_completion_scan_performed"])
+        self.assertTrue(packet["assistant_turn_last_scan_active"])
+        self.assertEqual(packet["assistant_turn_stop_generating_candidate_count"], 1)
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_STILL_RUNNING",
+        )
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+
+    def test_cdp_response_observer_reports_completion_without_exact_token(self) -> None:
+        cdp_packets = [
+            {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
+                            "assistantTurnStartedObserved": True,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 1,
+                            "responseSurfaceCandidateCount": 2,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 3,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ]
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS",
+                0.0,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=cdp_packets,
+            ),
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-completed",
+                request_id="native-submit-completed",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["assistant_turn_activity_observed"])
+        self.assertTrue(packet["assistant_turn_started_observed"])
+        self.assertTrue(packet["assistant_turn_completed_observed"])
+        self.assertTrue(packet["assistant_turn_activity_ended_observed"])
+        self.assertTrue(packet["assistant_turn_post_completion_scan_performed"])
+        self.assertFalse(packet["assistant_turn_last_scan_active"])
+        self.assertEqual(packet["assistant_turn_stop_generating_candidate_count"], 1)
+        self.assertEqual(packet["response_surface_candidate_count"], 3)
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN",
+        )
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+
+    def test_cdp_response_observer_prefers_prompt_echo_over_completion_without_exact(
+        self,
+    ) -> None:
+        cdp_packets = [
+            {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": True,
+                            "assistantTurnStartedObserved": True,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 1,
+                            "responseSurfaceCandidateCount": 2,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 1,
+                            "promptSuffixEchoCandidateCount": 1,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+            {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 3,
+                            "tokenLeafCandidateCount": 1,
+                            "promptEchoCandidateCount": 1,
+                            "promptSuffixEchoCandidateCount": 1,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            },
+        ]
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS",
+                0.0,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=cdp_packets,
+            ),
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-echo-completed",
+                request_id="native-submit-echo-completed",
+                timeout_seconds=0.1,
+            )
+
+        self.assertTrue(packet["assistant_turn_activity_observed"])
+        self.assertTrue(packet["assistant_turn_completed_observed"])
+        self.assertTrue(packet["assistant_turn_activity_ended_observed"])
+        self.assertTrue(packet["assistant_turn_post_completion_scan_performed"])
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY",
+        )
+        self.assertFalse(packet["custom_response_exact_token_observed"])
+        self.assertEqual(packet["custom_response_prompt_echo_candidate_count"], 1)
 
     def test_submit_custom_native_window_prompt_blocks_without_input_capable_window(self) -> None:
         with mock.patch(
@@ -2074,6 +2334,9 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             request_id="native-submit-ok",
             expected_text="",
             allowed_owner_pids=[222, 333],
+            observer_timeout_seconds=(
+                native_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS
+            ),
         )
 
     def test_native_ui_observer_proof_command_writes_file_backed_native_packet(self) -> None:
@@ -2095,9 +2358,12 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     "input_capable_ui_observed": True,
                     "native_app_usable": True,
                     "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": "OK",
                     "input_text_insert_succeeded": True,
                     "custom_response_exact_token_observed": True,
                     "custom_response_bound_to_request": True,
+                    "native_codex_subagent_used_as_dip": False,
                     "native_free_text_observer_source": "bounded_cdp_response_token_scan",
                     "native_free_text_observer_machine_error_code": "OK",
                     "custom_codex_ui_visibility_proven": False,
@@ -2114,9 +2380,14 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     proof_dir=str(proof_dir),
                     persistent_profile_id="wbp-custom-main",
                     persistent_profile_base_dir=str(root / "profiles"),
+                    observer_timeout_seconds=45.0,
                 )
 
             submitter.assert_called_once()
+            self.assertEqual(
+                submitter.call_args.kwargs["observer_timeout_seconds"],
+                45.0,
+            )
             self.assertEqual(packet["packet_kind"], "custom_codex_native_prompt_submit")
             self.assertTrue(packet["native_ui_observer_packet_file_written"])
             self.assertFalse(packet["native_ui_observer_packet_file_path_recorded"])
@@ -2127,6 +2398,123 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             self.assertTrue(written.exists())
             persisted = json.loads(written.read_text(encoding="utf-8"))
             self.assertEqual(persisted["request_id"], "req-1")
+
+    def test_native_ui_observer_proof_command_does_not_greenwash_prompt_submit_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "req-echo",
+                    "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": (
+                        "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY"
+                    ),
+                    "custom_response_exact_token_observed": False,
+                    "custom_response_bound_to_request": False,
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_free_text_observer_machine_error_code": (
+                        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                    ),
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-echo",
+                    expected_text="WBP_NATIVE_req-echo",
+                    proof_dir=str(proof_dir),
+                )
+
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            persisted = json.loads(
+                (proof_dir / "native-ui-observer.packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertFalse(persisted["native_ui_observer_packet_proven"])
+            self.assertEqual(persisted["exit_code"], 1)
+
+    def test_cdp_response_observer_allows_explicit_bounded_wait_above_default(self) -> None:
+        scan_count: list[int] = []
+
+        def fake_cdp_command(_ws_url: str, _message: dict[str, Any], **_kwargs: object) -> dict[str, Any]:
+            scan_count.append(1)
+            return {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 0,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            }
+
+        monotonic_values = iter([0.0, 0.0, 45.0, 46.0])
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.time.monotonic",
+                side_effect=lambda: next(monotonic_values),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS",
+                0.0,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.time.sleep",
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=fake_cdp_command,
+            ),
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-long-wait",
+                request_id="native-submit-long-wait",
+                timeout_seconds=45.0,
+            )
+
+        self.assertEqual(len(scan_count), 2)
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
+        )
 
     def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
         response = mock.MagicMock()

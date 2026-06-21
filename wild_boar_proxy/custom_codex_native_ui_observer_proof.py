@@ -24,6 +24,21 @@ def _proof_root(paths: RuntimePaths, raw_proof_dir: str | None) -> Path:
     return paths.managed_dir / "codex-runner" / "native-ui-observer-proof" / stamp
 
 
+def _native_ui_observer_packet_proven(packet: dict[str, Any]) -> bool:
+    return (
+        packet.get("status") == "ok"
+        and packet.get("prompt_submitted") is True
+        and packet.get("native_prompt_turn_accepted") is True
+        and packet.get("assistant_turn_machine_error_code") == "OK"
+        and packet.get("native_free_text_observer_machine_error_code") == "OK"
+        and packet.get("custom_response_exact_token_observed") is True
+        and packet.get("custom_response_bound_to_request") is True
+        and packet.get("native_codex_subagent_used_as_dip") is not True
+        and packet.get("fallback_used") is not True
+        and packet.get("local_imitation_used") is not True
+    )
+
+
 def run_native_ui_observer_proof_command(
     *,
     paths: RuntimePaths,
@@ -33,6 +48,7 @@ def run_native_ui_observer_proof_command(
     proof_dir: str | None = None,
     persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     persistent_profile_base_dir: str | None = None,
+    observer_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     proof_root = _proof_root(paths, proof_dir)
     proof_root.mkdir(parents=True, exist_ok=True)
@@ -43,10 +59,15 @@ def run_native_ui_observer_proof_command(
         expected_text=expected_text,
         persistent_profile_id=persistent_profile_id,
         persistent_profile_base_dir=base_dir,
+        **(
+            {"observer_timeout_seconds": observer_timeout_seconds}
+            if observer_timeout_seconds is not None
+            else {}
+        ),
     )
-    packet.setdefault("native_ui_observer_packet_file_written", True)
-    packet.setdefault("native_ui_observer_packet_file_path_recorded", False)
-    packet.setdefault("native_ui_observer_packet_proven", packet.get("status") == "ok")
-    packet.setdefault("exit_code", 0 if packet.get("status") == "ok" else 1)
+    packet["native_ui_observer_packet_file_written"] = True
+    packet["native_ui_observer_packet_file_path_recorded"] = False
+    packet["native_ui_observer_packet_proven"] = _native_ui_observer_packet_proven(packet)
+    packet["exit_code"] = 0 if packet["native_ui_observer_packet_proven"] else 1
     write_json_atomic(proof_root / NATIVE_UI_OBSERVER_PACKET_FILE_NAME, packet)
     return packet
