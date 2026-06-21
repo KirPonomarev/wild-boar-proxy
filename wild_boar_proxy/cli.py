@@ -159,6 +159,9 @@ from .full_runtime_dispatch_proof import (
 from .full_runtime_dispatch_proof_runner import (
     run_full_runtime_dispatch_proof_runner_command,
 )
+from .full_runtime_dispatch_admission import (
+    run_full_runtime_dispatch_admission_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -704,6 +707,18 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     router_hook_full_runtime_dispatch_runner.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission = router_hook_subparsers.add_parser(
+        "full-runtime-dispatch-admission"
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1492,6 +1507,12 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
         if launch_command == "custom-app-identity-repair":
             return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        == "full-runtime-dispatch-admission"
+    ):
+        return EFFECT_READ
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
@@ -2080,6 +2101,15 @@ def main(argv: list[str] | None = None) -> int:
                     custom_codex_ui_visibility_proof_file=(
                         args.custom_codex_ui_visibility_proof_file
                     ),
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-admission"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_admission_command(
                     proof_dir=args.proof_dir,
                 )
             )
