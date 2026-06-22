@@ -19,6 +19,7 @@ from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_RE
 from .core import packets as command_packets
 from .custom_codex_admission import run_custom_codex_admission_command
 from .custom_codex_operator_proof import run_repeatable_operator_proof_command
+from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_command
 from .custom_codex_working_flow_visible_source_proof import (
     run_working_flow_visible_source_proof_command,
 )
@@ -343,6 +344,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_operator.add_argument("--json", action="store_true", required=True)
+    codex_runner_real_custom_dip = codex_runner_subparsers.add_parser(
+        "real-custom-dip-proof"
+    )
+    codex_runner_real_custom_dip.add_argument("--prompt", required=True)
+    codex_runner_real_custom_dip.add_argument("--codex-bin")
+    codex_runner_real_custom_dip.add_argument("--codex-model")
+    codex_runner_real_custom_dip.add_argument("--proof-dir")
+    codex_runner_real_custom_dip.add_argument("--codex-cwd")
+    codex_runner_real_custom_dip.add_argument("--expected-alias", default="DIP")
+    codex_runner_real_custom_dip.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_real_custom_dip.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_real_custom_dip.add_argument("--codex-hook-current-hash")
+    codex_runner_real_custom_dip.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_real_custom_dip.add_argument("--json", action="store_true", required=True)
     codex_runner_repeatable_status = codex_runner_subparsers.add_parser(
         "repeatable-proof-status"
     )
@@ -1750,6 +1775,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "fresh-live-e2e-proof",
         "fresh-sealed-e2e-proof",
         "fresh-router-ready-proof",
+        "real-custom-dip-proof",
         "native-ui-observer-proof",
         "native-response-matrix",
     }:
@@ -2053,6 +2079,25 @@ def main(argv: list[str] | None = None) -> int:
                     expected_text=args.expected_text,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "real-custom-dip-proof"
+        ):
+            return emit_json(
+                run_real_custom_dip_proof_runner_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_alias=args.expected_alias,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
                 )
             )
         if (

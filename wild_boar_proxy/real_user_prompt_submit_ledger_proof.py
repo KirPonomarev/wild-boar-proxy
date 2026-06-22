@@ -469,6 +469,8 @@ def run_real_user_prompt_submit_ledger_proof_command(
     prompt_text: object,
     hook_ledger_file: str | None = None,
     runtime_context_file: str | None = None,
+    codex_hook_current_hash: str = "",
+    probe_codex_app_server: bool = True,
 ) -> dict[str, Any]:
     context_path = runtime_context_path(
         paths=paths,
@@ -483,7 +485,8 @@ def run_real_user_prompt_submit_ledger_proof_command(
     hook_ledger, ledger_metadata = _ledger_file_metadata(ledger_path)
     readiness_packet = build_user_prompt_submit_readiness_packet(
         paths=paths,
-        probe_codex_app_server=True,
+        codex_hook_current_hash=codex_hook_current_hash,
+        probe_codex_app_server=probe_codex_app_server,
     )
     return build_real_user_prompt_submit_ledger_proof_packet(
         paths=paths,
