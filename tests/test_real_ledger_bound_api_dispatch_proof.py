@@ -348,33 +348,47 @@ class RealLedgerBoundApiDispatchProofTests(unittest.TestCase):
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_manual_or_synthetic_ledger_cannot_drive_dispatch(self) -> None:
-        cases = [
-            ("synthetic", "synthetic_hook_flow", False),
-            ("event_file", "custom_codex_flow_proven", True),
-        ]
-        for name, origin_state, use_event_file in cases:
-            with self.subTest(name=name):
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    paths = _prepare_paths(
-                        Path(temp_dir),
-                        origin_state=origin_state,
-                        use_event_file=use_event_file,
-                    )
-                    result = _run_dispatch_proof(paths)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _prepare_paths(
+                Path(temp_dir),
+                origin_state="synthetic_hook_flow",
+                use_event_file=False,
+            )
+            result = _run_dispatch_proof(paths)
 
-                packet = json.loads(result.stdout)
-                self.assertEqual(result.returncode, 1)
-                self.assertEqual(
-                    packet["machine_error_code"],
-                    proof.REAL_LEDGER_BOUND_API_DISPATCH_LEDGER_NOT_PROVEN,
-                )
-                self.assertFalse(packet["real_ledger_bound_api_dispatch_proven"])
-                self.assertFalse(packet["ledger_bound_dispatch_admitted"])
-                self.assertFalse(packet["api_lane_called"])
-                self.assertFalse(packet["api_response_received"])
-                _assert_no_handoff_ui_or_product_claim(self, packet)
-                _assert_no_raw_prompt_route_or_provider(self, packet)
-                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+        packet = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.REAL_LEDGER_BOUND_API_DISPATCH_LEDGER_NOT_PROVEN,
+        )
+        self.assertFalse(packet["real_ledger_bound_api_dispatch_proven"])
+        self.assertFalse(packet["ledger_bound_dispatch_admitted"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["api_response_received"])
+        _assert_no_handoff_ui_or_product_claim(self, packet)
+        _assert_no_raw_prompt_route_or_provider(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_context(paths, _runtime_context())
+            hook_result = _run_hook(
+                paths,
+                origin_state="custom_codex_flow_proven",
+                use_event_file=True,
+            )
+
+        hook_packet = json.loads(hook_result.stdout)
+        self.assertEqual(hook_result.returncode, 1)
+        self.assertFalse(hook_packet["hook_ledger_written"])
+        self.assertFalse(hook_packet["user_prompt_submit_hook_ran"])
+        self.assertIn(
+            "custom_codex_origin_requires_stdin_transport",
+            hook_packet["blocking_reasons"],
+        )
+        self.assertFalse(hook_packet["product_ready"])
+        self.assertEqual(packets.inspect_command_packet_semantics(hook_packet), [])
 
     def test_provider_failure_keeps_admission_but_blocks_response_proof(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

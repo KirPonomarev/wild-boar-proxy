@@ -63,6 +63,27 @@ class NativeCustomPasteBridgeTests(unittest.TestCase):
                             }
                         },
                     }
+                if message_id == 3650:
+                    return {
+                        "id": message["id"],
+                        "result": {
+                            "result": {
+                                "value": {
+                                    "promptAcceptanceScanPerformed": True,
+                                    "promptAccepted": True,
+                                    "promptStillInInput": False,
+                                    "inputCandidateCount": 1,
+                                    "inputContainingPromptCandidateCount": 0,
+                                    "maxVisibleInputLength": 0,
+                                    "disabledSubmitLikeButtonCount": 0,
+                                    "submitLikeButtonCount": 1,
+                                    "textValueCaptured": False,
+                                    "rawDomExposed": False,
+                                    "rawPromptRecorded": False,
+                                }
+                            }
+                        },
+                    }
             if method == "Input.insertText":
                 return {"id": message["id"], "result": {}}
             raise AssertionError(f"unexpected CDP message {message}")
@@ -97,7 +118,13 @@ class NativeCustomPasteBridgeTests(unittest.TestCase):
         read_clipboard.assert_not_called()
         self.assertEqual(
             [message["method"] for message in cdp_messages],
-            ["Runtime.evaluate", "Input.insertText", "Runtime.evaluate", "Runtime.evaluate"],
+            [
+                "Runtime.evaluate",
+                "Input.insertText",
+                "Runtime.evaluate",
+                "Runtime.evaluate",
+                "Runtime.evaluate",
+            ],
         )
 
     def test_cdp_clipboard_paste_only_never_dispatches_enter_or_submit(self) -> None:

@@ -28,6 +28,7 @@ from .fresh_live_custom_codex_e2e_proof import (
 from .fresh_sealed_e2e_proof import (
     run_fresh_sealed_e2e_proof_command,
 )
+from .repeatable_proof_status import run_repeatable_proof_status_command
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -340,6 +341,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_operator.add_argument("--json", action="store_true", required=True)
+    codex_runner_repeatable_status = codex_runner_subparsers.add_parser(
+        "repeatable-proof-status"
+    )
+    codex_runner_repeatable_status.add_argument("--route", required=True)
+    codex_runner_repeatable_status.add_argument("--fresh-proof-file")
+    codex_runner_repeatable_status.add_argument(
+        "--provider-expected-text",
+        default="WBP_REPEATABLE_PROOF_PREFLIGHT_OK",
+    )
+    codex_runner_repeatable_status.add_argument(
+        "--run-provider-preflight",
+        action="store_true",
+    )
+    codex_runner_repeatable_status.add_argument("--external-models-dir")
+    codex_runner_repeatable_status.add_argument("--codex-hook-current-hash")
+    codex_runner_repeatable_status.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_repeatable_status.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     codex_runner_visible_source = codex_runner_subparsers.add_parser(
         "working-flow-visible-source-proof"
     )
@@ -1621,6 +1646,11 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         return EFFECT_READ
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
         return EFFECT_PROBE
+    if (
+        command == "codex-runner"
+        and getattr(args, "codex_runner_command", None) == "repeatable-proof-status"
+    ):
+        return EFFECT_PROBE
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
         "admission",
         "operator-proof",
@@ -1929,6 +1959,22 @@ def main(argv: list[str] | None = None) -> int:
                     expected_text=args.expected_text,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "repeatable-proof-status"
+        ):
+            return emit_json(
+                run_repeatable_proof_status_command(
+                    paths=paths,
+                    route_id=args.route,
+                    fresh_proof_file=args.fresh_proof_file,
+                    provider_expected_text=args.provider_expected_text,
+                    run_provider_preflight=args.run_provider_preflight,
+                    external_models_dir=args.external_models_dir,
+                    codex_hook_current_hash=args.codex_hook_current_hash or "",
+                    probe_codex_app_server=args.probe_codex_app_server,
                 )
             )
         if (

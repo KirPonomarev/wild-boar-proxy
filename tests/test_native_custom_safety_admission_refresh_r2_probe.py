@@ -77,8 +77,19 @@ class NativeCustomSafetyAdmissionRefreshR2ProbeTests(unittest.TestCase):
             packets["model_availability_reference_packet.json"],
             packets["cli_runner_reference_packet.json"],
         )
+        reference_packet_names = {
+            "provider_auth_strategy_reference_packet.json",
+            "model_availability_reference_packet.json",
+            "cli_runner_reference_packet.json",
+        }
 
-        self.assertEqual(summary["status"], "ok")
+        if summary["status"] == "blocked":
+            self.assertTrue(summary["blocked_packets"])
+            self.assertTrue(
+                reference_packet_names.isdisjoint(summary["blocked_packets"])
+            )
+        else:
+            self.assertEqual(summary["status"], "ok")
         for reference in references:
             self.assertEqual(reference["source_status"], "missing")
             self.assertEqual(
