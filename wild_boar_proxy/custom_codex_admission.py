@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 from threading import Event, Thread
+import tomllib
 from typing import Any
 
 from .codex_transcript_delivery_observation import (
@@ -447,8 +448,37 @@ def _runtime_truth_snapshots(paths: RuntimePaths) -> dict[str, dict[str, Any]]:
     return {
         "supervisor_state": snapshot_path_state(paths.state_file),
         "runtime_effective_mode": snapshot_path_state(paths.runtime_effective_mode_file),
-        "config_toml": snapshot_path_state(paths.config_toml),
+        "config_toml": _config_toml_runtime_truth_snapshot(paths.config_toml),
         "managed_config": snapshot_path_state(paths.managed_config_file),
+    }
+
+
+def _without_hook_trust_state(value: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = json.loads(json.dumps(dict(value), ensure_ascii=True))
+    hooks = cleaned.get("hooks")
+    if isinstance(hooks, dict):
+        hooks = dict(hooks)
+        hooks.pop("state", None)
+        if hooks:
+            cleaned["hooks"] = hooks
+        else:
+            cleaned.pop("hooks", None)
+    return cleaned
+
+
+def _config_toml_runtime_truth_snapshot(path: Path) -> dict[str, Any]:
+    raw = snapshot_path_state(path)
+    if raw.get("state") != "file":
+        return raw
+    try:
+        parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {**raw, "runtime_truth_parse_ok": False}
+    runtime_truth = _without_hook_trust_state(parsed)
+    return {
+        "state": raw.get("state"),
+        "runtime_truth_parse_ok": True,
+        "runtime_truth_sha256": _canonical_digest(runtime_truth),
     }
 
 
@@ -465,7 +495,11 @@ def _runtime_truth_unchanged(
     unchanged: dict[str, bool] = {}
     mutated: list[str] = []
     for key, path in candidates.items():
-        current = snapshot_path_state(path)
+        current = (
+            _config_toml_runtime_truth_snapshot(path)
+            if key == "config_toml"
+            else snapshot_path_state(path)
+        )
         ok = dict(before.get(key, {"state": "missing"})) == current
         unchanged[key] = ok
         if not ok:
