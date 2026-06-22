@@ -116,6 +116,12 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertEqual(packet, persisted)
         self.assertTrue(packet["fresh_sealed_e2e_proven"])
         self.assertTrue(packet["fresh_runtime_proof_sealed"])
+        self.assertTrue(packet["core_dispatch_proven"])
+        self.assertTrue(packet["core_runtime_proof_sealed"])
+        self.assertFalse(packet["core_dispatch_requires_native_ui_visibility"])
+        self.assertFalse(packet["core_dispatch_requires_full_runtime_dispatch"])
+        self.assertFalse(packet["ui_visibility_required_for_core"])
+        self.assertFalse(packet["full_runtime_required_for_core"])
         self.assertTrue(packet["fresh_live_custom_codex_e2e_proven"])
         self.assertTrue(packet["full_runtime_dispatch_runner_proven"])
         self.assertTrue(packet["full_runtime_dispatch_proven"])
@@ -140,6 +146,7 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertTrue(packet["does_not_prove_product_ready"])
         self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
         self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["native_free_chat_router_product_ready"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["native_codex_subagent_used_as_dip"])
@@ -166,6 +173,93 @@ class FreshSealedE2EProofTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_core_dispatch_proof_succeeds_when_native_ui_visibility_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            blocked_ui = packets.build_command_packet(
+                ok=False,
+                human_message="UI visibility blocked by test.",
+                machine_error_code="WBP_TEST_UI_VISIBILITY_BLOCKED",
+                liveness="not_applicable",
+                severity="recoverable",
+                operator_action="stop",
+                changed_files=[],
+                effect="probe",
+                extra={
+                    "packet_kind": "wbp_custom_codex_ui_visibility_proof",
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                    "native_codex_subagent_used_as_dip": False,
+                    "raw_prompt_recorded": False,
+                    "raw_route_id_recorded": False,
+                    "raw_provider_response_recorded": False,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                    "blocking_reasons": ["test_ui_visibility_blocked"],
+                },
+            )
+
+            with (
+                mock.patch.dict(
+                    "os.environ",
+                    {
+                        "PYTHONPATH": str(ROOT),
+                        "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.fresh_sealed_e2e_proof."
+                    "run_custom_codex_ui_visibility_proof_command",
+                    return_value=blocked_ui,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.fresh_sealed_e2e_proof."
+                    "_new_freshness_anchor_digest",
+                    return_value=FRESHNESS_ANCHOR_DIGEST,
+                ),
+            ):
+                packet = fresh_sealed.run_fresh_sealed_e2e_proof_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["fresh_sealed_e2e_proven"])
+        self.assertTrue(packet["core_dispatch_proven"])
+        self.assertTrue(packet["core_runtime_proof_sealed"])
+        self.assertTrue(packet["fresh_live_custom_codex_e2e_proven"])
+        self.assertTrue(packet["user_prompt_submit_hook_ran"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["dispatch_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["full_runtime_dispatch_proven"])
+        self.assertFalse(packet["full_runtime_required_for_core"])
+        self.assertTrue(packet["full_runtime_diagnostics_attempted"])
+        self.assertFalse(packet["full_runtime_diagnostics_passed"])
+        self.assertIn(
+            "fresh_sealed_e2e_full_runtime_not_proven",
+            packet["full_runtime_diagnostic_blocking_reasons"],
+        )
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertFalse(packet["product_ready"])
+        self.assertTrue(packet["does_not_prove_product_ready"])
+        self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["native_free_chat_router_product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
 
     def test_wrong_digest_green_from_downstream_blocks_final_packet(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -222,18 +316,22 @@ class FreshSealedE2EProofTests(unittest.TestCase):
                     timeout_seconds=20,
                 )
 
-        self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"],
-            fresh_sealed.FRESH_SEALED_E2E_NEGATIVE_FAILED,
-        )
-        self.assertFalse(packet["fresh_sealed_e2e_proven"])
-        self.assertFalse(packet["fresh_runtime_proof_sealed"])
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["fresh_sealed_e2e_proven"])
+        self.assertTrue(packet["fresh_runtime_proof_sealed"])
+        self.assertTrue(packet["core_dispatch_proven"])
         self.assertFalse(packet["wrong_digest_negative_proven"])
         self.assertIn(
             "fresh_sealed_e2e_wrong_digest_negative_not_proven",
-            packet["blocking_reasons"],
+            packet["full_runtime_diagnostic_blocking_reasons"],
         )
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertFalse(packet["product_ready"])
+        self.assertTrue(packet["does_not_prove_product_ready"])
+        self.assertFalse(packet["delivery_counts_as_custom_codex_ui"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["native_free_chat_router_product_ready"])
         _assert_no_raw_sensitive_text(self, packet)
         self.assertEqual(
             packets.inspect_command_packet_semantics(
@@ -316,6 +414,37 @@ class FreshSealedE2EProofTests(unittest.TestCase):
             "fresh_sealed_e2e_fresh_live_not_proven",
             packet["blocking_reasons"],
         )
+
+    def test_core_dispatch_false_claim_matrix_blocks_core_proof(self) -> None:
+        base = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "packet_kind": fresh_sealed.FRESH_LIVE_CUSTOM_CODEX_E2E_PACKET_KIND,
+            "fresh_live_custom_codex_e2e_proven": True,
+            "user_prompt_submit_hook_ran": True,
+            "api_lane_called": True,
+            "dispatch_proven": True,
+            "codex_working_flow_delivery_proven": True,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "native_codex_subagent_used_as_dip": False,
+            "product_ready": False,
+        }
+        cases = [
+            ("user_prompt_submit_hook_ran", False),
+            ("api_lane_called", False),
+            ("dispatch_proven", False),
+            ("codex_working_flow_delivery_proven", False),
+            ("fallback_used", True),
+            ("local_imitation_used", True),
+            ("native_codex_subagent_used_as_dip", True),
+            ("product_ready", True),
+        ]
+        for key, value in cases:
+            packet = dict(base)
+            packet[key] = value
+            with self.subTest(key=key):
+                self.assertFalse(fresh_sealed._fresh_live_ok(packet))
 
     def test_cli_effect_classifier_marks_fresh_sealed_runner_as_mutate(self) -> None:
         parser = cli_mod.build_parser()

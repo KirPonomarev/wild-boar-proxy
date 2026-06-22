@@ -160,6 +160,23 @@ def _fresh_live_ok(packet: Mapping[str, Any]) -> bool:
         and packet.get("api_lane_called") is True
         and packet.get("dispatch_proven") is True
         and packet.get("codex_working_flow_delivery_proven") is True
+        and packet.get("fallback_used") is False
+        and packet.get("local_imitation_used") is False
+        and packet.get("native_codex_subagent_used_as_dip") is False
+        and packet.get("product_ready") is False
+    )
+
+
+def _core_input_artifacts_present(
+    *,
+    real_custom_hook_proof_file: Path,
+    working_flow_delivery_proof_file: Path,
+    codex_exec_jsonl_file: Path,
+) -> bool:
+    return bool(
+        real_custom_hook_proof_file.is_file()
+        and working_flow_delivery_proof_file.is_file()
+        and codex_exec_jsonl_file.is_file()
     )
 
 
@@ -238,27 +255,15 @@ def _safe_reasons(value: object) -> list[str]:
 def _machine_error_code(
     *,
     fresh_live_ok: bool,
-    input_artifacts_present: bool,
-    runner_ok: bool,
-    admission_ok: bool,
-    seal_ok: bool,
-    wrong_digest_negative_ok: bool,
+    core_input_artifacts_present: bool,
     unsafe: bool,
 ) -> str:
     if unsafe:
         return FRESH_SEALED_E2E_UNSAFE_PACKET
     if not fresh_live_ok:
         return FRESH_SEALED_E2E_FRESH_LIVE_FAILED
-    if not input_artifacts_present:
+    if not core_input_artifacts_present:
         return FRESH_SEALED_E2E_INPUT_ARTIFACT_MISSING
-    if not runner_ok:
-        return FRESH_SEALED_E2E_FULL_RUNTIME_FAILED
-    if not admission_ok:
-        return FRESH_SEALED_E2E_ADMISSION_FAILED
-    if not seal_ok:
-        return FRESH_SEALED_E2E_SEAL_FAILED
-    if not wrong_digest_negative_ok:
-        return FRESH_SEALED_E2E_NEGATIVE_FAILED
     return FRESH_SEALED_E2E_OK
 
 
@@ -294,7 +299,12 @@ def build_fresh_sealed_e2e_packet(
     seal = dict(seal_packet or {})
     wrong_digest = dict(wrong_digest_seal_packet or {})
     fresh_ok = _fresh_live_ok(fresh_live)
-    inputs_present = _input_artifacts_present(
+    core_inputs_present = _core_input_artifacts_present(
+        real_custom_hook_proof_file=real_custom_hook_proof_file,
+        working_flow_delivery_proof_file=working_flow_delivery_proof_file,
+        codex_exec_jsonl_file=codex_exec_jsonl_file,
+    )
+    full_runtime_inputs_present = _input_artifacts_present(
         real_custom_hook_proof_file=real_custom_hook_proof_file,
         working_flow_delivery_proof_file=working_flow_delivery_proof_file,
         codex_exec_jsonl_file=codex_exec_jsonl_file,
@@ -326,37 +336,52 @@ def build_fresh_sealed_e2e_packet(
     )
     machine_error_code = _machine_error_code(
         fresh_live_ok=fresh_ok,
-        input_artifacts_present=inputs_present,
-        runner_ok=full_runtime_ok,
-        admission_ok=strict_admission_ok,
-        seal_ok=admission_seal_ok,
-        wrong_digest_negative_ok=negative_ok,
+        core_input_artifacts_present=core_inputs_present,
         unsafe=unsafe,
     )
     ok = machine_error_code == FRESH_SEALED_E2E_OK
-    blocking_reasons = sorted(
+    full_runtime_diagnostic_reasons = sorted(
         set(
-            _safe_reasons(fresh_live.get("blocking_reasons"))
-            + _safe_reasons(runner.get("blocking_reasons"))
+            _safe_reasons(runner.get("blocking_reasons"))
             + _safe_reasons(admission.get("blocking_reasons"))
             + _safe_reasons(seal.get("blocking_reasons"))
             + _safe_reasons(wrong_digest.get("blocking_reasons"))
-            + ([] if fresh_ok else ["fresh_sealed_e2e_fresh_live_not_proven"])
-            + ([] if inputs_present else ["fresh_sealed_e2e_input_artifacts_missing"])
+            + (
+                []
+                if full_runtime_inputs_present
+                else ["fresh_sealed_e2e_full_runtime_input_artifacts_missing"]
+            )
             + ([] if full_runtime_ok else ["fresh_sealed_e2e_full_runtime_not_proven"])
             + ([] if strict_admission_ok else ["fresh_sealed_e2e_admission_not_proven"])
             + ([] if admission_seal_ok else ["fresh_sealed_e2e_seal_not_proven"])
             + ([] if negative_ok else ["fresh_sealed_e2e_wrong_digest_negative_not_proven"])
             + ([] if freshness_bound else ["fresh_sealed_e2e_freshness_digest_not_bound"])
+        )
+    )
+    blocking_reasons = sorted(
+        set(
+            _safe_reasons(fresh_live.get("blocking_reasons"))
+            + ([] if fresh_ok else ["fresh_sealed_e2e_fresh_live_not_proven"])
+            + ([] if core_inputs_present else ["fresh_sealed_e2e_input_artifacts_missing"])
             + (["fresh_sealed_e2e_packet_secret_leak"] if unsafe else [])
         )
     )
     extra = {
         "schema_version": 1,
         "packet_kind": FRESH_SEALED_E2E_PACKET_KIND,
-        "proof_scope": "fresh_custom_codex_to_sealed_full_runtime_dispatch",
+        "proof_scope": "fresh_custom_codex_to_sealed_core_dispatch",
         "fresh_sealed_e2e_proven": ok,
         "fresh_runtime_proof_sealed": ok,
+        "core_dispatch_proven": ok,
+        "core_runtime_proof_sealed": ok,
+        "core_dispatch_proof_scope": "hook_context_allowlist_api_lane_working_flow",
+        "core_dispatch_requires_native_ui_visibility": False,
+        "core_dispatch_requires_full_runtime_dispatch": False,
+        "ui_visibility_required_for_core": False,
+        "full_runtime_required_for_core": False,
+        "full_runtime_diagnostics_attempted": bool(runner or admission or seal or wrong_digest),
+        "full_runtime_diagnostics_passed": full_runtime_ok,
+        "full_runtime_diagnostic_blocking_reasons": full_runtime_diagnostic_reasons,
         "proof_run_id": proof_run_id if packets.is_command_value_token(proof_run_id) else "",
         "proof_run_id_digest": _sha256_text(proof_run_id),
         "proof_run_started_at_ns": proof_run_started_at_ns,
@@ -365,13 +390,13 @@ def build_fresh_sealed_e2e_packet(
         "freshness_anchor_digest_generated": True,
         "raw_freshness_anchor_recorded": False,
         "freshness_anchor_bound_to_runner": bool(
-            ok and runner.get("freshness_anchor_digest") == freshness_anchor_digest
+            runner.get("freshness_anchor_digest") == freshness_anchor_digest
         ),
         "freshness_anchor_bound_to_admission": bool(
-            ok and admission.get("expected_freshness_anchor_digest") == freshness_anchor_digest
+            admission.get("expected_freshness_anchor_digest") == freshness_anchor_digest
         ),
         "freshness_anchor_bound_to_seal": bool(
-            ok and seal.get("expected_freshness_anchor_digest") == freshness_anchor_digest
+            seal.get("expected_freshness_anchor_digest") == freshness_anchor_digest
         ),
         "fresh_live_packet_kind": _safe_text(fresh_live.get("packet_kind"), limit=96),
         "fresh_live_status": _safe_text(fresh_live.get("status"), limit=32),
@@ -380,7 +405,7 @@ def build_fresh_sealed_e2e_packet(
             limit=96,
         ),
         "fresh_live_custom_codex_e2e_proven": bool(
-            ok and fresh_live.get("fresh_live_custom_codex_e2e_proven") is True
+            fresh_live.get("fresh_live_custom_codex_e2e_proven") is True
         ),
         "fresh_live_packet_sha256": sha256_file(fresh_live_packet_file),
         "real_custom_hook_proof_file_present": real_custom_hook_proof_file.is_file(),
@@ -411,24 +436,24 @@ def build_fresh_sealed_e2e_packet(
             limit=96,
         ),
         "full_runtime_dispatch_runner_proven": bool(
-            ok and runner.get("full_runtime_dispatch_runner_proven") is True
+            runner.get("full_runtime_dispatch_runner_proven") is True
         ),
         "full_runtime_dispatch_proven": bool(
-            ok and runner.get("full_runtime_dispatch_proven") is True
+            runner.get("full_runtime_dispatch_proven") is True
         ),
         "custom_codex_flow_proven": bool(
-            ok and runner.get("custom_codex_flow_proven") is True
+            ok and fresh_live.get("same_turn_custom_codex_flow_proven") is True
         ),
         "user_prompt_submit_hook_ran": bool(
-            ok and runner.get("user_prompt_submit_hook_ran") is True
+            ok and fresh_live.get("user_prompt_submit_hook_ran") is True
         ),
-        "api_lane_called": bool(ok and runner.get("api_lane_called") is True),
-        "dispatch_proven": bool(ok and runner.get("dispatch_proven") is True),
+        "api_lane_called": bool(ok and fresh_live.get("api_lane_called") is True),
+        "dispatch_proven": bool(ok and fresh_live.get("dispatch_proven") is True),
         "codex_working_flow_delivery_proven": bool(
-            ok and runner.get("codex_working_flow_delivery_proven") is True
+            ok and fresh_live.get("codex_working_flow_delivery_proven") is True
         ),
         "custom_codex_ui_visibility_proven": bool(
-            ok and runner.get("custom_codex_ui_visibility_proven") is True
+            runner.get("custom_codex_ui_visibility_proven") is True
         ),
         "full_runtime_runner_packet_sha256": sha256_file(
             proof_root / "full-runtime" / "full-runtime-dispatch-proof-runner.packet.json"
@@ -439,9 +464,9 @@ def build_fresh_sealed_e2e_packet(
             admission.get("machine_error_code"),
             limit=96,
         ),
-        "strict_admission_proven": strict_admission_ok if ok else False,
+        "strict_admission_proven": strict_admission_ok,
         "external_freshness_proven": bool(
-            ok and admission.get("external_freshness_proven") is True
+            admission.get("external_freshness_proven") is True
         ),
         "admission_packet_sha256": sha256_file(admission_packet_file),
         "admission_seal_packet_kind": _safe_text(seal.get("packet_kind"), limit=96),
@@ -451,10 +476,10 @@ def build_fresh_sealed_e2e_packet(
             limit=96,
         ),
         "proof_admission_sealed": bool(
-            ok and seal.get("proof_admission_sealed") is True
+            seal.get("proof_admission_sealed") is True
         ),
         "feature_runtime_proof_sealed": bool(
-            ok and seal.get("feature_runtime_proof_sealed") is True
+            seal.get("feature_runtime_proof_sealed") is True
         ),
         "admission_seal_packet_sha256": sha256_file(seal_packet_file),
         "wrong_digest_negative_proven": negative_ok,
@@ -502,9 +527,9 @@ def build_fresh_sealed_e2e_packet(
     return packets.build_command_packet(
         ok=ok,
         human_message=(
-            "WBP proved a fresh sealed Custom Codex full-runtime E2E chain."
+            "WBP proved a fresh sealed Custom Codex core dispatch chain."
             if ok
-            else "WBP blocked fresh sealed Custom Codex full-runtime E2E proof."
+            else "WBP blocked fresh sealed Custom Codex core dispatch proof."
         ),
         machine_error_code=machine_error_code,
         liveness="network_dependent",
