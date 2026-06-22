@@ -28,6 +28,7 @@ from .fresh_live_custom_codex_e2e_proof import (
 from .fresh_sealed_e2e_proof import (
     run_fresh_sealed_e2e_proof_command,
 )
+from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
@@ -361,6 +362,75 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
     codex_runner_repeatable_status.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_fresh_router_ready = codex_runner_subparsers.add_parser(
+        "fresh-router-ready-proof"
+    )
+    codex_runner_fresh_router_ready.add_argument("--route", required=True)
+    codex_runner_fresh_router_ready.add_argument("--prompt", required=True)
+    codex_runner_fresh_router_ready.add_argument("--codex-bin")
+    codex_runner_fresh_router_ready.add_argument("--codex-model")
+    codex_runner_fresh_router_ready.add_argument("--proof-dir")
+    codex_runner_fresh_router_ready.add_argument("--codex-cwd")
+    codex_runner_fresh_router_ready.add_argument(
+        "--custom-codex-ui-visibility-proof-file"
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--provider-expected-text",
+        default="WBP_REPEATABLE_PROOF_PREFLIGHT_OK",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_fresh_router_ready.add_argument("--persistent-profile-base-dir")
+    codex_runner_fresh_router_ready.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-model",
+        default="gpt-5.3-codex",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-owner-authorization-phrase"
+    )
+    codex_runner_fresh_router_ready.add_argument("--native-auto-launch-repo-root")
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-stable-runtime-generated-config-file"
+    )
+    codex_runner_fresh_router_ready.add_argument("--external-models-dir")
+    codex_runner_fresh_router_ready.add_argument("--codex-hook-current-hash")
+    codex_runner_fresh_router_ready.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_fresh_router_ready.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1657,6 +1727,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "working-flow-visible-source-proof",
         "fresh-live-e2e-proof",
         "fresh-sealed-e2e-proof",
+        "fresh-router-ready-proof",
         "native-ui-observer-proof",
         "native-response-matrix",
     }:
@@ -2044,6 +2115,46 @@ def main(argv: list[str] | None = None) -> int:
                     native_auto_launch_stable_runtime_generated_config_file=(
                         args.native_auto_launch_stable_runtime_generated_config_file
                     ),
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-router-ready-proof"
+        ):
+            return emit_json(
+                run_fresh_router_ready_proof_command(
+                    paths=paths,
+                    route_id=args.route,
+                    prompt_text=args.prompt,
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                    native_auto_launch_custom_codex=(
+                        args.native_auto_launch_custom_codex
+                    ),
+                    native_auto_launch_endpoint=args.native_auto_launch_endpoint,
+                    native_auto_launch_model=args.native_auto_launch_model,
+                    native_auto_launch_owner_authorization_phrase=(
+                        args.native_auto_launch_owner_authorization_phrase
+                    ),
+                    native_auto_launch_repo_root=args.native_auto_launch_repo_root,
+                    native_auto_launch_stable_runtime_generated_config_file=(
+                        args.native_auto_launch_stable_runtime_generated_config_file
+                    ),
+                    provider_expected_text=args.provider_expected_text,
+                    external_models_dir=args.external_models_dir,
+                    codex_hook_current_hash=args.codex_hook_current_hash or "",
+                    probe_codex_app_server=args.probe_codex_app_server,
                 )
             )
         if (
