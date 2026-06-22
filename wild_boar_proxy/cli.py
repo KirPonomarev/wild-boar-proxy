@@ -20,6 +20,10 @@ from .core import packets as command_packets
 from .custom_codex_admission import run_custom_codex_admission_command
 from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_command
+from .real_custom_dip_operator import (
+    run_real_custom_dip_operator_preflight_command,
+    run_real_custom_dip_operator_work_command,
+)
 from .custom_codex_working_flow_visible_source_proof import (
     run_working_flow_visible_source_proof_command,
 )
@@ -296,6 +300,41 @@ def build_parser() -> argparse.ArgumentParser:
     launch_custom_app_identity.add_argument("--custom-app-path")
     launch_custom_app_identity.add_argument("--backup-dir")
     launch_custom_app_identity.add_argument("--json", action="store_true", required=True)
+
+    dip = subparsers.add_parser("dip")
+    dip_subparsers = dip.add_subparsers(dest="dip_command", required=True)
+    dip_preflight = dip_subparsers.add_parser("preflight")
+    dip_preflight.add_argument("--prompt", required=True)
+    dip_preflight.add_argument("--codex-bin")
+    dip_preflight.add_argument("--proof-dir")
+    dip_preflight.add_argument("--codex-cwd")
+    dip_preflight.add_argument("--codex-hook-current-hash")
+    dip_preflight.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_preflight.add_argument("--json", action="store_true", required=True)
+    dip_work = dip_subparsers.add_parser("work")
+    dip_work.add_argument("--prompt", required=True)
+    dip_work.add_argument("--codex-bin")
+    dip_work.add_argument("--codex-model")
+    dip_work.add_argument("--proof-dir")
+    dip_work.add_argument("--codex-cwd")
+    dip_work.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_work.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_work.add_argument("--codex-hook-current-hash")
+    dip_work.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_work.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -1749,6 +1788,11 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             and getattr(args, "stable_target_command", None) == "switch"
         ):
             return EFFECT_MUTATE if getattr(args, "apply", False) else EFFECT_READ
+    if command == "dip":
+        if getattr(args, "dip_command", None) == "preflight":
+            return EFFECT_PROBE
+        if getattr(args, "dip_command", None) == "work":
+            return EFFECT_MUTATE
     if command == "launch":
         launch_command = getattr(args, "launch_command", None)
         if launch_command == "smoke":
@@ -2051,6 +2095,33 @@ def main(argv: list[str] | None = None) -> int:
                     stock_app_path=args.stock_app_path,
                     custom_app_path=args.custom_app_path,
                     backup_dir=args.backup_dir,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "preflight":
+            return emit_json(
+                run_real_custom_dip_operator_preflight_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "work":
+            return emit_json(
+                run_real_custom_dip_operator_work_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
                 )
             )
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
