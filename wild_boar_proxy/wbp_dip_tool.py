@@ -924,6 +924,47 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     )
 
 
+def _json_string_content(value: str, *, ensure_ascii: bool) -> str:
+    return json.dumps(value, ensure_ascii=ensure_ascii)[1:-1]
+
+
+def _redaction_replacements(*, task: str, prompt: str) -> dict[str, str]:
+    replacements: dict[str, str] = {}
+    for label, value in (
+        ("task", task),
+        ("codex-prompt", prompt),
+    ):
+        if not value:
+            continue
+        replacement = f"<redacted-{label}-sha256:{_sha256_text(value)}>"
+        for candidate in (
+            value,
+            _json_string_content(value, ensure_ascii=True),
+            _json_string_content(value, ensure_ascii=False),
+        ):
+            if candidate:
+                replacements[candidate] = replacement
+    return replacements
+
+
+def _redact_text_file(path: Path, replacements: Mapping[str, str]) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    redacted = text
+    for raw, replacement in sorted(
+        replacements.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        redacted = redacted.replace(raw, replacement)
+    if redacted == text:
+        return False
+    path.write_text(redacted, encoding="utf-8")
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wbp_dip")
     parser.add_argument("task", nargs="*")
@@ -1041,6 +1082,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 check=False,
             )
         codex_exit_code = int(completed.returncode)
+        redactions = _redaction_replacements(task=task, prompt=prompt)
+        _redact_text_file(output_jsonl, redactions)
+        _redact_text_file(output_last_message, redactions)
     live_result: dict[str, Any] | None = None
     if not args.proof_only and codex_exit_code == 0:
         delegate_packet = _find_delegate_packet(_read_codex_exec_jsonl(output_jsonl))

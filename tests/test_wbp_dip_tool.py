@@ -483,6 +483,20 @@ class WbpDipToolTests(unittest.TestCase):
                 stdout.write(
                     json.dumps(
                         {
+                            "type": "raw_prompt_echo",
+                            "prompt": build_delegate_prompt(
+                                task=TASK,
+                                expected_alias="DIP",
+                            ),
+                            "task": TASK,
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+                stdout.write(
+                    json.dumps(
+                        {
                             "type": "mcp_tool_result",
                             "result": {"structuredContent": _delegate_packet()},
                         },
@@ -512,6 +526,7 @@ class WbpDipToolTests(unittest.TestCase):
                         TASK,
                     ]
                 )
+            codex_jsonl = (proof_dir / "codex-exec.jsonl").read_text(encoding="utf-8")
 
         self.assertEqual(exit_code, 0)
         packet = json.loads(stdout.getvalue())
@@ -539,6 +554,16 @@ class WbpDipToolTests(unittest.TestCase):
         for path in packet["changed_files"]:
             self.assertTrue(str(path).startswith(str(proof_dir)))
         self.assertFalse(packet_contains_text(packet, TASK))
+        escaped_task = json.dumps(TASK, ensure_ascii=True)[1:-1]
+        escaped_prompt = json.dumps(
+            build_delegate_prompt(task=TASK, expected_alias="DIP"),
+            ensure_ascii=True,
+        )[1:-1]
+        self.assertNotIn(TASK, codex_jsonl)
+        self.assertNotIn(escaped_task, codex_jsonl)
+        self.assertNotIn(escaped_prompt, codex_jsonl)
+        self.assertIn("<redacted-task-sha256:", codex_jsonl)
+        self.assertIn("<redacted-codex-prompt-sha256:", codex_jsonl)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
