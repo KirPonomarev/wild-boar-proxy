@@ -913,6 +913,22 @@ def build_real_custom_codex_hook_proof_packet(
         and live_packet.get("status") == "ok"
         and live_data.get("expected_text_observed") is True
     )
+    live_provider_bridge_or_file_bridge_used = (
+        live_data.get("bridge_or_file_bridge_used") is True
+    )
+    direct_provider_auth_proven = live_data.get("direct_provider_auth_proven") is True
+    direct_provider_response_observed = (
+        live_data.get("direct_provider_response_observed") is True
+    )
+    provider_auth_ok = live_data.get("provider_auth_ok") is True
+    positive_provider_proof_gate_satisfied = bool(
+        live_provider_response_proven
+        and direct_provider_auth_proven
+        and direct_provider_response_observed
+        and provider_auth_ok
+        and not live_provider_bridge_or_file_bridge_used
+        and live_data.get("positive_provider_proof_gate_satisfied") is True
+    )
     provider_route_fallback_used = live_data.get("fallback_used") is True
     live_provider_response_preview = _safe_text(
         live_data.get("response_preview_bounded"),
@@ -1151,6 +1167,19 @@ def build_real_custom_codex_hook_proof_packet(
         "live_provider_route_state": _safe_text(live_data.get("route_state"), limit=80),
         "live_provider_network_dependent": live_data.get("network_dependent") is True,
         "live_provider_request_count": int(live_data.get("request_count") or 0),
+        "runtime_context_bridge_used": live_data.get("runtime_context_bridge_used") is True,
+        "runtime_context_file_bridge_used": (
+            live_data.get("runtime_context_file_bridge_used") is True
+        ),
+        "bridge_or_file_bridge_used": live_provider_bridge_or_file_bridge_used,
+        "direct_provider_auth_proven": direct_provider_auth_proven,
+        "direct_provider_response_observed": direct_provider_response_observed,
+        "provider_auth_ok": provider_auth_ok,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": (
+            positive_provider_proof_gate_satisfied
+        ),
         "live_provider_expected_text_digest": _sha256_text(expected_text)
         if expected_text
         else "",

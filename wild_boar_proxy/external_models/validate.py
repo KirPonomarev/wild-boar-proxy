@@ -26,6 +26,17 @@ from .state import (
 )
 
 
+def _direct_provider_proof_fields(*, direct_provider_response_observed: bool) -> dict[str, Any]:
+    return {
+        "direct_provider_auth_proven": bool(direct_provider_response_observed),
+        "direct_provider_response_observed": bool(direct_provider_response_observed),
+        "provider_auth_ok": bool(direct_provider_response_observed),
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": bool(direct_provider_response_observed),
+    }
+
+
 def _parse_secrets_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.exists():
@@ -182,6 +193,7 @@ def _bridge_live_format_data(
         "runtime_context_file_bridge_used": is_file_bridge,
         "bridge_or_file_bridge_used": True,
         "bridge_kind": bridge_kind,
+        **_direct_provider_proof_fields(direct_provider_response_observed=False),
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
     }
@@ -693,6 +705,10 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "evidence_path": str(evidence_path),
             "latency_ms": response.latency_ms,
             "request_count": 1,
+            "runtime_context_bridge_used": False,
+            "runtime_context_file_bridge_used": False,
+            "bridge_or_file_bridge_used": False,
+            **_direct_provider_proof_fields(direct_provider_response_observed=True),
         }
         data.update(request_metadata)
         data.update(
@@ -742,6 +758,10 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "provider": route["provider"],
             "fallback_used": False,
             "fallback_chain": [route["route_id"]],
+            "runtime_context_bridge_used": False,
+            "runtime_context_file_bridge_used": False,
+            "bridge_or_file_bridge_used": False,
+            **_direct_provider_proof_fields(direct_provider_response_observed=False),
         }
         error.data.update(transform_metadata)
         raise error from exc
@@ -782,17 +802,47 @@ def check_route_provider_once_no_write(
         payload=request_payload,
     )
     if response.status_code in (401, 403):
-        raise RuntimeErrorInfo(
+        error = RuntimeErrorInfo(
             "Provider rejected route credentials.",
             machine_error_code=errors.PROVIDER_AUTH_FAILED,
             operator_action="user_action",
         )
+        error.data = {
+            "check_kind": "api_only_live_route_format",
+            "network_dependent": True,
+            "verification_scope": "route_provider_only_no_write",
+            "route_state": "provider_auth_failed",
+            "requested_model": route["route_id"],
+            "provider": route["provider"],
+            "fallback_used": False,
+            "fallback_chain": [route["route_id"]],
+            "runtime_context_bridge_used": False,
+            "runtime_context_file_bridge_used": False,
+            "bridge_or_file_bridge_used": False,
+            **_direct_provider_proof_fields(direct_provider_response_observed=False),
+        }
+        raise error
     if response.status_code != 200:
-        raise RuntimeErrorInfo(
+        error = RuntimeErrorInfo(
             "Provider returned an invalid live-format response.",
             machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
             operator_action="retry",
         )
+        error.data = {
+            "check_kind": "api_only_live_route_format",
+            "network_dependent": True,
+            "verification_scope": "route_provider_only_no_write",
+            "route_state": "invalid_upstream_response",
+            "requested_model": route["route_id"],
+            "provider": route["provider"],
+            "fallback_used": False,
+            "fallback_chain": [route["route_id"]],
+            "runtime_context_bridge_used": False,
+            "runtime_context_file_bridge_used": False,
+            "bridge_or_file_bridge_used": False,
+            **_direct_provider_proof_fields(direct_provider_response_observed=False),
+        }
+        raise error
     response_text, response_metadata = transforms.extract_check_response(route, response.payload)
     return {
         "check_kind": "api_only_live_route_format",
@@ -820,6 +870,10 @@ def check_route_provider_once_no_write(
         "commands_started_by_provider": False,
         "codex_history_sent": False,
         "repo_context_sent": False,
+        "runtime_context_bridge_used": False,
+        "runtime_context_file_bridge_used": False,
+        "bridge_or_file_bridge_used": False,
+        **_direct_provider_proof_fields(direct_provider_response_observed=True),
         **request_metadata,
         "response_profile": response_metadata["response_profile"],
         "response_shape": response_metadata["response_shape"],

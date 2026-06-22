@@ -794,7 +794,13 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertTrue(data["expected_text_observed"])
         self.assertEqual(data["response_preview_bounded"], EXPECTED_TEXT)
         self.assertTrue(data["runtime_context_file_bridge_used"])
+        self.assertTrue(data["bridge_or_file_bridge_used"])
         self.assertEqual(data["bridge_kind"], "server_owned_file_bridge")
+        self.assertFalse(data["direct_provider_auth_proven"])
+        self.assertFalse(data["direct_provider_response_observed"])
+        self.assertFalse(data["provider_auth_ok"])
+        self.assertFalse(data["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(data["bridge_green_counts_as_provider_proof"])
         self.assertEqual(
             data["file_bridge_response_request_id_sha256"],
             hashlib.sha256(b"codex-test-request").hexdigest(),

@@ -82,6 +82,15 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "provider": "deepseek",
         "effective_model_sha256": "1" * 64,
         "effective_model_recorded": False,
+        "runtime_context_bridge_used": False,
+        "runtime_context_file_bridge_used": False,
+        "bridge_or_file_bridge_used": False,
+        "direct_provider_auth_proven": True,
+        "direct_provider_response_observed": True,
+        "provider_auth_ok": True,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": True,
     }
     packet.update(overrides)
     return packet
@@ -160,6 +169,10 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["live_result_required"])
         self.assertTrue(packet["live_result_available"])
         self.assertTrue(packet["live_result_provider_called"])
+        self.assertTrue(packet["direct_provider_auth_proven"])
+        self.assertTrue(packet["direct_provider_response_observed"])
+        self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(packet["live_result_bridge_or_file_bridge_used"])
         self.assertEqual(
             packet["live_result_text"],
             "DIP checked: dispatch is bounded; next step is operator smoke.",
@@ -638,6 +651,11 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["provider_called"])
         self.assertEqual(result["result_text"], "DIP result: bounded answer from provider.")
         self.assertFalse(result["route_id_recorded"])
+        self.assertTrue(result["direct_provider_auth_proven"])
+        self.assertTrue(result["direct_provider_response_observed"])
+        self.assertTrue(result["provider_auth_ok"])
+        self.assertTrue(result["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(result["bridge_or_file_bridge_used"])
         request_json_mock.assert_called_once()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
@@ -712,6 +730,10 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["operator_action"], "user_action")
         self.assertTrue(result["provider_called"])
         self.assertEqual(result["upstream_status_code"], 401)
+        self.assertFalse(result["direct_provider_auth_proven"])
+        self.assertFalse(result["direct_provider_response_observed"])
+        self.assertFalse(result["provider_auth_ok"])
+        self.assertFalse(result["positive_provider_proof_gate_satisfied"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
@@ -756,6 +778,12 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["source"], "runtime_context_http_bridge")
         self.assertTrue(result["bridge_attempted"])
         self.assertEqual(result["result_text"], "Bridge result from WBP.")
+        self.assertTrue(result["runtime_context_bridge_used"])
+        self.assertTrue(result["bridge_or_file_bridge_used"])
+        self.assertFalse(result["direct_provider_auth_proven"])
+        self.assertFalse(result["direct_provider_response_observed"])
+        self.assertFalse(result["provider_auth_ok"])
+        self.assertFalse(result["positive_provider_proof_gate_satisfied"])
         find_route_mock.assert_not_called()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
@@ -776,6 +804,13 @@ class WbpDipToolTests(unittest.TestCase):
             source="runtime_context_file_bridge",
             result_text="File bridge result from WBP.",
             provider_recorded=False,
+            runtime_context_bridge_used=False,
+            runtime_context_file_bridge_used=True,
+            bridge_or_file_bridge_used=True,
+            direct_provider_auth_proven=False,
+            direct_provider_response_observed=False,
+            provider_auth_ok=False,
+            positive_provider_proof_gate_satisfied=False,
         )
         with tempfile.TemporaryDirectory() as raw_root:
             profile = Path(raw_root)
@@ -815,6 +850,12 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["bridge_attempted"])
         self.assertTrue(result["file_bridge_attempted"])
         self.assertEqual(result["result_text"], "File bridge result from WBP.")
+        self.assertTrue(result["runtime_context_file_bridge_used"])
+        self.assertTrue(result["bridge_or_file_bridge_used"])
+        self.assertFalse(result["direct_provider_auth_proven"])
+        self.assertFalse(result["direct_provider_response_observed"])
+        self.assertFalse(result["provider_auth_ok"])
+        self.assertFalse(result["positive_provider_proof_gate_satisfied"])
         find_route_mock.assert_not_called()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")

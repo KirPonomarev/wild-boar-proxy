@@ -1374,6 +1374,20 @@ def build_codex_working_flow_delivery_proof_packet(
         and source.get("external_live_provider_response_proven") is True
         and live_provider_response_digest
     )
+    bridge_or_file_bridge_used = source.get("bridge_or_file_bridge_used") is True
+    direct_provider_auth_proven = source.get("direct_provider_auth_proven") is True
+    direct_provider_response_observed = (
+        source.get("direct_provider_response_observed") is True
+    )
+    provider_auth_ok = source.get("provider_auth_ok") is True
+    positive_provider_proof_gate_satisfied = bool(
+        live_provider_response_proven
+        and direct_provider_auth_proven
+        and direct_provider_response_observed
+        and provider_auth_ok
+        and not bridge_or_file_bridge_used
+        and source.get("positive_provider_proof_gate_satisfied") is True
+    )
     source_kind = _safe_text(source.get("packet_kind"), limit=80)
     approved_handoff_derived_from_source = bool(not source_failures and handoff_digest)
 
@@ -1490,6 +1504,19 @@ def build_codex_working_flow_delivery_proof_packet(
         "live_provider_proven": live_provider_response_proven,
         "live_provider_response_proven": live_provider_response_proven,
         "external_live_provider_response_proven": live_provider_response_proven,
+        "runtime_context_bridge_used": source.get("runtime_context_bridge_used") is True,
+        "runtime_context_file_bridge_used": (
+            source.get("runtime_context_file_bridge_used") is True
+        ),
+        "bridge_or_file_bridge_used": bridge_or_file_bridge_used,
+        "direct_provider_auth_proven": direct_provider_auth_proven,
+        "direct_provider_response_observed": direct_provider_response_observed,
+        "provider_auth_ok": provider_auth_ok,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": (
+            positive_provider_proof_gate_satisfied
+        ),
         "approved_handoff_ready": (
             source.get("approved_handoff_ready") is True
             or approved_handoff_derived_from_source

@@ -142,6 +142,15 @@ def _wbp_dip_packet(prompt: str, *, ok: bool = True) -> dict[str, object]:
         "live_result_text_length": len(live_text) if ok else 0,
         "live_result_text_recorded": ok,
         "live_result_route_id_recorded": False,
+        "live_result_bridge_or_file_bridge_used": False,
+        "live_result_runtime_context_bridge_used": False,
+        "live_result_runtime_context_file_bridge_used": False,
+        "direct_provider_auth_proven": ok,
+        "direct_provider_response_observed": ok,
+        "provider_auth_ok": ok,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": ok,
         "blocking_reasons": [] if ok else ["delegate_to_dip_not_proven"],
         "product_ready": False,
         "fallback_used": False,
@@ -185,6 +194,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         readiness_ok: bool = True,
         stale_ledger: bool = False,
         wbp_dip_ok: bool = True,
+        wbp_dip_bridge_backed: bool = False,
         join_patch: object = None,
         probe_codex_app_server: bool = False,
     ) -> dict[str, object]:
@@ -234,6 +244,17 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                 )
                 proof_dir = Path(argv[argv.index("--proof-dir") + 1])
                 packet = _wbp_dip_packet(str(argv[-1]), ok=wbp_dip_ok)
+                if wbp_dip_bridge_backed:
+                    packet.update(
+                        {
+                            "live_result_bridge_or_file_bridge_used": True,
+                            "live_result_runtime_context_file_bridge_used": True,
+                            "direct_provider_auth_proven": False,
+                            "direct_provider_response_observed": False,
+                            "provider_auth_ok": False,
+                            "positive_provider_proof_gate_satisfied": False,
+                        }
+                    )
                 if wbp_dip_ok:
                     _write_json(proof_dir / "wbp-dip-tool.packet.json", packet)
                 return _completed(
@@ -315,11 +336,19 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["api_lane_called"])
             self.assertTrue(packet["route_bound_dispatch_proven"])
             self.assertTrue(packet["live_result_available"])
+            self.assertTrue(packet["direct_provider_auth_proven"])
+            self.assertTrue(packet["direct_provider_response_observed"])
+            self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+            self.assertFalse(packet["live_result_bridge_or_file_bridge_used"])
             self.assertTrue(packet["first_run_custom_codex_flow_proven"])
             self.assertTrue(packet["first_run_user_prompt_submit_hook_ran"])
             self.assertTrue(packet["first_run_api_lane_called"])
             self.assertTrue(packet["first_run_route_bound_dispatch_proven"])
             self.assertTrue(packet["first_run_live_result_available"])
+            self.assertTrue(packet["first_run_direct_provider_auth_proven"])
+            self.assertTrue(packet["first_run_direct_provider_response_observed"])
+            self.assertTrue(packet["first_run_positive_provider_proof_gate_satisfied"])
+            self.assertFalse(packet["first_run_live_result_bridge_or_file_bridge_used"])
             self.assertEqual(packet["first_run_wbp_dip_machine_error_code"], "OK")
             self.assertTrue(packet["partial_first_run_diagnostics_recorded"])
             self.assertTrue(packet["partial_first_run_diagnostics_are_not_product_ready"])
@@ -335,6 +364,28 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertNotIn(ROUTE_ID, serialized)
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_bridge_backed_result_blocks_repeatable_direct_provider_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(Path(temp_dir), wbp_dip_bridge_backed=True)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_JOIN_FAILED,
+            )
+            self.assertIn(
+                "run_1_direct_provider_auth_proven_not_true",
+                packet["blocking_reasons"],
+            )
+            self.assertIn(
+                "run_1_positive_provider_proof_gate_satisfied_not_true",
+                packet["blocking_reasons"],
+            )
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertFalse(packet["positive_provider_proof_gate_satisfied"])
+            self.assertTrue(packet["first_run_live_result_bridge_or_file_bridge_used"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_readiness_failure_blocks_before_runtime_runs(self) -> None:

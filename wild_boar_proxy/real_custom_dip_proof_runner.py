@@ -83,6 +83,10 @@ _RUN_REQUIRED_TRUE_FIELDS = (
     "api_lane_called",
     "route_bound_dispatch_proven",
     "live_result_available",
+    "direct_provider_auth_proven",
+    "direct_provider_response_observed",
+    "provider_auth_ok",
+    "positive_provider_proof_gate_satisfied",
 )
 _RUN_REQUIRED_FALSE_FIELDS = (
     "fallback_used",
@@ -90,6 +94,7 @@ _RUN_REQUIRED_FALSE_FIELDS = (
     "native_codex_subagent_used_as_dip",
     "custom_codex_ui_visibility_proven",
     "product_ready",
+    "live_result_bridge_or_file_bridge_used",
     "raw_prompt_recorded",
     "prompt_text_recorded",
     "natural_phrase_recorded",
@@ -492,9 +497,15 @@ def _dip_failures(packet: Mapping[str, Any], completed: subprocess.CompletedProc
         "api_lane_called",
         "route_bound_dispatch_proven",
         "live_result_available",
+        "direct_provider_auth_proven",
+        "direct_provider_response_observed",
+        "provider_auth_ok",
+        "positive_provider_proof_gate_satisfied",
     ):
         if packet.get(field) is not True:
             failures.append(f"{field}_not_true")
+    if packet.get("live_result_bridge_or_file_bridge_used") is not False:
+        failures.append("live_result_bridge_or_file_bridge_used_not_false")
     blocking = packet.get("blocking_reasons")
     if isinstance(blocking, Sequence) and not isinstance(blocking, (str, bytes)):
         failures.extend(_safe_text(item, limit=96) for item in blocking)
@@ -674,6 +685,26 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         join_packet.get("live_result_available") is True
         or dip_packet.get("live_result_available") is True
     )
+    direct_provider_auth_proven = (
+        join_packet.get("direct_provider_auth_proven") is True
+        or dip_packet.get("direct_provider_auth_proven") is True
+    )
+    direct_provider_response_observed = (
+        join_packet.get("direct_provider_response_observed") is True
+        or dip_packet.get("direct_provider_response_observed") is True
+    )
+    provider_auth_ok = (
+        join_packet.get("provider_auth_ok") is True
+        or dip_packet.get("provider_auth_ok") is True
+    )
+    positive_provider_proof_gate_satisfied = (
+        join_packet.get("positive_provider_proof_gate_satisfied") is True
+        or dip_packet.get("positive_provider_proof_gate_satisfied") is True
+    )
+    live_result_bridge_or_file_bridge_used = (
+        join_packet.get("live_result_bridge_or_file_bridge_used") is True
+        or dip_packet.get("live_result_bridge_or_file_bridge_used") is True
+    )
     return {
         "run_index": run_index,
         "prompt_digest": _hex_sha256(run.get("prompt_digest")),
@@ -686,6 +717,13 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         "api_lane_called": api_lane_called,
         "route_bound_dispatch_proven": route_bound_dispatch_proven,
         "live_result_available": live_result_available,
+        "direct_provider_auth_proven": direct_provider_auth_proven,
+        "direct_provider_response_observed": direct_provider_response_observed,
+        "provider_auth_ok": provider_auth_ok,
+        "positive_provider_proof_gate_satisfied": positive_provider_proof_gate_satisfied,
+        "live_result_bridge_or_file_bridge_used": live_result_bridge_or_file_bridge_used,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
         "fallback_used": join_packet.get("fallback_used") is True,
         "local_imitation_used": join_packet.get("local_imitation_used") is True,
         "native_codex_subagent_used_as_dip": (
@@ -971,6 +1009,21 @@ def build_real_custom_dip_proof_runner_packet(
             ok and first_run.get("route_bound_dispatch_proven") is True
         ),
         "live_result_available": bool(ok and first_run.get("live_result_available") is True),
+        "direct_provider_auth_proven": bool(
+            ok and first_run.get("direct_provider_auth_proven") is True
+        ),
+        "direct_provider_response_observed": bool(
+            ok and first_run.get("direct_provider_response_observed") is True
+        ),
+        "provider_auth_ok": bool(ok and first_run.get("provider_auth_ok") is True),
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": bool(
+            ok and first_run.get("positive_provider_proof_gate_satisfied") is True
+        ),
+        "live_result_bridge_or_file_bridge_used": (
+            first_run.get("live_result_bridge_or_file_bridge_used") is True
+        ),
         "first_run_custom_codex_flow_proven": first_run.get("custom_codex_flow_proven") is True,
         "first_run_user_prompt_submit_hook_ran": first_run.get("user_prompt_submit_hook_ran") is True,
         "first_run_hook_prompt_digest_bound": first_run.get("hook_prompt_digest_bound") is True,
@@ -983,6 +1036,18 @@ def build_real_custom_dip_proof_runner_packet(
             first_run.get("route_bound_dispatch_proven") is True
         ),
         "first_run_live_result_available": first_run.get("live_result_available") is True,
+        "first_run_direct_provider_auth_proven": (
+            first_run.get("direct_provider_auth_proven") is True
+        ),
+        "first_run_direct_provider_response_observed": (
+            first_run.get("direct_provider_response_observed") is True
+        ),
+        "first_run_positive_provider_proof_gate_satisfied": (
+            first_run.get("positive_provider_proof_gate_satisfied") is True
+        ),
+        "first_run_live_result_bridge_or_file_bridge_used": (
+            first_run.get("live_result_bridge_or_file_bridge_used") is True
+        ),
         "first_run_ledger_machine_error_code": _safe_text(
             first_run.get("ledger_machine_error_code"),
             limit=128,

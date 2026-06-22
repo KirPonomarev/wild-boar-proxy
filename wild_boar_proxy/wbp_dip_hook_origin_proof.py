@@ -174,9 +174,22 @@ def _dip_failures(
         ("live_result_provider_called", "live_result_provider_not_called"),
         ("live_result_route_allowed", "live_result_route_not_allowed"),
         ("live_result_required", "live_result_not_required"),
+        ("direct_provider_auth_proven", "direct_provider_auth_not_proven"),
+        (
+            "direct_provider_response_observed",
+            "direct_provider_response_not_observed",
+        ),
+        (
+            "positive_provider_proof_gate_satisfied",
+            "positive_provider_proof_gate_not_satisfied",
+        ),
     ):
         if dip.get(field) is not True:
             failures.append(reason)
+    if dip.get("bridge_green_counts_as_provider_proof") is not False:
+        failures.append("bridge_green_counts_as_provider_proof_not_false")
+    if dip.get("live_result_bridge_or_file_bridge_used") is True:
+        failures.append("bridge_or_file_bridge_used_for_direct_provider_proof")
     if not _hex_sha256(dip.get("task_sha256")):
         failures.append("wbp_dip_task_digest_missing")
     if not _hex_sha256(dip.get("live_result_text_sha256")):
@@ -402,6 +415,27 @@ def build_wbp_dip_hook_origin_proof_packet(
         "live_result_available": bool(ok and dip.get("live_result_available") is True),
         "live_result_provider_called": bool(
             ok and dip.get("live_result_provider_called") is True
+        ),
+        "direct_provider_auth_proven": bool(
+            ok and dip.get("direct_provider_auth_proven") is True
+        ),
+        "direct_provider_response_observed": bool(
+            ok and dip.get("direct_provider_response_observed") is True
+        ),
+        "provider_auth_ok": bool(ok and dip.get("provider_auth_ok") is True),
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": bool(
+            ok and dip.get("positive_provider_proof_gate_satisfied") is True
+        ),
+        "live_result_bridge_or_file_bridge_used": bool(
+            ok and dip.get("live_result_bridge_or_file_bridge_used") is True
+        ),
+        "live_result_runtime_context_bridge_used": bool(
+            ok and dip.get("live_result_runtime_context_bridge_used") is True
+        ),
+        "live_result_runtime_context_file_bridge_used": bool(
+            ok and dip.get("live_result_runtime_context_file_bridge_used") is True
         ),
         "live_result_bridge_attempted": bool(
             ok and dip.get("live_result_bridge_attempted") is True

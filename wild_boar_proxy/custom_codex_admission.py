@@ -599,6 +599,12 @@ def _normalize_file_bridge_response_packet(
         "bridge_or_file_bridge_used": True,
         "bridge_kind": "server_owned_file_bridge",
         "server_owned_file_bridge": True,
+        "direct_provider_auth_proven": False,
+        "direct_provider_response_observed": False,
+        "provider_auth_ok": False,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": False,
         "file_bridge_response_request_id_sha256": _sha256_text(request_id),
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
@@ -1402,6 +1408,19 @@ def run_custom_codex_admission_command(
         "bridge_or_file_bridge_used": live_provider_data.get("bridge_or_file_bridge_used")
         is True,
         "bridge_kind": _safe_text(live_provider_data.get("bridge_kind"), limit=96),
+        "direct_provider_auth_proven": (
+            live_provider_data.get("direct_provider_auth_proven") is True
+        ),
+        "direct_provider_response_observed": (
+            live_provider_data.get("direct_provider_response_observed") is True
+        ),
+        "provider_auth_ok": live_provider_data.get("provider_auth_ok") is True,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": (
+            live_provider_data.get("positive_provider_proof_gate_satisfied") is True
+            and live_provider_data.get("bridge_or_file_bridge_used") is not True
+        ),
         "user_prompt_submit_proof_packet_kind": _safe_text(
             source_packet.get("packet_kind"),
             limit=80,

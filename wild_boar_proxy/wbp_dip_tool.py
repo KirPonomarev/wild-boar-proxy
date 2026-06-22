@@ -63,6 +63,17 @@ def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _provider_proof_fields(*, direct_provider_response_observed: bool) -> dict[str, Any]:
+    return {
+        "direct_provider_auth_proven": bool(direct_provider_response_observed),
+        "direct_provider_response_observed": bool(direct_provider_response_observed),
+        "provider_auth_ok": bool(direct_provider_response_observed),
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": bool(direct_provider_response_observed),
+    }
+
+
 def _sha256_file(path: Path) -> str:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -454,6 +465,10 @@ def _runtime_http_bridge_result(
                     "raw_backend_details_exposed": False,
                     "secret_value_exposed": False,
                     "bridge_attempted": True,
+                    "runtime_context_bridge_used": True,
+                    "runtime_context_file_bridge_used": False,
+                    "bridge_or_file_bridge_used": True,
+                    **_provider_proof_fields(direct_provider_response_observed=False),
                 },
                 permission_style_failure,
             )
@@ -520,6 +535,10 @@ def _runtime_file_bridge_result(
                 "raw_backend_details_exposed": False,
                 "secret_value_exposed": False,
                 "bridge_attempted": True,
+                "runtime_context_bridge_used": False,
+                "runtime_context_file_bridge_used": True,
+                "bridge_or_file_bridge_used": True,
+                **_provider_proof_fields(direct_provider_response_observed=False),
             }
     return None
 
@@ -565,6 +584,10 @@ def request_live_result(
         "local_imitation_used": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
+        "runtime_context_bridge_used": False,
+        "runtime_context_file_bridge_used": False,
+        "bridge_or_file_bridge_used": False,
+        **_provider_proof_fields(direct_provider_response_observed=False),
     }
     if not route_allowed:
         return base
@@ -648,6 +671,7 @@ def request_live_result(
         "thinking": request_metadata.get("thinking")
         if isinstance(request_metadata.get("thinking"), Mapping)
         else {},
+        **_provider_proof_fields(direct_provider_response_observed=True),
     }
 
 
@@ -700,6 +724,20 @@ def build_wbp_dip_tool_packet(
         and live_result_data.get("local_imitation_used") is False
         and live_result_data.get("raw_backend_details_exposed") is False
         and live_result_data.get("secret_value_exposed") is False
+    )
+    direct_provider_auth_proven = live_result_data.get("direct_provider_auth_proven") is True
+    direct_provider_response_observed = (
+        live_result_data.get("direct_provider_response_observed") is True
+    )
+    provider_auth_ok = live_result_data.get("provider_auth_ok") is True
+    bridge_or_file_bridge_used = live_result_data.get("bridge_or_file_bridge_used") is True
+    positive_provider_proof_gate_satisfied = bool(
+        live_result_available
+        and direct_provider_auth_proven
+        and direct_provider_response_observed
+        and provider_auth_ok
+        and not bridge_or_file_bridge_used
+        and live_result_data.get("positive_provider_proof_gate_satisfied") is True
     )
     live_result_text = _bounded_result_text(live_result_data.get("result_text"))
     direct_live_result_secret_leak = bool(
@@ -794,6 +832,25 @@ def build_wbp_dip_tool_packet(
         "live_result_bridge_attempted": live_result_data.get("bridge_attempted") is True,
         "live_result_file_bridge_attempted": (
             live_result_data.get("file_bridge_attempted") is True
+        ),
+        "live_result_runtime_context_bridge_used": (
+            live_result_data.get("runtime_context_bridge_used") is True
+        ),
+        "live_result_runtime_context_file_bridge_used": (
+            live_result_data.get("runtime_context_file_bridge_used") is True
+        ),
+        "live_result_bridge_or_file_bridge_used": bridge_or_file_bridge_used,
+        "direct_provider_auth_proven": direct_provider_auth_proven,
+        "direct_provider_response_observed": direct_provider_response_observed,
+        "provider_auth_ok": provider_auth_ok,
+        "bridge_green_counts_as_provider_proof": False,
+        "provider_auth_smoke_required_before_full_runner": True,
+        "positive_provider_proof_gate_satisfied": positive_provider_proof_gate_satisfied,
+        "live_result_direct_provider_auth_proven": direct_provider_auth_proven,
+        "live_result_direct_provider_response_observed": direct_provider_response_observed,
+        "live_result_provider_auth_ok": provider_auth_ok,
+        "live_result_positive_provider_proof_gate_satisfied": (
+            positive_provider_proof_gate_satisfied
         ),
         "live_result_source": _safe_text(live_result_data.get("source"), limit=120),
         "live_result_machine_error_code": live_result_error_code,

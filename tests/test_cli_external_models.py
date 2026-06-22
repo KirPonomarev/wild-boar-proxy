@@ -1283,10 +1283,53 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertFalse(payload["data"]["commands_started_by_provider"])
         self.assertFalse(payload["data"]["codex_history_sent"])
         self.assertFalse(payload["data"]["repo_context_sent"])
+        self.assertFalse(payload["data"]["runtime_context_bridge_used"])
+        self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertFalse(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertTrue(payload["data"]["direct_provider_auth_proven"])
+        self.assertTrue(payload["data"]["direct_provider_response_observed"])
+        self.assertTrue(payload["data"]["provider_auth_ok"])
+        self.assertTrue(payload["data"]["positive_provider_proof_gate_satisfied"])
         self.assertEqual(request_count, 1)
         self.assertEqual(request_payload["max_tokens"], 96)
         self.assertEqual(state_after, state_before)
         self.assertEqual(evidence_after, evidence_before)
+
+    def test_live_format_check_provider_auth_failure_marks_direct_gate_false(
+        self,
+    ) -> None:
+        with mocked_provider(expected_token="expected-token") as (base_url, _server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            result = self.run_cli(
+                "external-models",
+                "live-format-check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                "Return the marker.",
+                "--expected-text",
+                "AUTH_SHOULD_FAIL",
+            )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "provider_auth_failed")
+        self.assertEqual(payload["data"]["route_state"], "provider_auth_failed")
+        self.assertFalse(payload["data"]["runtime_context_bridge_used"])
+        self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertFalse(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertFalse(payload["data"]["direct_provider_auth_proven"])
+        self.assertFalse(payload["data"]["direct_provider_response_observed"])
+        self.assertFalse(payload["data"]["provider_auth_ok"])
+        self.assertFalse(payload["data"]["positive_provider_proof_gate_satisfied"])
 
     def test_live_format_check_uses_runtime_context_loopback_bridge_before_direct_provider(
         self,
@@ -1364,6 +1407,11 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertTrue(payload["data"]["runtime_context_bridge_used"])
         self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
         self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertFalse(payload["data"]["direct_provider_auth_proven"])
+        self.assertFalse(payload["data"]["direct_provider_response_observed"])
+        self.assertFalse(payload["data"]["provider_auth_ok"])
+        self.assertFalse(payload["data"]["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(payload["data"]["bridge_green_counts_as_provider_proof"])
         self.assertEqual(payload["data"]["bridge_kind"], "local_wbp_responses_bridge")
         self.assertFalse(payload["data"]["fallback_used"])
         self.assertFalse(payload["data"]["state_written"])
@@ -1471,6 +1519,11 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertFalse(payload["data"]["runtime_context_bridge_used"])
         self.assertTrue(payload["data"]["runtime_context_file_bridge_used"])
         self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertFalse(payload["data"]["direct_provider_auth_proven"])
+        self.assertFalse(payload["data"]["direct_provider_response_observed"])
+        self.assertFalse(payload["data"]["provider_auth_ok"])
+        self.assertFalse(payload["data"]["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(payload["data"]["bridge_green_counts_as_provider_proof"])
         self.assertEqual(payload["data"]["bridge_kind"], "server_owned_file_bridge")
         self.assertEqual(len(observed_request_ids), 1)
         self.assertEqual(
@@ -1546,7 +1599,10 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["data"]["expected_text_observed"])
         self.assertEqual(payload["data"]["request_shape"], "openai_chat_messages")
-        self.assertNotIn("bridge_or_file_bridge_used", payload["data"])
+        self.assertFalse(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertTrue(payload["data"]["direct_provider_auth_proven"])
+        self.assertTrue(payload["data"]["direct_provider_response_observed"])
+        self.assertTrue(payload["data"]["positive_provider_proof_gate_satisfied"])
         self.assertEqual(bridge.request_count, 0)  # type: ignore[attr-defined]
 
     def test_check_transform_profile_records_request_and_response_metadata(self) -> None:

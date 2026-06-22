@@ -151,6 +151,15 @@ def _live_provider_packet(
                 "commands_started_by_provider": False,
                 "codex_history_sent": False,
                 "repo_context_sent": False,
+                "runtime_context_bridge_used": False,
+                "runtime_context_file_bridge_used": False,
+                "bridge_or_file_bridge_used": False,
+                "direct_provider_auth_proven": True,
+                "direct_provider_response_observed": True,
+                "provider_auth_ok": True,
+                "bridge_green_counts_as_provider_proof": False,
+                "provider_auth_smoke_required_before_full_runner": True,
+                "positive_provider_proof_gate_satisfied": True,
                 "request_shape": "openai_chat_messages",
                 "response_shape": "choices_message",
             },
@@ -543,6 +552,10 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         )
         self.assertTrue(packet["live_provider_response_proven"])
         self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["direct_provider_auth_proven"])
+        self.assertTrue(packet["direct_provider_response_observed"])
+        self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(packet["bridge_or_file_bridge_used"])
         self.assertFalse(packet["does_not_prove_live_provider"])
         self.assertTrue(packet["approved_handoff_ready"])
         self.assertTrue(packet["approved_handoff_payload_sanitized"])
@@ -651,6 +664,7 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertTrue(packet["integrated_live_provider_proof_valid"])
         self.assertTrue(packet["api_lane_called"])
         self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
         self.assertEqual(
             packet["working_flow_delivery_surface_kind"],
             working_flow.DELIVERY_SURFACE_CODEX_COMMAND_EXECUTION_LIVE_FORMAT_CHECK,
