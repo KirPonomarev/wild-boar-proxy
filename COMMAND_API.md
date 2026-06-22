@@ -61,6 +61,19 @@ All operator commands must support `--json`.
 - `package launchable build --output-dir <path> [--runtime-executable <path>] --json`
 - `package launchable verify --manifest <path> --json`
 
+## Auxiliary working-tool surfaces
+
+- `tools/wbp_dip --json <task>`
+
+`tools/wbp_dip --json <task>` is a bounded Custom Codex working-tool launcher.
+It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
+CLI flow and emits one JSON packet.
+
+It must not write runtime truth, must not set `product_ready=true`, and must not
+claim success unless the captured Codex JSONL contains a successful
+`delegate_to_dip` tool result with API-lane dispatch and no fallback/local
+imitation.
+
 ## Runtime invariant check owner surface
 
 `invariant-check --json` is a read-only runtime truth guard. It machine-checks a
