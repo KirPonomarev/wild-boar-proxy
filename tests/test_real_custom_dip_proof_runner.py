@@ -16,6 +16,10 @@ from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import real_custom_dip_proof_runner as runner
 from wild_boar_proxy import real_user_prompt_submit_ledger_proof as ledger_proof
 from wild_boar_proxy import wbp_dip_hook_origin_proof
+from wild_boar_proxy.codex_working_flow_delivery_proof import (
+    CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND,
+    WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND,
+)
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
 from wild_boar_proxy.runtime import RuntimePaths
@@ -186,6 +190,48 @@ def _completed(stdout: str = "", stderr: str = "", returncode: int = 0) -> subpr
     )
 
 
+def _working_flow_source_packet(prompt: str) -> dict[str, object]:
+    return {
+        "packet_kind": WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND,
+        "status": "ok",
+        "machine_error_code": "OK",
+        "effect": "probe",
+        "changed_files": [],
+        "prompt_digest": _sha256(prompt),
+        "product_ready": False,
+        "custom_codex_ui_visibility_proven": False,
+        "codex_working_flow_delivery_proven": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+    }
+
+
+def _working_flow_delivery_packet(*, ok: bool = True) -> dict[str, object]:
+    return {
+        "packet_kind": CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND,
+        "status": "ok" if ok else "error",
+        "machine_error_code": "OK" if ok else "WBP_CODEX_WORKING_FLOW_DELIVERY_NOT_BOUND",
+        "effect": "probe",
+        "changed_files": [],
+        "codex_working_flow_delivery_proven": ok,
+        "approved_delivery_surface_proven": ok,
+        "assistant_response_bound_to_handoff_digest": ok,
+        "working_flow_delivery_surface_kind": "mcp_tool_response",
+        "working_flow_handoff_payload_digest": _sha256("working-flow-handoff"),
+        "blocking_reasons": [] if ok else ["assistant_response_bound_to_handoff_digest_not_true"],
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "product_ready": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "native_codex_subagent_used_as_dip": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+    }
+
+
 class RealCustomDipProofRunnerTests(unittest.TestCase):
     def _run(
         self,
@@ -195,6 +241,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         stale_ledger: bool = False,
         wbp_dip_ok: bool = True,
         wbp_dip_bridge_backed: bool = False,
+        delivery_ok: bool = True,
         join_patch: object = None,
         probe_codex_app_server: bool = False,
     ) -> dict[str, object]:
@@ -267,11 +314,43 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             captured_ledger_kwargs.append(dict(_kwargs))
             return _ledger_packet(str(prompt_text))
 
+        def fake_delivery(**kwargs: object) -> dict[str, object]:
+            run_dir = kwargs["run_dir"]
+            prompt_text = str(kwargs["prompt_text"])
+            self.assertIsInstance(run_dir, Path)
+            source_file = run_dir / runner.WORKING_FLOW_SOURCE_FILE_NAME
+            delivery_file = run_dir / runner.WORKING_FLOW_DELIVERY_FILE_NAME
+            source = _working_flow_source_packet(prompt_text)
+            delivery = _working_flow_delivery_packet(ok=delivery_ok)
+            _write_json(source_file, source)
+            _write_json(delivery_file, delivery)
+            return {
+                "working_flow_source_packet": source,
+                "working_flow_delivery_packet": delivery,
+                "working_flow_delivery_process": {},
+                "artifacts": [
+                    runner._packet_file_summary(  # noqa: SLF001
+                        runner.WORKING_FLOW_SOURCE_FILE_NAME,
+                        source_file,
+                        source,
+                    ),
+                    runner._packet_file_summary(  # noqa: SLF001
+                        runner.WORKING_FLOW_DELIVERY_FILE_NAME,
+                        delivery_file,
+                        delivery,
+                    ),
+                ],
+                "run_blocking_reasons": []
+                if delivery_ok
+                else ["assistant_response_bound_to_handoff_digest_not_true"],
+            }
+
         patches = [
             mock.patch.object(runner, "build_user_prompt_submit_readiness_packet", side_effect=fake_readiness),
             mock.patch.object(runner, "run_real_user_prompt_submit_ledger_proof_command", side_effect=fake_ledger_proof),
             mock.patch.object(runner, "_run_custom_codex_prompt", side_effect=fake_custom_codex_prompt),
             mock.patch.object(runner.subprocess, "run", side_effect=fake_subprocess_run),
+            mock.patch.object(runner, "_run_working_flow_delivery", side_effect=fake_delivery),
         ]
         if join_patch is not None:
             patches.append(
@@ -281,8 +360,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                     side_effect=join_patch,
                 )
             )
-        with patches[0], patches[1], patches[2], patches[3]:
-            if len(patches) == 4:
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            if len(patches) == 5:
                 return runner.run_real_custom_dip_proof_runner_command(
                     paths=paths,
                     prompt_text=PROMPT,
@@ -292,8 +371,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                     timeout_seconds=3,
                     probe_codex_app_server=probe_codex_app_server,
                 )
-            if len(patches) == 5:
-                with patches[4]:
+            if len(patches) == 6:
+                with patches[5]:
                     return runner.run_real_custom_dip_proof_runner_command(
                         paths=paths,
                         prompt_text=PROMPT,
@@ -339,6 +418,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["direct_provider_auth_proven"])
             self.assertTrue(packet["direct_provider_response_observed"])
             self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+            self.assertTrue(packet["codex_working_flow_delivery_proven"])
+            self.assertTrue(packet["approved_delivery_surface_proven"])
+            self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
             self.assertFalse(packet["live_result_bridge_or_file_bridge_used"])
             self.assertTrue(packet["first_run_custom_codex_flow_proven"])
             self.assertTrue(packet["first_run_user_prompt_submit_hook_ran"])
@@ -348,6 +430,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["first_run_direct_provider_auth_proven"])
             self.assertTrue(packet["first_run_direct_provider_response_observed"])
             self.assertTrue(packet["first_run_positive_provider_proof_gate_satisfied"])
+            self.assertTrue(packet["first_run_codex_working_flow_delivery_proven"])
+            self.assertTrue(packet["first_run_approved_delivery_surface_proven"])
+            self.assertTrue(packet["first_run_assistant_response_bound_to_handoff_digest"])
             self.assertFalse(packet["first_run_live_result_bridge_or_file_bridge_used"])
             self.assertEqual(packet["first_run_wbp_dip_machine_error_code"], "OK")
             self.assertTrue(packet["partial_first_run_diagnostics_recorded"])
@@ -364,6 +449,25 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertNotIn(ROUTE_ID, serialized)
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_delivery_failure_blocks_full_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(Path(temp_dir), delivery_ok=False)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_DELIVERY_FAILED,
+            )
+            self.assertIn(
+                "run_1_assistant_response_bound_to_handoff_digest_not_true",
+                packet["blocking_reasons"],
+            )
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertFalse(packet["codex_working_flow_delivery_proven"])
+            self.assertTrue(packet["first_run_api_lane_called"])
+            self.assertFalse(packet["first_run_codex_working_flow_delivery_proven"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_bridge_backed_result_blocks_repeatable_direct_provider_proof(self) -> None:

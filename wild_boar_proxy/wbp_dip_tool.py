@@ -158,12 +158,21 @@ def build_codex_exec_argv(
     profile_dir: Path,
     entry_evidence_file: Path,
     extra_args: Sequence[str] = (),
+    extra_mcp_env: Mapping[str, str] | None = None,
 ) -> list[str]:
     env_table = {
         "PYTHONPATH": str(repo_root),
         "WBP_ENTRY_HOOK_EVIDENCE_PATH": str(entry_evidence_file),
         "WBP_PROFILE_DIR": str(profile_dir),
     }
+    if extra_mcp_env:
+        env_table.update(
+            {
+                str(key): str(value)
+                for key, value in extra_mcp_env.items()
+                if key and value
+            }
+        )
     return [
         str(codex_bin),
         "exec",

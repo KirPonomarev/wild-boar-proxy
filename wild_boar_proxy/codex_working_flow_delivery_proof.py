@@ -45,6 +45,9 @@ from .router_hook_entry import _safe_text
 
 
 CODEX_WORKING_FLOW_DELIVERY_PACKET_KIND = "wbp_codex_working_flow_delivery_proof"
+WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND = (
+    "wbp_dip_hook_origin_live_provider_delivery_source"
+)
 
 CODEX_WORKING_FLOW_INTEGRATED_PROOF_INVALID = (
     "WBP_CODEX_WORKING_FLOW_INTEGRATED_PROOF_INVALID"
@@ -231,6 +234,100 @@ def _integrated_source_failures(
     if metadata.get("integrated_live_provider_proof_file_mapping") is not True:
         failures.append("integrated_live_provider_proof_file_not_mapping")
     source_kind = _safe_text(source.get("packet_kind"), limit=96)
+    if source_kind == WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND:
+        if source.get("status") != "ok":
+            failures.append("integrated_proof_packet_not_ok")
+        if source.get("machine_error_code") != "OK":
+            failures.append("integrated_proof_machine_error_not_ok")
+        if source.get("effect") != EFFECT_PROBE:
+            failures.append("integrated_proof_effect_not_probe")
+        if source.get("changed_files") not in ([], ()):
+            failures.append("integrated_proof_changed_files_not_empty")
+        for field, reason in (
+            ("custom_codex_flow_proven", "custom_codex_flow_not_proven"),
+            ("user_prompt_submit_hook_ran", "user_prompt_submit_hook_not_run"),
+            ("hook_prompt_digest_bound", "hook_prompt_digest_not_bound"),
+            ("hook_runtime_context_digest_bound", "hook_runtime_context_not_bound"),
+            ("alias_context_read", "alias_context_not_read"),
+            ("alias_bound", "alias_not_bound"),
+            ("alias_resolved", "alias_not_resolved"),
+            ("route_id_allowed", "route_id_not_allowed"),
+            ("allowed_api_route_ids_enforced", "allowed_api_route_ids_not_enforced"),
+            ("same_prompt_digest", "prompt_digest_not_bound"),
+            ("selected_api_route_id_present", "selected_route_not_present"),
+            (
+                "real_ledger_bound_api_dispatch_proven",
+                "ledger_bound_dispatch_not_proven",
+            ),
+            ("delegate_to_dip_proven", "delegate_to_dip_not_proven"),
+            ("api_lane_called", "api_lane_not_called"),
+            ("dispatch_proven", "dispatch_not_proven"),
+            ("route_bound_dispatch_proven", "route_bound_dispatch_not_proven"),
+            ("live_result_available", "live_result_not_available"),
+            ("direct_provider_auth_proven", "direct_provider_auth_not_proven"),
+            (
+                "direct_provider_response_observed",
+                "direct_provider_response_not_observed",
+            ),
+            ("provider_auth_ok", "provider_auth_not_ok"),
+            (
+                "positive_provider_proof_gate_satisfied",
+                "positive_provider_gate_not_satisfied",
+            ),
+            ("live_provider_proven", "live_provider_not_proven"),
+            ("live_provider_response_proven", "live_provider_response_not_proven"),
+            (
+                "external_live_provider_response_proven",
+                "external_live_provider_response_not_proven",
+            ),
+        ):
+            if source.get(field) is not True:
+                failures.append(reason)
+        for field, reason in (
+            ("fallback_used", "fallback_used"),
+            ("local_imitation_used", "local_imitation_used"),
+            ("native_codex_subagent_used_as_dip", "native_codex_subagent_used_as_dip"),
+            (
+                "live_result_bridge_or_file_bridge_used",
+                "live_result_bridge_or_file_bridge_used",
+            ),
+        ):
+            if source.get(field) is not False:
+                failures.append(reason)
+        if _safe_text(source.get("dispatch_status"), limit=32) != "proven":
+            failures.append("dispatch_status_not_proven")
+        if _safe_text(source.get("live_provider_status"), limit=32) != "proven":
+            failures.append("live_provider_status_not_proven")
+        for field, reason in (
+            ("hook_ledger_failures", "hook_ledger_failures_not_empty"),
+            ("dispatch_failures", "dispatch_failures_not_empty"),
+            ("wbp_dip_failures", "wbp_dip_failures_not_empty"),
+            ("join_failures", "join_failures_not_empty"),
+            ("delivery_source_failures", "delivery_source_failures_not_empty"),
+            ("blocking_reasons", "integrated_proof_blocking_reasons_not_empty"),
+        ):
+            value = source.get(field)
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+                if list(value):
+                    failures.append(reason)
+            elif value:
+                failures.append(reason)
+        for field, reason in (
+            ("prompt_digest", "prompt_digest_missing"),
+            ("selected_api_route_id_sha256", "selected_api_route_digest_missing"),
+            ("route_bound_request_sha256", "route_bound_request_digest_missing"),
+            ("provider_response_digest", "provider_response_digest_missing"),
+            (
+                "controlled_provider_response_digest",
+                "controlled_provider_response_digest_missing",
+            ),
+            ("live_provider_response_digest", "live_provider_response_digest_missing"),
+        ):
+            if not _hex_sha256(source.get(field)):
+                failures.append(reason)
+        failures.extend(_source_handoff_digest_failures(source))
+        failures.extend(unsafe_failures)
+        return sorted(set(failures)), unsafe_failures
     if source_kind == CUSTOM_ORIGIN_BOUND_LIVE_PROVIDER_JOIN_PACKET_KIND:
         if source.get("status") != "ok":
             failures.append("integrated_proof_packet_not_ok")

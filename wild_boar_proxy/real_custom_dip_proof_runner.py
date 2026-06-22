@@ -15,8 +15,15 @@ import subprocess
 import time
 from typing import Any
 
-from .command_effects import EFFECT_MUTATE
+from .command_effects import EFFECT_MUTATE, EFFECT_PROBE
+from .codex_working_flow_delivery_proof import (
+    WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND,
+    _safe_working_flow_delivery_payload,
+    _source_approved_handoff_payload,
+    run_codex_working_flow_delivery_proof_command,
+)
 from .core import packets
+from .observed_machine_handoff_delivery import _canonical_json_digest
 from .real_custom_codex_hook_proof import runtime_context_digest
 from .real_user_prompt_submit_ledger_proof import (
     REAL_USER_PROMPT_SUBMIT_LEDGER_OK,
@@ -35,7 +42,17 @@ from .wbp_dip_hook_origin_proof import (
     WBP_DIP_HOOK_ORIGIN_OK,
     run_wbp_dip_hook_origin_proof_command,
 )
-from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
+from .wbp_dip_tool import (
+    DEFAULT_CODEX_JSONL_FILENAME,
+    DEFAULT_MODEL,
+    DEFAULT_SANDBOX,
+    build_codex_exec_argv,
+    default_codex_bin,
+    _find_delegate_packet,
+    _read_codex_exec_jsonl,
+    _redact_text_file,
+    _redaction_replacements,
+)
 
 
 REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND = "wbp_repeatable_real_custom_dip_proof_runner"
@@ -58,6 +75,9 @@ REAL_CUSTOM_DIP_PROOF_RUNNER_LEDGER_PROOF_FAILED = (
 )
 REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED = "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED"
 REAL_CUSTOM_DIP_PROOF_RUNNER_JOIN_FAILED = "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_JOIN_FAILED"
+REAL_CUSTOM_DIP_PROOF_RUNNER_DELIVERY_FAILED = (
+    "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_DELIVERY_FAILED"
+)
 REAL_CUSTOM_DIP_PROOF_RUNNER_REPEATABILITY_FAILED = (
     "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_REPEATABILITY_FAILED"
 )
@@ -73,6 +93,11 @@ REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME = (
 HOOK_READINESS_FILE_NAME = "user-prompt-submit-readiness.packet.json"
 LEDGER_PROOF_FILE_NAME = "real-user-prompt-submit-ledger-proof.packet.json"
 WBP_DIP_HOOK_ORIGIN_FILE_NAME = "wbp-dip-hook-origin-proof.packet.json"
+WORKING_FLOW_SOURCE_FILE_NAME = "working-flow-source-proof.packet.json"
+WORKING_FLOW_CODEX_JSONL_FILE_NAME = "working-flow-codex-exec.jsonl"
+WORKING_FLOW_LAST_MESSAGE_FILE_NAME = "working-flow-last-message.txt"
+WORKING_FLOW_ENTRY_EVIDENCE_FILE_NAME = "working-flow-mcp-entry-evidence.json"
+WORKING_FLOW_DELIVERY_FILE_NAME = "codex-working-flow-delivery-proof.packet.json"
 
 _RUN_REQUIRED_TRUE_FIELDS = (
     "custom_codex_flow_proven",
@@ -87,6 +112,19 @@ _RUN_REQUIRED_TRUE_FIELDS = (
     "direct_provider_response_observed",
     "provider_auth_ok",
     "positive_provider_proof_gate_satisfied",
+    "codex_working_flow_delivery_proven",
+    "approved_delivery_surface_proven",
+    "assistant_response_bound_to_handoff_digest",
+)
+_JOIN_REQUIRED_TRUE_FIELDS = tuple(
+    field
+    for field in _RUN_REQUIRED_TRUE_FIELDS
+    if field
+    not in {
+        "codex_working_flow_delivery_proven",
+        "approved_delivery_surface_proven",
+        "assistant_response_bound_to_handoff_digest",
+    }
 )
 _RUN_REQUIRED_FALSE_FIELDS = (
     "fallback_used",
@@ -416,6 +454,431 @@ def _run_wbp_dip_tool(
     return completed, packet, packet_file
 
 
+def _build_delivery_delegate_prompt(*, task: str, expected_alias: str) -> str:
+    payload = {
+        "task": task,
+        "expected_alias": expected_alias,
+    }
+    return (
+        "Use only the WBP MCP tool. Do not run shell commands. Do not inspect "
+        "files. Call delegate_to_dip exactly once with the JSON arguments below. "
+        "The WBP MCP server is configured with a file-backed working-flow source "
+        "proof. After the tool returns, answer exactly one line in this form: "
+        "wbp_handoff_digest=<handoff_payload_sha256>. Do not answer locally, do "
+        "not create a Codex sub-agent as DIP, and do not include route ids, "
+        "secrets, backend details, or the task text.\n\n"
+        f"delegate_to_dip arguments JSON: {json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
+    )
+
+
+def _delivery_source_failures(
+    *,
+    delegate_packet: Mapping[str, Any],
+    dip_packet: Mapping[str, Any],
+    join_packet: Mapping[str, Any],
+    prompt_digest: str,
+) -> list[str]:
+    failures: list[str] = []
+    if not delegate_packet:
+        failures.append("delegate_packet_missing")
+    if join_packet.get("status") != "ok":
+        failures.append("join_packet_not_ok")
+    if join_packet.get("prompt_digest") != prompt_digest:
+        failures.append("join_prompt_digest_mismatch")
+    if delegate_packet.get("task_sha256") != prompt_digest:
+        failures.append("delegate_prompt_digest_mismatch")
+    for field, source, reason in (
+        ("custom_codex_flow_proven", join_packet, "custom_codex_flow_not_proven"),
+        ("user_prompt_submit_hook_ran", join_packet, "user_prompt_submit_hook_not_run"),
+        ("hook_prompt_digest_bound", join_packet, "hook_prompt_digest_not_bound"),
+        (
+            "hook_runtime_context_digest_bound",
+            join_packet,
+            "hook_runtime_context_not_bound",
+        ),
+        ("delegate_to_dip_proven", join_packet, "delegate_to_dip_not_proven"),
+        ("api_lane_called", join_packet, "api_lane_not_called"),
+        ("route_bound_dispatch_proven", join_packet, "route_bound_dispatch_not_proven"),
+        ("live_result_available", join_packet, "live_result_not_available"),
+        ("direct_provider_auth_proven", join_packet, "direct_provider_auth_not_proven"),
+        (
+            "direct_provider_response_observed",
+            join_packet,
+            "direct_provider_response_not_observed",
+        ),
+        ("provider_auth_ok", join_packet, "provider_auth_not_ok"),
+        (
+            "positive_provider_proof_gate_satisfied",
+            join_packet,
+            "positive_provider_gate_not_satisfied",
+        ),
+        (
+            "delegate_to_dip_tool_called",
+            delegate_packet,
+            "delegate_tool_call_not_observed",
+        ),
+        ("alias_context_read", delegate_packet, "alias_context_not_read"),
+        (
+            "allowed_api_route_ids_enforced",
+            delegate_packet,
+            "allowed_api_route_ids_not_enforced",
+        ),
+        ("route_allowed", delegate_packet, "route_id_not_allowed"),
+        (
+            "route_bound_dispatch_proven",
+            delegate_packet,
+            "dispatch_not_proven",
+        ),
+    ):
+        if source.get(field) is not True:
+            failures.append(reason)
+    for field, source, reason in (
+        ("fallback_used", join_packet, "fallback_used"),
+        ("local_imitation_used", join_packet, "local_imitation_used"),
+        (
+            "native_codex_subagent_used_as_dip",
+            join_packet,
+            "native_codex_subagent_used_as_dip",
+        ),
+        (
+            "live_result_bridge_or_file_bridge_used",
+            join_packet,
+            "live_result_bridge_or_file_bridge_used",
+        ),
+    ):
+        if source.get(field) is not False:
+            failures.append(reason)
+    for field, source, reason in (
+        ("selected_api_route_id_sha256", delegate_packet, "selected_route_digest_missing"),
+        ("route_bound_request_sha256", delegate_packet, "route_request_digest_missing"),
+        (
+            "controlled_provider_response_sha256",
+            delegate_packet,
+            "controlled_provider_response_digest_missing",
+        ),
+        ("live_result_text_sha256", dip_packet, "live_provider_response_digest_missing"),
+    ):
+        if not _hex_sha256(source.get(field)):
+            failures.append(reason)
+    return sorted(set(failure for failure in failures if packets.is_command_value_token(failure)))
+
+
+def _build_working_flow_source_packet(
+    *,
+    prompt_text: str,
+    expected_alias: str,
+    delegate_packet: Mapping[str, Any],
+    dip_packet: Mapping[str, Any],
+    ledger_packet: Mapping[str, Any],
+    join_packet: Mapping[str, Any],
+    ledger_file: Path,
+    dip_file: Path,
+    join_file: Path,
+    secret_values: Sequence[str],
+) -> dict[str, Any]:
+    prompt_digest = _sha256_text(prompt_text)
+    selected_route_digest = _hex_sha256(delegate_packet.get("selected_api_route_id_sha256"))
+    route_bound_request_digest = _hex_sha256(delegate_packet.get("route_bound_request_sha256"))
+    controlled_digest = _hex_sha256(delegate_packet.get("controlled_provider_response_sha256"))
+    live_provider_digest = _hex_sha256(dip_packet.get("live_result_text_sha256"))
+    failures = _delivery_source_failures(
+        delegate_packet=delegate_packet,
+        dip_packet=dip_packet,
+        join_packet=join_packet,
+        prompt_digest=prompt_digest,
+    )
+    ok = not failures
+    source_extra: dict[str, Any] = {
+        "schema_version": 1,
+        "packet_kind": WBP_DIP_HOOK_ORIGIN_LIVE_PROVIDER_DELIVERY_SOURCE_PACKET_KIND,
+        "source_packet_version": 1,
+        "proof_scope": "custom_codex_hook_origin_wbp_dip_direct_provider_delivery_source",
+        "dispatch_packet_kind": _safe_text(delegate_packet.get("packet_kind"), limit=96),
+        "source_dispatch_packet_kind": _safe_text(
+            delegate_packet.get("packet_kind"),
+            limit=96,
+        ),
+        "prompt_digest": prompt_digest,
+        "same_prompt_digest": bool(
+            ok
+            and join_packet.get("prompt_digest") == prompt_digest
+            and delegate_packet.get("task_sha256") == prompt_digest
+            and dip_packet.get("task_sha256") == prompt_digest
+        ),
+        "selected_alias": _safe_text(
+            delegate_packet.get("selected_alias") or expected_alias,
+            limit=80,
+        ),
+        "selected_alias_lane": _safe_text(
+            delegate_packet.get("selected_alias_lane"),
+            limit=32,
+        ),
+        "selected_slot": _safe_text(
+            join_packet.get("selected_slot") or dip_packet.get("selected_slot"),
+            limit=64,
+        ),
+        "selected_api_route_id_sha256": selected_route_digest,
+        "route_bound_request_sha256": route_bound_request_digest,
+        "controlled_provider_response_digest": controlled_digest,
+        "provider_response_digest": controlled_digest,
+        "live_provider_response_digest": live_provider_digest,
+        "dispatch_truth_source": _safe_text(
+            delegate_packet.get("dispatch_truth_source"),
+            limit=80,
+        ),
+        "api_lane_truth_source": "server_owned_controlled_route_bound_dispatch",
+        "live_provider_truth_source": "server_owned_external_live_provider_response",
+        "custom_codex_flow_proven": join_packet.get("custom_codex_flow_proven") is True,
+        "user_prompt_submit_hook_ran": join_packet.get("user_prompt_submit_hook_ran") is True,
+        "hook_ledger_written": ledger_packet.get("hook_ledger_written") is True,
+        "hook_prompt_digest_bound": join_packet.get("hook_prompt_digest_bound") is True,
+        "hook_runtime_context_digest_bound": (
+            join_packet.get("hook_runtime_context_digest_bound") is True
+        ),
+        "thread_or_turn_digest_bound": ledger_packet.get("thread_or_turn_digest_bound") is True,
+        "alias_context_read": delegate_packet.get("alias_context_read") is True,
+        "alias_bound": True,
+        "alias_resolved": True,
+        "route_id_allowed": delegate_packet.get("route_allowed") is True,
+        "allowed_api_route_ids_enforced": (
+            delegate_packet.get("allowed_api_route_ids_enforced") is True
+        ),
+        "selected_api_route_id_present": bool(selected_route_digest),
+        "real_ledger_bound_api_dispatch_proven": (
+            join_packet.get("real_ledger_bound_api_dispatch_proven") is True
+            or join_packet.get("delegate_to_dip_proven") is True
+        ),
+        "delegate_to_dip_proven": join_packet.get("delegate_to_dip_proven") is True,
+        "api_lane_called": join_packet.get("api_lane_called") is True,
+        "dispatch_status": (
+            "proven" if delegate_packet.get("route_bound_dispatch_proven") is True else ""
+        ),
+        "dispatch_proven": delegate_packet.get("route_bound_dispatch_proven") is True,
+        "route_bound_dispatch_proven": (
+            join_packet.get("route_bound_dispatch_proven") is True
+        ),
+        "live_result_available": join_packet.get("live_result_available") is True,
+        "direct_provider_auth_proven": (
+            join_packet.get("direct_provider_auth_proven") is True
+        ),
+        "direct_provider_response_observed": (
+            join_packet.get("direct_provider_response_observed") is True
+        ),
+        "provider_auth_ok": join_packet.get("provider_auth_ok") is True,
+        "positive_provider_proof_gate_satisfied": (
+            join_packet.get("positive_provider_proof_gate_satisfied") is True
+        ),
+        "live_provider_status": "proven" if live_provider_digest else "",
+        "live_provider_proven": bool(live_provider_digest),
+        "live_provider_response_proven": bool(live_provider_digest),
+        "external_live_provider_response_proven": bool(live_provider_digest),
+        "fallback_used": join_packet.get("fallback_used") is True,
+        "local_imitation_used": join_packet.get("local_imitation_used") is True,
+        "native_codex_subagent_used_as_dip": (
+            join_packet.get("native_codex_subagent_used_as_dip") is True
+        ),
+        "live_result_bridge_or_file_bridge_used": (
+            join_packet.get("live_result_bridge_or_file_bridge_used") is True
+            or dip_packet.get("live_result_bridge_or_file_bridge_used") is True
+        ),
+        "hook_ledger_failures": [],
+        "dispatch_failures": [],
+        "wbp_dip_failures": [],
+        "join_failures": [],
+        "delivery_source_failures": [] if ok else failures,
+        "blocking_reasons": [] if ok else failures,
+        "ledger_proof_file_sha256": _sha256_file(ledger_file),
+        "wbp_dip_file_sha256": _sha256_file(dip_file),
+        "join_file_sha256": _sha256_file(join_file),
+        "source_files_path_recorded": False,
+        "product_ready": False,
+        "custom_codex_ui_visibility_proven": False,
+        "codex_working_flow_delivery_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "fallback_used_recorded_as_failure": False,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+    source_extra["handoff_payload_digest"] = _canonical_json_digest(
+        _source_approved_handoff_payload(source_extra)
+    )
+    source_extra["working_flow_handoff_payload_digest"] = _hex_sha256(
+        _safe_working_flow_delivery_payload(source_extra).get("handoff_payload_sha256")
+    )
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "WBP prepared file-backed DIP delivery source proof."
+            if ok
+            else "WBP blocked DIP delivery source proof before Codex handoff."
+        ),
+        machine_error_code="OK" if ok else "WBP_DIP_DELIVERY_SOURCE_INVALID",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=[],
+        effect=EFFECT_PROBE,
+        secret_values=list(secret_values),
+        extra=source_extra,
+    )
+
+
+def _run_working_flow_delivery(
+    *,
+    run_dir: Path,
+    repo_root: Path,
+    profile_dir: Path,
+    codex_bin: Path,
+    model: str,
+    sandbox: str,
+    expected_alias: str,
+    prompt_text: str,
+    timeout_seconds: int,
+    ledger_packet: Mapping[str, Any],
+    dip_packet: Mapping[str, Any],
+    join_packet: Mapping[str, Any],
+    ledger_file: Path,
+    dip_file: Path,
+    join_file: Path,
+) -> dict[str, Any]:
+    source_file = run_dir / WORKING_FLOW_SOURCE_FILE_NAME
+    delivery_jsonl_file = run_dir / WORKING_FLOW_CODEX_JSONL_FILE_NAME
+    delivery_last_message_file = run_dir / WORKING_FLOW_LAST_MESSAGE_FILE_NAME
+    entry_evidence_file = run_dir / WORKING_FLOW_ENTRY_EVIDENCE_FILE_NAME
+    delivery_file = run_dir / WORKING_FLOW_DELIVERY_FILE_NAME
+    delegate_packet = _find_delegate_packet(
+        _read_codex_exec_jsonl(dip_file.parent / DEFAULT_CODEX_JSONL_FILENAME)
+    )
+    prompt = _build_delivery_delegate_prompt(task=prompt_text, expected_alias=expected_alias)
+    secret_values = [prompt_text, prompt]
+    source_packet = _build_working_flow_source_packet(
+        prompt_text=prompt_text,
+        expected_alias=expected_alias,
+        delegate_packet=delegate_packet,
+        dip_packet=dip_packet,
+        ledger_packet=ledger_packet,
+        join_packet=join_packet,
+        ledger_file=ledger_file,
+        dip_file=dip_file,
+        join_file=join_file,
+        secret_values=secret_values,
+    )
+    _write_artifact(source_file, source_packet)
+    if source_packet.get("status") != "ok":
+        return {
+            "working_flow_source_packet": source_packet,
+            "working_flow_delivery_packet": {},
+            "working_flow_delivery_process": {},
+            "artifacts": [
+                _packet_file_summary(WORKING_FLOW_SOURCE_FILE_NAME, source_file, source_packet),
+            ],
+            "run_blocking_reasons": list(source_packet.get("blocking_reasons") or []),
+        }
+    argv = build_codex_exec_argv(
+        codex_bin=codex_bin,
+        repo_root=repo_root,
+        model=model,
+        sandbox=sandbox,
+        prompt=prompt,
+        output_jsonl=delivery_jsonl_file,
+        output_last_message=delivery_last_message_file,
+        profile_dir=profile_dir,
+        entry_evidence_file=entry_evidence_file,
+        extra_mcp_env={
+            "WBP_MCP_WORKING_FLOW_SOURCE_PROOF_FILE": str(source_file),
+        },
+    )
+    env = dict(os.environ)
+    env.update(
+        {
+            "CODEX_HOME": str(profile_dir),
+            "WBP_PROFILE_DIR": str(profile_dir),
+            "WBP_MANAGED_DIR": str(profile_dir / "managed"),
+            "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
+        }
+    )
+    try:
+        with delivery_jsonl_file.open("w", encoding="utf-8") as stdout_handle:
+            completed = subprocess.run(
+                argv,
+                cwd=str(repo_root),
+                env=env,
+                stdout=stdout_handle,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+    except subprocess.TimeoutExpired:
+        completed = subprocess.CompletedProcess(
+            args=argv,
+            returncode=124,
+            stdout="",
+            stderr="",
+        )
+    redactions = _redaction_replacements(task=prompt_text, prompt=prompt)
+    _redact_text_file(delivery_jsonl_file, redactions)
+    _redact_text_file(delivery_last_message_file, redactions)
+    delivery_packet = run_codex_working_flow_delivery_proof_command(
+        integrated_live_provider_proof_file=str(source_file),
+        codex_exec_jsonl_file=str(delivery_jsonl_file),
+    )
+    _write_artifact(delivery_file, delivery_packet)
+    delivery_failures = _delivery_failures(delivery_packet, completed)
+    return {
+        "working_flow_source_packet": source_packet,
+        "working_flow_delivery_packet": delivery_packet,
+        "working_flow_delivery_process": _completed_process_metadata(completed),
+        "artifacts": [
+            _packet_file_summary(WORKING_FLOW_SOURCE_FILE_NAME, source_file, source_packet),
+            _packet_file_summary(WORKING_FLOW_DELIVERY_FILE_NAME, delivery_file, delivery_packet),
+        ],
+        "run_blocking_reasons": delivery_failures,
+    }
+
+
+def _delivery_failures(
+    packet: Mapping[str, Any],
+    completed: subprocess.CompletedProcess[str],
+) -> list[str]:
+    failures: list[str] = []
+    if completed.returncode != 0:
+        failures.append("working_flow_codex_exec_failed")
+    if packet.get("status") != "ok":
+        failures.append("working_flow_delivery_status_not_ok")
+    if packet.get("machine_error_code") != "OK":
+        failures.append("working_flow_delivery_machine_error_not_ok")
+    for field in (
+        "codex_working_flow_delivery_proven",
+        "approved_delivery_surface_proven",
+        "assistant_response_bound_to_handoff_digest",
+    ):
+        if packet.get(field) is not True:
+            failures.append(f"{field}_not_true")
+    for field in (
+        "custom_codex_ui_visibility_proven",
+        "delivery_counts_as_custom_codex_ui",
+        "product_ready",
+        "fallback_used",
+        "local_imitation_used",
+        "native_codex_subagent_used_as_dip",
+    ):
+        if packet.get(field) is not False:
+            failures.append(f"{field}_not_false")
+    blocking = packet.get("blocking_reasons")
+    if isinstance(blocking, Sequence) and not isinstance(blocking, (str, bytes)):
+        failures.extend(_safe_text(item, limit=96) for item in blocking)
+    return sorted(set(failure for failure in failures if packets.is_command_value_token(failure)))
+
+
 def _effective_prompt(base_prompt: str, run_index: int, run_session_id: str) -> str:
     marker = (
         f"WBP_REAL_CUSTOM_DIP_PROOF_RUN_{run_index:02d}_"
@@ -452,7 +915,7 @@ def _join_failures(packet: Mapping[str, Any]) -> list[str]:
         failures.append("join_status_not_ok")
     if packet.get("machine_error_code") != WBP_DIP_HOOK_ORIGIN_OK:
         failures.append("join_machine_error_not_ok")
-    for field in _RUN_REQUIRED_TRUE_FIELDS:
+    for field in _JOIN_REQUIRED_TRUE_FIELDS:
         if packet.get(field) is not True:
             failures.append(f"{field}_not_true")
     for field in _RUN_REQUIRED_FALSE_FIELDS:
@@ -626,22 +1089,76 @@ def _run_once(
     join_file = run_dir / WBP_DIP_HOOK_ORIGIN_FILE_NAME
     _write_artifact(join_file, join_packet)
     join_failures = _join_failures(join_packet)
+    if join_failures:
+        return {
+            "prompt_digest": _sha256_text(prompt_text),
+            "codex_exec": _completed_process_metadata(codex_completed),
+            "wbp_dip_process": _completed_process_metadata(dip_completed),
+            "hook_ledger_before": before,
+            "hook_ledger_after": after,
+            "hook_ledger_fresh": ledger_fresh,
+            "ledger_proof_packet": ledger_packet,
+            "wbp_dip_packet": dip_packet,
+            "join_packet": join_packet,
+            "working_flow_source_packet": {},
+            "working_flow_delivery_packet": {},
+            "artifacts": [
+                _packet_file_summary(LEDGER_PROOF_FILE_NAME, ledger_file, ledger_packet),
+                _packet_file_summary("wbp-dip/wbp-dip-tool.packet.json", dip_file, dip_packet),
+                _packet_file_summary(WBP_DIP_HOOK_ORIGIN_FILE_NAME, join_file, join_packet),
+            ],
+            "run_blocking_reasons": join_failures,
+        }
+
+    delivery_result = _run_working_flow_delivery(
+        run_dir=run_dir,
+        repo_root=repo_root,
+        profile_dir=paths.profile_dir,
+        codex_bin=codex_bin,
+        model=model,
+        sandbox=sandbox,
+        expected_alias=expected_alias,
+        prompt_text=prompt_text,
+        timeout_seconds=timeout_seconds,
+        ledger_packet=ledger_packet,
+        dip_packet=dip_packet,
+        join_packet=join_packet,
+        ledger_file=ledger_file,
+        dip_file=dip_file,
+        join_file=join_file,
+    )
+    delivery_artifacts = delivery_result.get("artifacts")
+    delivery_blocking = delivery_result.get("run_blocking_reasons")
     return {
         "prompt_digest": _sha256_text(prompt_text),
         "codex_exec": _completed_process_metadata(codex_completed),
         "wbp_dip_process": _completed_process_metadata(dip_completed),
+        "working_flow_delivery_process": delivery_result.get("working_flow_delivery_process", {}),
         "hook_ledger_before": before,
         "hook_ledger_after": after,
         "hook_ledger_fresh": ledger_fresh,
         "ledger_proof_packet": ledger_packet,
         "wbp_dip_packet": dip_packet,
         "join_packet": join_packet,
+        "working_flow_source_packet": delivery_result.get("working_flow_source_packet", {}),
+        "working_flow_delivery_packet": delivery_result.get("working_flow_delivery_packet", {}),
         "artifacts": [
             _packet_file_summary(LEDGER_PROOF_FILE_NAME, ledger_file, ledger_packet),
             _packet_file_summary("wbp-dip/wbp-dip-tool.packet.json", dip_file, dip_packet),
             _packet_file_summary(WBP_DIP_HOOK_ORIGIN_FILE_NAME, join_file, join_packet),
+            *(
+                list(delivery_artifacts)
+                if isinstance(delivery_artifacts, Sequence)
+                and not isinstance(delivery_artifacts, (str, bytes))
+                else []
+            ),
         ],
-        "run_blocking_reasons": join_failures,
+        "run_blocking_reasons": (
+            list(delivery_blocking)
+            if isinstance(delivery_blocking, Sequence)
+            and not isinstance(delivery_blocking, (str, bytes))
+            else []
+        ),
     }
 
 
@@ -652,6 +1169,8 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
     ledger_packet = ledger if isinstance(ledger, Mapping) else {}
     dip = run.get("wbp_dip_packet")
     dip_packet = dip if isinstance(dip, Mapping) else {}
+    delivery = run.get("working_flow_delivery_packet")
+    delivery_packet = delivery if isinstance(delivery, Mapping) else {}
     blocking = run.get("run_blocking_reasons")
     custom_codex_flow_proven = (
         join_packet.get("custom_codex_flow_proven") is True
@@ -701,6 +1220,15 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         join_packet.get("positive_provider_proof_gate_satisfied") is True
         or dip_packet.get("positive_provider_proof_gate_satisfied") is True
     )
+    codex_working_flow_delivery_proven = (
+        delivery_packet.get("codex_working_flow_delivery_proven") is True
+    )
+    approved_delivery_surface_proven = (
+        delivery_packet.get("approved_delivery_surface_proven") is True
+    )
+    assistant_response_bound_to_handoff_digest = (
+        delivery_packet.get("assistant_response_bound_to_handoff_digest") is True
+    )
     live_result_bridge_or_file_bridge_used = (
         join_packet.get("live_result_bridge_or_file_bridge_used") is True
         or dip_packet.get("live_result_bridge_or_file_bridge_used") is True
@@ -721,6 +1249,11 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         "direct_provider_response_observed": direct_provider_response_observed,
         "provider_auth_ok": provider_auth_ok,
         "positive_provider_proof_gate_satisfied": positive_provider_proof_gate_satisfied,
+        "codex_working_flow_delivery_proven": codex_working_flow_delivery_proven,
+        "approved_delivery_surface_proven": approved_delivery_surface_proven,
+        "assistant_response_bound_to_handoff_digest": (
+            assistant_response_bound_to_handoff_digest
+        ),
         "live_result_bridge_or_file_bridge_used": live_result_bridge_or_file_bridge_used,
         "bridge_green_counts_as_provider_proof": False,
         "provider_auth_smoke_required_before_full_runner": True,
@@ -783,6 +1316,28 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
                 "",
             )
         ),
+        "working_flow_source_file_sha256": _hex_sha256(
+            next(
+                (
+                    item.get("file_sha256")
+                    for item in run.get("artifacts", [])
+                    if isinstance(item, Mapping)
+                    and item.get("artifact_name") == WORKING_FLOW_SOURCE_FILE_NAME
+                ),
+                "",
+            )
+        ),
+        "working_flow_delivery_file_sha256": _hex_sha256(
+            next(
+                (
+                    item.get("file_sha256")
+                    for item in run.get("artifacts", [])
+                    if isinstance(item, Mapping)
+                    and item.get("artifact_name") == WORKING_FLOW_DELIVERY_FILE_NAME
+                ),
+                "",
+            )
+        ),
         "ledger_machine_error_code": _safe_text(
             ledger_packet.get("machine_error_code"),
             limit=128,
@@ -802,6 +1357,18 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         "join_machine_error_code": _safe_text(
             join_packet.get("machine_error_code"),
             limit=128,
+        ),
+        "working_flow_delivery_machine_error_code": _safe_text(
+            delivery_packet.get("machine_error_code"),
+            limit=128,
+        ),
+        "working_flow_delivery_surface_kind": _safe_text(
+            delivery_packet.get("working_flow_delivery_surface_kind"),
+            limit=128,
+        ),
+        "working_flow_handoff_payload_digest": _hex_sha256(
+            delivery_packet.get("working_flow_handoff_payload_digest")
+            or delivery_packet.get("handoff_payload_digest")
         ),
         "blocking_reasons": sorted(
             {
@@ -837,7 +1404,13 @@ def _repeatability_failures(run_summaries: Sequence[Mapping[str, Any]], *, requi
         for field in _RUN_REQUIRED_FALSE_FIELDS:
             if run.get(field) is not False:
                 failures.append(f"run_{index}_{field}_not_false")
-        for field in ("ledger_proof_file_sha256", "wbp_dip_file_sha256", "join_file_sha256"):
+        for field in (
+            "ledger_proof_file_sha256",
+            "wbp_dip_file_sha256",
+            "join_file_sha256",
+            "working_flow_source_file_sha256",
+            "working_flow_delivery_file_sha256",
+        ):
             if not _hex_sha256(run.get(field)):
                 failures.append(f"run_{index}_{field}_missing")
     return sorted(set(failures))
@@ -853,7 +1426,10 @@ def _build_manifest(
     return {
         "schema_version": 1,
         "packet_kind": REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_PACKET_KIND,
-        "proof_scope": "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch",
+        "proof_scope": (
+            "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
+            "and_working_flow_delivery"
+        ),
         "readiness": {
             "packet_kind": _safe_text(readiness_packet.get("packet_kind"), limit=96),
             "status": _safe_text(readiness_packet.get("status"), limit=32),
@@ -900,6 +1476,7 @@ def _machine_error_code(
     ledger_failures: Sequence[str],
     dip_failures: Sequence[str],
     join_failures: Sequence[str],
+    delivery_failures: Sequence[str],
     repeatability_failures: Sequence[str],
     unsafe_failures: Sequence[str],
     artifact_failures: Sequence[str],
@@ -920,6 +1497,8 @@ def _machine_error_code(
         return REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED
     if join_failures:
         return REAL_CUSTOM_DIP_PROOF_RUNNER_JOIN_FAILED
+    if delivery_failures:
+        return REAL_CUSTOM_DIP_PROOF_RUNNER_DELIVERY_FAILED
     if repeatability_failures:
         return REAL_CUSTOM_DIP_PROOF_RUNNER_REPEATABILITY_FAILED
     return REAL_CUSTOM_DIP_PROOF_RUNNER_OK
@@ -961,6 +1540,14 @@ def build_real_custom_dip_proof_runner_packet(
     join_failures = [
         reason for reason in repeatability_failures if "join" in reason
     ]
+    delivery_failures = [
+        reason
+        for reason in repeatability_failures
+        if "delivery" in reason
+        or "working_flow" in reason
+        or "assistant_response" in reason
+        or "handoff" in reason
+    ]
     unsafe_payload = {
         "manifest": dict(manifest_packet),
         "runs": [dict(run) for run in run_summaries],
@@ -978,6 +1565,7 @@ def build_real_custom_dip_proof_runner_packet(
         ledger_failures=ledger_failures,
         dip_failures=dip_failures,
         join_failures=join_failures,
+        delivery_failures=delivery_failures,
         repeatability_failures=repeatability_failures,
         unsafe_failures=unsafe_failures,
         artifact_failures=artifact_failures,
@@ -994,7 +1582,10 @@ def build_real_custom_dip_proof_runner_packet(
         **dict(context_metadata),
         "schema_version": 1,
         "packet_kind": REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND,
-        "proof_scope": "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch",
+        "proof_scope": (
+            "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
+            "and_working_flow_delivery"
+        ),
         "real_custom_codex_hook_origin_dip_proof_proven": ok,
         "repeatable_real_custom_dip_proof_proven": ok,
         "custom_codex_flow_proven": bool(ok and first_run.get("custom_codex_flow_proven") is True),
@@ -1045,6 +1636,15 @@ def build_real_custom_dip_proof_runner_packet(
         "first_run_positive_provider_proof_gate_satisfied": (
             first_run.get("positive_provider_proof_gate_satisfied") is True
         ),
+        "first_run_codex_working_flow_delivery_proven": (
+            first_run.get("codex_working_flow_delivery_proven") is True
+        ),
+        "first_run_approved_delivery_surface_proven": (
+            first_run.get("approved_delivery_surface_proven") is True
+        ),
+        "first_run_assistant_response_bound_to_handoff_digest": (
+            first_run.get("assistant_response_bound_to_handoff_digest") is True
+        ),
         "first_run_live_result_bridge_or_file_bridge_used": (
             first_run.get("live_result_bridge_or_file_bridge_used") is True
         ),
@@ -1068,6 +1668,10 @@ def build_real_custom_dip_proof_runner_packet(
             first_run.get("join_machine_error_code"),
             limit=128,
         ),
+        "first_run_working_flow_delivery_machine_error_code": _safe_text(
+            first_run.get("working_flow_delivery_machine_error_code"),
+            limit=128,
+        ),
         "partial_first_run_diagnostics_recorded": bool(first_run),
         "partial_first_run_diagnostics_are_not_product_ready": True,
         "required_run_count": required_runs,
@@ -1083,9 +1687,9 @@ def build_real_custom_dip_proof_runner_packet(
             ok
             and len(
                 {
-                    run.get("join_file_sha256")
+                    run.get("working_flow_delivery_file_sha256")
                     for run in run_summaries
-                    if _hex_sha256(run.get("join_file_sha256"))
+                    if _hex_sha256(run.get("working_flow_delivery_file_sha256"))
                 }
             )
             == run_count
@@ -1096,6 +1700,8 @@ def build_real_custom_dip_proof_runner_packet(
                 _hex_sha256(run.get("ledger_proof_file_sha256"))
                 and _hex_sha256(run.get("wbp_dip_file_sha256"))
                 and _hex_sha256(run.get("join_file_sha256"))
+                and _hex_sha256(run.get("working_flow_source_file_sha256"))
+                and _hex_sha256(run.get("working_flow_delivery_file_sha256"))
                 for run in run_summaries
             )
         ),
@@ -1136,7 +1742,15 @@ def build_real_custom_dip_proof_runner_packet(
         "cryptographic_origin_proven": False,
         "does_not_prove_source_file_unforgeable": True,
         "custom_codex_ui_visibility_proven": False,
-        "codex_working_flow_delivery_proven": False,
+        "codex_working_flow_delivery_proven": bool(
+            ok and first_run.get("codex_working_flow_delivery_proven") is True
+        ),
+        "approved_delivery_surface_proven": bool(
+            ok and first_run.get("approved_delivery_surface_proven") is True
+        ),
+        "assistant_response_bound_to_handoff_digest": bool(
+            ok and first_run.get("assistant_response_bound_to_handoff_digest") is True
+        ),
         "delivery_counts_as_custom_codex_ui": False,
         "product_ready": False,
         "does_not_prove_custom_codex_ui": True,
@@ -1170,6 +1784,7 @@ def build_real_custom_dip_proof_runner_packet(
         "ledger_failures": sorted(set(ledger_failures)),
         "wbp_dip_failures": sorted(set(dip_failures)),
         "join_failures": sorted(set(join_failures)),
+        "delivery_failures": sorted(set(delivery_failures)),
         "repeatability_failures": sorted(set(repeatability_failures)),
         "unsafe_failures": sorted(set(unsafe_failures)),
         "artifact_failures": sorted(set(artifact_failures)),
@@ -1181,6 +1796,7 @@ def build_real_custom_dip_proof_runner_packet(
                 + list(ledger_failures)
                 + list(dip_failures)
                 + list(join_failures)
+                + list(delivery_failures)
                 + list(repeatability_failures)
                 + list(unsafe_failures)
                 + list(artifact_failures)
@@ -1191,7 +1807,7 @@ def build_real_custom_dip_proof_runner_packet(
     return packets.build_command_packet(
         ok=ok,
         human_message=(
-            "WBP proved repeatable real Custom Codex UserPromptSubmit hook origin to DIP API dispatch."
+            "WBP proved repeatable real Custom Codex hook-origin DIP dispatch and working-flow delivery."
             if ok
             else "WBP blocked repeatable real Custom Codex DIP proof runner."
         ),
@@ -1298,6 +1914,18 @@ def run_real_custom_dip_proof_runner_command(
                 break
 
     run_summaries = [_run_summary(index, run) for index, run in enumerate(runs, start=1)]
+    provisional_repeatability_failures = _repeatability_failures(
+        run_summaries,
+        required_runs=run_count,
+    )
+    provisional_delivery_failures = [
+        reason
+        for reason in provisional_repeatability_failures
+        if "delivery" in reason
+        or "working_flow" in reason
+        or "assistant_response" in reason
+        or "handoff" in reason
+    ]
     provisional_error = _machine_error_code(
         input_failures=input_failures,
         readiness_failures=readiness_failures,
@@ -1305,7 +1933,8 @@ def run_real_custom_dip_proof_runner_command(
         ledger_failures=[],
         dip_failures=[],
         join_failures=[],
-        repeatability_failures=_repeatability_failures(run_summaries, required_runs=run_count),
+        delivery_failures=provisional_delivery_failures,
+        repeatability_failures=provisional_repeatability_failures,
         unsafe_failures=[],
         artifact_failures=artifact_failures,
     )
