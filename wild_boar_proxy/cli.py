@@ -423,6 +423,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
     )
     codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-model",
+        default="gpt-5.3-codex",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-owner-authorization-phrase"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--native-auto-launch-repo-root")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-stable-runtime-generated-config-file"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -443,6 +462,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--observer-timeout-seconds",
         type=float,
         default=None,
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-model",
+        default="gpt-5.3-codex",
+    )
+    codex_runner_native_ui.add_argument("--auto-launch-owner-authorization-phrase")
+    codex_runner_native_ui.add_argument("--auto-launch-repo-root")
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-stable-runtime-generated-config-file"
     )
     codex_runner_native_ui.add_argument("--json", action="store_true", required=True)
     codex_runner_native_response_matrix = codex_runner_subparsers.add_parser(
@@ -1950,6 +1986,18 @@ def main(argv: list[str] | None = None) -> int:
                     persistent_profile_id=args.persistent_profile_id,
                     persistent_profile_base_dir=args.persistent_profile_base_dir,
                     observer_timeout_seconds=args.observer_timeout_seconds,
+                    native_auto_launch_custom_codex=(
+                        args.native_auto_launch_custom_codex
+                    ),
+                    native_auto_launch_endpoint=args.native_auto_launch_endpoint,
+                    native_auto_launch_model=args.native_auto_launch_model,
+                    native_auto_launch_owner_authorization_phrase=(
+                        args.native_auto_launch_owner_authorization_phrase
+                    ),
+                    native_auto_launch_repo_root=args.native_auto_launch_repo_root,
+                    native_auto_launch_stable_runtime_generated_config_file=(
+                        args.native_auto_launch_stable_runtime_generated_config_file
+                    ),
                 )
             )
         if (
@@ -1966,6 +2014,16 @@ def main(argv: list[str] | None = None) -> int:
                     persistent_profile_id=args.persistent_profile_id,
                     persistent_profile_base_dir=args.persistent_profile_base_dir,
                     observer_timeout_seconds=args.observer_timeout_seconds,
+                    auto_launch_custom_codex=args.auto_launch_custom_codex,
+                    auto_launch_endpoint=args.auto_launch_endpoint,
+                    auto_launch_model=args.auto_launch_model,
+                    auto_launch_owner_authorization_phrase=(
+                        args.auto_launch_owner_authorization_phrase
+                    ),
+                    auto_launch_repo_root=args.auto_launch_repo_root,
+                    auto_launch_stable_runtime_generated_config_file=(
+                        args.auto_launch_stable_runtime_generated_config_file
+                    ),
                 )
             )
         if (

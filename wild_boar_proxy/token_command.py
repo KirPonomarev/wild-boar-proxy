@@ -40,8 +40,8 @@ def _extract_local_listener_token(config_path: Path) -> str:
     )
 
 
-def emit_local_token(paths: RuntimePaths) -> str:
-    config_path = paths.stable_runtime_generated_config_file.expanduser()
+def emit_local_token_from_config_path(config_path: Path) -> str:
+    config_path = config_path.expanduser()
     if not config_path.exists():
         raise RuntimeErrorInfo(
             "Stable runtime generated config is missing for token command.",
@@ -52,6 +52,10 @@ def emit_local_token(paths: RuntimePaths) -> str:
         )
     _write_audit_stamp_if_requested()
     return _extract_local_listener_token(config_path)
+
+
+def emit_local_token(paths: RuntimePaths) -> str:
+    return emit_local_token_from_config_path(paths.stable_runtime_generated_config_file)
 
 
 def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:

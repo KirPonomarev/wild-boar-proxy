@@ -14,6 +14,7 @@ from unittest import mock
 
 import wild_boar_proxy.native_window_probe as native_probe
 from wild_boar_proxy.custom_codex_native_ui_observer_proof import (
+    NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME,
     run_native_ui_observer_proof_command,
 )
 from wild_boar_proxy.native_launch_contract import build_native_custom_preflight_packet
@@ -2507,6 +2508,177 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             self.assertTrue(written.exists())
             persisted = json.loads(written.read_text(encoding="utf-8"))
             self.assertEqual(persisted["request_id"], "req-1")
+
+    def test_native_ui_observer_auto_launch_retries_after_missing_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            blocked_packet = {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_prompt_submit",
+                "status": "error",
+                "machine_error_code": "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+                "request_id": "req-autolaunch",
+                "native_window_observed": False,
+                "input_capable_ui_observed": False,
+                "prompt_submitted": False,
+                "native_prompt_turn_accepted": False,
+                "assistant_turn_machine_error_code": (
+                    "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+                ),
+                "native_free_text_observer_machine_error_code": (
+                    "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                ),
+                "custom_response_exact_token_observed": False,
+                "custom_response_bound_to_request": False,
+                "native_codex_subagent_used_as_dip": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+            }
+            proven_packet = {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_prompt_submit",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "request_id": "req-autolaunch",
+                "native_window_observed": True,
+                "input_capable_ui_observed": True,
+                "native_app_usable": True,
+                "prompt_submitted": True,
+                "native_prompt_turn_accepted": True,
+                "assistant_turn_machine_error_code": "OK",
+                "custom_response_exact_token_observed": True,
+                "custom_response_bound_to_request": True,
+                "native_codex_subagent_used_as_dip": False,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": "OK",
+                "custom_codex_ui_visibility_proven": False,
+                "product_ready": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+            }
+            launch_packet = {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "process_started": True,
+                "running_status": True,
+                "native_app_usable": True,
+                "reused_existing_window": False,
+                "existing_custom_window_reused": False,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=[blocked_packet, proven_packet],
+                ) as submitter,
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "launch_custom_native_app_packet",
+                    return_value=launch_packet,
+                ) as launcher,
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-autolaunch",
+                    expected_text="WBP_NATIVE_req-autolaunch",
+                    proof_dir=str(proof_dir),
+                    persistent_profile_base_dir=str(root / "profiles"),
+                    auto_launch_custom_codex=True,
+                    auto_launch_endpoint="http://127.0.0.1:8318/v1",
+                    auto_launch_model="gpt-5.3-codex",
+                    auto_launch_owner_authorization_phrase=(
+                        OWNER_STANDING_AUTHORIZATION_PHRASE
+                    ),
+                    auto_launch_repo_root=str(ROOT),
+                    auto_launch_stable_runtime_generated_config_file=str(
+                        root / "managed" / "stable-runtime-config.generated.yaml"
+                    ),
+                )
+
+            self.assertEqual(submitter.call_count, 2)
+            launcher.assert_called_once()
+            self.assertEqual(
+                launcher.call_args.kwargs["stable_runtime_generated_config_file"],
+                root / "managed" / "stable-runtime-config.generated.yaml",
+            )
+            self.assertTrue(packet["native_ui_observer_retry_after_auto_launch"])
+            self.assertTrue(packet["native_auto_launch_attempted"])
+            self.assertTrue(packet["native_auto_launch_packet_file_written"])
+            self.assertFalse(packet["native_auto_launch_local_token_value_recorded"])
+            self.assertTrue(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 0)
+            self.assertTrue((proof_dir / NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME).exists())
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(OWNER_STANDING_AUTHORIZATION_PHRASE, serialized)
+
+    def test_native_ui_observer_auto_launch_does_not_greenwash_launch_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            blocked_packet = {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_prompt_submit",
+                "status": "error",
+                "machine_error_code": "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+                "request_id": "req-launch-only",
+                "native_window_observed": False,
+                "input_capable_ui_observed": False,
+                "prompt_submitted": False,
+                "native_prompt_turn_accepted": False,
+                "assistant_turn_machine_error_code": (
+                    "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+                ),
+                "native_free_text_observer_machine_error_code": (
+                    "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                ),
+                "custom_response_exact_token_observed": False,
+                "custom_response_bound_to_request": False,
+                "native_codex_subagent_used_as_dip": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+            }
+            launch_packet = {
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+                "process_started": True,
+                "running_status": False,
+                "native_app_usable": False,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "submit_custom_native_window_prompt_packet",
+                    return_value=blocked_packet,
+                ) as submitter,
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "launch_custom_native_app_packet",
+                    return_value=launch_packet,
+                ),
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-launch-only",
+                    expected_text="WBP_NATIVE_req-launch-only",
+                    proof_dir=str(proof_dir),
+                    auto_launch_custom_codex=True,
+                    auto_launch_owner_authorization_phrase=(
+                        OWNER_STANDING_AUTHORIZATION_PHRASE
+                    ),
+                    auto_launch_repo_root=str(ROOT),
+                )
+
+            submitter.assert_called_once()
+            self.assertTrue(packet["native_auto_launch_attempted"])
+            self.assertFalse(packet["native_auto_launch_native_app_usable"])
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            self.assertTrue((proof_dir / NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME).exists())
 
     def test_native_ui_observer_proof_command_does_not_greenwash_prompt_submit_only(
         self,

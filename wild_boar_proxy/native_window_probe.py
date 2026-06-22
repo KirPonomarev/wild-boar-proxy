@@ -52,7 +52,7 @@ from .native_launch_dispatch import (
 )
 from .runtime import CODEX_REMOTE_DEBUGGING_PORT
 from .runtime import RuntimePaths
-from .token_command import emit_local_token
+from .token_command import emit_local_token, emit_local_token_from_config_path
 
 
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
@@ -4463,6 +4463,7 @@ def launch_custom_native_app_packet(
     keep_running_on_window_observed: bool = False,
     reuse_existing_window_if_present: bool = False,
     agent_runtime_context: dict[str, Any] | None = None,
+    stable_runtime_generated_config_file: Path | None = None,
 ) -> dict[str, Any]:
     admission = build_native_custom_preflight_packet(
         native_window_probe_command(),
@@ -4546,6 +4547,14 @@ def launch_custom_native_app_packet(
         "agent_runtime_context_profile_relative_path": "",
         "agent_runtime_context_sha256": "",
         "agent_runtime_context_path_redacted": True,
+        "stable_runtime_generated_config_override_used": (
+            stable_runtime_generated_config_file is not None
+        ),
+        "stable_runtime_generated_config_file_present": False,
+        "stable_runtime_generated_config_file_path_recorded": False,
+        "local_token_source_kind": "",
+        "local_token_present": False,
+        "local_token_value_recorded": False,
     }
     if auth["status"] != "ok":
         return {
@@ -4562,7 +4571,16 @@ def launch_custom_native_app_packet(
     cleanup_error = ""
     try:
         real_runtime_paths = RuntimePaths.from_env()
-        local_token = emit_local_token(real_runtime_paths)
+        token_config_path = (
+            stable_runtime_generated_config_file.expanduser()
+            if stable_runtime_generated_config_file is not None
+            else getattr(real_runtime_paths, "stable_runtime_generated_config_file", None)
+        )
+        local_token = (
+            emit_local_token_from_config_path(token_config_path)
+            if stable_runtime_generated_config_file is not None
+            else emit_local_token(real_runtime_paths)
+        )
         paths = default_persistent_custom_profile_paths(
             profile_id=persistent_profile_id,
             base_dir=persistent_profile_base_dir,
@@ -4616,6 +4634,13 @@ def launch_custom_native_app_packet(
                 materialized_profile.get("agent_runtime_context_sha256") or ""
             ),
             "agent_runtime_context_path_redacted": True,
+            "stable_runtime_generated_config_file_present": (
+                token_config_path.is_file() if isinstance(token_config_path, Path) else False
+            ),
+            "stable_runtime_generated_config_file_path_recorded": False,
+            "local_token_source_kind": "stable_runtime_generated_config",
+            "local_token_present": bool(local_token),
+            "local_token_value_recorded": False,
         }
         keychain_preflight = prepare_isolated_home_keychain(
             isolated_home=layout.custom_home_dir,
@@ -5165,6 +5190,14 @@ def launch_custom_native_app_packet(
                 "termination": termination or {},
                 "cleanup_error_class": cleanup_error,
                 "exception_class": type(exc).__name__,
+                "exception_machine_error_code": str(
+                    getattr(exc, "machine_error_code", "") or ""
+                ),
+                "exception_severity": str(getattr(exc, "severity", "") or ""),
+                "exception_operator_action": str(
+                    getattr(exc, "operator_action", "") or ""
+                ),
+                "exception_message_recorded": False,
             },
         }
 

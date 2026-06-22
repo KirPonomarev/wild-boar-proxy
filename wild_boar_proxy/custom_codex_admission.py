@@ -453,7 +453,7 @@ def _runtime_truth_snapshots(paths: RuntimePaths) -> dict[str, dict[str, Any]]:
     }
 
 
-def _without_hook_trust_state(value: Mapping[str, Any]) -> dict[str, Any]:
+def _without_codex_trust_state(value: Mapping[str, Any]) -> dict[str, Any]:
     cleaned = json.loads(json.dumps(dict(value), ensure_ascii=True))
     hooks = cleaned.get("hooks")
     if isinstance(hooks, dict):
@@ -463,6 +463,7 @@ def _without_hook_trust_state(value: Mapping[str, Any]) -> dict[str, Any]:
             cleaned["hooks"] = hooks
         else:
             cleaned.pop("hooks", None)
+    cleaned.pop("projects", None)
     return cleaned
 
 
@@ -474,7 +475,7 @@ def _config_toml_runtime_truth_snapshot(path: Path) -> dict[str, Any]:
         parsed = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return {**raw, "runtime_truth_parse_ok": False}
-    runtime_truth = _without_hook_trust_state(parsed)
+    runtime_truth = _without_codex_trust_state(parsed)
     return {
         "state": raw.get("state"),
         "runtime_truth_parse_ok": True,

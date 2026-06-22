@@ -370,6 +370,13 @@ def _write_fake_codex(path: Path) -> Path:
                         "trusted_hash = \\"sha256:"
                         "1111111111111111111111111111111111111111111111111111111111111111\\"\\n"
                     )
+            if os.environ.get("WBP_FAKE_MUTATE_PROJECT_TRUST_STATE") == "1":
+                config_path = Path(os.environ["WBP_CONFIG_TOML"])
+                with config_path.open("a", encoding="utf-8") as handle:
+                    handle.write(
+                        "\\n[projects.\\"/Volumes/Work/wild-boar-proxy\\"]\\n"
+                        "trust_level = \\"trusted\\"\\n"
+                    )
             if os.environ.get("WBP_FAKE_MUTATE_CONFIG_MODEL") == "1":
                 config_path = Path(os.environ["WBP_CONFIG_TOML"])
                 config_path.write_text('model = "gpt-mutated"\\n', encoding="utf-8")
@@ -1049,6 +1056,40 @@ class CustomCodexAdmissionTests(unittest.TestCase):
                 {
                     "PYTHONPATH": str(ROOT),
                     "WBP_FAKE_MUTATE_HOOK_STATE": "1",
+                    "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
+                },
+            ):
+                packet = admission.run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(fake_codex),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(ROOT),
+                    expected_text=EXPECTED_TEXT,
+                    timeout_seconds=20,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["admission_proven"])
+        self.assertTrue(packet["runtime_effective_truth_unchanged"])
+        self.assertTrue(packet["config_toml_unchanged"])
+        self.assertEqual(packet["runtime_truth_mutated_surfaces"], [])
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertFalse(packet["product_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_codex_project_trust_state_write_does_not_count_as_runtime_truth_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            fake_codex = _write_fake_codex(root / "fake-codex")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PYTHONPATH": str(ROOT),
+                    "WBP_FAKE_MUTATE_PROJECT_TRUST_STATE": "1",
                     "WBP_FAKE_EXPECTED_TEXT": EXPECTED_TEXT,
                 },
             ):

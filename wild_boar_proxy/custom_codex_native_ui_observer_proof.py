@@ -9,12 +9,23 @@ from typing import Any
 
 from .native_window_probe import (
     DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    launch_custom_native_app_packet,
     submit_custom_native_window_prompt_packet,
 )
 from .runtime import RuntimePaths, write_json_atomic
 
 
 NATIVE_UI_OBSERVER_PACKET_FILE_NAME = "native-ui-observer.packet.json"
+NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME = "native-ui-auto-launch.packet.json"
+DEFAULT_AUTO_LAUNCH_ENDPOINT = "http://127.0.0.1:8318/v1"
+DEFAULT_AUTO_LAUNCH_MODEL = "gpt-5.3-codex"
+
+_AUTO_LAUNCH_MACHINE_ERROR_CODES = frozenset(
+    {
+        "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+        "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
+    }
+)
 
 
 def _proof_root(paths: RuntimePaths, raw_proof_dir: str | None) -> Path:
@@ -39,6 +50,65 @@ def _native_ui_observer_packet_proven(packet: dict[str, Any]) -> bool:
     )
 
 
+def _should_auto_launch_after_submit(packet: dict[str, Any]) -> bool:
+    if packet.get("machine_error_code") not in _AUTO_LAUNCH_MACHINE_ERROR_CODES:
+        return False
+    if packet.get("native_window_observed") is True and packet.get("input_capable_ui_observed") is True:
+        return False
+    return True
+
+
+def _auto_launch_summary_fields(
+    *,
+    enabled: bool,
+    attempted: bool,
+    launch_packet: dict[str, Any] | None,
+    launch_packet_written: bool,
+    owner_authorization_phrase: str | None,
+) -> dict[str, Any]:
+    launch = dict(launch_packet or {})
+    return {
+        "native_auto_launch_enabled": enabled,
+        "native_auto_launch_attempted": attempted,
+        "native_auto_launch_status": str(launch.get("status") or ""),
+        "native_auto_launch_machine_error_code": str(
+            launch.get("machine_error_code") or ""
+        ),
+        "native_auto_launch_process_started": launch.get("process_started") is True,
+        "native_auto_launch_reused_existing_window": (
+            launch.get("reused_existing_window") is True
+            or launch.get("existing_custom_window_reused") is True
+        ),
+        "native_auto_launch_running_status": launch.get("running_status") is True,
+        "native_auto_launch_native_app_usable": launch.get("native_app_usable") is True,
+        "native_auto_launch_packet_file_written": launch_packet_written,
+        "native_auto_launch_packet_file_path_recorded": False,
+        "native_auto_launch_owner_authorization_phrase_present": bool(
+            owner_authorization_phrase
+        ),
+        "native_auto_launch_owner_authorization_phrase_recorded": False,
+        "native_auto_launch_stable_runtime_generated_config_override_used": (
+            launch.get("stable_runtime_generated_config_override_used") is True
+        ),
+        "native_auto_launch_stable_runtime_generated_config_file_present": (
+            launch.get("stable_runtime_generated_config_file_present") is True
+        ),
+        "native_auto_launch_stable_runtime_generated_config_file_path_recorded": False,
+        "native_auto_launch_local_token_present": launch.get("local_token_present") is True,
+        "native_auto_launch_local_token_value_recorded": False,
+    }
+
+
+def _launch_packet_allows_retry(launch_packet: dict[str, Any]) -> bool:
+    return bool(
+        launch_packet.get("status") == "ok"
+        and (
+            launch_packet.get("native_app_usable") is True
+            or launch_packet.get("running_status") is True
+        )
+    )
+
+
 def run_native_ui_observer_proof_command(
     *,
     paths: RuntimePaths,
@@ -49,6 +119,12 @@ def run_native_ui_observer_proof_command(
     persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
     persistent_profile_base_dir: str | None = None,
     observer_timeout_seconds: float | None = None,
+    auto_launch_custom_codex: bool = False,
+    auto_launch_endpoint: str = DEFAULT_AUTO_LAUNCH_ENDPOINT,
+    auto_launch_model: str = DEFAULT_AUTO_LAUNCH_MODEL,
+    auto_launch_owner_authorization_phrase: str | None = None,
+    auto_launch_repo_root: str | None = None,
+    auto_launch_stable_runtime_generated_config_file: str | None = None,
 ) -> dict[str, Any]:
     proof_root = _proof_root(paths, proof_dir)
     proof_root.mkdir(parents=True, exist_ok=True)
@@ -64,6 +140,56 @@ def run_native_ui_observer_proof_command(
             if observer_timeout_seconds is not None
             else {}
         ),
+    )
+    launch_packet: dict[str, Any] | None = None
+    launch_packet_written = False
+    auto_launch_attempted = False
+    if auto_launch_custom_codex and _should_auto_launch_after_submit(packet):
+        auto_launch_attempted = True
+        launch_packet = launch_custom_native_app_packet(
+            repo_root=Path(auto_launch_repo_root).expanduser()
+            if auto_launch_repo_root
+            else Path.cwd(),
+            endpoint=auto_launch_endpoint,
+            model=auto_launch_model,
+            owner_authorization_phrase=auto_launch_owner_authorization_phrase,
+            persistent_profile_id=persistent_profile_id,
+            persistent_profile_base_dir=base_dir,
+            keep_running_on_window_observed=True,
+            reuse_existing_window_if_present=False,
+            stable_runtime_generated_config_file=(
+                Path(auto_launch_stable_runtime_generated_config_file).expanduser()
+                if auto_launch_stable_runtime_generated_config_file
+                else None
+            ),
+        )
+        write_json_atomic(
+            proof_root / NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME,
+            launch_packet,
+        )
+        launch_packet_written = True
+        if _launch_packet_allows_retry(launch_packet):
+            packet = submit_custom_native_window_prompt_packet(
+                prompt=prompt_text,
+                request_id=request_id,
+                expected_text=expected_text,
+                persistent_profile_id=persistent_profile_id,
+                persistent_profile_base_dir=base_dir,
+                **(
+                    {"observer_timeout_seconds": observer_timeout_seconds}
+                    if observer_timeout_seconds is not None
+                    else {}
+                ),
+            )
+            packet["native_ui_observer_retry_after_auto_launch"] = True
+    packet.update(
+        _auto_launch_summary_fields(
+            enabled=auto_launch_custom_codex,
+            attempted=auto_launch_attempted,
+            launch_packet=launch_packet,
+            launch_packet_written=launch_packet_written,
+            owner_authorization_phrase=auto_launch_owner_authorization_phrase,
+        )
     )
     packet["native_ui_observer_packet_file_written"] = True
     packet["native_ui_observer_packet_file_path_recorded"] = False

@@ -15,6 +15,9 @@ from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import fresh_sealed_e2e_proof as fresh_sealed
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
+from wild_boar_proxy.native_window_probe import (
+    OWNER_STANDING_AUTHORIZATION_PHRASE as OWNER_AUTHORIZATION_PHRASE,
+)
 
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -131,6 +134,11 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertTrue(packet["dispatch_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
         self.assertTrue(packet["custom_codex_ui_visibility_proven"])
+        self.assertTrue(packet["native_custom_codex_visible_flow_proven"])
+        self.assertEqual(
+            packet["custom_codex_ui_visibility_source"],
+            "native_custom_codex_visible_flow_proof",
+        )
         self.assertTrue(packet["strict_admission_proven"])
         self.assertTrue(packet["external_freshness_proven"])
         self.assertTrue(packet["proof_admission_sealed"])
@@ -160,6 +168,7 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertIn("fresh-live-e2e-proof.packet.json", changed_names)
         self.assertIn("visible-source-binding-proof.packet.json", changed_names)
         self.assertIn("native-ui-observer.packet.json", changed_names)
+        self.assertIn("native-custom-codex-visible-flow-proof.packet.json", changed_names)
         self.assertIn("custom-codex-ui-visibility-proof.packet.json", changed_names)
         self.assertIn("strict-admission.packet.json", changed_names)
         self.assertIn("admission-seal.packet.json", changed_names)
@@ -215,6 +224,21 @@ class FreshSealedE2EProofTests(unittest.TestCase):
                 ),
                 mock.patch(
                     "wild_boar_proxy.fresh_sealed_e2e_proof."
+                    "run_native_ui_observer_proof_command",
+                    return_value=_native_packet(
+                        expected_text="wrong",
+                        request_id="wrong",
+                        overrides={
+                            "status": "error",
+                            "machine_error_code": "WBP_TEST_NATIVE_UI_BLOCKED",
+                            "custom_response_exact_token_observed": False,
+                            "custom_response_bound_to_request": False,
+                            "blocking_reasons": ["test_native_ui_blocked"],
+                        },
+                    ),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.fresh_sealed_e2e_proof."
                     "run_custom_codex_ui_visibility_proof_command",
                     return_value=blocked_ui,
                 ),
@@ -245,6 +269,7 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertTrue(packet["dispatch_proven"])
         self.assertTrue(packet["codex_working_flow_delivery_proven"])
         self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["native_custom_codex_visible_flow_proven"])
         self.assertFalse(packet["full_runtime_dispatch_proven"])
         self.assertFalse(packet["full_runtime_required_for_core"])
         self.assertTrue(packet["full_runtime_diagnostics_attempted"])
@@ -460,6 +485,9 @@ class FreshSealedE2EProofTests(unittest.TestCase):
                 "/tmp/wbp-ui-proof.json",
                 "--observer-timeout-seconds",
                 "45",
+                "--native-auto-launch-custom-codex",
+                "--native-auto-launch-owner-authorization-phrase",
+                OWNER_AUTHORIZATION_PHRASE,
                 "--json",
             ]
         )
@@ -471,6 +499,11 @@ class FreshSealedE2EProofTests(unittest.TestCase):
             "/tmp/wbp-ui-proof.json",
         )
         self.assertEqual(args.observer_timeout_seconds, 45.0)
+        self.assertTrue(args.native_auto_launch_custom_codex)
+        self.assertEqual(
+            args.native_auto_launch_owner_authorization_phrase,
+            OWNER_AUTHORIZATION_PHRASE,
+        )
         self.assertEqual(cli_mod.command_effect_from_args(args), "mutate")
 
     def test_cli_emits_fresh_sealed_packet(self) -> None:
@@ -542,6 +575,12 @@ class FreshSealedE2EProofTests(unittest.TestCase):
             persistent_profile_id="wbp-custom-main",
             persistent_profile_base_dir=None,
             observer_timeout_seconds=45.0,
+            native_auto_launch_custom_codex=False,
+            native_auto_launch_endpoint="http://127.0.0.1:8318/v1",
+            native_auto_launch_model="gpt-5.3-codex",
+            native_auto_launch_owner_authorization_phrase=None,
+            native_auto_launch_repo_root=None,
+            native_auto_launch_stable_runtime_generated_config_file=None,
         )
         self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
 

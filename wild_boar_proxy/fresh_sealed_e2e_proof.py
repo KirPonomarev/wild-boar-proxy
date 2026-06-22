@@ -33,6 +33,10 @@ from .custom_codex_visible_source_binding_proof import (
     VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
     run_custom_codex_visible_source_binding_proof_command,
 )
+from .native_custom_codex_visible_flow_proof import (
+    NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_FILE_NAME,
+    run_native_custom_codex_visible_flow_proof_command,
+)
 from .fresh_live_custom_codex_e2e_proof import (
     FRESH_LIVE_CUSTOM_CODEX_E2E_PACKET_KIND,
     run_fresh_live_custom_codex_e2e_proof_command,
@@ -211,6 +215,21 @@ def _runner_ok(packet: Mapping[str, Any]) -> bool:
     )
 
 
+def _native_visible_flow_ok(packet: Mapping[str, Any]) -> bool:
+    return bool(
+        packet.get("status") == "ok"
+        and packet.get("machine_error_code") == "OK"
+        and packet.get("native_custom_codex_visible_flow_proven") is True
+        and packet.get("custom_codex_ui_visibility_proven") is True
+        and packet.get("visible_response_bound_to_handoff") is True
+        and packet.get("visible_response_after_dispatch") is True
+        and packet.get("fallback_used") is False
+        and packet.get("local_imitation_used") is False
+        and packet.get("native_codex_subagent_used_as_dip") is False
+        and packet.get("product_ready") is False
+    )
+
+
 def _admission_ok(packet: Mapping[str, Any]) -> bool:
     return bool(
         packet.get("status") == "ok"
@@ -288,6 +307,7 @@ def build_fresh_sealed_e2e_packet(
     wrong_digest_seal_packet_file: Path,
     visible_source_binding_proof_file: Path,
     native_ui_observer_packet_file: Path,
+    native_custom_codex_visible_flow_proof_file: Path,
     ui_visibility_source: str,
     final_packet_file: Path,
     changed_files: Sequence[str],
@@ -298,6 +318,7 @@ def build_fresh_sealed_e2e_packet(
     admission = dict(admission_packet or {})
     seal = dict(seal_packet or {})
     wrong_digest = dict(wrong_digest_seal_packet or {})
+    native_visible_flow = _read_json_mapping(native_custom_codex_visible_flow_proof_file)
     fresh_ok = _fresh_live_ok(fresh_live)
     core_inputs_present = _core_input_artifacts_present(
         real_custom_hook_proof_file=real_custom_hook_proof_file,
@@ -311,6 +332,7 @@ def build_fresh_sealed_e2e_packet(
         custom_codex_ui_visibility_proof_file=custom_codex_ui_visibility_proof_file,
     )
     full_runtime_ok = _runner_ok(runner)
+    native_visible_flow_ok = _native_visible_flow_ok(native_visible_flow)
     strict_admission_ok = _admission_ok(admission)
     admission_seal_ok = _seal_ok(seal)
     negative_ok = _wrong_digest_negative_ok(wrong_digest)
@@ -352,6 +374,11 @@ def build_fresh_sealed_e2e_packet(
                 else ["fresh_sealed_e2e_full_runtime_input_artifacts_missing"]
             )
             + ([] if full_runtime_ok else ["fresh_sealed_e2e_full_runtime_not_proven"])
+            + (
+                []
+                if native_visible_flow_ok or not native_custom_codex_visible_flow_proof_file.is_file()
+                else ["fresh_sealed_e2e_native_visible_flow_not_proven"]
+            )
             + ([] if strict_admission_ok else ["fresh_sealed_e2e_admission_not_proven"])
             + ([] if admission_seal_ok else ["fresh_sealed_e2e_seal_not_proven"])
             + ([] if negative_ok else ["fresh_sealed_e2e_wrong_digest_negative_not_proven"])
@@ -425,10 +452,32 @@ def build_fresh_sealed_e2e_packet(
             visible_source_binding_proof_file.is_file()
         ),
         "native_ui_observer_packet_file_present": native_ui_observer_packet_file.is_file(),
+        "native_custom_codex_visible_flow_proof_file_present": (
+            native_custom_codex_visible_flow_proof_file.is_file()
+        ),
         "visible_source_binding_proof_sha256": sha256_file(
             visible_source_binding_proof_file
         ),
         "native_ui_observer_packet_sha256": sha256_file(native_ui_observer_packet_file),
+        "native_custom_codex_visible_flow_proof_sha256": sha256_file(
+            native_custom_codex_visible_flow_proof_file
+        ),
+        "native_custom_codex_visible_flow_packet_kind": _safe_text(
+            native_visible_flow.get("packet_kind"),
+            limit=96,
+        ),
+        "native_custom_codex_visible_flow_status": _safe_text(
+            native_visible_flow.get("status"),
+            limit=32,
+        ),
+        "native_custom_codex_visible_flow_machine_error_code": _safe_text(
+            native_visible_flow.get("machine_error_code"),
+            limit=96,
+        ),
+        "native_custom_codex_visible_flow_proven": native_visible_flow_ok,
+        "native_custom_codex_visible_flow_blocking_reasons": _safe_reasons(
+            native_visible_flow.get("blocking_reasons")
+        ),
         "full_runtime_runner_packet_kind": _safe_text(runner.get("packet_kind"), limit=96),
         "full_runtime_runner_status": _safe_text(runner.get("status"), limit=32),
         "full_runtime_runner_machine_error_code": _safe_text(
@@ -453,7 +502,14 @@ def build_fresh_sealed_e2e_packet(
             ok and fresh_live.get("codex_working_flow_delivery_proven") is True
         ),
         "custom_codex_ui_visibility_proven": bool(
-            runner.get("custom_codex_ui_visibility_proven") is True
+            native_visible_flow_ok or runner.get("custom_codex_ui_visibility_proven") is True
+        ),
+        "custom_codex_ui_visibility_source": (
+            "native_custom_codex_visible_flow_proof"
+            if native_visible_flow_ok
+            else "full_runtime_runner_diagnostic"
+            if runner.get("custom_codex_ui_visibility_proven") is True
+            else "not_proven"
         ),
         "full_runtime_runner_packet_sha256": sha256_file(
             proof_root / "full-runtime" / "full-runtime-dispatch-proof-runner.packet.json"
@@ -557,6 +613,12 @@ def run_fresh_sealed_e2e_proof_command(
     persistent_profile_id: str = "wbp-custom-main",
     persistent_profile_base_dir: str | None = None,
     observer_timeout_seconds: float | None = None,
+    native_auto_launch_custom_codex: bool = False,
+    native_auto_launch_endpoint: str = "http://127.0.0.1:8318/v1",
+    native_auto_launch_model: str = "gpt-5.3-codex",
+    native_auto_launch_owner_authorization_phrase: str | None = None,
+    native_auto_launch_repo_root: str | None = None,
+    native_auto_launch_stable_runtime_generated_config_file: str | None = None,
 ) -> dict[str, Any]:
     proof_run_started_at_ns = time.time_ns()
     proof_run_id = f"WBP_FRESH_SEALED_E2E_{proof_run_started_at_ns}"
@@ -598,10 +660,13 @@ def run_fresh_sealed_e2e_proof_command(
     approved_visible_working_flow_file = (
         approved_visible_flow_dir / "working-flow-delivery-proof.packet.json"
     )
+    legacy_ui_working_flow_delivery_proof_file = working_flow_delivery_proof_file
+    legacy_ui_codex_exec_jsonl_file = codex_exec_jsonl_file
     visible_source_binding_file = (
         ui_visibility_dir / "visible-source-binding-proof.packet.json"
     )
     native_ui_observer_packet_file = native_ui_dir / NATIVE_UI_OBSERVER_PACKET_FILE_NAME
+    native_visible_flow_file = ui_visibility_dir / NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_FILE_NAME
     ui_visibility_file = (
         Path(custom_codex_ui_visibility_proof_file).expanduser()
         if custom_codex_ui_visibility_proof_file
@@ -633,22 +698,22 @@ def run_fresh_sealed_e2e_proof_command(
                     approved_visible_working_flow,
                 )
             )
-            working_flow_delivery_proof_file = approved_visible_working_flow_file
-            codex_exec_jsonl_file = approved_visible_jsonl_file
+            legacy_ui_working_flow_delivery_proof_file = approved_visible_working_flow_file
+            legacy_ui_codex_exec_jsonl_file = approved_visible_jsonl_file
 
     if (
         _fresh_live_ok(fresh_live_packet)
         and not custom_codex_ui_visibility_proof_file
         and real_custom_hook_proof_file.is_file()
-        and working_flow_delivery_proof_file.is_file()
-        and codex_exec_jsonl_file.is_file()
+        and legacy_ui_working_flow_delivery_proof_file.is_file()
+        and legacy_ui_codex_exec_jsonl_file.is_file()
     ):
         ui_visibility_dir.mkdir(parents=True, exist_ok=True)
         visible_binding_packet = run_custom_codex_visible_source_binding_proof_command(
             paths=paths,
-            working_flow_delivery_proof_file=str(working_flow_delivery_proof_file),
+            working_flow_delivery_proof_file=str(legacy_ui_working_flow_delivery_proof_file),
             visible_source_kind=VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
-            codex_exec_jsonl_file=str(codex_exec_jsonl_file),
+            codex_exec_jsonl_file=str(legacy_ui_codex_exec_jsonl_file),
         )
         changed_files.append(_write_packet(visible_source_binding_file, visible_binding_packet))
         handoff_digest = _safe_text(
@@ -669,11 +734,28 @@ def run_fresh_sealed_e2e_proof_command(
             persistent_profile_id=persistent_profile_id,
             persistent_profile_base_dir=persistent_profile_base_dir,
             observer_timeout_seconds=observer_timeout_seconds,
+            auto_launch_custom_codex=native_auto_launch_custom_codex,
+            auto_launch_endpoint=native_auto_launch_endpoint,
+            auto_launch_model=native_auto_launch_model,
+            auto_launch_owner_authorization_phrase=(
+                native_auto_launch_owner_authorization_phrase
+            ),
+            auto_launch_repo_root=native_auto_launch_repo_root,
+            auto_launch_stable_runtime_generated_config_file=(
+                native_auto_launch_stable_runtime_generated_config_file
+            ),
         )
         if not native_ui_observer_packet_file.is_file():
             changed_files.append(_write_packet(native_ui_observer_packet_file, native_packet))
         else:
             changed_files.append(str(native_ui_observer_packet_file))
+        native_visible_flow_packet = run_native_custom_codex_visible_flow_proof_command(
+            working_flow_delivery_proof_file=str(working_flow_delivery_proof_file),
+            native_ui_observer_packet_file=str(native_ui_observer_packet_file),
+            expected_visible_text=visible_text,
+            request_id=request_id,
+        )
+        changed_files.append(_write_packet(native_visible_flow_file, native_visible_flow_packet))
         ui_visibility_packet = run_custom_codex_ui_visibility_proof_command(
             visible_source_binding_proof_file=str(visible_source_binding_file),
             native_ui_observer_packet_file=str(native_ui_observer_packet_file),
@@ -737,6 +819,7 @@ def run_fresh_sealed_e2e_proof_command(
         wrong_digest_seal_packet_file=wrong_digest_seal_packet_file,
         visible_source_binding_proof_file=visible_source_binding_file,
         native_ui_observer_packet_file=native_ui_observer_packet_file,
+        native_custom_codex_visible_flow_proof_file=native_visible_flow_file,
         ui_visibility_source=ui_visibility_source,
         final_packet_file=final_packet_file,
         changed_files=[*changed_files, str(final_packet_file)],
