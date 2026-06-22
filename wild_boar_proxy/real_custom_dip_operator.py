@@ -20,6 +20,7 @@ from .natural_intent_contract import (
     build_natural_intent_parser_packet,
 )
 from .real_custom_dip_proof_runner import (
+    REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND,
     REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
     run_real_custom_dip_proof_runner_command,
 )
@@ -37,6 +38,7 @@ from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_PACKET_KIND = "wbp_real_custom_dip_operator_preflight"
 REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND = "wbp_real_custom_dip_operator_work"
 REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND = "wbp_real_custom_dip_operator_acceptance"
+DIP_WORK_CHAIN_JOIN_PACKET_KIND = "wbp_dip_work_chain_join"
 DIP_OPERATOR_READINESS_PACKET_KIND = "wbp_dip_operator_readiness"
 
 REAL_CUSTOM_DIP_OPERATOR_OK = "OK"
@@ -52,6 +54,8 @@ DIP_OPERATOR_READINESS_BLOCKED = "WBP_DIP_OPERATOR_READINESS_BLOCKED"
 DIP_OPERATOR_READINESS_PROOF_MISSING = "WBP_DIP_OPERATOR_READINESS_PROOF_MISSING"
 DIP_OPERATOR_READINESS_STALE = "WBP_DIP_OPERATOR_READINESS_STALE"
 DIP_OPERATOR_READINESS_UNSAFE = "WBP_DIP_OPERATOR_READINESS_UNSAFE"
+DIP_WORK_CHAIN_JOIN_BLOCKED = "WBP_DIP_WORK_CHAIN_JOIN_BLOCKED"
+DIP_WORK_CHAIN_JOIN_UNSAFE = "WBP_DIP_WORK_CHAIN_JOIN_UNSAFE"
 
 ACCEPTANCE_RUNS_DEFAULT = 5
 ACCEPTANCE_RUNS_MIN = 2
@@ -1558,5 +1562,551 @@ def run_dip_operator_status_command(
         changed_files=[],
         effect=EFFECT_READ,
         secret_values=secret_values,
+        extra=extra,
+    )
+
+
+def _read_chain_json_mapping_file(
+    path_text: str | None,
+    *,
+    prefix: str,
+) -> tuple[dict[str, Any], dict[str, Any], Path | None]:
+    path = Path(path_text).expanduser() if path_text else None
+    metadata: dict[str, Any] = {
+        f"{prefix}_file_required": True,
+        f"{prefix}_file_present": bool(path and path.is_file()),
+        f"{prefix}_file_read": False,
+        f"{prefix}_file_valid_json": False,
+        f"{prefix}_file_mapping": False,
+        f"{prefix}_file_error_code": "",
+        f"{prefix}_file_sha256": "",
+        f"{prefix}_file_path_recorded": False,
+    }
+    if path is None or not path.is_file():
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_missing"
+        return {}, metadata, path
+    metadata[f"{prefix}_file_sha256"] = _sha256_file(path)
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_invalid"
+        return {}, metadata, path
+    metadata[f"{prefix}_file_read"] = True
+    metadata[f"{prefix}_file_valid_json"] = True
+    if not isinstance(parsed, Mapping):
+        metadata[f"{prefix}_file_error_code"] = f"{prefix}_file_not_mapping"
+        return {}, metadata, path
+    metadata[f"{prefix}_file_mapping"] = True
+    return dict(parsed), metadata, path
+
+
+def _chain_file_failures(metadata: Mapping[str, Any], *, prefix: str) -> list[str]:
+    if metadata.get(f"{prefix}_file_mapping") is True:
+        return []
+    error_code = _safe_text(metadata.get(f"{prefix}_file_error_code"), limit=96)
+    if packets.is_command_value_token(error_code) and error_code:
+        return [error_code]
+    return [f"{prefix}_file_invalid"]
+
+
+def _chain_packet_semantic_failures(
+    packet: Mapping[str, Any],
+    *,
+    prefix: str,
+) -> list[str]:
+    if not packet:
+        return []
+    return (
+        [f"{prefix}_packet_semantic_violation"]
+        if packets.inspect_command_packet_semantics(packet, secret_values=[])
+        else []
+    )
+
+
+def _chain_unsafe_failures(
+    named_packets: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    failures: list[str] = []
+    for prefix, packet in named_packets.items():
+        if not packet:
+            continue
+        if (
+            _acceptance_raw_or_secret_claim_present(packet)
+            or _acceptance_raw_material_present(packet)
+            or packets.command_packet_has_secret_leak(packet, secret_values=[])
+        ):
+            failures.append(f"{prefix}_unsafe_secret_or_raw_backend_claim")
+    return sorted(set(failures))
+
+
+def _chain_work_changed_file_paths(work_packet: Mapping[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    for changed_file in _safe_changed_files(work_packet.get("changed_files")):
+        paths.append(Path(changed_file).expanduser())
+    return paths
+
+
+def _resolve_chain_runner_file(
+    work_packet: Mapping[str, Any],
+    *,
+    runner_file: str | None,
+) -> tuple[str | None, str]:
+    if runner_file:
+        return runner_file, "explicit"
+    for changed_path in _chain_work_changed_file_paths(work_packet):
+        if changed_path.name == "real-custom-dip-proof-runner.packet.json":
+            return str(changed_path), "work_changed_files"
+    return None, "missing"
+
+
+def _chain_path_in_changed_files(
+    target: Path | None,
+    work_packet: Mapping[str, Any],
+) -> bool:
+    if target is None:
+        return False
+    target_key = str(target.expanduser().resolve(strict=False))
+    for changed_path in _chain_work_changed_file_paths(work_packet):
+        if str(changed_path.resolve(strict=False)) == target_key:
+            return True
+    return False
+
+
+def _status_chain_failures(
+    status_packet: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    status_path: Path | None,
+    *,
+    max_status_age_seconds: int | None,
+) -> tuple[list[str], bool, int, bool]:
+    failures = _chain_file_failures(metadata, prefix="status_packet")
+    failures.extend(_chain_packet_semantic_failures(status_packet, prefix="status"))
+    age_seconds = (
+        _packet_file_age_seconds(status_path)
+        if status_path is not None and metadata.get("status_packet_file_present") is True
+        else 0
+    )
+    max_age_valid = bool(
+        max_status_age_seconds is None
+        or (
+            isinstance(max_status_age_seconds, int)
+            and not isinstance(max_status_age_seconds, bool)
+            and max_status_age_seconds > 0
+        )
+    )
+    fresh_by_file = bool(
+        max_status_age_seconds is None
+        or (max_age_valid and age_seconds <= max_status_age_seconds)
+    )
+    status_fresh = bool(
+        status_packet
+        and max_age_valid
+        and fresh_by_file
+        and status_packet.get("last_acceptance_fresh") is True
+    )
+    if status_packet:
+        if status_packet.get("packet_kind") != DIP_OPERATOR_READINESS_PACKET_KIND:
+            failures.append("status_packet_wrong_kind")
+        if status_packet.get("status") != "ok":
+            failures.append("status_packet_status_not_ok")
+        if status_packet.get("machine_error_code") != REAL_CUSTOM_DIP_OPERATOR_OK:
+            failures.append("status_packet_machine_error_not_ok")
+        if status_packet.get("effect") != EFFECT_READ:
+            failures.append("status_packet_not_read_only")
+        if _safe_changed_files(status_packet.get("changed_files")):
+            failures.append("status_packet_changed_files_present")
+        if status_packet.get("dip_operator_ready") is not True:
+            failures.append("status_packet_operator_not_ready")
+        if status_packet.get("operator_status") != OPERATOR_STATUS_READY:
+            failures.append("status_packet_operator_status_not_ready")
+        if status_packet.get("last_acceptance_passed") is not True:
+            failures.append("status_packet_acceptance_not_passed")
+        if status_packet.get("last_acceptance_api_lane_called") is not True:
+            failures.append("status_packet_api_lane_not_called")
+        if status_packet.get("last_acceptance_delivery_proven") is not True:
+            failures.append("status_packet_delivery_not_proven")
+        if status_packet.get("last_acceptance_evidence_files_present") is not True:
+            failures.append("status_packet_evidence_files_missing")
+        if status_packet.get("last_acceptance_fresh") is not True:
+            failures.append("status_packet_last_acceptance_stale")
+        if status_packet.get("status_command_dispatches") is not False:
+            failures.append("status_packet_dispatches")
+        if status_packet.get("status_command_runs_acceptance") is not False:
+            failures.append("status_packet_runs_acceptance")
+        if status_packet.get("status_command_reads_audit_history") is not False:
+            failures.append("status_packet_reads_audit_history")
+        if status_packet.get("product_ready") is not False:
+            failures.append("status_packet_product_ready_claimed")
+    if not max_age_valid:
+        failures.append("status_packet_max_age_invalid")
+    if status_packet and max_age_valid and not fresh_by_file:
+        failures.append("status_packet_stale_by_file_mtime")
+    return sorted(set(failures)), status_fresh, age_seconds, max_age_valid
+
+
+def _work_chain_failures(work_packet: Mapping[str, Any]) -> list[str]:
+    failures: list[str] = []
+    failures.extend(_chain_packet_semantic_failures(work_packet, prefix="work"))
+    changed_files = _safe_changed_files(work_packet.get("changed_files"))
+    if work_packet:
+        if work_packet.get("packet_kind") != REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND:
+            failures.append("work_packet_wrong_kind")
+        if work_packet.get("status") != "ok":
+            failures.append("work_packet_status_not_ok")
+        if work_packet.get("machine_error_code") != REAL_CUSTOM_DIP_OPERATOR_OK:
+            failures.append("work_packet_machine_error_not_ok")
+        if work_packet.get("effect") != EFFECT_MUTATE:
+            failures.append("work_packet_effect_not_mutate")
+        if work_packet.get("operator_command_mode") != "work":
+            failures.append("work_packet_mode_not_work")
+        if work_packet.get("work_ready") is not True:
+            failures.append("work_packet_not_ready")
+        if work_packet.get("runner_called") is not True:
+            failures.append("work_packet_runner_not_called")
+        if work_packet.get("runner_packet_kind") != REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND:
+            failures.append("work_packet_runner_wrong_kind")
+        if work_packet.get("runner_status") != "ok":
+            failures.append("work_packet_runner_status_not_ok")
+        if work_packet.get("runner_machine_error_code") != REAL_CUSTOM_DIP_OPERATOR_OK:
+            failures.append("work_packet_runner_machine_error_not_ok")
+        if work_packet.get("runner_required_run_count") != 1:
+            failures.append("work_packet_runner_required_run_count_not_1")
+        if work_packet.get("runner_run_count") != 1:
+            failures.append("work_packet_runner_run_count_not_1")
+        if work_packet.get("work_mode_proven") is not True:
+            failures.append("work_packet_work_mode_not_proven")
+        if work_packet.get("single_work_run_proven") is not True:
+            failures.append("work_packet_single_work_run_not_proven")
+        if work_packet.get("api_lane_called") is not True:
+            failures.append("work_packet_api_lane_not_called")
+        if work_packet.get("codex_working_flow_delivery_proven") is not True:
+            failures.append("work_packet_delivery_not_proven")
+        if work_packet.get("approved_delivery_surface_proven") is not True:
+            failures.append("work_packet_approved_delivery_not_proven")
+        if work_packet.get("assistant_response_bound_to_handoff_digest") is not True:
+            failures.append("work_packet_assistant_response_not_bound")
+        if work_packet.get("status_packet_used_as_auth_grant") is not False:
+            failures.append("work_packet_status_used_as_auth_grant")
+        if work_packet.get("status_recommendation_bypasses_preflight") is not False:
+            failures.append("work_packet_status_bypasses_preflight")
+        if work_packet.get("acceptance_is_not_dip_work_prerequisite") is not True:
+            failures.append("work_packet_acceptance_used_as_prerequisite")
+        if work_packet.get("fallback_used") is not False:
+            failures.append("work_packet_fallback_used")
+        if work_packet.get("local_imitation_used") is not False:
+            failures.append("work_packet_local_imitation_used")
+        if work_packet.get("native_codex_subagent_used_as_dip") is not False:
+            failures.append("work_packet_native_codex_subagent_used_as_dip")
+        if work_packet.get("proof_mode_admission_proven") is not False:
+            failures.append("work_packet_admission_proof_minted")
+        if work_packet.get("repeatable_real_custom_dip_proof_proven") is not False:
+            failures.append("work_packet_repeatable_proof_minted")
+        if work_packet.get("real_custom_codex_hook_origin_dip_proof_proven") is not False:
+            failures.append("work_packet_hook_origin_proof_minted")
+        if work_packet.get("custom_codex_ui_visibility_proven") is not False:
+            failures.append("work_packet_custom_codex_ui_claimed")
+        if work_packet.get("delivery_counts_as_custom_codex_ui") is not False:
+            failures.append("work_packet_delivery_counts_as_custom_ui")
+        if work_packet.get("product_ready") is not False:
+            failures.append("work_packet_product_ready_claimed")
+        if not changed_files:
+            failures.append("work_packet_changed_files_missing")
+        elif not all(Path(path).expanduser().is_file() for path in changed_files):
+            failures.append("work_packet_evidence_files_missing")
+        if work_packet.get("runner_changed_files_count") != len(changed_files):
+            failures.append("work_packet_runner_changed_files_count_mismatch")
+    return sorted(set(failures))
+
+
+def _runner_chain_failures(runner_packet: Mapping[str, Any]) -> list[str]:
+    failures: list[str] = []
+    failures.extend(_chain_packet_semantic_failures(runner_packet, prefix="runner"))
+    if runner_packet:
+        if runner_packet.get("packet_kind") != REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND:
+            failures.append("runner_packet_wrong_kind")
+        if runner_packet.get("status") != "ok":
+            failures.append("runner_packet_status_not_ok")
+        if runner_packet.get("machine_error_code") != REAL_CUSTOM_DIP_OPERATOR_OK:
+            failures.append("runner_packet_machine_error_not_ok")
+        if runner_packet.get("effect") != EFFECT_MUTATE:
+            failures.append("runner_packet_effect_not_mutate")
+        if runner_packet.get("operator_command_mode") != REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK:
+            failures.append("runner_packet_mode_not_work")
+        if runner_packet.get("work_mode_proven") is not True:
+            failures.append("runner_packet_work_mode_not_proven")
+        if runner_packet.get("single_work_run_proven") is not True:
+            failures.append("runner_packet_single_work_run_not_proven")
+        if runner_packet.get("required_run_count") != 1:
+            failures.append("runner_packet_required_run_count_not_1")
+        if runner_packet.get("run_count") != 1:
+            failures.append("runner_packet_run_count_not_1")
+        if runner_packet.get("custom_codex_flow_proven") is not True:
+            failures.append("runner_packet_custom_codex_flow_not_proven")
+        if runner_packet.get("user_prompt_submit_hook_ran") is not True:
+            failures.append("runner_packet_hook_not_ran")
+        if runner_packet.get("hook_prompt_digest_bound") is not True:
+            failures.append("runner_packet_prompt_digest_not_bound")
+        if runner_packet.get("hook_runtime_context_digest_bound") is not True:
+            failures.append("runner_packet_runtime_context_digest_not_bound")
+        if runner_packet.get("delegate_to_dip_proven") is not True:
+            failures.append("runner_packet_delegate_to_dip_not_proven")
+        if runner_packet.get("api_lane_called") is not True:
+            failures.append("runner_packet_api_lane_not_called")
+        if runner_packet.get("route_bound_dispatch_proven") is not True:
+            failures.append("runner_packet_route_bound_dispatch_not_proven")
+        if runner_packet.get("live_result_available") is not True:
+            failures.append("runner_packet_live_result_missing")
+        if runner_packet.get("direct_provider_auth_proven") is not True:
+            failures.append("runner_packet_provider_auth_not_proven")
+        if runner_packet.get("codex_working_flow_delivery_proven") is not True:
+            failures.append("runner_packet_delivery_not_proven")
+        if runner_packet.get("approved_delivery_surface_proven") is not True:
+            failures.append("runner_packet_approved_delivery_not_proven")
+        if runner_packet.get("assistant_response_bound_to_handoff_digest") is not True:
+            failures.append("runner_packet_assistant_response_not_bound")
+        if runner_packet.get("fallback_used") is not False:
+            failures.append("runner_packet_fallback_used")
+        if runner_packet.get("local_imitation_used") is not False:
+            failures.append("runner_packet_local_imitation_used")
+        if runner_packet.get("native_codex_subagent_used_as_dip") is not False:
+            failures.append("runner_packet_native_codex_subagent_used_as_dip")
+        if runner_packet.get("proof_mode_admission_proven") is not False:
+            failures.append("runner_packet_admission_proof_minted")
+        if runner_packet.get("repeatable_real_custom_dip_proof_proven") is not False:
+            failures.append("runner_packet_repeatable_proof_minted")
+        if runner_packet.get("real_custom_codex_hook_origin_dip_proof_proven") is not False:
+            failures.append("runner_packet_hook_origin_proof_minted")
+        if runner_packet.get("custom_codex_ui_visibility_proven") is not False:
+            failures.append("runner_packet_custom_codex_ui_claimed")
+        if runner_packet.get("product_ready") is not False:
+            failures.append("runner_packet_product_ready_claimed")
+    return sorted(set(failures))
+
+
+def run_dip_work_chain_join_command(
+    *,
+    status_file: str | None,
+    work_file: str | None,
+    runner_file: str | None = None,
+    max_status_age_seconds: int | None = DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+) -> dict[str, Any]:
+    status_packet, status_metadata, status_path = _read_chain_json_mapping_file(
+        status_file,
+        prefix="status_packet",
+    )
+    work_packet, work_metadata, work_path = _read_chain_json_mapping_file(
+        work_file,
+        prefix="work_packet",
+    )
+    resolved_runner_file, runner_file_source = _resolve_chain_runner_file(
+        work_packet,
+        runner_file=runner_file,
+    )
+    runner_packet, runner_metadata, runner_path = _read_chain_json_mapping_file(
+        resolved_runner_file,
+        prefix="runner_packet",
+    )
+
+    status_failures, status_fresh, status_age_seconds, max_age_valid = (
+        _status_chain_failures(
+            status_packet,
+            status_metadata,
+            status_path,
+            max_status_age_seconds=max_status_age_seconds,
+        )
+    )
+    work_failures = _chain_file_failures(work_metadata, prefix="work_packet")
+    work_failures.extend(_work_chain_failures(work_packet))
+    runner_failures = _chain_file_failures(runner_metadata, prefix="runner_packet")
+    runner_failures.extend(_runner_chain_failures(runner_packet))
+    if work_packet and not _chain_path_in_changed_files(runner_path, work_packet):
+        runner_failures.append("runner_packet_not_listed_in_work_changed_files")
+    unsafe_failures = _chain_unsafe_failures(
+        {
+            "status_packet": status_packet,
+            "work_packet": work_packet,
+            "runner_packet": runner_packet,
+        }
+    )
+
+    status_packet_ok = bool(status_packet and not status_failures)
+    work_packet_ok = bool(work_packet and not work_failures)
+    runner_packet_ok = bool(runner_packet and not runner_failures)
+    explicit_dip_work_proven = bool(work_packet_ok and runner_packet_ok and not unsafe_failures)
+    api_lane_called = bool(
+        explicit_dip_work_proven
+        and work_packet.get("api_lane_called") is True
+        and runner_packet.get("api_lane_called") is True
+    )
+    delivery_proven = bool(
+        explicit_dip_work_proven
+        and work_packet.get("codex_working_flow_delivery_proven") is True
+        and runner_packet.get("codex_working_flow_delivery_proven") is True
+        and work_packet.get("approved_delivery_surface_proven") is True
+        and runner_packet.get("approved_delivery_surface_proven") is True
+        and work_packet.get("assistant_response_bound_to_handoff_digest") is True
+        and runner_packet.get("assistant_response_bound_to_handoff_digest") is True
+    )
+    custom_codex_hook_origin_bound = bool(
+        explicit_dip_work_proven
+        and work_packet.get("custom_codex_flow_proven") is True
+        and runner_packet.get("custom_codex_flow_proven") is True
+        and work_packet.get("user_prompt_submit_hook_ran") is True
+        and runner_packet.get("user_prompt_submit_hook_ran") is True
+        and work_packet.get("hook_prompt_digest_bound") is True
+        and runner_packet.get("hook_prompt_digest_bound") is True
+        and work_packet.get("hook_runtime_context_digest_bound") is True
+        and runner_packet.get("hook_runtime_context_digest_bound") is True
+    )
+    full_custom_codex_working_flow_proven = bool(
+        status_packet_ok
+        and status_fresh
+        and explicit_dip_work_proven
+        and api_lane_called
+        and delivery_proven
+        and custom_codex_hook_origin_bound
+    )
+
+    blocking_reasons = sorted(
+        set(status_failures + work_failures + runner_failures + unsafe_failures)
+    )
+    ok = bool(full_custom_codex_working_flow_proven and not blocking_reasons)
+    machine_error_code = (
+        DIP_WORK_CHAIN_JOIN_UNSAFE
+        if unsafe_failures
+        else REAL_CUSTOM_DIP_OPERATOR_OK
+        if ok
+        else DIP_WORK_CHAIN_JOIN_BLOCKED
+    )
+
+    raw_prompt_recorded = any(
+        packet.get("raw_prompt_recorded") is True
+        for packet in (status_packet, work_packet, runner_packet)
+    )
+    local_imitation_used = any(
+        packet.get("local_imitation_used") is True
+        for packet in (status_packet, work_packet, runner_packet)
+    )
+    fallback_used = any(
+        packet.get("fallback_used") is True
+        for packet in (status_packet, work_packet, runner_packet)
+    )
+    native_subagent_used = any(
+        packet.get("native_codex_subagent_used_as_dip") is True
+        for packet in (status_packet, work_packet, runner_packet)
+    )
+    secret_value_exposed = any(
+        packet.get("secret_value_exposed") is True
+        for packet in (status_packet, work_packet, runner_packet)
+    )
+
+    extra = {
+        "schema_version": 1,
+        "packet_kind": DIP_WORK_CHAIN_JOIN_PACKET_KIND,
+        "proof_scope": "explicit_dip_work_chain_join",
+        "operator_command_surface": "wild-boar-proxy dip chain-join",
+        "operator_command_mode": "chain_join",
+        "operator_status": OPERATOR_STATUS_READY if ok else OPERATOR_STATUS_BLOCKED,
+        "join_reads_audit_history": False,
+        "join_runs_status": False,
+        "join_runs_work": False,
+        "join_calls_api": False,
+        "join_dispatches": False,
+        **status_metadata,
+        **work_metadata,
+        **runner_metadata,
+        "status_packet_found": status_metadata.get("status_packet_file_present") is True,
+        "status_packet_ok": status_packet_ok,
+        "status_packet_fresh": status_fresh,
+        "status_packet_age_seconds": status_age_seconds,
+        "status_packet_max_age_seconds": max_status_age_seconds or 0,
+        "status_packet_max_age_valid": max_age_valid,
+        "status_packet_used_as_auth_grant": False,
+        "work_packet_found": work_metadata.get("work_packet_file_present") is True,
+        "work_packet_ok": work_packet_ok,
+        "work_packet_mode": _safe_text(work_packet.get("operator_command_mode"), limit=64),
+        "work_packet_status_used_as_auth_grant": (
+            work_packet.get("status_packet_used_as_auth_grant") is True
+        ),
+        "runner_packet_found": runner_metadata.get("runner_packet_file_present") is True,
+        "runner_packet_ok": runner_packet_ok,
+        "runner_packet_mode": _safe_text(runner_packet.get("operator_command_mode"), limit=64),
+        "runner_packet_file_source": runner_file_source,
+        "runner_packet_listed_in_work_changed_files": _chain_path_in_changed_files(
+            runner_path,
+            work_packet,
+        ),
+        "explicit_dip_work_proven": explicit_dip_work_proven,
+        "historical_explicit_dip_work_proven": bool(
+            explicit_dip_work_proven and not status_fresh
+        ),
+        "partial_chain_proven": bool(
+            explicit_dip_work_proven and not full_custom_codex_working_flow_proven
+        ),
+        "custom_codex_hook_origin_bound": custom_codex_hook_origin_bound,
+        "custom_codex_flow_proven": custom_codex_hook_origin_bound,
+        "user_prompt_submit_hook_ran": bool(
+            custom_codex_hook_origin_bound
+            and runner_packet.get("user_prompt_submit_hook_ran") is True
+        ),
+        "hook_prompt_digest_bound": bool(
+            custom_codex_hook_origin_bound
+            and runner_packet.get("hook_prompt_digest_bound") is True
+        ),
+        "hook_runtime_context_digest_bound": bool(
+            custom_codex_hook_origin_bound
+            and runner_packet.get("hook_runtime_context_digest_bound") is True
+        ),
+        "api_lane_called": api_lane_called,
+        "delivery_proven": delivery_proven,
+        "codex_working_flow_delivery_proven": delivery_proven,
+        "approved_delivery_surface_proven": bool(
+            delivery_proven
+            and runner_packet.get("approved_delivery_surface_proven") is True
+        ),
+        "assistant_response_bound_to_handoff_digest": bool(
+            delivery_proven
+            and runner_packet.get("assistant_response_bound_to_handoff_digest") is True
+        ),
+        "full_custom_codex_working_flow_proven": full_custom_codex_working_flow_proven,
+        "fallback_used": fallback_used,
+        "local_imitation_used": local_imitation_used,
+        "native_codex_subagent_used_as_dip": native_subagent_used,
+        "product_ready": False,
+        "does_not_prove_product_ready": True,
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "raw_prompt_recorded": raw_prompt_recorded,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": secret_value_exposed,
+        "status_failures": sorted(set(status_failures)),
+        "work_failures": sorted(set(work_failures)),
+        "runner_failures": sorted(set(runner_failures)),
+        "unsafe_failures": unsafe_failures,
+        "reason_codes": blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+        "changed_files": [],
+    }
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "WBP DIP explicit work chain is proven."
+            if ok
+            else "WBP DIP explicit work chain is BLOCKED."
+        ),
+        machine_error_code=machine_error_code,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=[],
+        effect=EFFECT_READ,
+        secret_values=[],
         extra=extra,
     )

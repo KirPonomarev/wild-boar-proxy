@@ -247,6 +247,127 @@ def _write_acceptance_packet_file(path: Path, packet: dict[str, object]) -> Path
     return path
 
 
+def _full_runner_work_packet(
+    *,
+    ok: bool = True,
+    changed_files: list[str] | None = None,
+    **overrides: object,
+) -> dict[str, object]:
+    packet = _runner_work_packet(
+        ok=ok,
+        changed_files=changed_files,
+        **overrides,
+    )
+    return packets.build_command_packet(
+        ok=ok,
+        human_message="runner work packet",
+        machine_error_code=str(packet["machine_error_code"]),
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=list(packet.get("changed_files") or []),
+        effect=EFFECT_MUTATE,
+        extra=packet,
+    )
+
+
+def _chain_status_packet(
+    *,
+    ok: bool = True,
+    **overrides: object,
+) -> dict[str, object]:
+    extra: dict[str, object] = {
+        "schema_version": 1,
+        "packet_kind": operator.DIP_OPERATOR_READINESS_PACKET_KIND,
+        "proof_scope": "dip_operator_readiness_from_last_acceptance",
+        "operator_command_surface": "wild-boar-proxy dip status",
+        "operator_command_mode": "status",
+        "operator_status": "ready" if ok else "blocked",
+        "dip_operator_ready": ok,
+        "last_acceptance_packet_found": ok,
+        "last_acceptance_packet_valid": ok,
+        "last_acceptance_packet_valid_json": ok,
+        "last_acceptance_packet_semantics_valid": ok,
+        "last_acceptance_passed": ok,
+        "last_acceptance_run_count": operator.ACCEPTANCE_RUNS_DEFAULT,
+        "required_acceptance_run_count": operator.ACCEPTANCE_RUNS_DEFAULT,
+        "last_acceptance_api_lane_called": ok,
+        "last_acceptance_delivery_proven": ok,
+        "last_acceptance_custom_codex_flow_proven": ok,
+        "last_acceptance_evidence_roots_distinct": ok,
+        "last_acceptance_evidence_files_present": ok,
+        "last_acceptance_age_seconds": 1,
+        "last_acceptance_max_age_seconds": operator.DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+        "last_acceptance_fresh": ok,
+        "historical_acceptance_passed": ok,
+        "status_command_dispatches": False,
+        "status_command_runs_acceptance": False,
+        "status_command_reads_audit_history": False,
+        "acceptance_is_not_dip_work_prerequisite": True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "native_codex_subagent_used_as_dip": False,
+        "proof_mode_admission_proven": False,
+        "repeatable_real_custom_dip_proof_proven": False,
+        "real_custom_codex_hook_origin_dip_proof_proven": False,
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "product_ready": False,
+        "does_not_prove_product_ready": True,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "reason_codes": [] if ok else ["acceptance_packet_missing"],
+        "blocking_reasons": [] if ok else ["acceptance_packet_missing"],
+    }
+    extra.update(overrides)
+    packet_ok = bool(ok and not extra.get("blocking_reasons"))
+    return packets.build_command_packet(
+        ok=packet_ok,
+        human_message="status packet",
+        machine_error_code="OK" if packet_ok else operator.DIP_OPERATOR_READINESS_BLOCKED,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if packet_ok else "stop",
+        changed_files=[],
+        effect=EFFECT_READ,
+        extra=extra,
+    )
+
+
+def _write_chain_packets(
+    root: Path,
+    *,
+    status_packet: dict[str, object] | None = None,
+    runner_packet: dict[str, object] | None = None,
+    work_overrides: dict[str, object] | None = None,
+) -> tuple[Path, Path, Path, dict[str, object], dict[str, object], dict[str, object]]:
+    status_path = root / "status.packet.json"
+    runner_path = root / "runner" / "real-custom-dip-proof-runner.packet.json"
+    work_path = root / "work.packet.json"
+    runner = runner_packet or _full_runner_work_packet(changed_files=[str(runner_path)])
+    _write_json(runner_path, runner)
+    work = operator.build_real_custom_dip_operator_work_packet(
+        prompt_text=PROMPT,
+        preflight_packet=_preflight_ready_packet(),
+        runner_packet=runner,
+        secret_values=[PROMPT, ROUTE_ID],
+    )
+    if work_overrides:
+        work.update(work_overrides)
+    status = status_packet or _chain_status_packet()
+    _write_json(status_path, status)
+    _write_json(work_path, work)
+    return status_path, work_path, runner_path, status, work, runner
+
+
 def _assert_recovery_decision(
     test_case: unittest.TestCase,
     packet: dict[str, object],
@@ -1348,6 +1469,212 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 raw_prompt_required=False,
             )
 
+    def test_dip_work_chain_join_proves_fresh_status_work_runner_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(root)
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["effect"], EFFECT_READ)
+        self.assertEqual(packet["packet_kind"], operator.DIP_WORK_CHAIN_JOIN_PACKET_KIND)
+        self.assertTrue(packet["status_packet_ok"])
+        self.assertTrue(packet["status_packet_fresh"])
+        self.assertTrue(packet["work_packet_ok"])
+        self.assertTrue(packet["runner_packet_ok"])
+        self.assertTrue(packet["explicit_dip_work_proven"])
+        self.assertTrue(packet["custom_codex_hook_origin_bound"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["delivery_proven"])
+        self.assertTrue(packet["full_custom_codex_working_flow_proven"])
+        self.assertFalse(packet["status_packet_used_as_auth_grant"])
+        self.assertFalse(packet["join_calls_api"])
+        self.assertFalse(packet["join_runs_work"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        self.assertEqual(packet["changed_files"], [])
+        self.assertFalse(packet["status_packet_file_path_recorded"])
+        self.assertFalse(packet["work_packet_file_path_recorded"])
+        self.assertFalse(packet["runner_packet_file_path_recorded"])
+
+    def test_dip_work_chain_join_blocks_when_work_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path = root / "status.packet.json"
+            _write_json(status_path, _chain_status_packet())
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(root / "missing-work.packet.json"),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["explicit_dip_work_proven"])
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertIn("work_packet_file_missing", packet["blocking_reasons"])
+
+    def test_dip_work_chain_join_keeps_work_historical_when_status_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(
+                    root,
+                    status_packet=_chain_status_packet(
+                        last_acceptance_fresh=False,
+                    ),
+                )
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertTrue(packet["explicit_dip_work_proven"])
+        self.assertTrue(packet["historical_explicit_dip_work_proven"])
+        self.assertTrue(packet["partial_chain_proven"])
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertIn("status_packet_last_acceptance_stale", packet["blocking_reasons"])
+
+    def test_dip_work_chain_join_blocks_on_fallback_or_raw_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(
+                    root,
+                    work_overrides={
+                        "fallback_used": True,
+                        "raw_prompt_recorded": True,
+                    },
+                )
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            operator.DIP_WORK_CHAIN_JOIN_UNSAFE,
+        )
+        self.assertFalse(packet["explicit_dip_work_proven"])
+        self.assertTrue(packet["fallback_used"])
+        self.assertTrue(packet["raw_prompt_recorded"])
+        self.assertIn("work_packet_fallback_used", packet["blocking_reasons"])
+        self.assertIn(
+            "work_packet_unsafe_secret_or_raw_backend_claim",
+            packet["blocking_reasons"],
+        )
+
+    def test_dip_work_chain_join_blocks_on_wrong_work_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(
+                    root,
+                    work_overrides={"operator_command_mode": "proof"},
+                )
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["explicit_dip_work_proven"])
+        self.assertEqual(packet["work_packet_mode"], "proof")
+        self.assertIn("work_packet_mode_not_work", packet["blocking_reasons"])
+
+    def test_dip_work_chain_join_blocks_on_api_or_delivery_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner_path = root / "runner" / "real-custom-dip-proof-runner.packet.json"
+            runner = _full_runner_work_packet(
+                changed_files=[str(runner_path)],
+                api_lane_called=False,
+                codex_working_flow_delivery_proven=False,
+            )
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(root, runner_packet=runner)
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["explicit_dip_work_proven"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["delivery_proven"])
+        self.assertIn("work_packet_api_lane_not_called", packet["blocking_reasons"])
+        self.assertIn("runner_packet_api_lane_not_called", packet["blocking_reasons"])
+        self.assertIn("runner_packet_delivery_not_proven", packet["blocking_reasons"])
+
+    def test_dip_work_chain_join_blocks_runner_not_bound_to_work_changed_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, _runner_path, _status, _work, _runner = (
+                _write_chain_packets(root)
+            )
+            other_runner_path = (
+                root / "other" / "real-custom-dip-proof-runner.packet.json"
+            )
+            _write_json(
+                other_runner_path,
+                _full_runner_work_packet(changed_files=[str(other_runner_path)]),
+            )
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+                runner_file=str(other_runner_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertIn(
+            "runner_packet_not_listed_in_work_changed_files",
+            packet["blocking_reasons"],
+        )
+
+    def test_dip_work_chain_join_blocks_wrong_kind_runner_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status_path, work_path, runner_path, _status, _work, _runner = (
+                _write_chain_packets(root)
+            )
+            wrong_runner = _full_runner_work_packet(changed_files=[str(runner_path)])
+            wrong_runner["packet_kind"] = "wrong_runner_packet"
+            _write_json(runner_path, wrong_runner)
+
+            packet = operator.run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["runner_packet_ok"])
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertIn("runner_packet_wrong_kind", packet["blocking_reasons"])
+
     def test_cli_effect_and_dispatch_for_dip_commands(self) -> None:
         parser = cli_mod.build_parser()
         preflight_args = parser.parse_args(
@@ -1361,10 +1688,22 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             ["dip", "acceptance", "--prompt", PROMPT, "--json"]
         )
         status_args = parser.parse_args(["dip", "status", "--json"])
+        chain_join_args = parser.parse_args(
+            [
+                "dip",
+                "chain-join",
+                "--status-file",
+                "/tmp/status.json",
+                "--work-file",
+                "/tmp/work.json",
+                "--json",
+            ]
+        )
         self.assertEqual(cli_mod.command_effect_from_args(preflight_args), EFFECT_PROBE)
         self.assertEqual(cli_mod.command_effect_from_args(work_args), EFFECT_MUTATE)
         self.assertEqual(cli_mod.command_effect_from_args(acceptance_args), EFFECT_MUTATE)
         self.assertEqual(cli_mod.command_effect_from_args(status_args), EFFECT_READ)
+        self.assertEqual(cli_mod.command_effect_from_args(chain_join_args), EFFECT_READ)
         self.assertEqual(
             acceptance_default_args.runs,
             operator.ACCEPTANCE_RUNS_DEFAULT,
@@ -1446,6 +1785,49 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         self.assertTrue(status_mock.called)
         self.assertEqual(status_mock.call_args.kwargs["proof_file"], "/tmp/proof.json")
         self.assertEqual(status_mock.call_args.kwargs["max_age_seconds"], 42)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
+
+        with mock.patch.object(
+            cli_mod,
+            "run_dip_work_chain_join_command",
+            return_value={"status": "ok", "exit_code": 0},
+        ) as chain_join_mock:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "dip",
+                        "chain-join",
+                        "--status-file",
+                        "/tmp/status.json",
+                        "--work-file",
+                        "/tmp/work.json",
+                        "--runner-file",
+                        "/tmp/runner.json",
+                        "--max-status-age-seconds",
+                        "43",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(chain_join_mock.called)
+        self.assertEqual(
+            chain_join_mock.call_args.kwargs["status_file"],
+            "/tmp/status.json",
+        )
+        self.assertEqual(
+            chain_join_mock.call_args.kwargs["work_file"],
+            "/tmp/work.json",
+        )
+        self.assertEqual(
+            chain_join_mock.call_args.kwargs["runner_file"],
+            "/tmp/runner.json",
+        )
+        self.assertEqual(
+            chain_join_mock.call_args.kwargs["max_status_age_seconds"],
+            43,
+        )
         self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
 
 

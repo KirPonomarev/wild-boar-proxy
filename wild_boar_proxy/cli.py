@@ -23,6 +23,7 @@ from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_comma
 from .real_custom_dip_operator import (
     ACCEPTANCE_RUNS_DEFAULT,
     DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    run_dip_work_chain_join_command,
     run_dip_operator_status_command,
     run_real_custom_dip_operator_acceptance_command,
     run_real_custom_dip_operator_preflight_command,
@@ -369,6 +370,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
     )
     dip_status.add_argument("--json", action="store_true", required=True)
+    dip_chain_join = dip_subparsers.add_parser("chain-join")
+    dip_chain_join.add_argument("--status-file", required=True)
+    dip_chain_join.add_argument("--work-file", required=True)
+    dip_chain_join.add_argument("--runner-file")
+    dip_chain_join.add_argument(
+        "--max-status-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_chain_join.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -1831,6 +1842,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
         if getattr(args, "dip_command", None) == "status":
             return EFFECT_READ
+        if getattr(args, "dip_command", None) == "chain-join":
+            return EFFECT_READ
     if command == "launch":
         launch_command = getattr(args, "launch_command", None)
         if launch_command == "smoke":
@@ -2184,6 +2197,15 @@ def main(argv: list[str] | None = None) -> int:
                     paths=paths,
                     proof_file=args.proof_file,
                     max_age_seconds=args.max_age_seconds,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "chain-join":
+            return emit_json(
+                run_dip_work_chain_join_command(
+                    status_file=args.status_file,
+                    work_file=args.work_file,
+                    runner_file=args.runner_file,
+                    max_status_age_seconds=args.max_status_age_seconds,
                 )
             )
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
