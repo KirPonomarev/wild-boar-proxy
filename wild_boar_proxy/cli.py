@@ -130,6 +130,7 @@ from .custom_origin_bound_live_provider_join import (
 from .official_mcp_ledger_bound_dispatch_join import (
     run_official_mcp_ledger_bound_dispatch_join_command,
 )
+from .wbp_dip_hook_origin_proof import run_wbp_dip_hook_origin_proof_command
 from .official_mcp_handoff_source_proof import (
     run_official_mcp_handoff_source_proof_command,
     run_official_mcp_working_flow_handoff_source_proof_command,
@@ -1026,6 +1027,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+    router_hook_wbp_dip_hook_origin_proof = router_hook_subparsers.add_parser(
+        "wbp-dip-hook-origin-proof"
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument("--prompt", required=True)
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--ledger-proof-file",
+        required=True,
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--wbp-dip-proof-file",
+        required=True,
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--expected-alias",
+        default="DIP",
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     router_hook_official_mcp_handoff_source_proof = router_hook_subparsers.add_parser(
         "official-mcp-handoff-source-proof"
     )
@@ -1758,6 +1780,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "custom-origin-bound-dispatch-proof",
         "custom-origin-bound-live-provider-join",
         "official-mcp-ledger-bound-dispatch-join",
+        "wbp-dip-hook-origin-proof",
         "official-mcp-handoff-source-proof",
         "official-mcp-working-flow-handoff-source-proof",
         "official-mcp-transcript-tool-result-observe",
@@ -2522,6 +2545,18 @@ def main(argv: list[str] | None = None) -> int:
                     ledger_bound_dispatch_proof_file=(
                         args.ledger_bound_dispatch_proof_file
                     ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "wbp-dip-hook-origin-proof"
+        ):
+            return emit_json(
+                run_wbp_dip_hook_origin_proof_command(
+                    prompt_text=args.prompt,
+                    expected_alias=args.expected_alias,
+                    ledger_proof_file=args.ledger_proof_file,
+                    wbp_dip_proof_file=args.wbp_dip_proof_file,
                 )
             )
         if (
