@@ -162,6 +162,9 @@ from .full_runtime_dispatch_proof_runner import (
 from .full_runtime_dispatch_admission import (
     run_full_runtime_dispatch_admission_command,
 )
+from .full_runtime_dispatch_admission_seal import (
+    run_full_runtime_dispatch_admission_seal_command,
+)
 from .custom_codex_auth_session_readiness import (
     run_custom_codex_auth_session_readiness_command,
 )
@@ -725,6 +728,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--expected-freshness-anchor-digest",
     )
     router_hook_full_runtime_dispatch_admission.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal = (
+        router_hook_subparsers.add_parser("full-runtime-dispatch-admission-seal")
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
+        "--expected-freshness-anchor-digest",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1516,7 +1535,10 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     if (
         command == "router-hook"
         and getattr(args, "router_hook_command", None)
-        == "full-runtime-dispatch-admission"
+        in {
+            "full-runtime-dispatch-admission",
+            "full-runtime-dispatch-admission-seal",
+        }
     ):
         return EFFECT_READ
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
@@ -2117,6 +2139,18 @@ def main(argv: list[str] | None = None) -> int:
         ):
             return emit_json(
                 run_full_runtime_dispatch_admission_command(
+                    proof_dir=args.proof_dir,
+                    expected_freshness_anchor_digest=(
+                        args.expected_freshness_anchor_digest
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-admission-seal"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_admission_seal_command(
                     proof_dir=args.proof_dir,
                     expected_freshness_anchor_digest=(
                         args.expected_freshness_anchor_digest
