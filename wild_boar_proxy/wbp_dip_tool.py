@@ -12,9 +12,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from typing import Any
 
 from .core import packets
+from .external_models import transforms
+from .external_models.http_client import request_json
+from .external_models.paths import ExternalModelsPaths
+from .external_models.routes import find_route, load_routes_file
+from .external_models.validate import _completion_url, _provider_headers
+from .runtime import RuntimeErrorInfo
 
 
 WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
@@ -25,6 +32,9 @@ DEFAULT_CODEX_APP_NAME = "Codex WBP Clean.app"
 DEFAULT_ENTRY_EVIDENCE_FILENAME = "mcp-entry-evidence.json"
 DEFAULT_CODEX_JSONL_FILENAME = "codex-exec.jsonl"
 DEFAULT_LAST_MESSAGE_FILENAME = "last-message.txt"
+DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
+DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
 
 WBP_DIP_TOOL_OK = "OK"
 WBP_DIP_TOOL_DRY_RUN = "WBP_DIP_TOOL_DRY_RUN"
@@ -32,7 +42,9 @@ WBP_DIP_TOOL_TASK_REQUIRED = "WBP_DIP_TOOL_TASK_REQUIRED"
 WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE = "WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE"
 WBP_DIP_TOOL_CODEX_EXEC_FAILED = "WBP_DIP_TOOL_CODEX_EXEC_FAILED"
 WBP_DIP_TOOL_DELEGATE_NOT_PROVEN = "WBP_DIP_TOOL_DELEGATE_NOT_PROVEN"
+WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
+WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
 
 
 def _utc_stamp() -> str:
@@ -251,6 +263,365 @@ def _assistant_response_observed(events: Sequence[Mapping[str, Any]]) -> bool:
     return False
 
 
+def _delegate_packet_ok(delegate_packet: Mapping[str, Any]) -> bool:
+    return bool(
+        delegate_packet.get("status") == "ok"
+        and delegate_packet.get("machine_error_code") == "OK"
+        and delegate_packet.get("delegate_to_dip_tool_called") is True
+        and delegate_packet.get("api_lane_called") is True
+        and delegate_packet.get("route_bound_dispatch_proven") is True
+        and delegate_packet.get("fallback_used") is False
+        and delegate_packet.get("local_imitation_used") is False
+        and delegate_packet.get("raw_backend_details_exposed") is False
+        and delegate_packet.get("secret_value_exposed") is False
+    )
+
+
+def _load_runtime_context(profile_dir: Path) -> dict[str, Any]:
+    context_path = profile_dir / "wbp-agent-runtime-context.json"
+    try:
+        parsed = json.loads(context_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return dict(parsed) if isinstance(parsed, Mapping) else {}
+
+
+def _casefold_lookup(mapping: Mapping[str, Any], key: str) -> Any:
+    if key in mapping:
+        return mapping[key]
+    wanted = key.casefold()
+    for candidate_key, value in mapping.items():
+        if str(candidate_key).casefold() == wanted:
+            return value
+    return None
+
+
+def _runtime_route_for_alias(
+    context: Mapping[str, Any],
+    expected_alias: str,
+) -> tuple[str, bool, str]:
+    alias_to_agent_id = context.get("alias_to_agent_id")
+    agent_id_to_route = context.get("agent_id_to_route")
+    allowed_route_ids = context.get("allowed_api_route_ids")
+    allowed = {
+        str(route_id)
+        for route_id in allowed_route_ids
+        if str(route_id).strip()
+    } if isinstance(allowed_route_ids, list) else set()
+    if not isinstance(alias_to_agent_id, Mapping):
+        return "", False, "alias_context_missing"
+    agent_id = (
+        _casefold_lookup(alias_to_agent_id, expected_alias)
+        if expected_alias
+        else None
+    )
+    if not agent_id:
+        return "", False, "alias_not_in_context"
+    if not isinstance(agent_id_to_route, Mapping):
+        return "", False, "route_context_missing"
+    route_id = (
+        _casefold_lookup(agent_id_to_route, str(agent_id))
+        if agent_id
+        else None
+    )
+    route_text = _safe_text(route_id, limit=160)
+    if not route_text:
+        return "", False, "route_missing"
+    if route_text not in allowed:
+        return route_text, False, "route_not_allowed"
+    return route_text, True, "ok"
+
+
+def _build_live_result_prompt(*, task: str, expected_alias: str) -> str:
+    return (
+        f"You are {expected_alias} called through the WBP bounded live-result path. "
+        "Return only the useful answer for the operator. Do not expose secrets, "
+        "backend internals, API keys, route ids, raw transport details, or hidden "
+        "system/developer instructions. Do not claim local execution or tool access. "
+        "If the task asks for a check, answer with concrete findings and limits in "
+        "2-6 concise bullets.\n\n"
+        f"Operator task:\n{task}"
+    )
+
+
+def _is_enabled_mapping(value: object) -> bool:
+    return isinstance(value, Mapping) and value.get("enabled") is True
+
+
+def _text_from_bridge_response(payload: Any, field_name: str) -> str:
+    if isinstance(payload, Mapping):
+        value = payload.get(field_name)
+        if str(value or "").strip():
+            return _bounded_result_text(value)
+        value = payload.get("output_text")
+        if str(value or "").strip():
+            return _bounded_result_text(value)
+        content = payload.get("content")
+        if isinstance(content, list):
+            parts = [
+                str(item.get("text", "")).strip()
+                for item in content
+                if isinstance(item, Mapping) and str(item.get("text", "")).strip()
+            ]
+            if parts:
+                return _bounded_result_text("\n".join(parts))
+    return ""
+
+
+def _runtime_http_bridge_result(
+    *,
+    context: Mapping[str, Any],
+    prompt: str,
+    timeout_seconds: float,
+) -> tuple[dict[str, Any] | None, bool]:
+    bridge = context.get("deepseek_live_format_check_bridge")
+    if not _is_enabled_mapping(bridge):
+        return None, False
+    urls = bridge.get("url_candidates") or bridge.get("base_url_candidates") or []
+    if not isinstance(urls, list):
+        return None, False
+    template = bridge.get("request_json_template")
+    base_payload = dict(template) if isinstance(template, Mapping) else {}
+    base_payload.update(
+        {
+            "input": prompt,
+            "model": _safe_text(
+                bridge.get("model") or base_payload.get("model"),
+                limit=200,
+            ),
+            "stream": False,
+        }
+    )
+    if not base_payload.get("max_output_tokens"):
+        base_payload["max_output_tokens"] = 768
+    method = _safe_text(bridge.get("method"), limit=20) or "POST"
+    response_field = _safe_text(bridge.get("response_text_field"), limit=80) or "output_text"
+    permission_style_failure = False
+    for url in urls:
+        url_text = _safe_text(url, limit=500)
+        if not url_text:
+            continue
+        try:
+            response = request_json(
+                url=url_text,
+                method=method,
+                headers={},
+                payload=base_payload,
+                timeout_seconds=min(float(timeout_seconds), DEFAULT_BRIDGE_TIMEOUT_SECONDS),
+            )
+        except RuntimeErrorInfo as exc:
+            message = str(getattr(exc, "message", "") or exc)
+            permission_style_failure = permission_style_failure or any(
+                marker in message
+                for marker in ("Operation not permitted", "PermissionError", "Errno 1")
+            )
+            continue
+        if response.status_code != 200:
+            continue
+        result_text = _text_from_bridge_response(response.payload, response_field)
+        if result_text:
+            return (
+                {
+                    "status": "ok",
+                    "machine_error_code": WBP_DIP_TOOL_OK,
+                    "provider_called": True,
+                    "result_available": True,
+                    "source": "runtime_context_http_bridge",
+                    "result_text": result_text,
+                    "result_text_sha256": _sha256_text(result_text),
+                    "result_text_length": len(result_text),
+                    "result_text_truncated": False,
+                    "provider_recorded": False,
+                    "effective_model_recorded": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                    "bridge_attempted": True,
+                },
+                permission_style_failure,
+            )
+    return None, permission_style_failure
+
+
+def _runtime_file_bridge_result(
+    *,
+    context: Mapping[str, Any],
+    prompt: str,
+    timeout_seconds: float,
+) -> dict[str, Any] | None:
+    bridge = context.get("deepseek_live_format_check_file_bridge")
+    if not _is_enabled_mapping(bridge):
+        return None
+    request_dir = Path(_safe_text(bridge.get("request_dir"), limit=1000)).expanduser()
+    response_dir = Path(_safe_text(bridge.get("response_dir"), limit=1000)).expanduser()
+    if not str(request_dir) or not str(response_dir):
+        return None
+    request_id = "wbp-dip-" + _utc_stamp() + "-" + _sha256_text(prompt)[:12]
+    request_extension = _safe_text(bridge.get("request_extension"), limit=20) or ".json"
+    response_extension = _safe_text(bridge.get("response_extension"), limit=20) or ".json"
+    request_file = request_dir / f"{request_id}{request_extension}"
+    response_file = response_dir / f"{request_id}{response_extension}"
+    payload = {
+        "schema_version": 1,
+        "request_id": request_id,
+        "model": _safe_text(bridge.get("model"), limit=200),
+        "input": prompt,
+        "max_output_tokens": 768,
+        "stream": False,
+        "temperature": 0,
+    }
+    try:
+        request_dir.mkdir(parents=True, exist_ok=True)
+        response_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(request_file, payload)
+    except OSError:
+        return None
+    response_field = _safe_text(bridge.get("response_text_field"), limit=80) or "output_text"
+    deadline = time.monotonic() + min(float(timeout_seconds), 8.0)
+    while time.monotonic() < deadline:
+        try:
+            response_payload = json.loads(response_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            time.sleep(0.25)
+            continue
+        result_text = _text_from_bridge_response(response_payload, response_field)
+        if result_text:
+            return {
+                "status": "ok",
+                "machine_error_code": WBP_DIP_TOOL_OK,
+                "provider_called": True,
+                "result_available": True,
+                "source": "runtime_context_file_bridge",
+                "result_text": result_text,
+                "result_text_sha256": _sha256_text(result_text),
+                "result_text_length": len(result_text),
+                "result_text_truncated": False,
+                "provider_recorded": False,
+                "effective_model_recorded": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "bridge_attempted": True,
+            }
+    return None
+
+
+def _bounded_result_text(value: object) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    lines = [line.rstrip() for line in text.splitlines()]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)[:DEFAULT_LIVE_RESULT_TEXT_LIMIT]
+
+
+def request_live_result(
+    *,
+    task: str,
+    expected_alias: str,
+    profile_dir: Path,
+    timeout_seconds: float = DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    context = _load_runtime_context(profile_dir)
+    route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
+    http_bridge_configured = _is_enabled_mapping(
+        context.get("deepseek_live_format_check_bridge")
+    )
+    base: dict[str, Any] = {
+        "status": "error",
+        "machine_error_code": WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
+        "provider_called": False,
+        "result_available": False,
+        "source": "external_models_direct",
+        "bridge_attempted": False,
+        "route_allowed": route_allowed,
+        "route_status": route_status,
+        "route_id_sha256": _sha256_text(route_id) if route_id else "",
+        "route_id_recorded": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+    }
+    if not route_allowed:
+        return base
+
+    prompt = _build_live_result_prompt(task=task, expected_alias=expected_alias)
+    base["bridge_attempted"] = http_bridge_configured
+    http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
+        context=context,
+        prompt=prompt,
+        timeout_seconds=timeout_seconds,
+    )
+    if http_bridge_result is not None:
+        return {**base, **http_bridge_result}
+    if permission_style_bridge_failure:
+        file_bridge_result = _runtime_file_bridge_result(
+            context=context,
+            prompt=prompt,
+            timeout_seconds=timeout_seconds,
+        )
+        if file_bridge_result is not None:
+            return {**base, **file_bridge_result}
+
+    try:
+        paths = ExternalModelsPaths.from_env()
+        route = find_route(load_routes_file(paths.routes_file), route_id)
+        transforms.validate_route_transform_profiles(route)
+        headers = _provider_headers(route, paths)
+        request_payload, request_metadata = transforms.build_check_request(
+            route,
+            user_prompt=prompt,
+        )
+        response = request_json(
+            url=_completion_url(route),
+            method="POST",
+            headers=headers,
+            payload=request_payload,
+            timeout_seconds=timeout_seconds,
+        )
+        base["provider_called"] = True
+        base["latency_ms"] = response.latency_ms
+        if response.status_code != 200:
+            base["upstream_status_code"] = response.status_code
+            return base
+        response_text, response_metadata = transforms.extract_check_response(
+            route,
+            response.payload,
+        )
+    except RuntimeErrorInfo as exc:
+        base["machine_error_code"] = _safe_text(exc.machine_error_code, limit=120)
+        base["operator_action"] = _safe_text(exc.operator_action, limit=120)
+        return base
+
+    result_text = _bounded_result_text(response_text)
+    if not result_text:
+        return base
+    return {
+        **base,
+        "status": "ok",
+        "machine_error_code": WBP_DIP_TOOL_OK,
+        "provider_called": True,
+        "result_available": True,
+        "result_text": result_text,
+        "result_text_sha256": _sha256_text(result_text),
+        "result_text_length": len(result_text),
+        "result_text_truncated": len(response_text) > DEFAULT_LIVE_RESULT_TEXT_LIMIT,
+        "provider": _safe_text(route.get("provider"), limit=120),
+        "provider_recorded": True,
+        "effective_model_sha256": _sha256_text(_safe_text(route.get("upstream_model"), limit=200)),
+        "effective_model_recorded": False,
+        "request_shape": _safe_text(request_metadata.get("request_shape"), limit=120),
+        "response_shape": _safe_text(response_metadata.get("response_shape"), limit=120),
+        "thinking": request_metadata.get("thinking")
+        if isinstance(request_metadata.get("thinking"), Mapping)
+        else {},
+    }
+
+
 def build_wbp_dip_tool_packet(
     *,
     task: str,
@@ -264,21 +635,13 @@ def build_wbp_dip_tool_packet(
     codex_executable: bool = True,
     changed_files: Sequence[str] = (),
     secret_values: Sequence[str] = (),
+    live_result: Mapping[str, Any] | None = None,
+    require_live_result: bool = True,
 ) -> dict[str, Any]:
     task_digest = _sha256_text(task) if task else ""
     events = _read_codex_exec_jsonl(codex_exec_jsonl_file)
     delegate_packet = _find_delegate_packet(events)
-    delegate_ok = bool(
-        delegate_packet.get("status") == "ok"
-        and delegate_packet.get("machine_error_code") == "OK"
-        and delegate_packet.get("delegate_to_dip_tool_called") is True
-        and delegate_packet.get("api_lane_called") is True
-        and delegate_packet.get("route_bound_dispatch_proven") is True
-        and delegate_packet.get("fallback_used") is False
-        and delegate_packet.get("local_imitation_used") is False
-        and delegate_packet.get("raw_backend_details_exposed") is False
-        and delegate_packet.get("secret_value_exposed") is False
-    )
+    delegate_ok = _delegate_packet_ok(delegate_packet)
     assistant_observed = _assistant_response_observed(events) or output_last_message_file.is_file()
     blocking_reasons: list[str] = []
     if not task:
@@ -290,6 +653,31 @@ def build_wbp_dip_tool_packet(
     if not dry_run and codex_exit_code == 0 and not delegate_ok:
         blocking_reasons.append("delegate_to_dip_not_proven")
 
+    live_result_data = dict(live_result or {})
+    live_result_available = bool(
+        live_result_data.get("status") == "ok"
+        and live_result_data.get("machine_error_code") == "OK"
+        and live_result_data.get("provider_called") is True
+        and live_result_data.get("result_available") is True
+        and live_result_data.get("fallback_used") is False
+        and live_result_data.get("local_imitation_used") is False
+        and live_result_data.get("raw_backend_details_exposed") is False
+        and live_result_data.get("secret_value_exposed") is False
+    )
+    live_result_text = _bounded_result_text(live_result_data.get("result_text"))
+    direct_live_result_secret_leak = bool(
+        live_result_available
+        and any(secret and secret in live_result_text for secret in secret_values)
+    )
+    if (
+        require_live_result
+        and not dry_run
+        and codex_exit_code == 0
+        and delegate_ok
+        and not live_result_available
+    ):
+        blocking_reasons.append("live_result_unavailable")
+
     unsafe_payload = {
         "packet_kind": WBP_DIP_TOOL_PACKET_KIND,
         "task_sha256": task_digest,
@@ -297,16 +685,23 @@ def build_wbp_dip_tool_packet(
         "codex_exec_jsonl_sha256": _sha256_file(codex_exec_jsonl_file),
         "output_last_message_sha256": _sha256_file(output_last_message_file),
         "entry_evidence_sha256": _sha256_file(entry_evidence_file),
+        "live_result_text": live_result_text if live_result_available else "",
     }
     unsafe = packets.command_packet_has_secret_leak(
         unsafe_payload,
         secret_values=list(secret_values),
-    )
+    ) or direct_live_result_secret_leak
     if unsafe:
+        live_result_text = ""
+        live_result_available = False
         blocking_reasons.append("unsafe_packet_secret_leak")
 
     if unsafe:
-        machine_error_code = WBP_DIP_TOOL_UNSAFE_PACKET
+        machine_error_code = (
+            WBP_DIP_TOOL_LIVE_RESULT_UNSAFE
+            if live_result_data.get("result_available") is True
+            else WBP_DIP_TOOL_UNSAFE_PACKET
+        )
     elif not task:
         machine_error_code = WBP_DIP_TOOL_TASK_REQUIRED
     elif not codex_executable:
@@ -315,6 +710,8 @@ def build_wbp_dip_tool_packet(
         machine_error_code = WBP_DIP_TOOL_DRY_RUN
     elif codex_exit_code != 0:
         machine_error_code = WBP_DIP_TOOL_CODEX_EXEC_FAILED
+    elif require_live_result and delegate_ok and not live_result_available:
+        machine_error_code = WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
     elif delegate_ok:
         machine_error_code = WBP_DIP_TOOL_OK
     else:
@@ -327,10 +724,12 @@ def build_wbp_dip_tool_packet(
         "status": "ok" if ok else "error",
         "exit_code": 0 if ok else 1,
         "human_message": (
-            "WBP DIP working tool completed through Custom Codex MCP delegate_to_dip."
+            "WBP DIP working tool completed through Custom Codex MCP delegate_to_dip and live result."
             if machine_error_code == WBP_DIP_TOOL_OK
             else "WBP DIP working tool dry run prepared."
             if machine_error_code == WBP_DIP_TOOL_DRY_RUN
+            else "WBP DIP working tool proved dispatch but live result is unavailable."
+            if machine_error_code == WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
             else "WBP DIP working tool did not complete a proven delegate_to_dip path."
         ),
         "machine_error_code": machine_error_code,
@@ -352,6 +751,40 @@ def build_wbp_dip_tool_packet(
         "raw_backend_details_exposed": delegate_packet.get("raw_backend_details_exposed") is True,
         "secret_value_exposed": delegate_packet.get("secret_value_exposed") is True,
         "assistant_response_observed": assistant_observed,
+        "live_result_required": bool(require_live_result and not dry_run),
+        "live_result_available": live_result_available,
+        "live_result_provider_called": live_result_data.get("provider_called") is True,
+        "live_result_bridge_attempted": live_result_data.get("bridge_attempted") is True,
+        "live_result_source": _safe_text(live_result_data.get("source"), limit=120),
+        "live_result_machine_error_code": _safe_text(
+            live_result_data.get("machine_error_code"),
+            limit=160,
+        ),
+        "live_result_route_allowed": live_result_data.get("route_allowed") is True,
+        "live_result_route_status": _safe_text(live_result_data.get("route_status"), limit=120),
+        "live_result_route_id_recorded": False,
+        "live_result_route_id_sha256": _safe_text(
+            live_result_data.get("route_id_sha256"),
+            limit=80,
+        ),
+        "live_result_text": live_result_text if live_result_available else "",
+        "live_result_text_recorded": live_result_available,
+        "live_result_text_sha256": _sha256_text(live_result_text) if live_result_available else "",
+        "live_result_text_length": len(live_result_text) if live_result_available else 0,
+        "live_result_text_truncated": live_result_data.get("result_text_truncated") is True,
+        "live_result_provider_recorded": live_result_data.get("provider_recorded") is True,
+        "live_result_provider": _safe_text(live_result_data.get("provider"), limit=120)
+        if live_result_data.get("provider_recorded") is True
+        else "",
+        "live_result_effective_model_recorded": False,
+        "live_result_effective_model_sha256": _safe_text(
+            live_result_data.get("effective_model_sha256"),
+            limit=80,
+        ),
+        "live_result_raw_backend_details_exposed": (
+            live_result_data.get("raw_backend_details_exposed") is True
+        ),
+        "live_result_secret_value_exposed": live_result_data.get("secret_value_exposed") is True,
         "expected_alias": expected_alias,
         "task_sha256": task_digest,
         "prompt_text_recorded": False,
@@ -411,6 +844,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-last-message")
     parser.add_argument("--entry-evidence-file")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--proof-only",
+        action="store_true",
+        help="prove Custom Codex MCP dispatch without requiring a live user-facing result",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -469,6 +907,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             codex_executable=codex_executable,
             changed_files=[],
             secret_values=[task],
+            require_live_result=False,
         )
         dry_packet.update(
             {
@@ -506,6 +945,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 check=False,
             )
         codex_exit_code = int(completed.returncode)
+    live_result: dict[str, Any] | None = None
+    if not args.proof_only and codex_exit_code == 0:
+        delegate_packet = _find_delegate_packet(_read_codex_exec_jsonl(output_jsonl))
+        if _delegate_packet_ok(delegate_packet):
+            live_result = request_live_result(
+                task=task,
+                expected_alias=expected_alias,
+                profile_dir=profile_dir,
+            )
     existing_changed_files = [path for path in changed_files if Path(path).exists()]
     packet = build_wbp_dip_tool_packet(
         task=task,
@@ -519,13 +967,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         codex_executable=codex_executable,
         changed_files=[*existing_changed_files, str(proof_dir / "wbp-dip-tool.packet.json")],
         secret_values=[task],
+        live_result=live_result,
+        require_live_result=not args.proof_only,
     )
     packet_file = proof_dir / "wbp-dip-tool.packet.json"
     _write_json(packet_file, packet)
     if args.json:
         sys.stdout.write(json.dumps(packet, ensure_ascii=True, sort_keys=True) + "\n")
     else:
-        if output_last_message.is_file():
+        if packet.get("live_result_available") is True and str(packet.get("live_result_text", "")).strip():
+            result_text = str(packet["live_result_text"])
+            sys.stdout.write(result_text)
+            if not result_text.endswith("\n"):
+                sys.stdout.write("\n")
+        elif output_last_message.is_file():
             last_message = output_last_message.read_text(encoding="utf-8")
             sys.stdout.write(last_message)
             if not last_message.endswith("\n"):

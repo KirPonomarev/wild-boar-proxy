@@ -67,12 +67,19 @@ All operator commands must support `--json`.
 
 `tools/wbp_dip --json <task>` is a bounded Custom Codex working-tool launcher.
 It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
-CLI flow and emits one JSON packet.
+CLI flow, then requires a bounded live result from the runtime-context allowed
+API route before returning success. It emits one JSON packet.
 
 It must not write runtime truth, must not set `product_ready=true`, and must not
-claim success unless the captured Codex JSONL contains a successful
-`delegate_to_dip` tool result with API-lane dispatch and no fallback/local
-imitation.
+claim working-tool success unless both conditions are true:
+
+- the captured Codex JSONL contains a successful `delegate_to_dip` tool result
+  with API-lane dispatch and no fallback/local imitation;
+- `live_result_available=true` with no raw prompt, route id, secret, fallback,
+  local imitation, or backend detail exposure in the emitted packet.
+
+`tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
+diagnostics. It is not a working-result success path.
 
 ## Runtime invariant check owner surface
 
