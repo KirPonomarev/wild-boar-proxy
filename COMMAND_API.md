@@ -70,6 +70,20 @@ It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
 CLI flow, then requires a bounded live result from the runtime-context allowed
 API route before returning success. It emits one JSON packet.
 
+Canonical operator entry:
+
+```sh
+tools/wbp_dip "DIP: <bounded task>"
+```
+
+Canonical repeatable smoke:
+
+```sh
+PROOF_DIR="$(mktemp -d /tmp/wbp-dip-smoke.XXXXXX)"
+tools/wbp_dip --json --proof-dir "$PROOF_DIR" \
+  "DIP: ответь одним коротким пунктом: WBP operator path работает без локальной имитации."
+```
+
 It must not write runtime truth, must not set `product_ready=true`, and must not
 claim working-tool success unless both conditions are true:
 
@@ -77,6 +91,19 @@ claim working-tool success unless both conditions are true:
   with API-lane dispatch and no fallback/local imitation;
 - `live_result_available=true` with no raw prompt, route id, secret, fallback,
   local imitation, or backend detail exposure in the emitted packet.
+
+Without `--json`, stdout is the bounded live result text for the operator.
+With `--json`, stdout is exactly one JSON object and must include:
+
+- `delegate_to_dip_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `raw_prompt_recorded=false`
+- `prompt_text_recorded=false`
+- `live_result_route_id_recorded=false`
 
 `tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
 diagnostics. It is not a working-result success path.

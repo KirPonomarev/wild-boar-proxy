@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 import subprocess
 import sys
@@ -12,15 +14,22 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
+from wild_boar_proxy.external_models import errors
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
+from wild_boar_proxy.runtime import RuntimeErrorInfo
 from wild_boar_proxy.wbp_dip_tool import (
     DEFAULT_SANDBOX,
+    WBP_DIP_TOOL_CODEX_EXEC_FAILED,
+    WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE,
+    WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
     WBP_DIP_TOOL_DRY_RUN,
+    WBP_DIP_TOOL_LIVE_RESULT_UNSAFE,
     WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
     WBP_DIP_TOOL_OK,
     build_codex_exec_argv,
     build_delegate_prompt,
     build_wbp_dip_tool_packet,
+    main,
     request_live_result,
 )
 
@@ -234,6 +243,146 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["live_result_text"], "")
         self.assertFalse(packet_contains_text(packet, TASK))
 
+    def test_packet_rejects_unsafe_live_result_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            jsonl = root / "codex.jsonl"
+            last = root / "last.txt"
+            entry = root / "entry.json"
+            _write_jsonl(
+                jsonl,
+                [
+                    {
+                        "type": "mcp_tool_result",
+                        "result": {"structuredContent": _delegate_packet()},
+                    }
+                ],
+            )
+            last.write_text("ok\n", encoding="utf-8")
+            entry.write_text("{}", encoding="utf-8")
+
+            packet = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=0,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+                live_result=_live_result(raw_backend_details_exposed=True),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_LIVE_RESULT_UNSAFE)
+        self.assertFalse(packet["live_result_available"])
+        self.assertEqual(packet["live_result_text"], "")
+        self.assertIn("unsafe_packet_secret_leak", packet["blocking_reasons"])
+
+    def test_packet_propagates_live_result_provider_auth_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            jsonl = root / "codex.jsonl"
+            last = root / "last.txt"
+            entry = root / "entry.json"
+            _write_jsonl(
+                jsonl,
+                [
+                    {
+                        "type": "mcp_tool_result",
+                        "result": {"structuredContent": _delegate_packet()},
+                    }
+                ],
+            )
+            last.write_text("ok\n", encoding="utf-8")
+            entry.write_text("{}", encoding="utf-8")
+
+            packet = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=0,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+                live_result={
+                    "status": "error",
+                    "machine_error_code": errors.PROVIDER_AUTH_FAILED,
+                    "provider_called": True,
+                    "result_available": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                },
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], errors.PROVIDER_AUTH_FAILED)
+        self.assertFalse(packet["live_result_available"])
+        self.assertIn("live_result_unavailable", packet["blocking_reasons"])
+
+    def test_packet_classifies_codex_exec_and_delegate_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            jsonl = root / "codex.jsonl"
+            last = root / "last.txt"
+            entry = root / "entry.json"
+            _write_jsonl(jsonl, [{"type": "assistant_message", "role": "assistant"}])
+            last.write_text("ok\n", encoding="utf-8")
+            entry.write_text("{}", encoding="utf-8")
+
+            codex_failed = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=7,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+            )
+            missing_delegate = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=0,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+            )
+            codex_missing = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=None,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                codex_executable=False,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+            )
+
+        self.assertEqual(codex_failed["machine_error_code"], WBP_DIP_TOOL_CODEX_EXEC_FAILED)
+        self.assertIn("codex_exec_failed", codex_failed["blocking_reasons"])
+        self.assertEqual(
+            missing_delegate["machine_error_code"],
+            WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
+        )
+        self.assertIn("delegate_to_dip_not_proven", missing_delegate["blocking_reasons"])
+        self.assertEqual(
+            codex_missing["machine_error_code"],
+            WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE,
+        )
+        self.assertIn("codex_binary_not_executable", codex_missing["blocking_reasons"])
+
     def test_packet_rejects_fallback_or_local_imitation(self) -> None:
         for unsafe_field in ("fallback_used", "local_imitation_used"):
             with self.subTest(unsafe_field=unsafe_field):
@@ -302,6 +451,132 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["planned_sandbox"], DEFAULT_SANDBOX)
         self.assertFalse(packet_contains_text(packet, TASK))
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
+    def test_main_json_operator_path_returns_working_result_packet(
+        self,
+        subprocess_run_mock: mock.Mock,
+        request_live_result_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            codex_bin = root / "codex"
+            codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex_bin.chmod(0o755)
+            proof_dir = root / "proof"
+
+            def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
+                stdout = kwargs["stdout"]
+                stdout.write(
+                    json.dumps(
+                        {
+                            "type": "mcp_tool_result",
+                            "result": {"structuredContent": _delegate_packet()},
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+                return SimpleNamespace(returncode=0)
+
+            subprocess_run_mock.side_effect = fake_run
+            request_live_result_mock.return_value = _live_result(
+                result_text="DIP operator path returned a useful result."
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--json",
+                        "--codex-bin",
+                        str(codex_bin),
+                        "--profile-dir",
+                        str(root / "profile"),
+                        "--proof-dir",
+                        str(proof_dir),
+                        "--cd",
+                        str(Path(__file__).resolve().parents[1]),
+                        TASK,
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        packet = json.loads(stdout.getvalue())
+        self.assertEqual(packet["packet_kind"], "wbp_dip_working_tool_run")
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertTrue(packet["custom_codex_exec_invoked"])
+        self.assertTrue(packet["delegate_to_dip_tool_call_observed"])
+        self.assertTrue(packet["delegate_to_dip_proven"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertTrue(packet["live_result_available"])
+        self.assertTrue(packet["live_result_provider_called"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["live_result_route_id_recorded"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["prompt_text_recorded"])
+        self.assertFalse(packet["command_argv_recorded"])
+        self.assertFalse(packet["codex_stdout_recorded"])
+        self.assertFalse(packet["codex_stderr_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertGreater(packet["live_result_text_length"], 0)
+        for path in packet["changed_files"]:
+            self.assertTrue(str(path).startswith(str(proof_dir)))
+        self.assertFalse(packet_contains_text(packet, TASK))
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
+    def test_main_plain_operator_path_prints_useful_result(
+        self,
+        subprocess_run_mock: mock.Mock,
+        request_live_result_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            codex_bin = root / "codex"
+            codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex_bin.chmod(0o755)
+
+            def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
+                stdout = kwargs["stdout"]
+                stdout.write(
+                    json.dumps(
+                        {
+                            "type": "mcp_tool_result",
+                            "result": {"structuredContent": _delegate_packet()},
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+                return SimpleNamespace(returncode=0)
+
+            subprocess_run_mock.side_effect = fake_run
+            request_live_result_mock.return_value = _live_result(
+                result_text="DIP plain output is useful."
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--codex-bin",
+                        str(codex_bin),
+                        "--profile-dir",
+                        str(root / "profile"),
+                        "--proof-dir",
+                        str(root / "proof"),
+                        "--cd",
+                        str(Path(__file__).resolve().parents[1]),
+                        TASK,
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "DIP plain output is useful.\n")
+
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
@@ -365,6 +640,79 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(result["route_id_recorded"])
         request_json_mock.assert_called_once()
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_reports_missing_alias_context(
+        self,
+        request_json_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+
+            result = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["machine_error_code"], "FAIL_ALIAS_CONTEXT_MISSING")
+        self.assertEqual(result["route_status"], "alias_context_missing")
+        self.assertFalse(result["provider_called"])
+        request_json_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_reports_provider_auth_failure(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=401,
+            latency_ms=12,
+            payload={"error": {"code": "unauthorized"}},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["machine_error_code"], errors.PROVIDER_AUTH_FAILED)
+        self.assertEqual(result["operator_action"], "user_action")
+        self.assertTrue(result["provider_called"])
+        self.assertEqual(result["upstream_status_code"], 401)
+
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
     def test_request_live_result_prefers_runtime_http_bridge(
@@ -408,6 +756,65 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["source"], "runtime_context_http_bridge")
         self.assertTrue(result["bridge_attempted"])
         self.assertEqual(result["result_text"], "Bridge result from WBP.")
+        find_route_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_tries_file_bridge_before_direct_provider(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        file_bridge_mock: mock.Mock,
+    ) -> None:
+        request_json_mock.side_effect = RuntimeErrorInfo(
+            "Provider network request failed: refused",
+            machine_error_code=errors.PROVIDER_NETWORK_FAILED,
+            operator_action="retry",
+        )
+        file_bridge_mock.return_value = _live_result(
+            source="runtime_context_file_bridge",
+            result_text="File bridge result from WBP.",
+            provider_recorded=False,
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "method": "POST",
+                            "model": "route-ok",
+                            "response_text_field": "output_text",
+                            "url_candidates": ["http://127.0.0.1:50555/v1/responses"],
+                        },
+                        "deepseek_live_format_check_file_bridge": {
+                            "enabled": True,
+                            "request_dir": str(profile / "requests"),
+                            "response_dir": str(profile / "responses"),
+                            "response_text_field": "output_text",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["source"], "runtime_context_file_bridge")
+        self.assertTrue(result["bridge_attempted"])
+        self.assertTrue(result["file_bridge_attempted"])
+        self.assertEqual(result["result_text"], "File bridge result from WBP.")
         find_route_mock.assert_not_called()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")

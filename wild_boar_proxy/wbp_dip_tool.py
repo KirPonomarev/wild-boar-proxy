@@ -16,7 +16,7 @@ import time
 from typing import Any
 
 from .core import packets
-from .external_models import transforms
+from .external_models import errors, transforms
 from .external_models.http_client import request_json
 from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
@@ -34,6 +34,7 @@ DEFAULT_CODEX_JSONL_FILENAME = "codex-exec.jsonl"
 DEFAULT_LAST_MESSAGE_FILENAME = "last-message.txt"
 DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
+DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS = 2.0
 DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
 
 WBP_DIP_TOOL_OK = "OK"
@@ -45,6 +46,9 @@ WBP_DIP_TOOL_DELEGATE_NOT_PROVEN = "WBP_DIP_TOOL_DELEGATE_NOT_PROVEN"
 WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
 WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
+WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT = "WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT"
+WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
+WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 
 
 def _utc_stamp() -> str:
@@ -332,6 +336,18 @@ def _runtime_route_for_alias(
     return route_text, True, "ok"
 
 
+def _route_status_machine_error_code(route_status: str) -> str:
+    if route_status == "alias_context_missing":
+        return "FAIL_ALIAS_CONTEXT_MISSING"
+    if route_status == "alias_not_in_context":
+        return WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT
+    if route_status == "route_context_missing":
+        return WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING
+    if route_status == "route_not_allowed":
+        return WBP_DIP_TOOL_ROUTE_NOT_ALLOWED
+    return WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
+
+
 def _build_live_result_prompt(*, task: str, expected_alias: str) -> str:
     return (
         f"You are {expected_alias} called through the WBP bounded live-result path. "
@@ -478,7 +494,7 @@ def _runtime_file_bridge_result(
     except OSError:
         return None
     response_field = _safe_text(bridge.get("response_text_field"), limit=80) or "output_text"
-    deadline = time.monotonic() + min(float(timeout_seconds), 8.0)
+    deadline = time.monotonic() + min(float(timeout_seconds), DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS)
     while time.monotonic() < deadline:
         try:
             response_payload = json.loads(response_file.read_text(encoding="utf-8"))
@@ -530,13 +546,17 @@ def request_live_result(
     http_bridge_configured = _is_enabled_mapping(
         context.get("deepseek_live_format_check_bridge")
     )
+    file_bridge_configured = _is_enabled_mapping(
+        context.get("deepseek_live_format_check_file_bridge")
+    )
     base: dict[str, Any] = {
         "status": "error",
-        "machine_error_code": WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
+        "machine_error_code": _route_status_machine_error_code(route_status),
         "provider_called": False,
         "result_available": False,
         "source": "external_models_direct",
         "bridge_attempted": False,
+        "file_bridge_attempted": False,
         "route_allowed": route_allowed,
         "route_status": route_status,
         "route_id_sha256": _sha256_text(route_id) if route_id else "",
@@ -550,7 +570,7 @@ def request_live_result(
         return base
 
     prompt = _build_live_result_prompt(task=task, expected_alias=expected_alias)
-    base["bridge_attempted"] = http_bridge_configured
+    base["bridge_attempted"] = http_bridge_configured or file_bridge_configured
     http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
         context=context,
         prompt=prompt,
@@ -558,7 +578,8 @@ def request_live_result(
     )
     if http_bridge_result is not None:
         return {**base, **http_bridge_result}
-    if permission_style_bridge_failure:
+    if file_bridge_configured:
+        base["file_bridge_attempted"] = True
         file_bridge_result = _runtime_file_bridge_result(
             context=context,
             prompt=prompt,
@@ -566,6 +587,8 @@ def request_live_result(
         )
         if file_bridge_result is not None:
             return {**base, **file_bridge_result}
+    elif permission_style_bridge_failure:
+        base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
 
     try:
         paths = ExternalModelsPaths.from_env()
@@ -585,7 +608,13 @@ def request_live_result(
         )
         base["provider_called"] = True
         base["latency_ms"] = response.latency_ms
+        if response.status_code in (401, 403):
+            base["machine_error_code"] = errors.PROVIDER_AUTH_FAILED
+            base["operator_action"] = "user_action"
+            base["upstream_status_code"] = response.status_code
+            return base
         if response.status_code != 200:
+            base["machine_error_code"] = errors.INVALID_UPSTREAM_RESPONSE
             base["upstream_status_code"] = response.status_code
             return base
         response_text, response_metadata = transforms.extract_check_response(
@@ -654,6 +683,14 @@ def build_wbp_dip_tool_packet(
         blocking_reasons.append("delegate_to_dip_not_proven")
 
     live_result_data = dict(live_result or {})
+    live_result_error_code = _safe_text(
+        live_result_data.get("machine_error_code"),
+        limit=160,
+    )
+    live_result_declared_unsafe = bool(
+        live_result_data.get("raw_backend_details_exposed") is True
+        or live_result_data.get("secret_value_exposed") is True
+    )
     live_result_available = bool(
         live_result_data.get("status") == "ok"
         and live_result_data.get("machine_error_code") == "OK"
@@ -690,7 +727,7 @@ def build_wbp_dip_tool_packet(
     unsafe = packets.command_packet_has_secret_leak(
         unsafe_payload,
         secret_values=list(secret_values),
-    ) or direct_live_result_secret_leak
+    ) or direct_live_result_secret_leak or live_result_declared_unsafe
     if unsafe:
         live_result_text = ""
         live_result_available = False
@@ -699,7 +736,7 @@ def build_wbp_dip_tool_packet(
     if unsafe:
         machine_error_code = (
             WBP_DIP_TOOL_LIVE_RESULT_UNSAFE
-            if live_result_data.get("result_available") is True
+            if live_result_data.get("result_available") is True or live_result_declared_unsafe
             else WBP_DIP_TOOL_UNSAFE_PACKET
         )
     elif not task:
@@ -711,7 +748,7 @@ def build_wbp_dip_tool_packet(
     elif codex_exit_code != 0:
         machine_error_code = WBP_DIP_TOOL_CODEX_EXEC_FAILED
     elif require_live_result and delegate_ok and not live_result_available:
-        machine_error_code = WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
+        machine_error_code = live_result_error_code or WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
     elif delegate_ok:
         machine_error_code = WBP_DIP_TOOL_OK
     else:
@@ -755,11 +792,11 @@ def build_wbp_dip_tool_packet(
         "live_result_available": live_result_available,
         "live_result_provider_called": live_result_data.get("provider_called") is True,
         "live_result_bridge_attempted": live_result_data.get("bridge_attempted") is True,
-        "live_result_source": _safe_text(live_result_data.get("source"), limit=120),
-        "live_result_machine_error_code": _safe_text(
-            live_result_data.get("machine_error_code"),
-            limit=160,
+        "live_result_file_bridge_attempted": (
+            live_result_data.get("file_bridge_attempted") is True
         ),
+        "live_result_source": _safe_text(live_result_data.get("source"), limit=120),
+        "live_result_machine_error_code": live_result_error_code,
         "live_result_route_allowed": live_result_data.get("route_allowed") is True,
         "live_result_route_status": _safe_text(live_result_data.get("route_status"), limit=120),
         "live_result_route_id_recorded": False,
@@ -879,12 +916,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     repo_root = Path(args.repo_root).expanduser().resolve()
     codex_bin = Path(args.codex_bin).expanduser() if args.codex_bin else default_codex_bin()
+    model = _safe_text(args.model, limit=80) or DEFAULT_MODEL
+    sandbox = _safe_text(args.sandbox, limit=80) or DEFAULT_SANDBOX
     prompt = build_delegate_prompt(task=task, expected_alias=expected_alias)
     argv_to_run = build_codex_exec_argv(
         codex_bin=codex_bin,
         repo_root=repo_root,
-        model=_safe_text(args.model, limit=80) or DEFAULT_MODEL,
-        sandbox=_safe_text(args.sandbox, limit=80) or DEFAULT_SANDBOX,
+        model=model,
+        sandbox=sandbox,
         prompt=prompt,
         output_jsonl=output_jsonl,
         output_last_message=output_last_message,
@@ -912,8 +951,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         dry_packet.update(
             {
                 "planned_codex_exec": True,
-                "planned_sandbox": _safe_text(args.sandbox, limit=80) or DEFAULT_SANDBOX,
-                "planned_model": _safe_text(args.model, limit=80) or DEFAULT_MODEL,
+                "planned_sandbox": sandbox,
+                "planned_model": model,
                 "planned_prompt_sha256": _sha256_text(prompt),
             }
         )
@@ -940,7 +979,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cwd=str(repo_root),
                 env=env,
                 stdout=stdout_handle,
-                stderr=subprocess.DEVNULL if args.json else None,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 check=False,
             )
