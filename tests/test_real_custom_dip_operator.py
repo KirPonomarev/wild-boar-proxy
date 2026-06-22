@@ -14,7 +14,7 @@ from unittest import mock
 
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import real_custom_dip_operator as operator
-from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_PROBE
+from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
 from wild_boar_proxy.runtime import RuntimePaths
@@ -221,6 +221,24 @@ def _operator_work_packet(
         packet_kind=operator.REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND,
         **overrides,
     )
+
+
+def _acceptance_packet(root: Path, *, run_count: int = 5) -> dict[str, object]:
+    return operator.build_real_custom_dip_operator_acceptance_packet(
+        prompt_text=PROMPT,
+        requested_runs=run_count,
+        preflight_packet=_preflight_ready_packet(),
+        work_packets=[
+            _operator_work_packet(root / "acceptance-evidence", run_index)
+            for run_index in range(1, run_count + 1)
+        ],
+        secret_values=[PROMPT, ROUTE_ID],
+    )
+
+
+def _write_acceptance_packet_file(path: Path, packet: dict[str, object]) -> Path:
+    _write_json(path, packet)
+    return path
 
 
 class RealCustomDipOperatorTests(unittest.TestCase):
@@ -500,6 +518,14 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertFalse(packet["local_imitation_used"])
             self.assertFalse(packet["native_codex_subagent_used_as_dip"])
             self.assertTrue(packet["acceptance_is_not_dip_work_prerequisite"])
+            self.assertTrue(packet["acceptance_packet_file_written"])
+            acceptance_packet_file = (
+                root
+                / "acceptance-proof"
+                / "real-custom-dip-operator-acceptance.packet.json"
+            )
+            self.assertTrue(acceptance_packet_file.is_file())
+            self.assertIn(str(acceptance_packet_file), packet["changed_files"])
             self.assertEqual(len(packet["evidence_root_digests"]), 5)
             self.assertEqual(len(packet["run_summaries"]), 5)
             serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
@@ -704,6 +730,265 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 [],
             )
 
+    def test_status_reads_acceptance_proof_file_as_ready_without_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            proof_file = _write_acceptance_packet_file(
+                root / "real-custom-dip-operator-acceptance.packet.json",
+                _acceptance_packet(root),
+            )
+            with mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+            ) as work_mock, mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_acceptance_command",
+            ) as acceptance_mock:
+                packet = operator.run_dip_operator_status_command(
+                    paths=paths,
+                    proof_file=str(proof_file),
+                    max_age_seconds=3600,
+                )
+
+            self.assertFalse(work_mock.called)
+            self.assertFalse(acceptance_mock.called)
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(
+                packet["packet_kind"],
+                operator.DIP_OPERATOR_READINESS_PACKET_KIND,
+            )
+            self.assertTrue(packet["dip_operator_ready"])
+            self.assertEqual(packet["operator_status"], "ready")
+            self.assertTrue(packet["last_acceptance_packet_found"])
+            self.assertTrue(packet["last_acceptance_packet_valid"])
+            self.assertTrue(packet["last_acceptance_passed"])
+            self.assertEqual(packet["last_acceptance_run_count"], 5)
+            self.assertEqual(packet["required_acceptance_run_count"], 5)
+            self.assertTrue(packet["last_acceptance_api_lane_called"])
+            self.assertTrue(packet["last_acceptance_delivery_proven"])
+            self.assertTrue(packet["last_acceptance_evidence_roots_distinct"])
+            self.assertTrue(packet["last_acceptance_evidence_files_present"])
+            self.assertTrue(packet["last_acceptance_fresh"])
+            self.assertFalse(packet["status_command_dispatches"])
+            self.assertFalse(packet["status_command_runs_acceptance"])
+            self.assertFalse(packet["status_command_reads_audit_history"])
+            self.assertFalse(packet["product_ready"])
+            self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(PROMPT, serialized)
+            self.assertNotIn(ROUTE_ID, serialized)
+            self.assertNotIn(str(proof_file), serialized)
+            self.assertEqual(
+                packets.inspect_command_packet_semantics(
+                    packet,
+                    secret_values=[PROMPT, ROUTE_ID],
+                ),
+                [],
+            )
+
+    def test_status_finds_latest_managed_acceptance_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            old_packet = _acceptance_packet(root / "old")
+            new_packet = _acceptance_packet(root / "new")
+            old_file = _write_acceptance_packet_file(
+                paths.managed_dir
+                / "direct-provider-positive-proof"
+                / "operator-dip-acceptance-old"
+                / "real-custom-dip-operator-acceptance.packet.json",
+                old_packet,
+            )
+            new_file = _write_acceptance_packet_file(
+                paths.managed_dir
+                / "direct-provider-positive-proof"
+                / "operator-dip-acceptance-new"
+                / "real-custom-dip-operator-acceptance.packet.json",
+                new_packet,
+            )
+            os.utime(old_file, (old_file.stat().st_atime - 100, old_file.stat().st_mtime - 100))
+
+            packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                max_age_seconds=3600,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["dip_operator_ready"])
+            self.assertEqual(
+                packet["last_acceptance_packet_path_digest"],
+                operator._sha256_text(str(new_file.expanduser().resolve(strict=False))),
+            )
+
+    def test_status_missing_acceptance_packet_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            packet = operator.run_dip_operator_status_command(paths=paths)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.DIP_OPERATOR_READINESS_PROOF_MISSING,
+            )
+            self.assertFalse(packet["dip_operator_ready"])
+            self.assertEqual(packet["operator_status"], "proof_missing")
+            self.assertIn("acceptance_packet_missing", packet["blocking_reasons"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_status_latest_search_ignores_disappearing_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            proof_file = _write_acceptance_packet_file(
+                paths.managed_dir
+                / "direct-provider-positive-proof"
+                / "operator-dip-acceptance-vanishing"
+                / "real-custom-dip-operator-acceptance.packet.json",
+                _acceptance_packet(root),
+            )
+            real_stat = Path.stat
+
+            def fake_stat(path: Path, *args: object, **kwargs: object) -> os.stat_result:
+                if path == proof_file:
+                    raise FileNotFoundError(str(path))
+                return real_stat(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "stat", fake_stat):
+                packet = operator.run_dip_operator_status_command(paths=paths)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.DIP_OPERATOR_READINESS_PROOF_MISSING,
+            )
+            self.assertFalse(packet["dip_operator_ready"])
+            self.assertIn("acceptance_packet_missing", packet["blocking_reasons"])
+
+    def test_status_invalid_json_and_wrong_kind_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            invalid_file = root / "invalid.json"
+            invalid_file.write_text("{not-json\n", encoding="utf-8")
+
+            invalid_packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(invalid_file),
+            )
+
+            self.assertEqual(invalid_packet["status"], "error")
+            self.assertFalse(invalid_packet["dip_operator_ready"])
+            self.assertIn(
+                "acceptance_packet_invalid_json",
+                invalid_packet["blocking_reasons"],
+            )
+
+            wrong_kind_file = _write_acceptance_packet_file(
+                root / "wrong-kind.json",
+                {
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "wrong kind",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                    "liveness": "not_applicable",
+                    "severity": "recoverable",
+                    "operator_action": "none",
+                    "effect": "read",
+                    "packet_kind": "wrong_kind",
+                },
+            )
+            wrong_kind_packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(wrong_kind_file),
+            )
+
+            self.assertEqual(wrong_kind_packet["status"], "error")
+            self.assertFalse(wrong_kind_packet["dip_operator_ready"])
+            self.assertIn(
+                "acceptance_packet_wrong_kind",
+                wrong_kind_packet["blocking_reasons"],
+            )
+
+    def test_status_stale_acceptance_is_historical_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            proof_file = _write_acceptance_packet_file(
+                root / "stale.json",
+                _acceptance_packet(root),
+            )
+            old_time = proof_file.stat().st_mtime - 100
+            os.utime(proof_file, (old_time, old_time))
+
+            packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(proof_file),
+                max_age_seconds=1,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(packet["machine_error_code"], operator.DIP_OPERATOR_READINESS_STALE)
+            self.assertFalse(packet["dip_operator_ready"])
+            self.assertEqual(packet["operator_status"], "stale")
+            self.assertTrue(packet["historical_acceptance_passed"])
+            self.assertFalse(packet["last_acceptance_fresh"])
+            self.assertIn("acceptance_packet_stale", packet["blocking_reasons"])
+
+    def test_status_blocks_missing_evidence_and_unsafe_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            missing_evidence_packet = _acceptance_packet(root / "missing")
+            first_changed_file = Path(missing_evidence_packet["changed_files"][0])
+            first_changed_file.unlink()
+            missing_file = _write_acceptance_packet_file(
+                root / "missing-evidence.json",
+                missing_evidence_packet,
+            )
+
+            packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(missing_file),
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["dip_operator_ready"])
+            self.assertIn(
+                "acceptance_evidence_files_missing",
+                packet["blocking_reasons"],
+            )
+
+            unsafe_packet = _acceptance_packet(root / "unsafe")
+            unsafe_packet["product_ready"] = True
+            unsafe_packet["raw_prompt_recorded"] = True
+            unsafe_packet["leaked_prompt"] = PROMPT
+            unsafe_file = _write_acceptance_packet_file(root / "unsafe.json", unsafe_packet)
+
+            unsafe_status = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(unsafe_file),
+            )
+
+            self.assertEqual(unsafe_status["status"], "error")
+            self.assertEqual(
+                unsafe_status["machine_error_code"],
+                operator.DIP_OPERATOR_READINESS_UNSAFE,
+            )
+            self.assertFalse(unsafe_status["dip_operator_ready"])
+            self.assertEqual(unsafe_status["operator_status"], "unsafe")
+            self.assertIn("product_ready_claimed", unsafe_status["blocking_reasons"])
+            self.assertIn(
+                "unsafe_secret_or_raw_backend_claim",
+                unsafe_status["blocking_reasons"],
+            )
+
     def test_cli_effect_and_dispatch_for_dip_commands(self) -> None:
         parser = cli_mod.build_parser()
         preflight_args = parser.parse_args(
@@ -716,9 +1001,11 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         acceptance_default_args = parser.parse_args(
             ["dip", "acceptance", "--prompt", PROMPT, "--json"]
         )
+        status_args = parser.parse_args(["dip", "status", "--json"])
         self.assertEqual(cli_mod.command_effect_from_args(preflight_args), EFFECT_PROBE)
         self.assertEqual(cli_mod.command_effect_from_args(work_args), EFFECT_MUTATE)
         self.assertEqual(cli_mod.command_effect_from_args(acceptance_args), EFFECT_MUTATE)
+        self.assertEqual(cli_mod.command_effect_from_args(status_args), EFFECT_READ)
         self.assertEqual(
             acceptance_default_args.runs,
             operator.ACCEPTANCE_RUNS_DEFAULT,
@@ -775,6 +1062,31 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         self.assertTrue(acceptance_mock.called)
         self.assertEqual(acceptance_mock.call_args.kwargs["prompt_text"], PROMPT)
         self.assertEqual(acceptance_mock.call_args.kwargs["runs"], 2)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
+
+        with mock.patch.object(
+            cli_mod,
+            "run_dip_operator_status_command",
+            return_value={"status": "ok", "exit_code": 0},
+        ) as status_mock:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "dip",
+                        "status",
+                        "--proof-file",
+                        "/tmp/proof.json",
+                        "--max-age-seconds",
+                        "42",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(status_mock.called)
+        self.assertEqual(status_mock.call_args.kwargs["proof_file"], "/tmp/proof.json")
+        self.assertEqual(status_mock.call_args.kwargs["max_age_seconds"], 42)
         self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
 
 

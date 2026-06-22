@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import hashlib
+import json
 import os
 from pathlib import Path
+import time
 from typing import Any
 
-from .command_effects import EFFECT_MUTATE, EFFECT_PROBE
+from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ
 from .core import packets
 from .natural_intent_contract import (
     INTENT_PASS,
@@ -35,6 +37,7 @@ from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_PACKET_KIND = "wbp_real_custom_dip_operator_preflight"
 REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND = "wbp_real_custom_dip_operator_work"
 REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND = "wbp_real_custom_dip_operator_acceptance"
+DIP_OPERATOR_READINESS_PACKET_KIND = "wbp_dip_operator_readiness"
 
 REAL_CUSTOM_DIP_OPERATOR_OK = "OK"
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_BLOCKED = (
@@ -45,10 +48,15 @@ REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED = (
     "WBP_REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED"
 )
 REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET = "WBP_REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET"
+DIP_OPERATOR_READINESS_BLOCKED = "WBP_DIP_OPERATOR_READINESS_BLOCKED"
+DIP_OPERATOR_READINESS_PROOF_MISSING = "WBP_DIP_OPERATOR_READINESS_PROOF_MISSING"
+DIP_OPERATOR_READINESS_STALE = "WBP_DIP_OPERATOR_READINESS_STALE"
+DIP_OPERATOR_READINESS_UNSAFE = "WBP_DIP_OPERATOR_READINESS_UNSAFE"
 
 ACCEPTANCE_RUNS_DEFAULT = 5
 ACCEPTANCE_RUNS_MIN = 2
 ACCEPTANCE_RUNS_MAX = 10
+DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT = 24 * 60 * 60
 
 OPERATOR_STATUS_READY = "ready"
 OPERATOR_STATUS_BLOCKED = "blocked"
@@ -160,6 +168,37 @@ def _acceptance_run_proof_dir(base_proof_root: Path, run_number: int) -> Path:
     return base_proof_root / f"run-{run_number:02d}"
 
 
+def _acceptance_packet_output_path(base_proof_root: Path) -> Path:
+    return base_proof_root / "real-custom-dip-operator-acceptance.packet.json"
+
+
+def _acceptance_packet_search_roots(paths: RuntimePaths) -> list[Path]:
+    return [
+        paths.managed_dir / "codex-runner" / "real-custom-dip-acceptance",
+        paths.managed_dir / "direct-provider-positive-proof",
+    ]
+
+
+def _find_latest_acceptance_packet(paths: RuntimePaths) -> Path | None:
+    candidates: list[tuple[float, Path]] = []
+    for root in _acceptance_packet_search_roots(paths):
+        try:
+            if root.is_dir():
+                for path in root.glob(
+                    "**/real-custom-dip-operator-acceptance.packet.json"
+                ):
+                    try:
+                        if path.is_file():
+                            candidates.append((path.stat().st_mtime, path))
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 def _evidence_root_from_packet(packet: Mapping[str, Any]) -> str:
     changed_files = _safe_changed_files(packet.get("changed_files"))
     if not changed_files:
@@ -170,6 +209,98 @@ def _evidence_root_from_packet(packet: Mapping[str, Any]) -> str:
 def _changed_files_present(packet: Mapping[str, Any]) -> bool:
     changed_files = _safe_changed_files(packet.get("changed_files"))
     return bool(changed_files) and all(Path(path).expanduser().is_file() for path in changed_files)
+
+
+def _packet_file_age_seconds(path: Path, now: float | None = None) -> int:
+    try:
+        reference = time.time() if now is None else now
+        return max(0, int(reference - path.stat().st_mtime))
+    except OSError:
+        return 0
+
+
+def _load_json_packet(path: Path) -> tuple[dict[str, Any] | None, str]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None, "read_error"
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "invalid_json"
+    if not isinstance(loaded, dict):
+        return None, "json_not_object"
+    return loaded, ""
+
+
+def _persist_acceptance_packet(
+    packet: Mapping[str, Any],
+    *,
+    base_proof_root: Path,
+) -> dict[str, Any]:
+    packet_path = _acceptance_packet_output_path(base_proof_root)
+    changed_files = _safe_changed_files(packet.get("changed_files"))
+    packet_path_text = str(packet_path)
+    if packet_path_text not in changed_files:
+        changed_files.append(packet_path_text)
+    persisted = dict(packet)
+    persisted.update(
+        {
+            "changed_files": changed_files,
+            "acceptance_packet_file_written": True,
+            "acceptance_packet_path_digest": _sha256_text(
+                str(packet_path.expanduser().resolve(strict=False))
+            ),
+            "acceptance_packet_path_recorded": False,
+        }
+    )
+    packet_path.parent.mkdir(parents=True, exist_ok=True)
+    packet_path.write_text(
+        json.dumps(persisted, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return persisted
+
+
+def _with_persisted_acceptance_packet(
+    packet: Mapping[str, Any],
+    *,
+    base_proof_root: Path,
+) -> dict[str, Any]:
+    try:
+        return _persist_acceptance_packet(packet, base_proof_root=base_proof_root)
+    except OSError as exc:
+        blocking_reasons = sorted(
+            set(
+                _safe_reasons(packet.get("blocking_reasons"))
+                + ["acceptance_packet_write_failed"]
+            )
+        )
+        failed = dict(packet)
+        failed.update(
+            {
+                "status": "error",
+                "exit_code": 1,
+                "human_message": (
+                    "WBP DIP operator acceptance gate is BLOCKED; "
+                    "top-level acceptance packet was not written."
+                ),
+                "machine_error_code": REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED,
+                "next_action": "stop",
+                "operator_action": "stop",
+                "operator_status": OPERATOR_STATUS_BLOCKED,
+                "acceptance_passed": False,
+                "blocked": True,
+                "acceptance_packet_file_written": False,
+                "acceptance_packet_write_error": _safe_text(
+                    type(exc).__name__,
+                    limit=80,
+                ),
+                "reason_codes": blocking_reasons,
+                "blocking_reasons": blocking_reasons,
+            }
+        )
+        return failed
 
 
 def _normalize_acceptance_runs(value: object) -> int:
@@ -987,12 +1118,15 @@ def run_real_custom_dip_operator_acceptance_command(
     secret_values.extend(_runtime_secret_values(runtime_context))
     base_proof_root = _acceptance_proof_root(paths, proof_dir)
     if not (ACCEPTANCE_RUNS_MIN <= selected_runs <= ACCEPTANCE_RUNS_MAX):
-        return build_real_custom_dip_operator_acceptance_packet(
-            prompt_text=prompt,
-            requested_runs=selected_runs,
-            preflight_packet=None,
-            work_packets=[],
-            secret_values=secret_values,
+        return _with_persisted_acceptance_packet(
+            build_real_custom_dip_operator_acceptance_packet(
+                prompt_text=prompt,
+                requested_runs=selected_runs,
+                preflight_packet=None,
+                work_packets=[],
+                secret_values=secret_values,
+            ),
+            base_proof_root=base_proof_root,
         )
     preflight = build_real_custom_dip_operator_preflight_packet(
         paths=paths,
@@ -1021,10 +1155,295 @@ def run_real_custom_dip_operator_acceptance_command(
             work_packets.append(work_packet)
             if _acceptance_run_failures(run_index, work_packet):
                 break
-    return build_real_custom_dip_operator_acceptance_packet(
-        prompt_text=prompt,
-        requested_runs=selected_runs,
-        preflight_packet=preflight,
-        work_packets=work_packets,
+    return _with_persisted_acceptance_packet(
+        build_real_custom_dip_operator_acceptance_packet(
+            prompt_text=prompt,
+            requested_runs=selected_runs,
+            preflight_packet=preflight,
+            work_packets=work_packets,
+            secret_values=secret_values,
+        ),
+        base_proof_root=base_proof_root,
+    )
+
+
+def _readiness_operator_status(
+    *,
+    ready: bool,
+    proof_found: bool,
+    stale: bool,
+    unsafe: bool,
+) -> str:
+    if ready:
+        return OPERATOR_STATUS_READY
+    if not proof_found:
+        return "proof_missing"
+    if unsafe:
+        return "unsafe"
+    if stale:
+        return "stale"
+    return OPERATOR_STATUS_BLOCKED
+
+
+def _readiness_machine_error_code(
+    *,
+    ready: bool,
+    proof_found: bool,
+    stale: bool,
+    unsafe: bool,
+) -> str:
+    if ready:
+        return REAL_CUSTOM_DIP_OPERATOR_OK
+    if not proof_found:
+        return DIP_OPERATOR_READINESS_PROOF_MISSING
+    if unsafe:
+        return DIP_OPERATOR_READINESS_UNSAFE
+    if stale:
+        return DIP_OPERATOR_READINESS_STALE
+    return DIP_OPERATOR_READINESS_BLOCKED
+
+
+def _acceptance_raw_or_secret_claim_present(packet: Mapping[str, Any]) -> bool:
+    unsafe_flag_names = (
+        "raw_prompt_recorded",
+        "prompt_text_recorded",
+        "natural_phrase_recorded",
+        "raw_route_id_recorded",
+        "selected_api_route_id_recorded",
+        "raw_provider_response_recorded",
+        "provider_response_text_recorded",
+        "provider_response_preview_recorded",
+        "raw_backend_details_exposed",
+        "secret_value_exposed",
+    )
+    return any(packet.get(flag_name) is True for flag_name in unsafe_flag_names)
+
+
+def _acceptance_raw_material_present(value: object, *, key: str = "") -> bool:
+    normalized_key = key.strip().lower()
+    unsafe_key_tokens = (
+        "leaked_prompt",
+        "raw_prompt",
+        "prompt_text",
+        "natural_phrase",
+        "leaked_route",
+        "raw_route_id",
+        "selected_api_route_id",
+        "provider_response_text",
+        "provider_response_preview",
+        "raw_provider_response",
+        "raw_backend_details",
+    )
+    unsafe_context = any(token in normalized_key for token in unsafe_key_tokens)
+    if isinstance(value, Mapping):
+        return any(
+            _acceptance_raw_material_present(item_value, key=str(item_key))
+            for item_key, item_value in value.items()
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return any(
+            _acceptance_raw_material_present(item, key=key)
+            for item in value
+        )
+    return unsafe_context and isinstance(value, str) and bool(value)
+
+
+def run_dip_operator_status_command(
+    *,
+    paths: RuntimePaths,
+    proof_file: str | None = None,
+    max_age_seconds: int | None = DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+) -> dict[str, Any]:
+    context_path = runtime_context_path(paths=paths)
+    runtime_context, _context_metadata = load_runtime_context_packet(context_path)
+    secret_values = _runtime_secret_values(runtime_context)
+    selected_path = (
+        Path(proof_file).expanduser()
+        if proof_file
+        else _find_latest_acceptance_packet(paths)
+    )
+    proof_found = bool(selected_path and selected_path.is_file())
+    packet: dict[str, Any] = {}
+    load_error = ""
+    if proof_found and selected_path is not None:
+        loaded_packet, load_error = _load_json_packet(selected_path)
+        if loaded_packet is not None:
+            packet = loaded_packet
+
+    age_seconds = (
+        _packet_file_age_seconds(selected_path)
+        if proof_found and selected_path is not None
+        else 0
+    )
+    max_age_valid = bool(
+        max_age_seconds is None
+        or (
+            isinstance(max_age_seconds, int)
+            and not isinstance(max_age_seconds, bool)
+            and max_age_seconds > 0
+        )
+    )
+    fresh = bool(max_age_seconds is None or (max_age_valid and age_seconds <= max_age_seconds))
+    semantic_violations = (
+        packets.inspect_command_packet_semantics(packet, secret_values=secret_values)
+        if packet
+        else []
+    )
+    changed_files = _safe_changed_files(packet.get("changed_files")) if packet else []
+    evidence_files_present = bool(changed_files) and all(
+        Path(changed_file).expanduser().is_file() for changed_file in changed_files
+    )
+    unsafe = bool(
+        packet
+        and (
+            packets.command_packet_has_secret_leak(
+                packet,
+                secret_values=secret_values,
+            )
+            or _acceptance_raw_or_secret_claim_present(packet)
+            or _acceptance_raw_material_present(packet)
+        )
+    )
+
+    blocking_reasons: list[str] = []
+    if not proof_found:
+        blocking_reasons.append("acceptance_packet_missing")
+    elif load_error:
+        reason = (
+            "acceptance_packet_invalid_json"
+            if load_error in {"invalid_json", "json_not_object"}
+            else "acceptance_packet_missing"
+        )
+        blocking_reasons.append(reason)
+    if packet and semantic_violations:
+        blocking_reasons.append("acceptance_packet_semantic_violation")
+    if packet and packet.get("packet_kind") != REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND:
+        blocking_reasons.append("acceptance_packet_wrong_kind")
+    if packet and packet.get("acceptance_passed") is not True:
+        blocking_reasons.append("acceptance_not_passed")
+    if packet and packet.get("acceptance_run_count_completed") != ACCEPTANCE_RUNS_DEFAULT:
+        blocking_reasons.append("acceptance_run_count_not_5")
+    if packet and packet.get("all_runs_work_mode_proven") is not True:
+        blocking_reasons.append("acceptance_work_mode_not_proven")
+    if packet and packet.get("all_runs_api_lane_called") is not True:
+        blocking_reasons.append("acceptance_api_lane_not_called")
+    if packet and packet.get("all_runs_delivery_proven") is not True:
+        blocking_reasons.append("acceptance_delivery_not_proven")
+    if packet and not evidence_files_present:
+        blocking_reasons.append("acceptance_evidence_files_missing")
+    if packet and packet.get("evidence_roots_distinct") is not True:
+        blocking_reasons.append("acceptance_evidence_roots_not_distinct")
+    if not max_age_valid:
+        blocking_reasons.append("max_age_seconds_invalid")
+    if packet and max_age_valid and not fresh:
+        blocking_reasons.append("acceptance_packet_stale")
+    if packet and packet.get("all_runs_no_fallback") is not True:
+        blocking_reasons.append("fallback_used")
+    if packet and packet.get("all_runs_no_local_imitation") is not True:
+        blocking_reasons.append("local_imitation_used")
+    if packet and packet.get("all_runs_no_native_codex_subagent_as_dip") is not True:
+        blocking_reasons.append("native_codex_subagent_used_as_dip")
+    if packet and packet.get("all_runs_no_admission_mint") is not True:
+        blocking_reasons.append("admission_proof_minted")
+    if packet and packet.get("product_ready") is not False:
+        blocking_reasons.append("product_ready_claimed")
+    if unsafe:
+        blocking_reasons.append("unsafe_secret_or_raw_backend_claim")
+    blocking_reasons = sorted(set(blocking_reasons))
+
+    dip_operator_ready = bool(packet and not blocking_reasons)
+    operator_status = _readiness_operator_status(
+        ready=dip_operator_ready,
+        proof_found=proof_found,
+        stale="acceptance_packet_stale" in blocking_reasons,
+        unsafe=unsafe,
+    )
+    selected_path_digest = (
+        _sha256_text(str(selected_path.expanduser().resolve(strict=False)))
+        if selected_path
+        else ""
+    )
+    extra = {
+        "schema_version": 1,
+        "packet_kind": DIP_OPERATOR_READINESS_PACKET_KIND,
+        "proof_scope": "dip_operator_readiness_from_last_acceptance",
+        "operator_command_surface": "wild-boar-proxy dip status",
+        "operator_command_mode": "status",
+        "operator_status": operator_status,
+        "dip_operator_ready": dip_operator_ready,
+        "blocked": not dip_operator_ready,
+        "last_acceptance_packet_found": proof_found,
+        "last_acceptance_packet_valid": bool(packet and not semantic_violations),
+        "last_acceptance_packet_valid_json": bool(packet),
+        "last_acceptance_packet_semantics_valid": not bool(semantic_violations),
+        "last_acceptance_packet_path_digest": selected_path_digest,
+        "last_acceptance_packet_path_recorded": False,
+        "last_acceptance_passed": packet.get("acceptance_passed") is True,
+        "last_acceptance_run_count": int(
+            packet.get("acceptance_run_count_completed") or 0
+        )
+        if packet
+        else 0,
+        "required_acceptance_run_count": ACCEPTANCE_RUNS_DEFAULT,
+        "last_acceptance_api_lane_called": packet.get("all_runs_api_lane_called") is True,
+        "last_acceptance_delivery_proven": packet.get("all_runs_delivery_proven") is True,
+        "last_acceptance_custom_codex_flow_proven": (
+            packet.get("custom_codex_flow_proven") is True
+        ),
+        "last_acceptance_evidence_roots_distinct": (
+            packet.get("evidence_roots_distinct") is True
+        ),
+        "last_acceptance_evidence_files_present": evidence_files_present,
+        "last_acceptance_age_seconds": age_seconds,
+        "last_acceptance_max_age_seconds": max_age_seconds or 0,
+        "last_acceptance_fresh": fresh,
+        "historical_acceptance_passed": packet.get("acceptance_passed") is True,
+        "status_command_dispatches": False,
+        "status_command_runs_acceptance": False,
+        "status_command_reads_audit_history": False,
+        "acceptance_is_not_dip_work_prerequisite": True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "native_codex_subagent_used_as_dip": False,
+        "proof_mode_admission_proven": False,
+        "repeatable_real_custom_dip_proof_proven": False,
+        "real_custom_codex_hook_origin_dip_proof_proven": False,
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "product_ready": False,
+        "does_not_prove_product_ready": True,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "reason_codes": blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+        "changed_files": [],
+    }
+    return packets.build_command_packet(
+        ok=dip_operator_ready,
+        human_message=(
+            "WBP DIP operator readiness is ready."
+            if dip_operator_ready
+            else "WBP DIP operator readiness is BLOCKED."
+        ),
+        machine_error_code=_readiness_machine_error_code(
+            ready=dip_operator_ready,
+            proof_found=proof_found,
+            stale="acceptance_packet_stale" in blocking_reasons,
+            unsafe=unsafe,
+        ),
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if dip_operator_ready else "stop",
+        changed_files=[],
+        effect=EFFECT_READ,
         secret_values=secret_values,
+        extra=extra,
     )

@@ -22,6 +22,8 @@ from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_command
 from .real_custom_dip_operator import (
     ACCEPTANCE_RUNS_DEFAULT,
+    DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    run_dip_operator_status_command,
     run_real_custom_dip_operator_acceptance_command,
     run_real_custom_dip_operator_preflight_command,
     run_real_custom_dip_operator_work_command,
@@ -359,6 +361,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
     dip_acceptance.add_argument("--json", action="store_true", required=True)
+    dip_status = dip_subparsers.add_parser("status")
+    dip_status.add_argument("--proof-file")
+    dip_status.add_argument(
+        "--max-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_status.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -1819,6 +1829,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_MUTATE
         if getattr(args, "dip_command", None) == "acceptance":
             return EFFECT_MUTATE
+        if getattr(args, "dip_command", None) == "status":
+            return EFFECT_READ
     if command == "launch":
         launch_command = getattr(args, "launch_command", None)
         if launch_command == "smoke":
@@ -2164,6 +2176,14 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     codex_hook_current_hash=args.codex_hook_current_hash,
                     probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "status":
+            return emit_json(
+                run_dip_operator_status_command(
+                    paths=paths,
+                    proof_file=args.proof_file,
+                    max_age_seconds=args.max_age_seconds,
                 )
             )
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":

@@ -201,6 +201,7 @@ class ReadEffectNoWriteTests(unittest.TestCase):
         commands = (
             ("invariant-check", "--json"),
             ("status", "--json"),
+            ("dip", "status", "--json"),
             ("rollback", "--latest", "--dry-run", "--json"),
             ("mode", "get", "--json"),
             ("accounts", "list", "--json"),
