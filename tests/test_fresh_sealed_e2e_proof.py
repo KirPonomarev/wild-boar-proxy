@@ -126,6 +126,12 @@ class FreshSealedE2EProofTests(unittest.TestCase):
         self.assertFalse(packet["ui_visibility_required_for_core"])
         self.assertFalse(packet["full_runtime_required_for_core"])
         self.assertTrue(packet["fresh_live_custom_codex_e2e_proven"])
+        self.assertTrue(packet["full_runtime_diagnostics_passed"])
+        self.assertEqual(packet["full_runtime_diagnostic_blocking_reasons"], [])
+        self.assertEqual(
+            packet["full_runtime_ui_visibility_proof_source"],
+            "native_custom_codex_visible_flow_proof",
+        )
         self.assertTrue(packet["full_runtime_dispatch_runner_proven"])
         self.assertTrue(packet["full_runtime_dispatch_proven"])
         self.assertTrue(packet["custom_codex_flow_proven"])

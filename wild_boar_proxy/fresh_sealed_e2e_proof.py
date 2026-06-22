@@ -311,6 +311,7 @@ def build_fresh_sealed_e2e_packet(
     ui_visibility_source: str,
     final_packet_file: Path,
     changed_files: Sequence[str],
+    full_runtime_ui_visibility_proof_file: Path | None = None,
     secret_values: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     fresh_live = dict(fresh_live_packet)
@@ -319,6 +320,11 @@ def build_fresh_sealed_e2e_packet(
     seal = dict(seal_packet or {})
     wrong_digest = dict(wrong_digest_seal_packet or {})
     native_visible_flow = _read_json_mapping(native_custom_codex_visible_flow_proof_file)
+    full_runtime_ui_file = (
+        full_runtime_ui_visibility_proof_file
+        if full_runtime_ui_visibility_proof_file is not None
+        else custom_codex_ui_visibility_proof_file
+    )
     fresh_ok = _fresh_live_ok(fresh_live)
     core_inputs_present = _core_input_artifacts_present(
         real_custom_hook_proof_file=real_custom_hook_proof_file,
@@ -329,7 +335,7 @@ def build_fresh_sealed_e2e_packet(
         real_custom_hook_proof_file=real_custom_hook_proof_file,
         working_flow_delivery_proof_file=working_flow_delivery_proof_file,
         codex_exec_jsonl_file=codex_exec_jsonl_file,
-        custom_codex_ui_visibility_proof_file=custom_codex_ui_visibility_proof_file,
+        custom_codex_ui_visibility_proof_file=full_runtime_ui_file,
     )
     full_runtime_ok = _runner_ok(runner)
     native_visible_flow_ok = _native_visible_flow_ok(native_visible_flow)
@@ -364,10 +370,10 @@ def build_fresh_sealed_e2e_packet(
     ok = machine_error_code == FRESH_SEALED_E2E_OK
     full_runtime_diagnostic_reasons = sorted(
         set(
-            _safe_reasons(runner.get("blocking_reasons"))
-            + _safe_reasons(admission.get("blocking_reasons"))
-            + _safe_reasons(seal.get("blocking_reasons"))
-            + _safe_reasons(wrong_digest.get("blocking_reasons"))
+            ([] if full_runtime_ok else _safe_reasons(runner.get("blocking_reasons")))
+            + ([] if strict_admission_ok else _safe_reasons(admission.get("blocking_reasons")))
+            + ([] if admission_seal_ok else _safe_reasons(seal.get("blocking_reasons")))
+            + ([] if negative_ok else _safe_reasons(wrong_digest.get("blocking_reasons")))
             + (
                 []
                 if full_runtime_inputs_present
@@ -446,6 +452,13 @@ def build_fresh_sealed_e2e_packet(
         "codex_exec_jsonl_sha256": sha256_file(codex_exec_jsonl_file),
         "custom_codex_ui_visibility_proof_sha256": sha256_file(
             custom_codex_ui_visibility_proof_file
+        ),
+        "full_runtime_ui_visibility_proof_file_present": full_runtime_ui_file.is_file(),
+        "full_runtime_ui_visibility_proof_sha256": sha256_file(full_runtime_ui_file),
+        "full_runtime_ui_visibility_proof_source": (
+            "native_custom_codex_visible_flow_proof"
+            if full_runtime_ui_file == native_custom_codex_visible_flow_proof_file
+            else "custom_codex_ui_visibility_proof"
         ),
         "ui_visibility_source": _safe_text(ui_visibility_source, limit=80),
         "visible_source_binding_proof_file_present": (
@@ -678,6 +691,7 @@ def run_fresh_sealed_e2e_proof_command(
     admission_packet: dict[str, Any] = {}
     seal_packet: dict[str, Any] = {}
     wrong_digest_seal_packet: dict[str, Any] = {}
+    full_runtime_ui_visibility_file = ui_visibility_file
     if (
         _fresh_live_ok(fresh_live_packet)
         and real_custom_hook_proof_file.is_file()
@@ -756,6 +770,7 @@ def run_fresh_sealed_e2e_proof_command(
             request_id=request_id,
         )
         changed_files.append(_write_packet(native_visible_flow_file, native_visible_flow_packet))
+        full_runtime_ui_visibility_file = native_visible_flow_file
         ui_visibility_packet = run_custom_codex_ui_visibility_proof_command(
             visible_source_binding_proof_file=str(visible_source_binding_file),
             native_ui_observer_packet_file=str(native_ui_observer_packet_file),
@@ -768,13 +783,13 @@ def run_fresh_sealed_e2e_proof_command(
         real_custom_hook_proof_file=real_custom_hook_proof_file,
         working_flow_delivery_proof_file=working_flow_delivery_proof_file,
         codex_exec_jsonl_file=codex_exec_jsonl_file,
-        custom_codex_ui_visibility_proof_file=ui_visibility_file,
+        custom_codex_ui_visibility_proof_file=full_runtime_ui_visibility_file,
     ):
         full_runtime_runner_packet = run_full_runtime_dispatch_proof_runner_command(
             real_custom_hook_proof_file=str(real_custom_hook_proof_file),
             working_flow_delivery_proof_file=str(working_flow_delivery_proof_file),
             codex_exec_jsonl_file=str(codex_exec_jsonl_file),
-            custom_codex_ui_visibility_proof_file=str(ui_visibility_file),
+            custom_codex_ui_visibility_proof_file=str(full_runtime_ui_visibility_file),
             proof_dir=str(full_runtime_dir),
             freshness_anchor_digest=freshness_anchor_digest,
         )
@@ -813,6 +828,7 @@ def run_fresh_sealed_e2e_proof_command(
         working_flow_delivery_proof_file=working_flow_delivery_proof_file,
         codex_exec_jsonl_file=codex_exec_jsonl_file,
         custom_codex_ui_visibility_proof_file=ui_visibility_file,
+        full_runtime_ui_visibility_proof_file=full_runtime_ui_visibility_file,
         fresh_live_packet_file=fresh_live_packet_file,
         admission_packet_file=admission_packet_file,
         seal_packet_file=seal_packet_file,

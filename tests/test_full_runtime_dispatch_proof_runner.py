@@ -258,6 +258,47 @@ class FullRuntimeDispatchProofRunnerTests(unittest.TestCase):
         _assert_no_raw_prompt_route_or_provider(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_positive_final_packet_collapses_intermediate_probe_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = _write_fixture(root)
+
+            packet = _run_fixture(root, fixture)
+            proof_dir = root / "proof"
+            final_packet = json.loads(
+                (proof_dir / "full-runtime-dispatch-proof.packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        noisy_summaries = [dict(summary) for summary in packet["artifact_summaries"]]
+        noisy_summaries[0]["status"] = "error"
+        noisy_summaries[0]["machine_error_code"] = "WBP_TEST_INTERMEDIATE_PROBE_RED"
+
+        replay = runner.build_full_runtime_dispatch_proof_runner_packet(
+            input_metadata=packet,
+            artifact_summaries=noisy_summaries,
+            final_packet=final_packet,
+            manifest_packet={
+                "packet_kind": (
+                    runner.FULL_RUNTIME_DISPATCH_PROOF_RUNNER_MANIFEST_PACKET_KIND
+                ),
+                "product_ready": False,
+            },
+            manifest_file_sha256="b" * 64,
+            manifest_file_written=True,
+            runner_packet_file_written=True,
+        )
+
+        self.assertEqual(replay["status"], "ok")
+        self.assertEqual(replay["machine_error_code"], "OK")
+        self.assertTrue(replay["full_runtime_dispatch_runner_proven"])
+        self.assertTrue(replay["full_runtime_dispatch_proven"])
+        self.assertEqual(replay["runner_chain_failures"], [])
+        self.assertEqual(replay["blocking_reasons"], [])
+        _assert_no_raw_prompt_route_or_provider(self, replay)
+        self.assertEqual(packets.inspect_command_packet_semantics(replay), [])
+
     def test_positive_binds_freshness_anchor_digest_to_runner_and_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

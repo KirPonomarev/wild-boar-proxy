@@ -276,6 +276,23 @@ def _final_packet_failures(final_packet: Mapping[str, Any]) -> list[str]:
     return sorted(set(failures))
 
 
+def _runner_chain_failures(
+    artifact_summaries: Sequence[Mapping[str, Any]],
+    final_packet: Mapping[str, Any],
+) -> list[str]:
+    final_failures = _final_packet_failures(final_packet)
+    final_blocking_reasons = _safe_reasons(final_packet.get("blocking_reasons"))
+    if not final_failures and not final_blocking_reasons:
+        return []
+    return sorted(
+        set(
+            _artifact_status_failures(artifact_summaries)
+            + final_failures
+            + final_blocking_reasons
+        )
+    )
+
+
 def _unsafe_failures(
     packets_by_name: Mapping[str, Mapping[str, Any]],
     *,
@@ -529,15 +546,7 @@ def build_full_runtime_dispatch_proof_runner_packet(
         metadata,
         proof_dir="present" if metadata.get("proof_dir_present") is True else "",
     )
-    artifact_status_failures = _artifact_status_failures(summaries)
-    final_failures = _final_packet_failures(final)
-    chain_failures = sorted(
-        set(
-            artifact_status_failures
-            + final_failures
-            + _safe_reasons(final.get("blocking_reasons"))
-        )
-    )
+    chain_failures = _runner_chain_failures(summaries, final)
     unsafe_failure_list = _unsafe_failures(
         {
             **dict(artifact_packets or {}),
@@ -729,8 +738,7 @@ def run_full_runtime_dispatch_proof_runner_command(
             {FULL_RUNTIME_DISPATCH_PROOF_FILE_NAME: final_packet}
         ),
         artifact_failures=artifact_failures,
-        chain_failures=_artifact_status_failures(artifact_summaries)
-        + _final_packet_failures(final_packet),
+        chain_failures=_runner_chain_failures(artifact_summaries, final_packet),
     )
     runner_status = (
         "ok"

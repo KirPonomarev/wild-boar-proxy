@@ -13,6 +13,9 @@ from .codex_transcript_delivery_observation import _hex_sha256
 from .command_effects import EFFECT_PROBE
 from .core import packets
 from .custom_codex_ui_visibility_proof import CUSTOM_CODEX_UI_VISIBILITY_PACKET_KIND
+from .native_custom_codex_visible_flow_proof import (
+    NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_KIND,
+)
 from .official_e2e_working_flow_proof_join import (
     OFFICIAL_E2E_WORKING_FLOW_PROOF_JOIN_OK,
     OFFICIAL_E2E_WORKING_FLOW_PROOF_JOIN_PACKET_KIND,
@@ -186,6 +189,41 @@ _UI_REQUIRED_DIGEST_FIELDS = (
     "expected_visible_text_sha256",
     "request_id_sha256",
 )
+_NATIVE_VISIBLE_REQUIRED_TRUE_FIELDS = (
+    "native_custom_codex_visible_flow_proven",
+    "custom_codex_ui_visibility_proven",
+    "visible_response_observed",
+    "visible_response_bound_to_handoff",
+    "visible_response_after_dispatch",
+    "working_flow_delivery_file_backed",
+    "native_ui_observer_file_backed",
+    "working_flow_delivery_surface_accepted",
+    "codex_working_flow_delivery_proven",
+    "approved_delivery_surface_proven",
+    "handoff_payload_digest_present",
+    "native_ui_source_allowed",
+    "native_ui_request_id_bound",
+    "expected_visible_text_bound_to_handoff",
+    "native_expected_text_sha256_bound",
+    "custom_codex_process_bound",
+    "custom_codex_window_observed",
+    "input_capable_ui_observed",
+    "visible_native_response_exact_token_observed",
+    "native_response_bound_to_request",
+)
+_NATIVE_VISIBLE_REQUIRED_EMPTY_FIELDS = (
+    "working_flow_failures",
+    "native_ui_failures",
+    "binding_failures",
+    "unsafe_failures",
+    "blocking_reasons",
+    "changed_files",
+)
+_NATIVE_VISIBLE_REQUIRED_DIGEST_FIELDS = (
+    "handoff_payload_digest",
+    "expected_visible_text_sha256",
+    "request_id_sha256",
+)
 
 
 def _mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -349,10 +387,7 @@ def _upstream_failures(
     return sorted(set(failures))
 
 
-def _ui_failures(
-    packet: Mapping[str, Any],
-    metadata: Mapping[str, Any],
-) -> list[str]:
+def _ui_file_failures(metadata: Mapping[str, Any]) -> list[str]:
     failures: list[str] = []
     if metadata.get("custom_codex_ui_visibility_proof_file_read") is not True:
         failures.append("custom_codex_ui_visibility_proof_file_not_read")
@@ -360,6 +395,14 @@ def _ui_failures(
         failures.append("custom_codex_ui_visibility_proof_file_json_not_valid")
     if metadata.get("custom_codex_ui_visibility_proof_file_mapping") is not True:
         failures.append("custom_codex_ui_visibility_proof_file_not_mapping")
+    return failures
+
+
+def _legacy_ui_failures(
+    packet: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = _ui_file_failures(metadata)
     if packet.get("packet_kind") != CUSTOM_CODEX_UI_VISIBILITY_PACKET_KIND:
         failures.append("custom_codex_ui_visibility_packet_kind_invalid")
     if packet.get("status") != "ok":
@@ -391,6 +434,55 @@ def _ui_failures(
     if not isinstance(like_count, int) or like_count < 1:
         failures.append("ui_visibility_like_candidate_count_missing")
     return sorted(set(failures))
+
+
+def _native_visible_ui_failures(
+    packet: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> list[str]:
+    failures: list[str] = _ui_file_failures(metadata)
+    if packet.get("packet_kind") != NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_KIND:
+        failures.append("native_visible_flow_packet_kind_invalid")
+    if packet.get("status") != "ok":
+        failures.append("native_visible_flow_packet_not_ok")
+    if packet.get("machine_error_code") != "OK":
+        failures.append("native_visible_flow_machine_error_not_ok")
+    if packet.get("effect") != EFFECT_PROBE:
+        failures.append("native_visible_flow_effect_not_probe")
+    failures.extend(
+        _required_true_failures(
+            packet,
+            _NATIVE_VISIBLE_REQUIRED_TRUE_FIELDS,
+            prefix="native_visible_flow",
+        )
+    )
+    failures.extend(
+        _required_false_failures(packet, _UI_REQUIRED_FALSE_FIELDS, prefix="ui_visibility")
+    )
+    failures.extend(
+        _required_empty_failures(
+            packet,
+            _NATIVE_VISIBLE_REQUIRED_EMPTY_FIELDS,
+            prefix="native_visible_flow",
+        )
+    )
+    failures.extend(
+        _required_digest_failures(
+            packet,
+            _NATIVE_VISIBLE_REQUIRED_DIGEST_FIELDS,
+            prefix="native_visible_flow",
+        )
+    )
+    return sorted(set(failures))
+
+
+def _ui_failures(
+    packet: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> list[str]:
+    if packet.get("packet_kind") == NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_KIND:
+        return _native_visible_ui_failures(packet, metadata)
+    return _legacy_ui_failures(packet, metadata)
 
 
 def _unsafe_claim_failures(
@@ -426,7 +518,15 @@ def _binding_failures(
         failures.append("visible_response_not_after_dispatch")
     if upstream.get("codex_working_flow_delivery_proven") is not True:
         failures.append("official_e2e_working_flow_delivery_not_proven")
-    if ui.get("working_flow_delivery_proven") is not True:
+    ui_working_flow_proven = bool(
+        ui.get("working_flow_delivery_proven") is True
+        or (
+            ui.get("packet_kind") == NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_KIND
+            and ui.get("codex_working_flow_delivery_proven") is True
+            and ui.get("working_flow_delivery_file_backed") is True
+        )
+    )
+    if not ui_working_flow_proven:
         failures.append("ui_visibility_working_flow_delivery_not_proven")
     return sorted(set(failures))
 
@@ -488,6 +588,14 @@ def build_full_runtime_dispatch_proof_packet(
         unsafe_failures=unsafe_failures,
         binding_failures=binding_failures,
     )
+    ui_source_kind = (
+        "native_custom_codex_visible_flow_proof"
+        if ui.get("packet_kind") == NATIVE_CUSTOM_CODEX_VISIBLE_FLOW_PACKET_KIND
+        else "custom_codex_ui_visibility_proof"
+    )
+    ui_expected_sha = _hex_sha256(ui.get("custom_response_expected_sha256")) or _hex_sha256(
+        ui.get("expected_visible_text_sha256")
+    )
 
     extra = {
         **metadata,
@@ -509,6 +617,7 @@ def build_full_runtime_dispatch_proof_packet(
             ui.get("machine_error_code"),
             limit=96,
         ),
+        "custom_codex_ui_visibility_source_kind": ui_source_kind,
         "official_e2e_working_flow_valid": not upstream_failures,
         "custom_codex_ui_visibility_valid": not ui_failures,
         "full_runtime_binding_valid": not binding_failures,
@@ -586,11 +695,17 @@ def build_full_runtime_dispatch_proof_packet(
         "custom_codex_ui_visibility_proven": bool(
             ok and ui.get("custom_codex_ui_visibility_proven") is True
         ),
+        "native_custom_codex_visible_flow_proven": bool(
+            ok and ui.get("native_custom_codex_visible_flow_proven") is True
+        ),
         "native_ui_observer_file_backed": bool(
             ok and ui.get("native_ui_observer_file_backed") is True
         ),
         "visible_source_binding_proven": bool(
             ok and ui.get("visible_source_binding_proven") is True
+        ),
+        "working_flow_delivery_file_backed": bool(
+            ok and ui.get("working_flow_delivery_file_backed") is True
         ),
         "prompt_digest": prompt_digest if ok else "",
         "runtime_context_digest": runtime_context_digest if ok else "",
@@ -600,7 +715,7 @@ def build_full_runtime_dispatch_proof_packet(
         "handoff_payload_digest": handoff_digest if ok else "",
         "codex_exec_transcript_sha256": transcript_digest if ok else "",
         "custom_response_expected_sha256": (
-            _hex_sha256(ui.get("custom_response_expected_sha256")) if ok else ""
+            ui_expected_sha if ok else ""
         ),
         "custom_response_exact_token_candidate_count": int(
             ui.get("custom_response_exact_token_candidate_count") or 0

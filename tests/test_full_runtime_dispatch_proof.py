@@ -14,6 +14,7 @@ from unittest import mock
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy import custom_codex_ui_visibility_proof as ui_visibility
 from wild_boar_proxy import full_runtime_dispatch_proof as proof
+from wild_boar_proxy import native_custom_codex_visible_flow_proof as native_visible
 from wild_boar_proxy.core import packets
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
 
@@ -26,6 +27,10 @@ from test_custom_codex_ui_visibility_proof import (  # noqa: E402
     _file_metadata as _ui_file_metadata,
     _native_packet,
     _source_packet,
+)
+from test_native_custom_codex_visible_flow_proof import (  # noqa: E402
+    _metadata as _native_visible_metadata,
+    _working_flow_packet as _native_visible_working_flow_packet,
 )
 from test_official_e2e_working_flow_proof_join import (  # noqa: E402
     EXPECTED_TEXT,
@@ -95,6 +100,29 @@ def _ui_packet_for(
     return packet
 
 
+def _native_visible_packet_for(
+    upstream: dict[str, object],
+    *,
+    overrides: dict[str, object] | None = None,
+) -> dict[str, object]:
+    handoff_digest = str(upstream["handoff_payload_digest"])
+    expected_visible_text = f"WBP_FULL_RUNTIME_NATIVE_VISIBLE_{handoff_digest}_{REQUEST_ID}"
+    native_packet = native_visible.build_native_custom_codex_visible_flow_proof_packet(
+        _native_visible_working_flow_packet({"handoff_payload_digest": handoff_digest}),
+        _native_packet(
+            expected_text=expected_visible_text,
+            request_id=REQUEST_ID,
+        ),
+        expected_visible_text=expected_visible_text,
+        request_id=REQUEST_ID,
+        file_metadata=_native_visible_metadata(),
+    )
+    assert native_packet["status"] == "ok"
+    if overrides:
+        native_packet.update(overrides)
+    return native_packet
+
+
 def _packet(
     *,
     upstream: dict[str, object] | None = None,
@@ -160,6 +188,61 @@ class FullRuntimeDispatchProofTests(unittest.TestCase):
         self.assertNotIn("external_freshness_proven", packet)
         _assert_no_product_or_raw_claims(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_native_visible_flow_as_ui_source(self) -> None:
+        upstream = _official_e2e_packet()
+        packet = _packet(upstream=upstream, ui=_native_visible_packet_for(upstream))
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["full_runtime_dispatch_proven"])
+        self.assertTrue(packet["custom_codex_ui_visibility_proven"])
+        self.assertTrue(packet["native_custom_codex_visible_flow_proven"])
+        self.assertEqual(
+            packet["custom_codex_ui_visibility_source_kind"],
+            "native_custom_codex_visible_flow_proof",
+        )
+        self.assertEqual(packet["handoff_payload_digest"], upstream["handoff_payload_digest"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_product_or_raw_claims(self, packet)
+
+    def test_blocks_forged_native_visible_flow_source(self) -> None:
+        upstream = _official_e2e_packet()
+        forged = _native_visible_packet_for(
+            upstream,
+            overrides={"native_custom_codex_visible_flow_proven": False},
+        )
+
+        packet = _packet(upstream=upstream, ui=forged)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.FULL_RUNTIME_DISPATCH_UI_INVALID,
+        )
+        self.assertFalse(packet["full_runtime_dispatch_proven"])
+        self.assertIn(
+            "native_visible_flow_native_custom_codex_visible_flow_proven_not_true",
+            packet["blocking_reasons"],
+        )
+        _assert_no_product_or_raw_claims(self, packet)
+
+    def test_blocks_native_visible_flow_handoff_digest_mismatch(self) -> None:
+        upstream = _official_e2e_packet()
+        mismatched = _native_visible_packet_for(
+            {**upstream, "handoff_payload_digest": "c" * 64}
+        )
+
+        packet = _packet(upstream=upstream, ui=mismatched)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            proof.FULL_RUNTIME_DISPATCH_NOT_BOUND,
+        )
+        self.assertFalse(packet["full_runtime_dispatch_proven"])
+        self.assertIn("handoff_payload_digest_mismatch", packet["blocking_reasons"])
+        _assert_no_product_or_raw_claims(self, packet)
 
     def test_blocks_when_upstream_api_dispatch_is_not_proven(self) -> None:
         upstream = {**_official_e2e_packet(), "api_lane_called": False}
