@@ -61,6 +61,14 @@ DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT = 24 * 60 * 60
 OPERATOR_STATUS_READY = "ready"
 OPERATOR_STATUS_BLOCKED = "blocked"
 
+OPERATOR_RECOVERY_ACTION_RUN_WORK = "run_work"
+OPERATOR_RECOVERY_ACTION_REFRESH_ACCEPTANCE = "refresh_acceptance"
+OPERATOR_RECOVERY_ACTION_STOP = "stop"
+
+OPERATOR_RECOVERY_COMMAND_DIP_WORK = "dip_work"
+OPERATOR_RECOVERY_COMMAND_DIP_ACCEPTANCE = "dip_acceptance"
+OPERATOR_RECOVERY_COMMAND_NONE = "none"
+
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -1203,6 +1211,86 @@ def _readiness_machine_error_code(
     return DIP_OPERATOR_READINESS_BLOCKED
 
 
+def _dip_operator_recovery_decision(
+    *,
+    ready: bool,
+    proof_found: bool,
+    blocking_reasons: Sequence[str],
+    unsafe: bool,
+) -> dict[str, Any]:
+    reason_set = set(blocking_reasons)
+    invalid_reasons = {
+        "acceptance_packet_invalid_json",
+        "acceptance_packet_semantic_violation",
+        "acceptance_packet_wrong_kind",
+        "max_age_seconds_invalid",
+    }
+    unsafe_reasons = {
+        "fallback_used",
+        "local_imitation_used",
+        "native_codex_subagent_used_as_dip",
+        "admission_proof_minted",
+        "product_ready_claimed",
+        "unsafe_secret_or_raw_backend_claim",
+    }
+    blocked_reasons = {
+        "acceptance_not_passed",
+        "acceptance_run_count_not_5",
+        "acceptance_work_mode_not_proven",
+        "acceptance_api_lane_not_called",
+        "acceptance_delivery_not_proven",
+        "acceptance_evidence_files_missing",
+        "acceptance_evidence_roots_not_distinct",
+    }
+
+    recovery_reason_codes: list[str]
+    if ready:
+        action = OPERATOR_RECOVERY_ACTION_RUN_WORK
+        command_kind = OPERATOR_RECOVERY_COMMAND_DIP_WORK
+        recovery_reason_codes = ["recovery_ready_run_work"]
+    elif reason_set.intersection(invalid_reasons):
+        action = OPERATOR_RECOVERY_ACTION_STOP
+        command_kind = OPERATOR_RECOVERY_COMMAND_NONE
+        recovery_reason_codes = ["recovery_invalid_stop"]
+    elif unsafe or reason_set.intersection(unsafe_reasons):
+        action = OPERATOR_RECOVERY_ACTION_STOP
+        command_kind = OPERATOR_RECOVERY_COMMAND_NONE
+        recovery_reason_codes = ["recovery_unsafe_stop"]
+    elif reason_set.intersection(blocked_reasons):
+        action = OPERATOR_RECOVERY_ACTION_STOP
+        command_kind = OPERATOR_RECOVERY_COMMAND_NONE
+        recovery_reason_codes = ["recovery_blocked_stop"]
+    elif not proof_found or "acceptance_packet_missing" in reason_set:
+        action = OPERATOR_RECOVERY_ACTION_REFRESH_ACCEPTANCE
+        command_kind = OPERATOR_RECOVERY_COMMAND_DIP_ACCEPTANCE
+        recovery_reason_codes = ["recovery_missing_refresh_acceptance"]
+    elif "acceptance_packet_stale" in reason_set:
+        action = OPERATOR_RECOVERY_ACTION_REFRESH_ACCEPTANCE
+        command_kind = OPERATOR_RECOVERY_COMMAND_DIP_ACCEPTANCE
+        recovery_reason_codes = ["recovery_stale_refresh_acceptance"]
+    else:
+        action = OPERATOR_RECOVERY_ACTION_STOP
+        command_kind = OPERATOR_RECOVERY_COMMAND_NONE
+        recovery_reason_codes = ["recovery_blocked_stop"]
+
+    return {
+        "operator_may_run_dip_work": action == OPERATOR_RECOVERY_ACTION_RUN_WORK,
+        "operator_may_refresh_acceptance": (
+            action == OPERATOR_RECOVERY_ACTION_REFRESH_ACCEPTANCE
+        ),
+        "operator_must_stop": action == OPERATOR_RECOVERY_ACTION_STOP,
+        "recommended_operator_action": action,
+        "recommended_command_kind": command_kind,
+        "recommended_command_safe_to_show": True,
+        "recommended_command_text_recorded": False,
+        "raw_prompt_required_from_operator": action == OPERATOR_RECOVERY_ACTION_RUN_WORK,
+        "auto_recovery_started": False,
+        "auto_dispatch_started": False,
+        "auto_acceptance_started": False,
+        "recovery_reason_codes": recovery_reason_codes,
+    }
+
+
 def _acceptance_raw_or_secret_claim_present(packet: Mapping[str, Any]) -> bool:
     unsafe_flag_names = (
         "raw_prompt_recorded",
@@ -1358,6 +1446,12 @@ def run_dip_operator_status_command(
         stale="acceptance_packet_stale" in blocking_reasons,
         unsafe=unsafe,
     )
+    recovery_decision = _dip_operator_recovery_decision(
+        ready=dip_operator_ready,
+        proof_found=proof_found,
+        blocking_reasons=blocking_reasons,
+        unsafe=unsafe,
+    )
     selected_path_digest = (
         _sha256_text(str(selected_path.expanduser().resolve(strict=False)))
         if selected_path
@@ -1402,6 +1496,7 @@ def run_dip_operator_status_command(
         "status_command_runs_acceptance": False,
         "status_command_reads_audit_history": False,
         "acceptance_is_not_dip_work_prerequisite": True,
+        **recovery_decision,
         "fallback_used": False,
         "local_imitation_used": False,
         "native_codex_subagent_used_as_dip": False,

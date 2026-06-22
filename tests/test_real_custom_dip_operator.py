@@ -241,6 +241,32 @@ def _write_acceptance_packet_file(path: Path, packet: dict[str, object]) -> Path
     return path
 
 
+def _assert_recovery_decision(
+    test_case: unittest.TestCase,
+    packet: dict[str, object],
+    *,
+    action: str,
+    command_kind: str,
+    may_run: bool,
+    may_refresh: bool,
+    must_stop: bool,
+    reason_code: str,
+    raw_prompt_required: bool,
+) -> None:
+    test_case.assertIs(packet["operator_may_run_dip_work"], may_run)
+    test_case.assertIs(packet["operator_may_refresh_acceptance"], may_refresh)
+    test_case.assertIs(packet["operator_must_stop"], must_stop)
+    test_case.assertEqual(packet["recommended_operator_action"], action)
+    test_case.assertEqual(packet["recommended_command_kind"], command_kind)
+    test_case.assertIs(packet["recommended_command_safe_to_show"], True)
+    test_case.assertIs(packet["recommended_command_text_recorded"], False)
+    test_case.assertIs(packet["raw_prompt_required_from_operator"], raw_prompt_required)
+    test_case.assertIs(packet["auto_recovery_started"], False)
+    test_case.assertIs(packet["auto_dispatch_started"], False)
+    test_case.assertIs(packet["auto_acceptance_started"], False)
+    test_case.assertIn(reason_code, packet["recovery_reason_codes"])
+
+
 class RealCustomDipOperatorTests(unittest.TestCase):
     def test_preflight_ready_is_probe_only_and_leak_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -779,6 +805,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertFalse(packet["fallback_used"])
             self.assertFalse(packet["local_imitation_used"])
             self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="run_work",
+                command_kind="dip_work",
+                may_run=True,
+                may_refresh=False,
+                must_stop=False,
+                reason_code="recovery_ready_run_work",
+                raw_prompt_required=True,
+            )
             serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
             self.assertNotIn(PROMPT, serialized)
             self.assertNotIn(ROUTE_ID, serialized)
@@ -838,6 +875,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertFalse(packet["dip_operator_ready"])
             self.assertEqual(packet["operator_status"], "proof_missing")
             self.assertIn("acceptance_packet_missing", packet["blocking_reasons"])
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="refresh_acceptance",
+                command_kind="dip_acceptance",
+                may_run=False,
+                may_refresh=True,
+                must_stop=False,
+                reason_code="recovery_missing_refresh_acceptance",
+                raw_prompt_required=False,
+            )
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_status_latest_search_ignores_disappearing_candidate(self) -> None:
@@ -868,6 +916,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             )
             self.assertFalse(packet["dip_operator_ready"])
             self.assertIn("acceptance_packet_missing", packet["blocking_reasons"])
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="refresh_acceptance",
+                command_kind="dip_acceptance",
+                may_run=False,
+                may_refresh=True,
+                must_stop=False,
+                reason_code="recovery_missing_refresh_acceptance",
+                raw_prompt_required=False,
+            )
 
     def test_status_invalid_json_and_wrong_kind_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -886,6 +945,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertIn(
                 "acceptance_packet_invalid_json",
                 invalid_packet["blocking_reasons"],
+            )
+            _assert_recovery_decision(
+                self,
+                invalid_packet,
+                action="stop",
+                command_kind="none",
+                may_run=False,
+                may_refresh=False,
+                must_stop=True,
+                reason_code="recovery_invalid_stop",
+                raw_prompt_required=False,
             )
 
             wrong_kind_file = _write_acceptance_packet_file(
@@ -915,6 +985,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 "acceptance_packet_wrong_kind",
                 wrong_kind_packet["blocking_reasons"],
             )
+            _assert_recovery_decision(
+                self,
+                wrong_kind_packet,
+                action="stop",
+                command_kind="none",
+                may_run=False,
+                may_refresh=False,
+                must_stop=True,
+                reason_code="recovery_invalid_stop",
+                raw_prompt_required=False,
+            )
 
     def test_status_stale_acceptance_is_historical_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -940,6 +1021,52 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertTrue(packet["historical_acceptance_passed"])
             self.assertFalse(packet["last_acceptance_fresh"])
             self.assertIn("acceptance_packet_stale", packet["blocking_reasons"])
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="refresh_acceptance",
+                command_kind="dip_acceptance",
+                may_run=False,
+                may_refresh=True,
+                must_stop=False,
+                reason_code="recovery_stale_refresh_acceptance",
+                raw_prompt_required=False,
+            )
+
+    def test_status_invalid_max_age_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            proof_file = _write_acceptance_packet_file(
+                root / "ready.json",
+                _acceptance_packet(root),
+            )
+
+            packet = operator.run_dip_operator_status_command(
+                paths=paths,
+                proof_file=str(proof_file),
+                max_age_seconds=0,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.DIP_OPERATOR_READINESS_BLOCKED,
+            )
+            self.assertFalse(packet["dip_operator_ready"])
+            self.assertEqual(packet["operator_status"], "blocked")
+            self.assertIn("max_age_seconds_invalid", packet["blocking_reasons"])
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="stop",
+                command_kind="none",
+                may_run=False,
+                may_refresh=False,
+                must_stop=True,
+                reason_code="recovery_invalid_stop",
+                raw_prompt_required=False,
+            )
 
     def test_status_blocks_missing_evidence_and_unsafe_claims(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -964,6 +1091,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 "acceptance_evidence_files_missing",
                 packet["blocking_reasons"],
             )
+            _assert_recovery_decision(
+                self,
+                packet,
+                action="stop",
+                command_kind="none",
+                may_run=False,
+                may_refresh=False,
+                must_stop=True,
+                reason_code="recovery_blocked_stop",
+                raw_prompt_required=False,
+            )
 
             unsafe_packet = _acceptance_packet(root / "unsafe")
             unsafe_packet["product_ready"] = True
@@ -987,6 +1125,17 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertIn(
                 "unsafe_secret_or_raw_backend_claim",
                 unsafe_status["blocking_reasons"],
+            )
+            _assert_recovery_decision(
+                self,
+                unsafe_status,
+                action="stop",
+                command_kind="none",
+                may_run=False,
+                may_refresh=False,
+                must_stop=True,
+                reason_code="recovery_unsafe_stop",
+                raw_prompt_required=False,
             )
 
     def test_cli_effect_and_dispatch_for_dip_commands(self) -> None:

@@ -217,7 +217,20 @@ class ReadEffectNoWriteTests(unittest.TestCase):
 
         for command in commands:
             with self.subTest(command=" ".join(command)):
-                self.assert_read_effect_no_write(*command)
+                payload = self.assert_read_effect_no_write(*command)
+                if command == ("dip", "status", "--json"):
+                    self.assertEqual(payload["recommended_operator_action"], "refresh_acceptance")
+                    self.assertEqual(payload["recommended_command_kind"], "dip_acceptance")
+                    self.assertFalse(payload["operator_may_run_dip_work"])
+                    self.assertTrue(payload["operator_may_refresh_acceptance"])
+                    self.assertFalse(payload["operator_must_stop"])
+                    self.assertFalse(payload["auto_recovery_started"])
+                    self.assertFalse(payload["auto_dispatch_started"])
+                    self.assertFalse(payload["auto_acceptance_started"])
+                    self.assertIn(
+                        "recovery_missing_refresh_acceptance",
+                        payload["recovery_reason_codes"],
+                    )
 
     def test_read_effect_error_path_does_not_write_truth_files(self) -> None:
         payload = self.assert_read_effect_no_write(
