@@ -352,6 +352,11 @@ def build_parser() -> argparse.ArgumentParser:
     codex_runner_real_custom_dip.add_argument("--codex-model")
     codex_runner_real_custom_dip.add_argument("--proof-dir")
     codex_runner_real_custom_dip.add_argument("--codex-cwd")
+    codex_runner_real_custom_dip.add_argument(
+        "--mode",
+        choices=("proof", "work"),
+        default="proof",
+    )
     codex_runner_real_custom_dip.add_argument("--expected-alias", default="DIP")
     codex_runner_real_custom_dip.add_argument(
         "--sandbox",
@@ -2093,6 +2098,7 @@ def main(argv: list[str] | None = None) -> int:
                     codex_model=args.codex_model,
                     proof_dir=args.proof_dir,
                     codex_cwd=args.codex_cwd,
+                    run_mode=args.mode,
                     expected_alias=args.expected_alias,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,

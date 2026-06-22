@@ -244,6 +244,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         delivery_ok: bool = True,
         join_patch: object = None,
         probe_codex_app_server: bool = False,
+        run_mode: str = runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
+        run_count: int | None = None,
     ) -> dict[str, object]:
         paths = _paths(root)
         codex_bin = root / "codex"
@@ -370,6 +372,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                     proof_dir=str(root / "proof"),
                     timeout_seconds=3,
                     probe_codex_app_server=probe_codex_app_server,
+                    run_mode=run_mode,
+                    run_count=run_count,
                 )
             if len(patches) == 6:
                 with patches[5]:
@@ -381,6 +385,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                         proof_dir=str(root / "proof"),
                         timeout_seconds=3,
                         probe_codex_app_server=probe_codex_app_server,
+                        run_mode=run_mode,
+                        run_count=run_count,
                     )
             return runner.run_real_custom_dip_proof_runner_command(
                 paths=paths,
@@ -390,6 +396,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                 proof_dir=str(root / "proof"),
                 timeout_seconds=3,
                 probe_codex_app_server=probe_codex_app_server,
+                run_mode=run_mode,
+                run_count=run_count,
             )
 
     def test_positive_requires_two_fresh_runs_and_file_backed_join(self) -> None:
@@ -400,13 +408,25 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertEqual(packet["machine_error_code"], "OK")
             self.assertEqual(packet["packet_kind"], runner.REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND)
+            self.assertEqual(packet["operator_command_mode"], "proof")
+            self.assertTrue(packet["proof_mode_admission_proven"])
+            self.assertFalse(packet["work_mode_proven"])
+            self.assertFalse(packet["work_mode_cannot_mint_admission_proof"])
             self.assertTrue(packet["repeatable_real_custom_dip_proof_proven"])
             self.assertTrue(packet["real_custom_codex_hook_origin_dip_proof_proven"])
             self.assertTrue(packet["two_runs_proven"])
+            self.assertFalse(packet["single_work_run_proven"])
             self.assertEqual(packet["run_count"], 2)
+            self.assertEqual(packet["required_run_count"], 2)
             self.assertTrue(packet["fresh_hook_ledgers_proven"])
             self.assertTrue(packet["prompt_digests_distinct"])
             self.assertTrue(packet["source_packet_hashes_present"])
+            first_run = packet["runs"][0]
+            self.assertEqual(first_run["custom_codex_exec_returncode"], 0)
+            self.assertFalse(first_run["custom_codex_terminal_output_recorded"])
+            self.assertFalse(first_run["custom_codex_process_stdout_recorded"])
+            self.assertFalse(first_run["custom_codex_process_stderr_recorded"])
+            self.assertFalse(first_run["custom_codex_command_argv_recorded"])
             self.assertTrue(packet["custom_codex_flow_proven"])
             self.assertTrue(packet["user_prompt_submit_hook_ran"])
             self.assertTrue(packet["hook_prompt_digest_bound"])
@@ -444,11 +464,106 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet["native_codex_subagent_used_as_dip"])
             self.assertTrue((root / "proof" / runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME).is_file())
             self.assertTrue((root / "proof" / runner.REAL_CUSTOM_DIP_PROOF_RUNNER_FILE_NAME).is_file())
+            manifest = json.loads(
+                (
+                    root
+                    / "proof"
+                    / runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["operator_command_mode"], "proof")
+            self.assertFalse(manifest["work_mode_cannot_mint_admission_proof"])
             serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
             self.assertNotIn(PROMPT, serialized)
             self.assertNotIn(ROUTE_ID, serialized)
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_mode_runs_once_but_cannot_mint_admission_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            packet = self._run(
+                root,
+                run_mode=runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(packet["operator_command_mode"], "work")
+            self.assertEqual(
+                packet["proof_scope"],
+                "single_run_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
+                "and_working_flow_delivery_operator_work",
+            )
+            self.assertTrue(packet["work_mode_proven"])
+            self.assertTrue(packet["single_work_run_proven"])
+            self.assertTrue(packet["work_mode_cannot_mint_admission_proof"])
+            manifest = json.loads(
+                (
+                    root
+                    / "proof"
+                    / runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["operator_command_mode"], "work")
+            self.assertTrue(manifest["work_mode_cannot_mint_admission_proof"])
+            self.assertEqual(packet["run_count"], 1)
+            self.assertEqual(packet["required_run_count"], 1)
+            self.assertTrue(packet["custom_codex_flow_proven"])
+            self.assertTrue(packet["user_prompt_submit_hook_ran"])
+            self.assertTrue(packet["hook_prompt_digest_bound"])
+            self.assertTrue(packet["hook_runtime_context_digest_bound"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertTrue(packet["direct_provider_auth_proven"])
+            self.assertTrue(packet["codex_working_flow_delivery_proven"])
+            self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
+            self.assertFalse(packet["proof_mode_admission_proven"])
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertFalse(packet["real_custom_codex_hook_origin_dip_proof_proven"])
+            self.assertFalse(packet["two_runs_proven"])
+            self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+            self.assertFalse(packet["product_ready"])
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(PROMPT, serialized)
+            self.assertNotIn(ROUTE_ID, serialized)
+            self.assertFalse(packet_contains_text(packet, PROMPT))
+            self.assertFalse(packet_contains_text(packet, ROUTE_ID))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_runner_rejects_status_mode_in_proof_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(Path(temp_dir), run_mode="status")
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_INPUT_INVALID,
+            )
+            self.assertIn("run_mode_invalid", packet["blocking_reasons"])
+            self.assertEqual(packet["run_count"], 0)
+            self.assertFalse(packet["api_lane_called"])
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertFalse(packet["work_mode_proven"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_mode_rejects_explicit_two_run_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                run_mode=runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+                run_count=2,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_INPUT_INVALID,
+            )
+            self.assertIn("run_count_must_match_mode", packet["blocking_reasons"])
+            self.assertEqual(packet["run_count"], 0)
+            self.assertFalse(packet["work_mode_proven"])
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_delivery_failure_blocks_full_proof(self) -> None:
@@ -612,6 +727,52 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertTrue(mocked.called)
+        self.assertEqual(mocked.call_args.kwargs["run_mode"], "proof")
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+
+    def test_cli_rejects_invalid_real_custom_dip_mode(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            with self.assertRaises(SystemExit) as raised:
+                cli_mod.main(
+                    [
+                        "codex-runner",
+                        "real-custom-dip-proof",
+                        "--prompt",
+                        PROMPT,
+                        "--mode",
+                        "status",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("invalid choice", stderr.getvalue())
+
+    def test_cli_wires_work_mode_to_real_custom_dip_runner(self) -> None:
+        with mock.patch.object(
+            cli_mod,
+            "run_real_custom_dip_proof_runner_command",
+            return_value={"status": "ok", "exit_code": 0},
+        ) as mocked:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "codex-runner",
+                        "real-custom-dip-proof",
+                        "--prompt",
+                        PROMPT,
+                        "--mode",
+                        "work",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(mocked.called)
+        self.assertEqual(mocked.call_args.kwargs["run_mode"], "work")
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["status"], "ok")
 

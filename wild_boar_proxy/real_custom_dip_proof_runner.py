@@ -59,6 +59,14 @@ REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND = "wbp_repeatable_real_custom_dip_proof
 REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_PACKET_KIND = (
     "wbp_repeatable_real_custom_dip_proof_runner_manifest"
 )
+REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF = "proof"
+REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK = "work"
+REAL_CUSTOM_DIP_PROOF_RUNNER_MODES = frozenset(
+    {
+        REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
+        REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+    }
+)
 
 REAL_CUSTOM_DIP_PROOF_RUNNER_OK = "OK"
 REAL_CUSTOM_DIP_PROOF_RUNNER_INPUT_INVALID = (
@@ -174,6 +182,29 @@ def _hex_sha256(value: object) -> str:
     return ""
 
 
+def _normalize_run_mode(value: object) -> str:
+    mode = _safe_text(value, limit=32).casefold()
+    return mode if mode in REAL_CUSTOM_DIP_PROOF_RUNNER_MODES else ""
+
+
+def _required_runs_for_mode(mode: str) -> int:
+    if mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK:
+        return 1
+    return 2
+
+
+def _proof_scope_for_mode(mode: str) -> str:
+    if mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK:
+        return (
+            "single_run_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
+            "and_working_flow_delivery_operator_work"
+        )
+    return (
+        "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
+        "and_working_flow_delivery"
+    )
+
+
 def _proof_root(paths: RuntimePaths, proof_dir: str | None) -> Path:
     if proof_dir:
         return Path(proof_dir).expanduser()
@@ -275,6 +306,9 @@ def _completed_process_metadata(completed: subprocess.CompletedProcess[str]) -> 
         "terminal_output_bytes": terminal_bytes,
         "terminal_output_recorded": False,
         "elapsed_ms": int(getattr(completed, "wbp_elapsed_ms", 0) or 0),
+        "prompt_submit_key_sent": bool(
+            getattr(completed, "wbp_prompt_submit_key_sent", False)
+        ),
         "process_stdout_recorded": False,
         "process_stderr_recorded": False,
         "command_argv_recorded": False,
@@ -325,6 +359,7 @@ def _run_custom_codex_prompt(
     output_hasher = hashlib.sha256()
     output_bytes = 0
     returncode = 1
+    submit_key_sent = False
     try:
         master_fd, slave_fd = pty.openpty()
         proc = subprocess.Popen(
@@ -355,6 +390,16 @@ def _run_custom_codex_prompt(
             if _ledger_matches_prompt_digest(ledger_path, expected_ledger_digest):
                 returncode = 0
                 break
+            if (
+                not submit_key_sent
+                and time.monotonic() - started >= 1.0
+                and master_fd >= 0
+            ):
+                try:
+                    os.write(master_fd, b"\r")
+                    submit_key_sent = True
+                except OSError:
+                    submit_key_sent = False
             if proc.poll() is not None:
                 returncode = int(proc.returncode or 0)
                 break
@@ -388,6 +433,7 @@ def _run_custom_codex_prompt(
     completed.wbp_terminal_output_sha256 = output_hasher.hexdigest()  # type: ignore[attr-defined]
     completed.wbp_terminal_output_bytes = output_bytes  # type: ignore[attr-defined]
     completed.wbp_elapsed_ms = elapsed_ms  # type: ignore[attr-defined]
+    completed.wbp_prompt_submit_key_sent = submit_key_sent  # type: ignore[attr-defined]
     return completed
 
 
@@ -1171,6 +1217,8 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
     dip_packet = dip if isinstance(dip, Mapping) else {}
     delivery = run.get("working_flow_delivery_packet")
     delivery_packet = delivery if isinstance(delivery, Mapping) else {}
+    codex_exec = run.get("codex_exec")
+    codex_exec_metadata = codex_exec if isinstance(codex_exec, Mapping) else {}
     blocking = run.get("run_blocking_reasons")
     custom_codex_flow_proven = (
         join_packet.get("custom_codex_flow_proven") is True
@@ -1236,6 +1284,31 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "run_index": run_index,
         "prompt_digest": _hex_sha256(run.get("prompt_digest")),
+        "custom_codex_exec_returncode": int(
+            codex_exec_metadata.get("process_returncode")
+            if isinstance(codex_exec_metadata.get("process_returncode"), int)
+            else 0
+        ),
+        "custom_codex_exec_elapsed_ms": int(
+            codex_exec_metadata.get("elapsed_ms")
+            if isinstance(codex_exec_metadata.get("elapsed_ms"), int)
+            else 0
+        ),
+        "custom_codex_terminal_output_sha256": _hex_sha256(
+            codex_exec_metadata.get("terminal_output_sha256")
+        ),
+        "custom_codex_terminal_output_bytes": int(
+            codex_exec_metadata.get("terminal_output_bytes")
+            if isinstance(codex_exec_metadata.get("terminal_output_bytes"), int)
+            else 0
+        ),
+        "custom_codex_prompt_submit_key_sent": bool(
+            codex_exec_metadata.get("prompt_submit_key_sent") is True
+        ),
+        "custom_codex_terminal_output_recorded": False,
+        "custom_codex_process_stdout_recorded": False,
+        "custom_codex_process_stderr_recorded": False,
+        "custom_codex_command_argv_recorded": False,
         "hook_ledger_fresh": run.get("hook_ledger_fresh") is True,
         "custom_codex_flow_proven": custom_codex_flow_proven,
         "user_prompt_submit_hook_ran": user_prompt_submit_hook_ran,
@@ -1418,6 +1491,7 @@ def _repeatability_failures(run_summaries: Sequence[Mapping[str, Any]], *, requi
 
 def _build_manifest(
     *,
+    run_mode: str,
     readiness_packet: Mapping[str, Any],
     run_summaries: Sequence[Mapping[str, Any]],
     runner_status: str,
@@ -1426,9 +1500,10 @@ def _build_manifest(
     return {
         "schema_version": 1,
         "packet_kind": REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_PACKET_KIND,
-        "proof_scope": (
-            "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
-            "and_working_flow_delivery"
+        "proof_scope": _proof_scope_for_mode(run_mode),
+        "operator_command_mode": run_mode,
+        "work_mode_cannot_mint_admission_proof": (
+            run_mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK
         ),
         "readiness": {
             "packet_kind": _safe_text(readiness_packet.get("packet_kind"), limit=96),
@@ -1506,6 +1581,7 @@ def _machine_error_code(
 
 def build_real_custom_dip_proof_runner_packet(
     *,
+    run_mode: str = REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
     proof_root: Path,
     readiness_packet: Mapping[str, Any],
     runtime_context: Mapping[str, Any],
@@ -1522,6 +1598,7 @@ def build_real_custom_dip_proof_runner_packet(
     artifact_failures: Sequence[str],
     secret_values: Sequence[str],
 ) -> dict[str, Any]:
+    mode = _normalize_run_mode(run_mode) or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF
     repeatability_failures = _repeatability_failures(
         run_summaries,
         required_runs=required_runs,
@@ -1571,6 +1648,8 @@ def build_real_custom_dip_proof_runner_packet(
         artifact_failures=artifact_failures,
     )
     ok = machine_error == REAL_CUSTOM_DIP_PROOF_RUNNER_OK
+    admission_ok = bool(ok and mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF)
+    work_ok = bool(ok and mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK)
     run_count = len(run_summaries)
     prompt_digests = [_hex_sha256(run.get("prompt_digest")) for run in run_summaries]
     first_run = run_summaries[0] if run_summaries else {}
@@ -1582,12 +1661,16 @@ def build_real_custom_dip_proof_runner_packet(
         **dict(context_metadata),
         "schema_version": 1,
         "packet_kind": REAL_CUSTOM_DIP_PROOF_RUNNER_PACKET_KIND,
-        "proof_scope": (
-            "repeatable_real_custom_codex_hook_origin_to_wbp_dip_live_dispatch_"
-            "and_working_flow_delivery"
+        "proof_scope": _proof_scope_for_mode(mode),
+        "operator_command_mode": mode,
+        "operator_command_surface": "wild-boar-proxy codex-runner real-custom-dip-proof",
+        "proof_mode_admission_proven": admission_ok,
+        "work_mode_proven": work_ok,
+        "work_mode_cannot_mint_admission_proof": (
+            mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK
         ),
-        "real_custom_codex_hook_origin_dip_proof_proven": ok,
-        "repeatable_real_custom_dip_proof_proven": ok,
+        "real_custom_codex_hook_origin_dip_proof_proven": admission_ok,
+        "repeatable_real_custom_dip_proof_proven": admission_ok,
         "custom_codex_flow_proven": bool(ok and first_run.get("custom_codex_flow_proven") is True),
         "user_prompt_submit_hook_ran": bool(ok and first_run.get("user_prompt_submit_hook_ran") is True),
         "hook_prompt_digest_bound": bool(ok and first_run.get("hook_prompt_digest_bound") is True),
@@ -1676,7 +1759,16 @@ def build_real_custom_dip_proof_runner_packet(
         "partial_first_run_diagnostics_are_not_product_ready": True,
         "required_run_count": required_runs,
         "run_count": run_count,
-        "two_runs_proven": bool(ok and run_count == required_runs),
+        "two_runs_proven": bool(
+            admission_ok
+            and run_count == 2
+            and required_runs == 2
+        ),
+        "single_work_run_proven": bool(
+            work_ok
+            and run_count == 1
+            and required_runs == 1
+        ),
         "fresh_hook_ledgers_proven": bool(
             ok and all(run.get("hook_ledger_fresh") is True for run in run_summaries)
         ),
@@ -1807,9 +1899,17 @@ def build_real_custom_dip_proof_runner_packet(
     return packets.build_command_packet(
         ok=ok,
         human_message=(
-            "WBP proved repeatable real Custom Codex hook-origin DIP dispatch and working-flow delivery."
+            (
+                "WBP proved repeatable real Custom Codex hook-origin DIP dispatch and working-flow delivery."
+                if mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF
+                else "WBP completed one proof-backed DIP operator work run."
+            )
             if ok
-            else "WBP blocked repeatable real Custom Codex DIP proof runner."
+            else (
+                "WBP blocked real Custom Codex DIP operator work run."
+                if mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK
+                else "WBP blocked repeatable real Custom Codex DIP proof runner."
+            )
         ),
         machine_error_code=machine_error,
         liveness="not_applicable",
@@ -1825,7 +1925,7 @@ def build_real_custom_dip_proof_runner_packet(
 def run_real_custom_dip_proof_runner_command(
     *,
     paths: RuntimePaths,
-    prompt_text: object,
+    prompt_text: object = "",
     codex_bin: str | None = None,
     codex_model: str | None = None,
     proof_dir: str | None = None,
@@ -1835,8 +1935,12 @@ def run_real_custom_dip_proof_runner_command(
     timeout_seconds: int = 300,
     codex_hook_current_hash: str | None = None,
     probe_codex_app_server: bool = False,
-    run_count: int = 2,
+    run_count: int | None = None,
+    run_mode: str = REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
 ) -> dict[str, Any]:
+    mode = _normalize_run_mode(run_mode)
+    required_runs = _required_runs_for_mode(mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF)
+    selected_run_count = required_runs if run_count is None else int(run_count)
     base_prompt = _safe_text(prompt_text, limit=4096)
     proof_root = _proof_root(paths, proof_dir)
     requested_prompt_digest = _sha256_text(base_prompt) if base_prompt else ""
@@ -1854,12 +1958,21 @@ def run_real_custom_dip_proof_runner_command(
     run_session_id = _run_session_id()
     secret_values = [
         base_prompt,
-        *[_effective_prompt(base_prompt, i, run_session_id) for i in range(1, run_count + 1)],
+        *[
+            _effective_prompt(base_prompt, i, run_session_id)
+            for i in range(1, selected_run_count + 1)
+            if base_prompt
+        ],
     ]
     secret_values.extend(_runtime_secret_values(runtime_context))
 
     input_failures: list[str] = []
-    if not base_prompt:
+    if not mode:
+        input_failures.append("run_mode_invalid")
+    if mode in {
+        REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
+        REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+    } and not base_prompt:
         input_failures.append("prompt_required")
     if not codex_executable.is_file() or not os.access(codex_executable, os.X_OK):
         input_failures.append("codex_binary_not_executable")
@@ -1867,8 +1980,8 @@ def run_real_custom_dip_proof_runner_command(
         input_failures.append("wbp_dip_tool_missing")
     if context_metadata.get("runtime_context_file_read") is not True:
         input_failures.append("runtime_context_file_not_read")
-    if run_count != 2:
-        input_failures.append("run_count_must_be_two")
+    if selected_run_count != required_runs:
+        input_failures.append("run_count_must_match_mode")
 
     proof_root.mkdir(parents=True, exist_ok=True)
     explicit_hook_hash = _safe_text(codex_hook_current_hash, limit=80)
@@ -1894,7 +2007,7 @@ def run_real_custom_dip_proof_runner_command(
 
     runs: list[dict[str, Any]] = []
     if not input_failures and not readiness_failures and not artifact_failures:
-        for index in range(1, run_count + 1):
+        for index in range(1, selected_run_count + 1):
             runs.append(
                 _run_once(
                     paths=paths,
@@ -1916,7 +2029,7 @@ def run_real_custom_dip_proof_runner_command(
     run_summaries = [_run_summary(index, run) for index, run in enumerate(runs, start=1)]
     provisional_repeatability_failures = _repeatability_failures(
         run_summaries,
-        required_runs=run_count,
+        required_runs=selected_run_count,
     )
     provisional_delivery_failures = [
         reason
@@ -1939,6 +2052,7 @@ def run_real_custom_dip_proof_runner_command(
         artifact_failures=artifact_failures,
     )
     manifest_packet = _build_manifest(
+        run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
         readiness_packet=readiness_packet,
         run_summaries=run_summaries,
         runner_status="ok" if provisional_error == REAL_CUSTOM_DIP_PROOF_RUNNER_OK else "error",
@@ -1957,6 +2071,7 @@ def run_real_custom_dip_proof_runner_command(
     runner_packet = build_real_custom_dip_proof_runner_packet(
         proof_root=proof_root,
         readiness_packet=readiness_packet,
+        run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
         runtime_context=runtime_context,
         context_metadata=context_metadata,
         run_summaries=run_summaries,
@@ -1965,7 +2080,7 @@ def run_real_custom_dip_proof_runner_command(
         manifest_file_written=manifest_file_written,
         runner_packet_file_written=True,
         requested_prompt_digest=requested_prompt_digest,
-        required_runs=run_count,
+        required_runs=selected_run_count,
         input_failures=input_failures,
         readiness_failures=readiness_failures,
         artifact_failures=artifact_failures,
@@ -1979,6 +2094,7 @@ def run_real_custom_dip_proof_runner_command(
         runner_packet = build_real_custom_dip_proof_runner_packet(
             proof_root=proof_root,
             readiness_packet=readiness_packet,
+            run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
             runtime_context=runtime_context,
             context_metadata=context_metadata,
             run_summaries=run_summaries,
@@ -1987,7 +2103,7 @@ def run_real_custom_dip_proof_runner_command(
             manifest_file_written=manifest_file_written,
             runner_packet_file_written=False,
             requested_prompt_digest=requested_prompt_digest,
-            required_runs=run_count,
+            required_runs=selected_run_count,
             input_failures=input_failures,
             readiness_failures=readiness_failures,
             artifact_failures=artifact_failures,
