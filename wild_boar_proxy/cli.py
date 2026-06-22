@@ -21,6 +21,8 @@ from .custom_codex_admission import run_custom_codex_admission_command
 from .custom_codex_operator_proof import run_repeatable_operator_proof_command
 from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_command
 from .real_custom_dip_operator import (
+    ACCEPTANCE_RUNS_DEFAULT,
+    run_real_custom_dip_operator_acceptance_command,
     run_real_custom_dip_operator_preflight_command,
     run_real_custom_dip_operator_work_command,
 )
@@ -335,6 +337,28 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
     dip_work.add_argument("--json", action="store_true", required=True)
+    dip_acceptance = dip_subparsers.add_parser("acceptance")
+    dip_acceptance.add_argument("--prompt", required=True)
+    dip_acceptance.add_argument("--runs", type=int, default=ACCEPTANCE_RUNS_DEFAULT)
+    dip_acceptance.add_argument("--codex-bin")
+    dip_acceptance.add_argument("--codex-model")
+    dip_acceptance.add_argument("--proof-dir")
+    dip_acceptance.add_argument("--codex-cwd")
+    dip_acceptance.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_acceptance.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_acceptance.add_argument("--codex-hook-current-hash")
+    dip_acceptance.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_acceptance.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -1793,6 +1817,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_PROBE
         if getattr(args, "dip_command", None) == "work":
             return EFFECT_MUTATE
+        if getattr(args, "dip_command", None) == "acceptance":
+            return EFFECT_MUTATE
     if command == "launch":
         launch_command = getattr(args, "launch_command", None)
         if launch_command == "smoke":
@@ -2114,6 +2140,22 @@ def main(argv: list[str] | None = None) -> int:
                 run_real_custom_dip_operator_work_command(
                     paths=paths,
                     prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "acceptance":
+            return emit_json(
+                run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runs=args.runs,
                     codex_bin=args.codex_bin,
                     codex_model=args.codex_model,
                     proof_dir=args.proof_dir,

@@ -124,13 +124,19 @@ def _readiness(ok: bool = True) -> dict[str, object]:
     }
 
 
-def _runner_work_packet(*, ok: bool = True) -> dict[str, object]:
-    return {
+def _runner_work_packet(
+    *,
+    ok: bool = True,
+    changed_files: list[str] | None = None,
+    **overrides: object,
+) -> dict[str, object]:
+    packet: dict[str, object] = {
         "packet_kind": "wbp_repeatable_real_custom_dip_proof_runner",
         "status": "ok" if ok else "error",
         "machine_error_code": "OK" if ok else "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED",
         "effect": "mutate",
-        "changed_files": ["/tmp/wbp/operator/real-custom-dip-proof-runner.packet.json"],
+        "changed_files": changed_files
+        or ["/tmp/wbp/operator/real-custom-dip-proof-runner.packet.json"],
         "operator_command_mode": "work",
         "work_mode_proven": ok,
         "single_work_run_proven": ok,
@@ -163,6 +169,58 @@ def _runner_work_packet(*, ok: bool = True) -> dict[str, object]:
         "raw_route_id_recorded": False,
         "secret_value_exposed": False,
     }
+    packet.update(overrides)
+    return packet
+
+
+def _preflight_ready_packet() -> dict[str, object]:
+    return {
+        "packet_kind": operator.REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_PACKET_KIND,
+        "status": "ok",
+        "machine_error_code": "OK",
+        "effect": "probe",
+        "changed_files": [],
+        "preflight_ready": True,
+        "selected_alias": "DIP",
+        "selected_alias_present": True,
+        "blocking_reasons": [],
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+        "product_ready": False,
+    }
+
+
+def _preflight_blocked_packet() -> dict[str, object]:
+    packet = _preflight_ready_packet()
+    packet.update(
+        {
+            "status": "error",
+            "machine_error_code": operator.REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_BLOCKED,
+            "preflight_ready": False,
+            "blocking_reasons": ["user_prompt_submit_hook_not_ready"],
+        }
+    )
+    return packet
+
+
+def _operator_work_packet(
+    root: Path,
+    run_index: int,
+    *,
+    ok: bool = True,
+    evidence_root: Path | None = None,
+    **overrides: object,
+) -> dict[str, object]:
+    evidence_dir = evidence_root or root / f"run-{run_index:02d}"
+    evidence_file = evidence_dir / "real-custom-dip-proof-runner.packet.json"
+    _write_json(evidence_file, {"ok": ok, "run_index": run_index})
+    return _runner_work_packet(
+        ok=ok,
+        changed_files=[str(evidence_file)],
+        packet_kind=operator.REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND,
+        **overrides,
+    )
 
 
 class RealCustomDipOperatorTests(unittest.TestCase):
@@ -389,14 +447,282 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         self.assertIn("runner_work_not_proven", packet["blocking_reasons"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_acceptance_passes_five_mocked_runs_with_distinct_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            work_packets = [
+                _operator_work_packet(root / "evidence", run_index)
+                for run_index in range(1, 6)
+            ]
+            with mock.patch.object(
+                operator,
+                "build_real_custom_dip_operator_preflight_packet",
+                return_value=_preflight_ready_packet(),
+            ) as preflight_mock, mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                side_effect=work_packets,
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    runs=5,
+                    proof_dir=str(root / "acceptance-proof"),
+                    codex_cwd=str(Path(__file__).resolve().parents[1]),
+                )
+
+            self.assertTrue(preflight_mock.called)
+            self.assertEqual(work_mock.call_count, 5)
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(
+                packet["packet_kind"],
+                operator.REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND,
+            )
+            self.assertTrue(packet["acceptance_passed"])
+            self.assertEqual(packet["acceptance_run_count_requested"], 5)
+            self.assertEqual(packet["acceptance_run_count_completed"], 5)
+            self.assertTrue(packet["all_runs_work_mode_proven"])
+            self.assertTrue(packet["all_runs_api_lane_called"])
+            self.assertTrue(packet["all_runs_delivery_proven"])
+            self.assertTrue(packet["all_runs_no_fallback"])
+            self.assertTrue(packet["all_runs_no_local_imitation"])
+            self.assertTrue(packet["all_runs_no_native_codex_subagent_as_dip"])
+            self.assertTrue(packet["all_runs_no_admission_mint"])
+            self.assertTrue(packet["evidence_roots_distinct"])
+            self.assertFalse(packet["proof_mode_admission_proven"])
+            self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertFalse(packet["real_custom_codex_hook_origin_dip_proof_proven"])
+            self.assertFalse(packet["product_ready"])
+            self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+            self.assertTrue(packet["acceptance_is_not_dip_work_prerequisite"])
+            self.assertEqual(len(packet["evidence_root_digests"]), 5)
+            self.assertEqual(len(packet["run_summaries"]), 5)
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(PROMPT, serialized)
+            self.assertNotIn(ROUTE_ID, serialized)
+            self.assertFalse(packet["evidence_root_paths_recorded"])
+            for summary in packet["run_summaries"]:
+                self.assertFalse(summary["evidence_root_path_recorded"])
+            self.assertEqual(
+                packets.inspect_command_packet_semantics(
+                    packet,
+                    secret_values=[PROMPT, ROUTE_ID],
+                ),
+                [],
+            )
+
+    def test_acceptance_rejects_out_of_range_runs_without_preflight_or_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            with mock.patch.object(
+                operator,
+                "build_real_custom_dip_operator_preflight_packet",
+            ) as preflight_mock, mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    runs=1,
+                )
+
+            self.assertFalse(preflight_mock.called)
+            self.assertFalse(work_mock.called)
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED,
+            )
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertFalse(packet["acceptance_run_count_valid"])
+            self.assertIn("acceptance_run_count_out_of_range", packet["blocking_reasons"])
+            self.assertEqual(packet["acceptance_run_count_completed"], 0)
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_acceptance_preflight_blocked_skips_work(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            with mock.patch.object(
+                operator,
+                "build_real_custom_dip_operator_preflight_packet",
+                return_value=_preflight_blocked_packet(),
+            ) as preflight_mock, mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    runs=2,
+                )
+
+            self.assertTrue(preflight_mock.called)
+            self.assertFalse(work_mock.called)
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertFalse(packet["preflight_ready"])
+            self.assertIn("preflight_not_ready", packet["blocking_reasons"])
+            self.assertEqual(packet["acceptance_run_count_completed"], 0)
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_acceptance_stops_on_first_failed_work_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            work_packets = [
+                _operator_work_packet(root / "evidence", 1),
+                _operator_work_packet(root / "evidence", 2),
+                _operator_work_packet(root / "evidence", 3, ok=False),
+                _operator_work_packet(root / "evidence", 4),
+            ]
+            with mock.patch.object(
+                operator,
+                "build_real_custom_dip_operator_preflight_packet",
+                return_value=_preflight_ready_packet(),
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                side_effect=work_packets,
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    runs=5,
+                )
+
+            self.assertEqual(work_mock.call_count, 3)
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertEqual(packet["acceptance_run_count_completed"], 3)
+            self.assertEqual(packet["acceptance_stopped_on_run"], 3)
+            self.assertIn("acceptance_run_count_not_completed", packet["blocking_reasons"])
+            self.assertIn("run_3_api_lane_not_called", packet["blocking_reasons"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_acceptance_blocks_admission_mint_overclaim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            work_packet = _operator_work_packet(
+                root / "evidence",
+                1,
+                proof_mode_admission_proven=True,
+            )
+            with mock.patch.object(
+                operator,
+                "build_real_custom_dip_operator_preflight_packet",
+                return_value=_preflight_ready_packet(),
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                return_value=work_packet,
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    runs=2,
+                )
+
+            self.assertEqual(work_mock.call_count, 1)
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertFalse(packet["all_runs_no_admission_mint"])
+            self.assertFalse(packet["proof_mode_admission_proven"])
+            self.assertIn(
+                "run_1_proof_mode_admission_minted",
+                packet["blocking_reasons"],
+            )
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_acceptance_blocks_duplicate_evidence_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            shared_root = root / "shared-evidence"
+            packet = operator.build_real_custom_dip_operator_acceptance_packet(
+                prompt_text=PROMPT,
+                requested_runs=2,
+                preflight_packet=_preflight_ready_packet(),
+                work_packets=[
+                    _operator_work_packet(root / "unused", 1, evidence_root=shared_root),
+                    _operator_work_packet(root / "unused", 2, evidence_root=shared_root),
+                ],
+                secret_values=[PROMPT, ROUTE_ID],
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertFalse(packet["evidence_roots_distinct"])
+            self.assertIn("evidence_roots_not_distinct", packet["blocking_reasons"])
+            self.assertFalse(packet["evidence_root_paths_recorded"])
+            for summary in packet["run_summaries"]:
+                self.assertFalse(summary["evidence_root_path_recorded"])
+            self.assertEqual(
+                packets.inspect_command_packet_semantics(
+                    packet,
+                    secret_values=[PROMPT, ROUTE_ID],
+                ),
+                [],
+            )
+
+    def test_acceptance_blocks_prompt_or_route_secret_in_nested_work_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            packet = operator.build_real_custom_dip_operator_acceptance_packet(
+                prompt_text=PROMPT,
+                requested_runs=2,
+                preflight_packet=_preflight_ready_packet(),
+                work_packets=[
+                    _operator_work_packet(root / "evidence", 1, leaked_prompt=PROMPT),
+                    _operator_work_packet(root / "evidence", 2, leaked_route=ROUTE_ID),
+                ],
+                secret_values=[PROMPT, ROUTE_ID],
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET,
+            )
+            self.assertFalse(packet["acceptance_passed"])
+            self.assertIn("operator_acceptance_packet_secret_leak", packet["blocking_reasons"])
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(PROMPT, serialized)
+            self.assertNotIn(ROUTE_ID, serialized)
+            self.assertEqual(
+                packets.inspect_command_packet_semantics(
+                    packet,
+                    secret_values=[PROMPT, ROUTE_ID],
+                ),
+                [],
+            )
+
     def test_cli_effect_and_dispatch_for_dip_commands(self) -> None:
         parser = cli_mod.build_parser()
         preflight_args = parser.parse_args(
             ["dip", "preflight", "--prompt", PROMPT, "--json"]
         )
         work_args = parser.parse_args(["dip", "work", "--prompt", PROMPT, "--json"])
+        acceptance_args = parser.parse_args(
+            ["dip", "acceptance", "--runs", "2", "--prompt", PROMPT, "--json"]
+        )
+        acceptance_default_args = parser.parse_args(
+            ["dip", "acceptance", "--prompt", PROMPT, "--json"]
+        )
         self.assertEqual(cli_mod.command_effect_from_args(preflight_args), EFFECT_PROBE)
         self.assertEqual(cli_mod.command_effect_from_args(work_args), EFFECT_MUTATE)
+        self.assertEqual(cli_mod.command_effect_from_args(acceptance_args), EFFECT_MUTATE)
+        self.assertEqual(
+            acceptance_default_args.runs,
+            operator.ACCEPTANCE_RUNS_DEFAULT,
+        )
 
         with mock.patch.object(
             cli_mod,
@@ -424,6 +750,31 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue(preflight_mock.called)
         self.assertEqual(preflight_mock.call_args.kwargs["prompt_text"], PROMPT)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
+
+        with mock.patch.object(
+            cli_mod,
+            "run_real_custom_dip_operator_acceptance_command",
+            return_value={"status": "ok", "exit_code": 0},
+        ) as acceptance_mock:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "dip",
+                        "acceptance",
+                        "--runs",
+                        "2",
+                        "--prompt",
+                        PROMPT,
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(acceptance_mock.called)
+        self.assertEqual(acceptance_mock.call_args.kwargs["prompt_text"], PROMPT)
+        self.assertEqual(acceptance_mock.call_args.kwargs["runs"], 2)
         self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
 
 

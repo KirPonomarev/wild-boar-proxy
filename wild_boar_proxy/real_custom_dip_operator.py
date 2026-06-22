@@ -34,13 +34,21 @@ from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
 
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_PACKET_KIND = "wbp_real_custom_dip_operator_preflight"
 REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND = "wbp_real_custom_dip_operator_work"
+REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND = "wbp_real_custom_dip_operator_acceptance"
 
 REAL_CUSTOM_DIP_OPERATOR_OK = "OK"
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_BLOCKED = (
     "WBP_REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_BLOCKED"
 )
 REAL_CUSTOM_DIP_OPERATOR_WORK_BLOCKED = "WBP_REAL_CUSTOM_DIP_OPERATOR_WORK_BLOCKED"
+REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED = (
+    "WBP_REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED"
+)
 REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET = "WBP_REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET"
+
+ACCEPTANCE_RUNS_DEFAULT = 5
+ACCEPTANCE_RUNS_MIN = 2
+ACCEPTANCE_RUNS_MAX = 10
 
 OPERATOR_STATUS_READY = "ready"
 OPERATOR_STATUS_BLOCKED = "blocked"
@@ -74,6 +82,17 @@ def _safe_changed_files(value: object) -> list[str]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
         return []
     return [str(item) for item in value if isinstance(item, str)]
+
+
+def _merge_changed_files(packets_to_merge: Sequence[Mapping[str, Any]]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for packet in packets_to_merge:
+        for changed_file in _safe_changed_files(packet.get("changed_files")):
+            if changed_file not in seen:
+                seen.add(changed_file)
+                merged.append(changed_file)
+    return merged
 
 
 def _runtime_secret_values(context: Mapping[str, Any] | None) -> list[str]:
@@ -129,6 +148,35 @@ def _proof_output_parent_writable(paths: RuntimePaths, proof_dir: str | None) ->
     if target.exists():
         return target.is_dir() and os.access(target, os.W_OK | os.X_OK)
     return _writable_existing_ancestor(target.parent)
+
+
+def _acceptance_proof_root(paths: RuntimePaths, proof_dir: str | None) -> Path:
+    if proof_dir:
+        return Path(proof_dir).expanduser()
+    return paths.managed_dir / "codex-runner" / "real-custom-dip-acceptance"
+
+
+def _acceptance_run_proof_dir(base_proof_root: Path, run_number: int) -> Path:
+    return base_proof_root / f"run-{run_number:02d}"
+
+
+def _evidence_root_from_packet(packet: Mapping[str, Any]) -> str:
+    changed_files = _safe_changed_files(packet.get("changed_files"))
+    if not changed_files:
+        return ""
+    return str(Path(changed_files[0]).expanduser().parent)
+
+
+def _changed_files_present(packet: Mapping[str, Any]) -> bool:
+    changed_files = _safe_changed_files(packet.get("changed_files"))
+    return bool(changed_files) and all(Path(path).expanduser().is_file() for path in changed_files)
+
+
+def _normalize_acceptance_runs(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _hook_ready(packet: Mapping[str, Any]) -> bool:
@@ -532,10 +580,14 @@ def build_real_custom_dip_operator_work_packet(
         "delivery_counts_as_custom_codex_ui": False,
         "product_ready": False,
         "does_not_prove_product_ready": True,
-        "fallback_used": False,
-        "local_imitation_used": False,
-        "native_codex_subagent_used_as_dip": False,
-        "codex_native_subagent_used_as_dip": False,
+        "fallback_used": runner.get("fallback_used") is True,
+        "local_imitation_used": runner.get("local_imitation_used") is True,
+        "native_codex_subagent_used_as_dip": (
+            runner.get("native_codex_subagent_used_as_dip") is True
+        ),
+        "codex_native_subagent_used_as_dip": (
+            runner.get("codex_native_subagent_used_as_dip") is True
+        ),
         "raw_prompt_recorded": False,
         "prompt_text_recorded": False,
         "natural_phrase_recorded": False,
@@ -619,5 +671,360 @@ def run_real_custom_dip_operator_work_command(
         prompt_text=prompt,
         preflight_packet=preflight,
         runner_packet=runner_packet,
+        secret_values=secret_values,
+    )
+
+
+def _acceptance_run_failures(index: int, packet: Mapping[str, Any]) -> list[str]:
+    prefix = f"run_{index}_"
+    failures: list[str] = []
+    if packet.get("status") != "ok":
+        failures.append(prefix + "status_not_ok")
+    if packet.get("machine_error_code") != REAL_CUSTOM_DIP_OPERATOR_OK:
+        failures.append(prefix + "machine_error_not_ok")
+    if packet.get("work_mode_proven") is not True:
+        failures.append(prefix + "work_mode_not_proven")
+    if packet.get("single_work_run_proven") is not True:
+        failures.append(prefix + "single_work_run_not_proven")
+    if packet.get("api_lane_called") is not True:
+        failures.append(prefix + "api_lane_not_called")
+    if packet.get("codex_working_flow_delivery_proven") is not True:
+        failures.append(prefix + "delivery_not_proven")
+    if packet.get("fallback_used") is not False:
+        failures.append(prefix + "fallback_used")
+    if packet.get("local_imitation_used") is not False:
+        failures.append(prefix + "local_imitation_used")
+    if packet.get("native_codex_subagent_used_as_dip") is not False:
+        failures.append(prefix + "native_codex_subagent_used_as_dip")
+    if packet.get("proof_mode_admission_proven") is not False:
+        failures.append(prefix + "proof_mode_admission_minted")
+    if packet.get("repeatable_real_custom_dip_proof_proven") is not False:
+        failures.append(prefix + "repeatable_proof_minted")
+    if packet.get("real_custom_codex_hook_origin_dip_proof_proven") is not False:
+        failures.append(prefix + "admission_origin_proof_minted")
+    if packet.get("product_ready") is not False:
+        failures.append(prefix + "product_ready_claimed")
+    if not _changed_files_present(packet):
+        failures.append(prefix + "evidence_files_missing")
+    failures.extend(prefix + reason for reason in _safe_reasons(packet.get("blocking_reasons")))
+    return sorted(set(failures))
+
+
+def build_real_custom_dip_operator_acceptance_packet(
+    *,
+    prompt_text: object,
+    requested_runs: int,
+    preflight_packet: Mapping[str, Any] | None,
+    work_packets: Sequence[Mapping[str, Any]],
+    secret_values: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    prompt = _safe_text(prompt_text, limit=4096)
+    preflight = dict(preflight_packet or {})
+    runs = [dict(packet) for packet in work_packets]
+    run_count_valid = ACCEPTANCE_RUNS_MIN <= requested_runs <= ACCEPTANCE_RUNS_MAX
+    completed_count = len(runs)
+    evidence_roots = [_evidence_root_from_packet(packet) for packet in runs]
+    evidence_root_digests = [
+        _sha256_text(root) for root in evidence_roots if root
+    ]
+    evidence_roots_distinct = bool(
+        completed_count > 0
+        and len(evidence_roots) == completed_count
+        and all(evidence_roots)
+        and len(set(evidence_roots)) == completed_count
+    )
+    preflight_ready = preflight.get("preflight_ready") is True
+    run_failures = [
+        failure
+        for index, packet in enumerate(runs, start=1)
+        for failure in _acceptance_run_failures(index, packet)
+    ]
+    unsafe_input = [preflight, *runs]
+    unsafe = packets.command_packet_has_secret_leak(
+        unsafe_input,
+        secret_values=list(secret_values or []),
+    )
+    blocking_reasons: list[str] = []
+    if not run_count_valid:
+        blocking_reasons.append("acceptance_run_count_out_of_range")
+    if run_count_valid and not preflight_ready:
+        blocking_reasons.append("preflight_not_ready")
+        blocking_reasons.extend(_safe_reasons(preflight.get("blocking_reasons")))
+    if run_count_valid and preflight_ready and completed_count != requested_runs:
+        blocking_reasons.append("acceptance_run_count_not_completed")
+    if completed_count and not evidence_roots_distinct:
+        blocking_reasons.append("evidence_roots_not_distinct")
+    blocking_reasons.extend(run_failures)
+    if unsafe:
+        blocking_reasons.append("operator_acceptance_packet_secret_leak")
+    blocking_reasons = sorted(set(blocking_reasons))
+
+    all_runs_work_mode_proven = bool(
+        completed_count == requested_runs
+        and completed_count > 0
+        and all(packet.get("work_mode_proven") is True for packet in runs)
+    )
+    all_runs_api_lane_called = bool(
+        completed_count == requested_runs
+        and completed_count > 0
+        and all(packet.get("api_lane_called") is True for packet in runs)
+    )
+    all_runs_delivery_proven = bool(
+        completed_count == requested_runs
+        and completed_count > 0
+        and all(packet.get("codex_working_flow_delivery_proven") is True for packet in runs)
+    )
+    all_runs_no_fallback = all(packet.get("fallback_used") is False for packet in runs)
+    all_runs_no_local_imitation = all(
+        packet.get("local_imitation_used") is False for packet in runs
+    )
+    all_runs_no_native_codex_subagent_as_dip = all(
+        packet.get("native_codex_subagent_used_as_dip") is False for packet in runs
+    )
+    all_runs_no_admission_mint = all(
+        packet.get("proof_mode_admission_proven") is False
+        and packet.get("repeatable_real_custom_dip_proof_proven") is False
+        and packet.get("real_custom_codex_hook_origin_dip_proof_proven") is False
+        for packet in runs
+    )
+    all_runs_product_not_ready = all(packet.get("product_ready") is False for packet in runs)
+    acceptance_passed = bool(
+        run_count_valid
+        and preflight_ready
+        and completed_count == requested_runs
+        and all_runs_work_mode_proven
+        and all_runs_api_lane_called
+        and all_runs_delivery_proven
+        and all_runs_no_fallback
+        and all_runs_no_local_imitation
+        and all_runs_no_native_codex_subagent_as_dip
+        and all_runs_no_admission_mint
+        and all_runs_product_not_ready
+        and evidence_roots_distinct
+        and not unsafe
+        and not blocking_reasons
+    )
+    changed_files = _merge_changed_files(runs)
+    stopped_on_run = 0
+    if run_failures:
+        first_failure = run_failures[0].split("_", 2)
+        if len(first_failure) >= 2 and first_failure[0] == "run":
+            try:
+                stopped_on_run = int(first_failure[1])
+            except ValueError:
+                stopped_on_run = completed_count
+    elif run_count_valid and preflight_ready and completed_count < requested_runs:
+        stopped_on_run = completed_count + 1
+    extra = {
+        "schema_version": 1,
+        "packet_kind": REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND,
+        "proof_scope": "real_custom_dip_operator_acceptance_gate",
+        "operator_command_surface": "wild-boar-proxy dip acceptance",
+        "operator_command_mode": "acceptance",
+        "operator_status": OPERATOR_STATUS_READY
+        if acceptance_passed
+        else OPERATOR_STATUS_BLOCKED,
+        "acceptance_passed": acceptance_passed,
+        "blocked": not acceptance_passed,
+        "acceptance_run_count_requested": requested_runs,
+        "acceptance_run_count_min": ACCEPTANCE_RUNS_MIN,
+        "acceptance_run_count_max": ACCEPTANCE_RUNS_MAX,
+        "acceptance_run_count_valid": run_count_valid,
+        "acceptance_run_count_completed": completed_count,
+        "acceptance_successful_run_count": sum(
+            1 for packet in runs if packet.get("status") == "ok"
+        ),
+        "acceptance_stopped_on_run": stopped_on_run,
+        "preflight_checked": bool(preflight),
+        "preflight_ready": preflight_ready,
+        "preflight_packet_kind": _safe_text(preflight.get("packet_kind"), limit=96),
+        "preflight_machine_error_code": _safe_text(
+            preflight.get("machine_error_code"),
+            limit=128,
+        ),
+        "all_runs_work_mode_proven": all_runs_work_mode_proven,
+        "all_runs_api_lane_called": all_runs_api_lane_called,
+        "all_runs_delivery_proven": all_runs_delivery_proven,
+        "all_runs_no_fallback": all_runs_no_fallback,
+        "all_runs_no_local_imitation": all_runs_no_local_imitation,
+        "all_runs_no_native_codex_subagent_as_dip": (
+            all_runs_no_native_codex_subagent_as_dip
+        ),
+        "all_runs_no_admission_mint": all_runs_no_admission_mint,
+        "all_runs_product_not_ready": all_runs_product_not_ready,
+        "evidence_roots_distinct": evidence_roots_distinct,
+        "evidence_root_count": len(evidence_roots),
+        "evidence_root_digests": evidence_root_digests,
+        "evidence_root_paths_recorded": False,
+        "evidence_changed_files_count": len(changed_files),
+        "acceptance_is_not_dip_work_prerequisite": True,
+        "custom_codex_flow_proven": bool(
+            acceptance_passed
+            and all(packet.get("custom_codex_flow_proven") is True for packet in runs)
+        ),
+        "user_prompt_submit_hook_ran": bool(
+            acceptance_passed
+            and all(packet.get("user_prompt_submit_hook_ran") is True for packet in runs)
+        ),
+        "hook_prompt_digest_bound": bool(
+            acceptance_passed
+            and all(packet.get("hook_prompt_digest_bound") is True for packet in runs)
+        ),
+        "hook_runtime_context_digest_bound": bool(
+            acceptance_passed
+            and all(
+                packet.get("hook_runtime_context_digest_bound") is True
+                for packet in runs
+            )
+        ),
+        "api_lane_called": all_runs_api_lane_called,
+        "work_mode_proven": all_runs_work_mode_proven,
+        "codex_working_flow_delivery_proven": all_runs_delivery_proven,
+        "proof_mode_admission_proven": False,
+        "repeatable_real_custom_dip_proof_proven": False,
+        "real_custom_codex_hook_origin_dip_proof_proven": False,
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "product_ready": False,
+        "does_not_prove_product_ready": True,
+        "fallback_used": not all_runs_no_fallback,
+        "local_imitation_used": not all_runs_no_local_imitation,
+        "native_codex_subagent_used_as_dip": (
+            not all_runs_no_native_codex_subagent_as_dip
+        ),
+        "codex_native_subagent_used_as_dip": (
+            not all_runs_no_native_codex_subagent_as_dip
+        ),
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "run_summaries_recorded": True,
+        "run_summaries": [
+            {
+                "run_index": index,
+                "status": _safe_text(packet.get("status"), limit=32),
+                "machine_error_code": _safe_text(
+                    packet.get("machine_error_code"),
+                    limit=128,
+                ),
+                "work_mode_proven": packet.get("work_mode_proven") is True,
+                "api_lane_called": packet.get("api_lane_called") is True,
+                "codex_working_flow_delivery_proven": (
+                    packet.get("codex_working_flow_delivery_proven") is True
+                ),
+                "fallback_used": packet.get("fallback_used") is True,
+                "local_imitation_used": packet.get("local_imitation_used") is True,
+                "native_codex_subagent_used_as_dip": (
+                    packet.get("native_codex_subagent_used_as_dip") is True
+                ),
+                "proof_mode_admission_proven": (
+                    packet.get("proof_mode_admission_proven") is True
+                ),
+                "repeatable_real_custom_dip_proof_proven": (
+                    packet.get("repeatable_real_custom_dip_proof_proven") is True
+                ),
+                "product_ready": packet.get("product_ready") is True,
+                "evidence_root_digest": _sha256_text(evidence_roots[index - 1])
+                if index - 1 < len(evidence_roots) and evidence_roots[index - 1]
+                else "",
+                "evidence_root_path_recorded": False,
+                "changed_files_count": len(_safe_changed_files(packet.get("changed_files"))),
+            }
+            for index, packet in enumerate(runs, start=1)
+        ],
+        "reason_codes": blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+        "changed_files": changed_files,
+    }
+    return packets.build_command_packet(
+        ok=acceptance_passed,
+        human_message=(
+            "WBP DIP operator acceptance gate passed."
+            if acceptance_passed
+            else "WBP DIP operator acceptance gate is BLOCKED."
+        ),
+        machine_error_code=REAL_CUSTOM_DIP_OPERATOR_OK
+        if acceptance_passed
+        else REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET
+        if unsafe
+        else REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if acceptance_passed else "stop",
+        changed_files=changed_files,
+        effect=EFFECT_MUTATE,
+        secret_values=list(secret_values or []),
+        extra=extra,
+    )
+
+
+def run_real_custom_dip_operator_acceptance_command(
+    *,
+    paths: RuntimePaths,
+    prompt_text: object,
+    runs: int = ACCEPTANCE_RUNS_DEFAULT,
+    codex_bin: str | None = None,
+    codex_model: str | None = None,
+    proof_dir: str | None = None,
+    codex_cwd: str | None = None,
+    sandbox: str = DEFAULT_SANDBOX,
+    timeout_seconds: int = 300,
+    codex_hook_current_hash: str | None = None,
+    probe_codex_app_server: bool = False,
+) -> dict[str, Any]:
+    prompt = _safe_text(prompt_text, limit=4096)
+    selected_runs = _normalize_acceptance_runs(runs)
+    context_path = runtime_context_path(paths=paths)
+    runtime_context, _context_metadata = load_runtime_context_packet(context_path)
+    secret_values = [prompt] if prompt else []
+    secret_values.extend(_runtime_secret_values(runtime_context))
+    base_proof_root = _acceptance_proof_root(paths, proof_dir)
+    if not (ACCEPTANCE_RUNS_MIN <= selected_runs <= ACCEPTANCE_RUNS_MAX):
+        return build_real_custom_dip_operator_acceptance_packet(
+            prompt_text=prompt,
+            requested_runs=selected_runs,
+            preflight_packet=None,
+            work_packets=[],
+            secret_values=secret_values,
+        )
+    preflight = build_real_custom_dip_operator_preflight_packet(
+        paths=paths,
+        prompt_text=prompt,
+        codex_bin=codex_bin,
+        proof_dir=str(base_proof_root),
+        codex_cwd=codex_cwd,
+        codex_hook_current_hash=codex_hook_current_hash,
+        probe_codex_app_server=probe_codex_app_server,
+    )
+    work_packets: list[dict[str, Any]] = []
+    if preflight.get("preflight_ready") is True:
+        for run_index in range(1, selected_runs + 1):
+            work_packet = run_real_custom_dip_operator_work_command(
+                paths=paths,
+                prompt_text=prompt,
+                codex_bin=codex_bin,
+                codex_model=codex_model,
+                proof_dir=str(_acceptance_run_proof_dir(base_proof_root, run_index)),
+                codex_cwd=codex_cwd,
+                sandbox=sandbox,
+                timeout_seconds=timeout_seconds,
+                codex_hook_current_hash=codex_hook_current_hash,
+                probe_codex_app_server=probe_codex_app_server,
+            )
+            work_packets.append(work_packet)
+            if _acceptance_run_failures(run_index, work_packet):
+                break
+    return build_real_custom_dip_operator_acceptance_packet(
+        prompt_text=prompt,
+        requested_runs=selected_runs,
+        preflight_packet=preflight,
+        work_packets=work_packets,
         secret_values=secret_values,
     )
