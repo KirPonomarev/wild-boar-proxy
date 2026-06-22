@@ -656,8 +656,26 @@ def build_real_custom_dip_operator_work_packet(
         "work_ready": ok,
         "blocked": not ok,
         "reason_codes": blocking_reasons,
+        "status_packet_consulted": False,
+        "status_packet_used_as_auth_grant": False,
+        "status_recommendation_is_not_auth_grant": True,
+        "status_recommendation_bypasses_preflight": False,
+        "acceptance_readiness_packet_required": False,
+        "acceptance_is_not_dip_work_prerequisite": True,
         "preflight_checked": True,
         "preflight_ready": preflight_ready,
+        "work_preflight_rechecked_runtime_context": (
+            preflight_packet.get("runtime_context_file_read") is True
+        ),
+        "work_preflight_rechecked_allowlist": (
+            preflight_packet.get("allowed_api_route_ids_enforced") is True
+        ),
+        "work_alias_context_read_by_preflight": (
+            preflight_packet.get("alias_context_read") is True
+        ),
+        "work_route_allowed_by_preflight": (
+            preflight_packet.get("route_id_allowed") is True
+        ),
         "preflight_packet_kind": _safe_text(
             preflight_packet.get("packet_kind"),
             limit=96,

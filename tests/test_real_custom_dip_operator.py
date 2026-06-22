@@ -181,6 +181,12 @@ def _preflight_ready_packet() -> dict[str, object]:
         "effect": "probe",
         "changed_files": [],
         "preflight_ready": True,
+        "runtime_context_file_read": True,
+        "runtime_context_file_valid_json": True,
+        "runtime_context_file_mapping": True,
+        "alias_context_read": True,
+        "allowed_api_route_ids_enforced": True,
+        "route_id_allowed": True,
         "selected_alias": "DIP",
         "selected_alias_present": True,
         "blocking_reasons": [],
@@ -408,10 +414,147 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             )
             self.assertTrue(packet["preflight_checked"])
             self.assertFalse(packet["preflight_ready"])
+            self.assertTrue(packet["status_recommendation_is_not_auth_grant"])
+            self.assertFalse(packet["status_packet_consulted"])
+            self.assertFalse(packet["status_packet_used_as_auth_grant"])
+            self.assertFalse(packet["status_recommendation_bypasses_preflight"])
+            self.assertTrue(packet["acceptance_is_not_dip_work_prerequisite"])
             self.assertFalse(packet["runner_called"])
             self.assertFalse(packet["api_lane_called"])
             self.assertFalse(packet["work_mode_proven"])
             self.assertIn("preflight_not_ready", packet["blocking_reasons"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_blocks_missing_runtime_context_before_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            (paths.profile_dir / "wbp-agent-runtime-context.json").unlink()
+            codex_bin = _codex_bin(root)
+            with mock.patch.object(
+                operator,
+                "build_user_prompt_submit_readiness_packet",
+                return_value=_readiness(),
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_proof_runner_command",
+            ) as runner_mock, mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+            ) as status_mock:
+                packet = operator.run_real_custom_dip_operator_work_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(codex_bin),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(Path(__file__).resolve().parents[1]),
+                )
+
+            self.assertFalse(status_mock.called)
+            self.assertFalse(runner_mock.called)
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                operator.REAL_CUSTOM_DIP_OPERATOR_WORK_BLOCKED,
+            )
+            self.assertFalse(packet["preflight_ready"])
+            self.assertFalse(packet["work_preflight_rechecked_runtime_context"])
+            self.assertFalse(packet["work_preflight_rechecked_allowlist"])
+            self.assertFalse(packet["work_alias_context_read_by_preflight"])
+            self.assertFalse(packet["work_route_allowed_by_preflight"])
+            self.assertFalse(packet["status_packet_used_as_auth_grant"])
+            self.assertIn("runtime_context_file_not_read", packet["blocking_reasons"])
+            self.assertIn("preflight_not_ready", packet["blocking_reasons"])
+            self.assertFalse(packet["api_lane_called"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_blocks_malformed_runtime_context_before_runner(self) -> None:
+        cases = {
+            "invalid-json": (
+                "{not-json\n",
+                "runtime_context_file_json_not_valid",
+                False,
+            ),
+            "not-mapping": ("[]\n", "runtime_context_file_not_mapping", True),
+        }
+        for label, (context_text, expected_reason, context_read) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                paths = _paths(root)
+                (paths.profile_dir / "wbp-agent-runtime-context.json").write_text(
+                    context_text,
+                    encoding="utf-8",
+                )
+                codex_bin = _codex_bin(root)
+                with mock.patch.object(
+                    operator,
+                    "build_user_prompt_submit_readiness_packet",
+                    return_value=_readiness(),
+                ), mock.patch.object(
+                    operator,
+                    "run_real_custom_dip_proof_runner_command",
+                ) as runner_mock, mock.patch.object(
+                    operator,
+                    "run_dip_operator_status_command",
+                ) as status_mock:
+                    packet = operator.run_real_custom_dip_operator_work_command(
+                        paths=paths,
+                        prompt_text=PROMPT,
+                        codex_bin=str(codex_bin),
+                        proof_dir=str(root / "proof"),
+                        codex_cwd=str(Path(__file__).resolve().parents[1]),
+                    )
+
+                self.assertFalse(status_mock.called)
+                self.assertFalse(runner_mock.called)
+                self.assertEqual(packet["status"], "error")
+                self.assertFalse(packet["preflight_ready"])
+                self.assertIs(
+                    packet["work_preflight_rechecked_runtime_context"],
+                    context_read,
+                )
+                self.assertFalse(packet["work_preflight_rechecked_allowlist"])
+                self.assertFalse(packet["status_packet_used_as_auth_grant"])
+                self.assertIn(expected_reason, packet["blocking_reasons"])
+                self.assertIn("preflight_not_ready", packet["blocking_reasons"])
+                self.assertFalse(packet["api_lane_called"])
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_blocks_route_outside_allowlist_before_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root, context=_runtime_context(allowed_routes=["wbp-other-route"]))
+            codex_bin = _codex_bin(root)
+            with mock.patch.object(
+                operator,
+                "build_user_prompt_submit_readiness_packet",
+                return_value=_readiness(),
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_proof_runner_command",
+            ) as runner_mock, mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+            ) as status_mock:
+                packet = operator.run_real_custom_dip_operator_work_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(codex_bin),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(Path(__file__).resolve().parents[1]),
+                )
+
+            self.assertFalse(status_mock.called)
+            self.assertFalse(runner_mock.called)
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["preflight_ready"])
+            self.assertTrue(packet["work_preflight_rechecked_runtime_context"])
+            self.assertTrue(packet["work_preflight_rechecked_allowlist"])
+            self.assertTrue(packet["work_alias_context_read_by_preflight"])
+            self.assertFalse(packet["work_route_allowed_by_preflight"])
+            self.assertFalse(packet["status_packet_used_as_auth_grant"])
+            self.assertIn("route_not_allowed_by_runtime_context", packet["blocking_reasons"])
+            self.assertFalse(packet["api_lane_called"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_work_calls_runner_with_parser_selected_alias_and_wraps_evidence(self) -> None:
@@ -427,7 +570,10 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 operator,
                 "run_real_custom_dip_proof_runner_command",
                 return_value=_runner_work_packet(),
-            ) as runner_mock:
+            ) as runner_mock, mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+            ) as status_mock:
                 packet = operator.run_real_custom_dip_operator_work_command(
                     paths=paths,
                     prompt_text=AGENT_2_PROMPT,
@@ -437,6 +583,7 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                     timeout_seconds=7,
                 )
 
+            self.assertFalse(status_mock.called)
             self.assertTrue(runner_mock.called)
             self.assertEqual(runner_mock.call_args.kwargs["run_mode"], "work")
             self.assertEqual(runner_mock.call_args.kwargs["expected_alias"], "Agent 2")
@@ -446,6 +593,15 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertTrue(packet["work_ready"])
             self.assertTrue(packet["runner_called"])
             self.assertTrue(packet["work_mode_proven"])
+            self.assertTrue(packet["status_recommendation_is_not_auth_grant"])
+            self.assertFalse(packet["status_packet_consulted"])
+            self.assertFalse(packet["status_packet_used_as_auth_grant"])
+            self.assertFalse(packet["status_recommendation_bypasses_preflight"])
+            self.assertTrue(packet["acceptance_is_not_dip_work_prerequisite"])
+            self.assertTrue(packet["work_preflight_rechecked_runtime_context"])
+            self.assertTrue(packet["work_preflight_rechecked_allowlist"])
+            self.assertTrue(packet["work_alias_context_read_by_preflight"])
+            self.assertTrue(packet["work_route_allowed_by_preflight"])
             self.assertTrue(packet["single_work_run_proven"])
             self.assertTrue(packet["api_lane_called"])
             self.assertEqual(packet["selected_alias"], "Agent 2")
@@ -456,6 +612,60 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
             self.assertNotIn(AGENT_2_PROMPT, serialized)
             self.assertNotIn(ROUTE_ID, serialized)
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_work_reports_provider_runner_failure_without_false_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            codex_bin = _codex_bin(root)
+            runner_packet = _runner_work_packet(
+                ok=False,
+                machine_error_code=(
+                    "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED"
+                ),
+                blocking_reasons=["run_1_provider_unavailable"],
+            )
+            with mock.patch.object(
+                operator,
+                "build_user_prompt_submit_readiness_packet",
+                return_value=_readiness(),
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_proof_runner_command",
+                return_value=runner_packet,
+            ) as runner_mock, mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+            ) as status_mock:
+                packet = operator.run_real_custom_dip_operator_work_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    codex_bin=str(codex_bin),
+                    proof_dir=str(root / "proof"),
+                    codex_cwd=str(Path(__file__).resolve().parents[1]),
+                )
+
+            self.assertFalse(status_mock.called)
+            self.assertTrue(runner_mock.called)
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "WBP_REAL_CUSTOM_DIP_PROOF_RUNNER_WBP_DIP_FAILED",
+            )
+            self.assertTrue(packet["preflight_ready"])
+            self.assertTrue(packet["runner_called"])
+            self.assertFalse(packet["work_ready"])
+            self.assertFalse(packet["work_mode_proven"])
+            self.assertFalse(packet["single_work_run_proven"])
+            self.assertFalse(packet["api_lane_called"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+            self.assertFalse(packet["product_ready"])
+            self.assertFalse(packet["status_packet_used_as_auth_grant"])
+            self.assertIn("runner_work_not_proven", packet["blocking_reasons"])
+            self.assertIn("run_1_provider_unavailable", packet["blocking_reasons"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_work_wrapper_does_not_accept_proof_mode_runner_packet_as_work(self) -> None:
