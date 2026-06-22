@@ -25,6 +25,9 @@ from .custom_codex_working_flow_visible_source_proof import (
 from .fresh_live_custom_codex_e2e_proof import (
     run_fresh_live_custom_codex_e2e_proof_command,
 )
+from .fresh_sealed_e2e_proof import (
+    run_fresh_sealed_e2e_proof_command,
+)
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -381,6 +384,45 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
     )
     codex_runner_fresh_live_e2e.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_fresh_sealed_e2e = codex_runner_subparsers.add_parser(
+        "fresh-sealed-e2e-proof"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--prompt", required=True)
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-bin")
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-model")
+    codex_runner_fresh_sealed_e2e.add_argument("--proof-dir")
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-cwd")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--custom-codex-ui-visibility-proof-file"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--persistent-profile-base-dir")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1548,6 +1590,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "operator-proof",
         "working-flow-visible-source-proof",
         "fresh-live-e2e-proof",
+        "fresh-sealed-e2e-proof",
         "native-ui-observer-proof",
         "native-response-matrix",
     }:
@@ -1884,6 +1927,29 @@ def main(argv: list[str] | None = None) -> int:
                     expected_text=args.expected_text,
                     sandbox=args.sandbox,
                     timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-sealed-e2e-proof"
+        ):
+            return emit_json(
+                run_fresh_sealed_e2e_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
                 )
             )
         if (
