@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -26,7 +27,7 @@ from .runtime import RuntimeErrorInfo
 
 WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
 DEFAULT_ALIAS = "DIP"
-DEFAULT_MODEL = "gpt-5.4"
+DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_SANDBOX = "danger-full-access"
 DEFAULT_CODEX_APP_NAME = "Codex WBP Clean.app"
 DEFAULT_ENTRY_EVIDENCE_FILENAME = "mcp-entry-evidence.json"
@@ -36,6 +37,8 @@ DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
 DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS = 2.0
 DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
+MIN_SUPPORTED_PYTHON = (3, 10)
+PYTHON_BIN_ENV = "WBP_PYTHON_BIN"
 
 WBP_DIP_TOOL_OK = "OK"
 WBP_DIP_TOOL_DRY_RUN = "WBP_DIP_TOOL_DRY_RUN"
@@ -114,17 +117,65 @@ def default_profile_dir(env: Mapping[str, str] | None = None) -> Path:
     return Path(raw).expanduser()
 
 
+def _codex_app_candidates(source: Mapping[str, str]) -> list[Path]:
+    app_candidates: list[Path] = []
+    if source.get("WBP_CODEX_APP_COPY_PATH"):
+        app_candidates.append(Path(str(source["WBP_CODEX_APP_COPY_PATH"])).expanduser())
+    app_candidates.extend(
+        [
+            Path.home() / "Applications" / DEFAULT_CODEX_APP_NAME,
+            Path("/Applications") / DEFAULT_CODEX_APP_NAME,
+            Path.home() / "Applications" / "Codex.app",
+            Path("/Applications/Codex.app"),
+        ]
+    )
+    return app_candidates
+
+
 def default_codex_bin(env: Mapping[str, str] | None = None) -> Path:
     source = env if env is not None else os.environ
     if source.get("WBP_CODEX_BIN"):
         return Path(str(source["WBP_CODEX_BIN"])).expanduser()
-    app_path = Path(
-        source.get(
-            "WBP_CODEX_APP_COPY_PATH",
-            str(Path.home() / "Applications" / DEFAULT_CODEX_APP_NAME),
-        )
-    ).expanduser()
-    return app_path / "Contents/Resources/codex"
+    binary_candidates = [
+        app / "Contents/Resources/codex"
+        for app in _codex_app_candidates(source)
+    ]
+    for candidate in binary_candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    path_codex = shutil.which("codex")
+    if path_codex:
+        return Path(path_codex).expanduser()
+    return binary_candidates[0]
+
+
+def _python_candidate_names() -> tuple[str, ...]:
+    return ("python3.14", "python3.13", "python3.12", "python3.11", "python3.10")
+
+
+def _python_candidate_absolute_paths() -> tuple[str, ...]:
+    return (
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
+    )
+
+
+def default_python_bin(env: Mapping[str, str] | None = None) -> Path:
+    source = env if env is not None else os.environ
+    if source.get(PYTHON_BIN_ENV):
+        return Path(str(source[PYTHON_BIN_ENV])).expanduser()
+    if sys.version_info >= MIN_SUPPORTED_PYTHON:
+        return Path(sys.executable).expanduser()
+    for name in _python_candidate_names():
+        found = shutil.which(name)
+        if found:
+            return Path(found).expanduser()
+    for raw_path in _python_candidate_absolute_paths():
+        candidate = Path(raw_path)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return Path("python3")
 
 
 def default_proof_dir(profile_dir: Path) -> Path:
@@ -149,6 +200,7 @@ def build_delegate_prompt(*, task: str, expected_alias: str) -> str:
 def build_codex_exec_argv(
     *,
     codex_bin: Path,
+    python_bin: Path | None = None,
     repo_root: Path,
     model: str,
     sandbox: str,
@@ -160,10 +212,12 @@ def build_codex_exec_argv(
     extra_args: Sequence[str] = (),
     extra_mcp_env: Mapping[str, str] | None = None,
 ) -> list[str]:
+    mcp_python_bin = python_bin or default_python_bin()
     env_table = {
         "PYTHONPATH": str(repo_root),
         "WBP_ENTRY_HOOK_EVIDENCE_PATH": str(entry_evidence_file),
         "WBP_PROFILE_DIR": str(profile_dir),
+        PYTHON_BIN_ENV: str(mcp_python_bin),
     }
     if extra_mcp_env:
         env_table.update(
@@ -186,7 +240,7 @@ def build_codex_exec_argv(
         "-o",
         str(output_last_message),
         "-c",
-        'mcp_servers.wbp.command="python3"',
+        f"mcp_servers.wbp.command={_toml_string(str(mcp_python_bin))}",
         "-c",
         f"mcp_servers.wbp.args={_toml_array(['-m', 'wild_boar_proxy.mcp_delegate'])}",
         "-c",
@@ -810,6 +864,9 @@ def build_wbp_dip_tool_packet(
         "human_message": (
             "WBP DIP working tool completed through Custom Codex MCP delegate_to_dip and live result."
             if machine_error_code == WBP_DIP_TOOL_OK
+            and require_live_result
+            else "WBP DIP proof-only dispatch completed through Custom Codex MCP delegate_to_dip."
+            if machine_error_code == WBP_DIP_TOOL_OK
             else "WBP DIP working tool dry run prepared."
             if machine_error_code == WBP_DIP_TOOL_DRY_RUN
             else "WBP DIP working tool proved dispatch but live result is unavailable."
@@ -1023,11 +1080,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     repo_root = Path(args.repo_root).expanduser().resolve()
     codex_bin = Path(args.codex_bin).expanduser() if args.codex_bin else default_codex_bin()
+    python_bin = default_python_bin()
     model = _safe_text(args.model, limit=80) or DEFAULT_MODEL
     sandbox = _safe_text(args.sandbox, limit=80) or DEFAULT_SANDBOX
     prompt = build_delegate_prompt(task=task, expected_alias=expected_alias)
     argv_to_run = build_codex_exec_argv(
         codex_bin=codex_bin,
+        python_bin=python_bin,
         repo_root=repo_root,
         model=model,
         sandbox=sandbox,

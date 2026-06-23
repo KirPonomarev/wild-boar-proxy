@@ -18,7 +18,9 @@ from wild_boar_proxy.external_models import errors
 from wild_boar_proxy.natural_intent_contract import packet_contains_text
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 from wild_boar_proxy.wbp_dip_tool import (
+    DEFAULT_MODEL,
     DEFAULT_SANDBOX,
+    PYTHON_BIN_ENV,
     WBP_DIP_TOOL_CODEX_EXEC_FAILED,
     WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE,
     WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
@@ -29,6 +31,8 @@ from wild_boar_proxy.wbp_dip_tool import (
     build_codex_exec_argv,
     build_delegate_prompt,
     build_wbp_dip_tool_packet,
+    default_codex_bin,
+    default_python_bin,
     main,
     request_live_result,
 )
@@ -103,6 +107,7 @@ class WbpDipToolTests(unittest.TestCase):
             prompt = build_delegate_prompt(task=TASK, expected_alias="DIP")
             argv = build_codex_exec_argv(
                 codex_bin=root / "codex",
+                python_bin=root / "python3.14",
                 repo_root=Path("/repo"),
                 model="gpt-5.4",
                 sandbox=DEFAULT_SANDBOX,
@@ -120,11 +125,36 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertIn("-m", argv)
         self.assertIn("gpt-5.4", argv)
         joined = "\n".join(argv)
-        self.assertIn('mcp_servers.wbp.command="python3"', joined)
+        self.assertIn(f'mcp_servers.wbp.command="{root / "python3.14"}"', joined)
         self.assertIn("wild_boar_proxy.mcp_delegate", joined)
         self.assertIn("delegate_to_dip", joined)
         self.assertIn('approval_mode="approve"', joined)
         self.assertIn("WBP_PROFILE_DIR", joined)
+        self.assertIn(PYTHON_BIN_ENV, joined)
+
+    def test_default_python_bin_prefers_explicit_runtime_python(self) -> None:
+        self.assertEqual(
+            default_python_bin({PYTHON_BIN_ENV: "/opt/custom/python3.14"}),
+            Path("/opt/custom/python3.14"),
+        )
+
+    def test_default_codex_bin_falls_back_to_available_app_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            missing_app = root / "missing" / "Codex WBP Clean.app"
+            installed_app = root / "Applications" / "Codex.app"
+            installed_bin = installed_app / "Contents" / "Resources" / "codex"
+            installed_bin.parent.mkdir(parents=True)
+            installed_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            installed_bin.chmod(0o755)
+
+            with mock.patch(
+                "wild_boar_proxy.wbp_dip_tool._codex_app_candidates",
+                return_value=[missing_app, installed_app],
+            ):
+                resolved = default_codex_bin({})
+
+        self.assertEqual(resolved, installed_bin)
 
     def test_packet_accepts_only_observed_delegate_api_lane(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -219,6 +249,45 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["delegate_to_dip_proven"])
         self.assertFalse(packet["live_result_available"])
         self.assertIn("live_result_unavailable", packet["blocking_reasons"])
+
+    def test_packet_names_proof_only_dispatch_without_live_result_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            jsonl = root / "codex.jsonl"
+            last = root / "last.txt"
+            entry = root / "entry.json"
+            _write_jsonl(
+                jsonl,
+                [
+                    {
+                        "type": "mcp_tool_result",
+                        "result": {"structuredContent": _delegate_packet()},
+                    },
+                    {"type": "assistant_message", "role": "assistant", "text": "ok"},
+                ],
+            )
+            last.write_text("ok\n", encoding="utf-8")
+            entry.write_text("{}", encoding="utf-8")
+
+            packet = build_wbp_dip_tool_packet(
+                task=TASK,
+                expected_alias="DIP",
+                codex_exit_code=0,
+                codex_exec_jsonl_file=jsonl,
+                output_last_message_file=last,
+                entry_evidence_file=entry,
+                proof_dir=root,
+                changed_files=[str(jsonl), str(last), str(entry)],
+                secret_values=[TASK],
+                require_live_result=False,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertFalse(packet["live_result_required"])
+        self.assertFalse(packet["live_result_available"])
+        self.assertIn("proof-only dispatch", packet["human_message"])
+        self.assertNotIn("live result", packet["human_message"])
 
     def test_packet_rejects_and_redacts_unsafe_live_result_text(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -461,6 +530,7 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_DRY_RUN)
         self.assertEqual(packet["effect"], "probe")
         self.assertTrue(packet["planned_codex_exec"])
+        self.assertEqual(packet["planned_model"], DEFAULT_MODEL)
         self.assertEqual(packet["planned_sandbox"], DEFAULT_SANDBOX)
         self.assertFalse(packet_contains_text(packet, TASK))
 
