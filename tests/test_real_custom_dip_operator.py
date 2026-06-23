@@ -368,6 +368,26 @@ def _write_chain_packets(
     return status_path, work_path, runner_path, status, work, runner
 
 
+def _work_packet_with_runner_file(
+    root: Path,
+    *,
+    runner_packet: dict[str, object] | None = None,
+    work_overrides: dict[str, object] | None = None,
+) -> tuple[dict[str, object], dict[str, object], Path]:
+    runner_path = root / "runner" / "real-custom-dip-proof-runner.packet.json"
+    runner = runner_packet or _full_runner_work_packet(changed_files=[str(runner_path)])
+    _write_json(runner_path, runner)
+    work = operator.build_real_custom_dip_operator_work_packet(
+        prompt_text=PROMPT,
+        preflight_packet=_preflight_ready_packet(),
+        runner_packet=runner,
+        secret_values=[PROMPT, ROUTE_ID],
+    )
+    if work_overrides:
+        work.update(work_overrides)
+    return work, runner, runner_path
+
+
 def _assert_recovery_decision(
     test_case: unittest.TestCase,
     packet: dict[str, object],
@@ -1675,6 +1695,228 @@ class RealCustomDipOperatorTests(unittest.TestCase):
         self.assertFalse(packet["full_custom_codex_working_flow_proven"])
         self.assertIn("runner_packet_wrong_kind", packet["blocking_reasons"])
 
+    def test_dip_run_wraps_status_work_and_chain_join_without_auth_grant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = _paths(root)
+            status = _chain_status_packet()
+            work, _runner, runner_path = _work_packet_with_runner_file(root)
+            proof_root = root / "run-proof"
+            with mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+                return_value=status,
+            ) as status_mock, mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                return_value=work,
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    proof_dir=str(proof_root),
+                    codex_cwd=str(Path(__file__).resolve().parents[1]),
+                    timeout_seconds=9,
+                )
+
+        self.assertTrue(status_mock.called)
+        self.assertTrue(work_mock.called)
+        self.assertEqual(work_mock.call_args.kwargs["proof_dir"], str(proof_root / "work"))
+        self.assertEqual(work_mock.call_args.kwargs["timeout_seconds"], 9)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["effect"], EFFECT_MUTATE)
+        self.assertEqual(
+            packet["packet_kind"],
+            operator.REAL_CUSTOM_DIP_OPERATOR_RUN_PACKET_KIND,
+        )
+        self.assertEqual(packet["operator_command_mode"], "run")
+        self.assertTrue(packet["status_packet_ok"])
+        self.assertFalse(packet["status_packet_used_as_auth_grant"])
+        self.assertFalse(packet["status_allows_dispatch"])
+        self.assertFalse(packet["status_recommendation_bypasses_preflight"])
+        self.assertTrue(packet["preflight_checked"])
+        self.assertTrue(packet["preflight_ready"])
+        self.assertTrue(packet["work_called"])
+        self.assertTrue(packet["work_mode_proven"])
+        self.assertTrue(packet["single_work_run_proven"])
+        self.assertTrue(packet["chain_join_called"])
+        self.assertTrue(packet["chain_join_packet_ok"])
+        self.assertFalse(packet["chain_join_calls_api"])
+        self.assertFalse(packet["chain_join_runs_work"])
+        self.assertTrue(packet["explicit_dip_work_proven"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertTrue(packet["live_result_available"])
+        self.assertTrue(packet["delivery_proven"])
+        self.assertTrue(packet["full_custom_codex_working_flow_proven"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertEqual(packet["blocking_reasons"], [])
+        changed_names = {Path(path).name for path in packet["changed_files"]}
+        self.assertIn("dip-run-status.packet.json", changed_names)
+        self.assertIn("dip-run-work.packet.json", changed_names)
+        self.assertIn("dip-run-chain-join.packet.json", changed_names)
+        self.assertIn("real-custom-dip-operator-run.packet.json", changed_names)
+        self.assertIn(runner_path.name, changed_names)
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn(PROMPT, serialized)
+        self.assertNotIn(ROUTE_ID, serialized)
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(
+                packet,
+                secret_values=[PROMPT, ROUTE_ID],
+            ),
+            [],
+        )
+
+    def test_dip_run_status_not_ready_does_not_gate_work_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = _paths(root)
+            status = _chain_status_packet(ok=False)
+            work, _runner, _runner_path = _work_packet_with_runner_file(root)
+            with mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+                return_value=status,
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                return_value=work,
+            ) as work_mock:
+                packet = operator.run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    proof_dir=str(root / "run-proof"),
+                )
+
+        self.assertTrue(work_mock.called)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            operator.REAL_CUSTOM_DIP_OPERATOR_RUN_BLOCKED,
+        )
+        self.assertFalse(packet["status_packet_ok"])
+        self.assertTrue(packet["work_called"])
+        self.assertTrue(packet["work_mode_proven"])
+        self.assertTrue(packet["chain_join_called"])
+        self.assertFalse(packet["chain_join_packet_ok"])
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertFalse(packet["status_packet_used_as_auth_grant"])
+        self.assertIn("status_not_ready", packet["blocking_reasons"])
+        self.assertIn("chain_join_not_proven", packet["blocking_reasons"])
+        self.assertIn("acceptance_packet_missing", packet["blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_dip_run_blocks_work_failure_without_false_green(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = _paths(root)
+            status = _chain_status_packet()
+            failing_runner = _full_runner_work_packet(
+                ok=False,
+                changed_files=[
+                    str(root / "runner" / "real-custom-dip-proof-runner.packet.json")
+                ],
+                blocking_reasons=["run_1_provider_unavailable"],
+            )
+            work, _runner, _runner_path = _work_packet_with_runner_file(
+                root,
+                runner_packet=failing_runner,
+            )
+            with mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+                return_value=status,
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                return_value=work,
+            ):
+                packet = operator.run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    proof_dir=str(root / "run-proof"),
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            operator.REAL_CUSTOM_DIP_OPERATOR_RUN_BLOCKED,
+        )
+        self.assertTrue(packet["status_packet_ok"])
+        self.assertTrue(packet["work_called"])
+        self.assertFalse(packet["work_mode_proven"])
+        self.assertTrue(packet["chain_join_called"])
+        self.assertFalse(packet["chain_join_packet_ok"])
+        self.assertFalse(packet["explicit_dip_work_proven"])
+        self.assertFalse(packet["full_custom_codex_working_flow_proven"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertIn("work_not_proven", packet["blocking_reasons"])
+        self.assertIn("chain_join_not_proven", packet["blocking_reasons"])
+        self.assertIn("runner_work_not_proven", packet["blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_dip_run_blocks_unsafe_work_packet_without_leaking_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = _paths(root)
+            status = _chain_status_packet()
+            work, _runner, _runner_path = _work_packet_with_runner_file(
+                root,
+                work_overrides={
+                    "raw_prompt_recorded": True,
+                    "leaked_prompt": PROMPT,
+                },
+            )
+            with mock.patch.object(
+                operator,
+                "run_dip_operator_status_command",
+                return_value=status,
+            ), mock.patch.object(
+                operator,
+                "run_real_custom_dip_operator_work_command",
+                return_value=work,
+            ):
+                packet = operator.run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=PROMPT,
+                    proof_dir=str(root / "run-proof"),
+                )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            operator.REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET,
+        )
+        self.assertTrue(packet["source_packet_unsafe"])
+        self.assertTrue(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["product_ready"])
+        self.assertIn("unsafe_source_packet", packet["blocking_reasons"])
+        self.assertIn("raw_prompt_recorded", packet["blocking_reasons"])
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn(PROMPT, serialized)
+        self.assertNotIn(ROUTE_ID, serialized)
+        for changed_file in packet["changed_files"]:
+            changed_path = Path(changed_file)
+            if changed_path.is_file():
+                changed_text = changed_path.read_text(encoding="utf-8")
+                self.assertNotIn(PROMPT, changed_text)
+                self.assertNotIn(ROUTE_ID, changed_text)
+        self.assertEqual(
+            packets.inspect_command_packet_semantics(
+                packet,
+                secret_values=[PROMPT, ROUTE_ID],
+            ),
+            [],
+        )
+
     def test_cli_effect_and_dispatch_for_dip_commands(self) -> None:
         parser = cli_mod.build_parser()
         preflight_args = parser.parse_args(
@@ -1699,11 +1941,25 @@ class RealCustomDipOperatorTests(unittest.TestCase):
                 "--json",
             ]
         )
+        run_args = parser.parse_args(
+            [
+                "dip",
+                "run",
+                "--prompt",
+                PROMPT,
+                "--proof-dir",
+                "/tmp/run-proof",
+                "--max-status-age-seconds",
+                "44",
+                "--json",
+            ]
+        )
         self.assertEqual(cli_mod.command_effect_from_args(preflight_args), EFFECT_PROBE)
         self.assertEqual(cli_mod.command_effect_from_args(work_args), EFFECT_MUTATE)
         self.assertEqual(cli_mod.command_effect_from_args(acceptance_args), EFFECT_MUTATE)
         self.assertEqual(cli_mod.command_effect_from_args(status_args), EFFECT_READ)
         self.assertEqual(cli_mod.command_effect_from_args(chain_join_args), EFFECT_READ)
+        self.assertEqual(cli_mod.command_effect_from_args(run_args), EFFECT_MUTATE)
         self.assertEqual(
             acceptance_default_args.runs,
             operator.ACCEPTANCE_RUNS_DEFAULT,
@@ -1829,6 +2085,41 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             43,
         )
         self.assertEqual(json.loads(stdout.getvalue())["status"], "ok")
+
+        with mock.patch.object(
+            cli_mod,
+            "run_real_custom_dip_operator_run_command",
+            return_value={
+                "status": "ok",
+                "exit_code": 0,
+                "operator_command_mode": "run",
+            },
+        ) as run_mock:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "dip",
+                        "run",
+                        "--prompt",
+                        PROMPT,
+                        "--proof-dir",
+                        "/tmp/run-proof",
+                        "--max-status-age-seconds",
+                        "44",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(run_mock.called)
+        self.assertEqual(run_mock.call_args.kwargs["prompt_text"], PROMPT)
+        self.assertEqual(run_mock.call_args.kwargs["proof_dir"], "/tmp/run-proof")
+        self.assertEqual(run_mock.call_args.kwargs["max_status_age_seconds"], 44)
+        run_stdout = stdout.getvalue()
+        self.assertEqual(run_stdout.count("\n"), 1)
+        run_payload = json.loads(run_stdout)
+        self.assertEqual(run_payload["operator_command_mode"], "run")
 
 
 if __name__ == "__main__":

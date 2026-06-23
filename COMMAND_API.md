@@ -108,6 +108,57 @@ With `--json`, stdout is exactly one JSON object and must include:
 `tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
 diagnostics. It is not a working-result success path.
 
+## DIP run operator wrapper
+
+`dip run --prompt <prompt> --json` is a bounded operator wrapper over the
+existing DIP readiness, work, and chain-join command surfaces.
+
+It emits exactly one JSON packet and must not print prose before or after that
+packet. Its effect is `mutate` because it runs the work path and writes evidence
+packets.
+
+The wrapper must preserve command-surface ownership:
+
+- `dip status` remains a read-only readiness snapshot and must not become an
+  auth grant;
+- `dip work` owns the fresh preflight and live work path;
+- `dip chain-join` remains a read-only join and must not run status, work, API
+  calls, or dispatch;
+- `dip run` orchestrates those surfaces and summarizes their packet truth.
+
+Readiness status may contribute to the final proof result, but it must not by
+itself authorize or prevent the work path. Dispatch eligibility remains owned by
+the fresh `dip work` preflight; unsafe readiness packets or evidence-write
+failures may still stop the wrapper fail-closed.
+
+On success the `dip run --json` packet must include:
+
+- `operator_command_surface="wild-boar-proxy dip run"`
+- `operator_command_mode="run"`
+- `effect="mutate"`
+- `status_packet_used_as_auth_grant=false`
+- `work_mode_proven=true`
+- `single_work_run_proven=true`
+- `explicit_dip_work_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `delivery_proven=true`
+- `full_custom_codex_working_flow_proven=true`
+- `product_ready=false`
+- `custom_codex_ui_visibility_proven=false`
+- `raw_prompt_recorded=false`
+- `prompt_text_recorded=false`
+- `raw_route_id_recorded=false`
+- `selected_api_route_id_recorded=false`
+- `raw_backend_details_exposed=false`
+- `secret_value_exposed=false`
+- `blocking_reasons=[]`
+
+If readiness, work, chain-join, evidence writes, or safety checks fail, `dip run`
+must fail closed with machine-readable `blocking_reasons` and must not start an
+acceptance loop or product-readiness claim by default.
+
 ## Runtime invariant check owner surface
 
 `invariant-check --json` is a read-only runtime truth guard. It machine-checks a

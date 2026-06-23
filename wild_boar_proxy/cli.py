@@ -27,6 +27,7 @@ from .real_custom_dip_operator import (
     run_dip_operator_status_command,
     run_real_custom_dip_operator_acceptance_command,
     run_real_custom_dip_operator_preflight_command,
+    run_real_custom_dip_operator_run_command,
     run_real_custom_dip_operator_work_command,
 )
 from .custom_codex_working_flow_visible_source_proof import (
@@ -380,6 +381,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
     )
     dip_chain_join.add_argument("--json", action="store_true", required=True)
+    dip_run = dip_subparsers.add_parser("run")
+    dip_run.add_argument("--prompt", required=True)
+    dip_run.add_argument("--codex-bin")
+    dip_run.add_argument("--codex-model")
+    dip_run.add_argument("--proof-dir")
+    dip_run.add_argument("--codex-cwd")
+    dip_run.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_run.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_run.add_argument("--codex-hook-current-hash")
+    dip_run.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_run.add_argument(
+        "--max-status-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_run.add_argument("--json", action="store_true", required=True)
 
     codex_runner = subparsers.add_parser("codex-runner")
     codex_runner_subparsers = codex_runner.add_subparsers(
@@ -1844,6 +1871,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_READ
         if getattr(args, "dip_command", None) == "chain-join":
             return EFFECT_READ
+        if getattr(args, "dip_command", None) == "run":
+            return EFFECT_MUTATE
     if command == "launch":
         launch_command = getattr(args, "launch_command", None)
         if launch_command == "smoke":
@@ -2205,6 +2234,22 @@ def main(argv: list[str] | None = None) -> int:
                     status_file=args.status_file,
                     work_file=args.work_file,
                     runner_file=args.runner_file,
+                    max_status_age_seconds=args.max_status_age_seconds,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "run":
+            return emit_json(
+                run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
                     max_status_age_seconds=args.max_status_age_seconds,
                 )
             )

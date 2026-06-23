@@ -38,6 +38,7 @@ from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
 REAL_CUSTOM_DIP_OPERATOR_PREFLIGHT_PACKET_KIND = "wbp_real_custom_dip_operator_preflight"
 REAL_CUSTOM_DIP_OPERATOR_WORK_PACKET_KIND = "wbp_real_custom_dip_operator_work"
 REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_PACKET_KIND = "wbp_real_custom_dip_operator_acceptance"
+REAL_CUSTOM_DIP_OPERATOR_RUN_PACKET_KIND = "wbp_real_custom_dip_operator_run"
 DIP_WORK_CHAIN_JOIN_PACKET_KIND = "wbp_dip_work_chain_join"
 DIP_OPERATOR_READINESS_PACKET_KIND = "wbp_dip_operator_readiness"
 
@@ -49,6 +50,7 @@ REAL_CUSTOM_DIP_OPERATOR_WORK_BLOCKED = "WBP_REAL_CUSTOM_DIP_OPERATOR_WORK_BLOCK
 REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED = (
     "WBP_REAL_CUSTOM_DIP_OPERATOR_ACCEPTANCE_BLOCKED"
 )
+REAL_CUSTOM_DIP_OPERATOR_RUN_BLOCKED = "WBP_REAL_CUSTOM_DIP_OPERATOR_RUN_BLOCKED"
 REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET = "WBP_REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET"
 DIP_OPERATOR_READINESS_BLOCKED = "WBP_DIP_OPERATOR_READINESS_BLOCKED"
 DIP_OPERATOR_READINESS_PROOF_MISSING = "WBP_DIP_OPERATOR_READINESS_PROOF_MISSING"
@@ -184,6 +186,28 @@ def _acceptance_packet_output_path(base_proof_root: Path) -> Path:
     return base_proof_root / "real-custom-dip-operator-acceptance.packet.json"
 
 
+def _run_proof_root(paths: RuntimePaths, proof_dir: str | None) -> Path:
+    if proof_dir:
+        return Path(proof_dir).expanduser()
+    return paths.managed_dir / "codex-runner" / "real-custom-dip-run"
+
+
+def _run_status_packet_output_path(base_proof_root: Path) -> Path:
+    return base_proof_root / "dip-run-status.packet.json"
+
+
+def _run_work_packet_output_path(base_proof_root: Path) -> Path:
+    return base_proof_root / "dip-run-work.packet.json"
+
+
+def _run_chain_join_packet_output_path(base_proof_root: Path) -> Path:
+    return base_proof_root / "dip-run-chain-join.packet.json"
+
+
+def _run_packet_output_path(base_proof_root: Path) -> Path:
+    return base_proof_root / "real-custom-dip-operator-run.packet.json"
+
+
 def _acceptance_packet_search_roots(paths: RuntimePaths) -> list[Path]:
     return [
         paths.managed_dir / "codex-runner" / "real-custom-dip-acceptance",
@@ -272,6 +296,24 @@ def _persist_acceptance_packet(
         encoding="utf-8",
     )
     return persisted
+
+
+def _persist_json_packet(
+    path: Path,
+    packet: Mapping[str, Any],
+    *,
+    secret_values: Sequence[str] | None = None,
+) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    redacted = packets.redact_command_packet(
+        dict(packet),
+        secret_values=list(secret_values or []),
+    )
+    path.write_text(
+        json.dumps(redacted, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return str(path)
 
 
 def _with_persisted_acceptance_packet(
@@ -2110,3 +2152,441 @@ def run_dip_work_chain_join_command(
         secret_values=[],
         extra=extra,
     )
+
+
+def _run_source_packet_unsafe(
+    packet: Mapping[str, Any],
+    *,
+    secret_values: Sequence[str],
+) -> bool:
+    return bool(
+        packets.command_packet_has_secret_leak(packet, secret_values=secret_values)
+        or _acceptance_raw_or_secret_claim_present(packet)
+        or _acceptance_raw_material_present(packet)
+        or packet.get("product_ready") is True
+    )
+
+
+def build_real_custom_dip_operator_run_packet(
+    *,
+    prompt_text: object,
+    status_packet: Mapping[str, Any],
+    work_packet: Mapping[str, Any] | None = None,
+    chain_join_packet: Mapping[str, Any] | None = None,
+    status_packet_path: Path | None = None,
+    work_packet_path: Path | None = None,
+    chain_join_packet_path: Path | None = None,
+    run_packet_path: Path | None = None,
+    status_packet_written: bool = False,
+    work_packet_written: bool = False,
+    chain_join_packet_written: bool = False,
+    run_packet_file_written: bool = True,
+    write_failures: Sequence[str] | None = None,
+    secret_values: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    prompt = _safe_text(prompt_text, limit=4096)
+    source_packets = [
+        packet
+        for packet in (status_packet, work_packet or {}, chain_join_packet or {})
+        if packet
+    ]
+    secret_values_list = [value for value in (secret_values or []) if value]
+    status_ready = bool(
+        status_packet.get("status") == "ok"
+        and status_packet.get("machine_error_code") == REAL_CUSTOM_DIP_OPERATOR_OK
+        and status_packet.get("dip_operator_ready") is True
+    )
+    work_called = bool(work_packet)
+    work_ok = bool(
+        work_packet
+        and work_packet.get("status") == "ok"
+        and work_packet.get("machine_error_code") == REAL_CUSTOM_DIP_OPERATOR_OK
+        and work_packet.get("work_mode_proven") is True
+    )
+    chain_join_called = bool(chain_join_packet)
+    chain_join_ok = bool(
+        chain_join_packet
+        and chain_join_packet.get("status") == "ok"
+        and chain_join_packet.get("machine_error_code") == REAL_CUSTOM_DIP_OPERATOR_OK
+        and chain_join_packet.get("full_custom_codex_working_flow_proven") is True
+    )
+    unsafe_sources = [
+        index
+        for index, packet in enumerate(source_packets, start=1)
+        if _run_source_packet_unsafe(packet, secret_values=secret_values_list)
+    ]
+    raw_prompt_recorded = any(
+        packet.get("raw_prompt_recorded") is True for packet in source_packets
+    )
+    fallback_used = any(packet.get("fallback_used") is True for packet in source_packets)
+    local_imitation_used = any(
+        packet.get("local_imitation_used") is True for packet in source_packets
+    )
+    native_subagent_used = any(
+        packet.get("native_codex_subagent_used_as_dip") is True
+        for packet in source_packets
+    )
+    secret_value_exposed = any(
+        packet.get("secret_value_exposed") is True for packet in source_packets
+    )
+    blocking_reasons = sorted(
+        set(
+            ([] if status_ready else ["status_not_ready"])
+            + _safe_reasons(status_packet.get("blocking_reasons"))
+            + ([] if work_called or not status_ready else ["work_not_run"])
+            + ([] if work_ok or not work_called else ["work_not_proven"])
+            + _safe_reasons((work_packet or {}).get("blocking_reasons"))
+            + (
+                []
+                if chain_join_called or not work_called
+                else ["chain_join_not_run"]
+            )
+            + (
+                []
+                if chain_join_ok or not chain_join_called
+                else ["chain_join_not_proven"]
+            )
+            + _safe_reasons((chain_join_packet or {}).get("blocking_reasons"))
+            + list(write_failures or [])
+            + (["unsafe_source_packet"] if unsafe_sources else [])
+            + (["fallback_used"] if fallback_used else [])
+            + (["local_imitation_used"] if local_imitation_used else [])
+            + (
+                ["native_codex_subagent_used_as_dip"]
+                if native_subagent_used
+                else []
+            )
+            + (["raw_prompt_recorded"] if raw_prompt_recorded else [])
+            + (["secret_value_exposed"] if secret_value_exposed else [])
+        )
+    )
+    ok = bool(status_ready and work_ok and chain_join_ok and not blocking_reasons)
+    machine_error_code = (
+        REAL_CUSTOM_DIP_OPERATOR_UNSAFE_PACKET
+        if unsafe_sources or raw_prompt_recorded or secret_value_exposed
+        else REAL_CUSTOM_DIP_OPERATOR_OK
+        if ok
+        else REAL_CUSTOM_DIP_OPERATOR_RUN_BLOCKED
+    )
+    status_path_digest = (
+        _sha256_text(str(status_packet_path.expanduser().resolve(strict=False)))
+        if status_packet_path
+        else ""
+    )
+    work_path_digest = (
+        _sha256_text(str(work_packet_path.expanduser().resolve(strict=False)))
+        if work_packet_path
+        else ""
+    )
+    chain_join_path_digest = (
+        _sha256_text(str(chain_join_packet_path.expanduser().resolve(strict=False)))
+        if chain_join_packet_path
+        else ""
+    )
+    run_path_digest = (
+        _sha256_text(str(run_packet_path.expanduser().resolve(strict=False)))
+        if run_packet_path
+        else ""
+    )
+    changed_files = _merge_changed_files(source_packets)
+    for candidate_path, written in (
+        (status_packet_path, status_packet_written),
+        (work_packet_path, work_packet_written),
+        (chain_join_packet_path, chain_join_packet_written),
+        (run_packet_path, run_packet_file_written),
+    ):
+        if candidate_path is None or not written:
+            continue
+        candidate_text = str(candidate_path)
+        if candidate_text not in changed_files:
+            changed_files.append(candidate_text)
+
+    extra = {
+        "schema_version": 1,
+        "packet_kind": REAL_CUSTOM_DIP_OPERATOR_RUN_PACKET_KIND,
+        "proof_scope": "real_custom_dip_operator_run_wrapper",
+        "operator_command_surface": "wild-boar-proxy dip run",
+        "operator_command_mode": "run",
+        "operator_status": OPERATOR_STATUS_READY if ok else OPERATOR_STATUS_BLOCKED,
+        "run_ready": ok,
+        "blocked": not ok,
+        "run_status_checked": True,
+        "status_packet_found": bool(status_packet),
+        "status_packet_ok": status_ready,
+        "status_packet_written": status_packet_written,
+        "status_packet_path_digest": status_path_digest,
+        "status_packet_path_recorded": False,
+        "status_packet_machine_error_code": _safe_text(
+            status_packet.get("machine_error_code"),
+            limit=128,
+        ),
+        "status_packet_used_as_auth_grant": False,
+        "status_recommendation_is_not_auth_grant": True,
+        "status_recommendation_bypasses_preflight": False,
+        "status_allows_dispatch": False,
+        "work_called": work_called,
+        "work_packet_ok": work_ok,
+        "work_packet_written": work_packet_written,
+        "work_packet_path_digest": work_path_digest,
+        "work_packet_path_recorded": False,
+        "work_packet_machine_error_code": _safe_text(
+            (work_packet or {}).get("machine_error_code"),
+            limit=128,
+        ),
+        "preflight_checked": (work_packet or {}).get("preflight_checked") is True,
+        "preflight_ready": (work_packet or {}).get("preflight_ready") is True,
+        "work_mode_proven": work_ok,
+        "single_work_run_proven": bool(
+            work_ok and (work_packet or {}).get("single_work_run_proven") is True
+        ),
+        "work_status_packet_used_as_auth_grant": (
+            (work_packet or {}).get("status_packet_used_as_auth_grant") is True
+        ),
+        "chain_join_called": chain_join_called,
+        "chain_join_packet_ok": chain_join_ok,
+        "chain_join_packet_written": chain_join_packet_written,
+        "chain_join_packet_path_digest": chain_join_path_digest,
+        "chain_join_packet_path_recorded": False,
+        "chain_join_machine_error_code": _safe_text(
+            (chain_join_packet or {}).get("machine_error_code"),
+            limit=128,
+        ),
+        "chain_join_reads_audit_history": (
+            (chain_join_packet or {}).get("join_reads_audit_history") is True
+        ),
+        "chain_join_runs_status": (
+            (chain_join_packet or {}).get("join_runs_status") is True
+        ),
+        "chain_join_runs_work": (
+            (chain_join_packet or {}).get("join_runs_work") is True
+        ),
+        "chain_join_calls_api": (
+            (chain_join_packet or {}).get("join_calls_api") is True
+        ),
+        "chain_join_dispatches": (
+            (chain_join_packet or {}).get("join_dispatches") is True
+        ),
+        "explicit_dip_work_proven": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("explicit_dip_work_proven") is True
+        ),
+        "custom_codex_hook_origin_bound": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("custom_codex_hook_origin_bound") is True
+        ),
+        "custom_codex_flow_proven": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("custom_codex_flow_proven") is True
+        ),
+        "user_prompt_submit_hook_ran": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("user_prompt_submit_hook_ran") is True
+        ),
+        "hook_prompt_digest_bound": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("hook_prompt_digest_bound") is True
+        ),
+        "hook_runtime_context_digest_bound": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("hook_runtime_context_digest_bound") is True
+        ),
+        "delegate_to_dip_proven": bool(
+            work_ok and (work_packet or {}).get("delegate_to_dip_proven") is True
+        ),
+        "api_lane_called": bool(
+            chain_join_ok and (chain_join_packet or {}).get("api_lane_called") is True
+        ),
+        "route_bound_dispatch_proven": bool(
+            work_ok and (work_packet or {}).get("route_bound_dispatch_proven") is True
+        ),
+        "live_result_available": bool(
+            work_ok and (work_packet or {}).get("live_result_available") is True
+        ),
+        "delivery_proven": bool(
+            chain_join_ok and (chain_join_packet or {}).get("delivery_proven") is True
+        ),
+        "codex_working_flow_delivery_proven": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("codex_working_flow_delivery_proven")
+            is True
+        ),
+        "approved_delivery_surface_proven": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("approved_delivery_surface_proven")
+            is True
+        ),
+        "assistant_response_bound_to_handoff_digest": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get(
+                "assistant_response_bound_to_handoff_digest"
+            )
+            is True
+        ),
+        "full_custom_codex_working_flow_proven": bool(
+            chain_join_ok
+            and (chain_join_packet or {}).get("full_custom_codex_working_flow_proven")
+            is True
+        ),
+        "run_packet_file_written": run_packet_file_written,
+        "run_packet_path_digest": run_path_digest,
+        "run_packet_path_recorded": False,
+        "product_ready": False,
+        "does_not_prove_product_ready": True,
+        "custom_codex_ui_visibility_proven": False,
+        "delivery_counts_as_custom_codex_ui": False,
+        "fallback_used": fallback_used,
+        "local_imitation_used": local_imitation_used,
+        "native_codex_subagent_used_as_dip": native_subagent_used,
+        "codex_native_subagent_used_as_dip": native_subagent_used,
+        "raw_prompt_recorded": raw_prompt_recorded,
+        "prompt_text_recorded": False,
+        "natural_phrase_recorded": False,
+        "raw_route_id_recorded": False,
+        "selected_api_route_id_recorded": False,
+        "raw_provider_response_recorded": False,
+        "provider_response_text_recorded": False,
+        "provider_response_preview_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": secret_value_exposed,
+        "source_packet_unsafe": bool(unsafe_sources),
+        "unsafe_source_packet_count": len(unsafe_sources),
+        "prompt_digest": _sha256_text(prompt) if prompt else "",
+        "reason_codes": blocking_reasons,
+        "blocking_reasons": blocking_reasons,
+        "changed_files": changed_files,
+    }
+    return packets.build_command_packet(
+        ok=ok,
+        human_message=(
+            "WBP DIP run completed with proof-backed live dispatch."
+            if ok
+            else "WBP DIP run is BLOCKED."
+        ),
+        machine_error_code=machine_error_code,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if ok else "stop",
+        changed_files=changed_files,
+        effect=EFFECT_MUTATE,
+        secret_values=secret_values_list,
+        extra=extra,
+    )
+
+
+def run_real_custom_dip_operator_run_command(
+    *,
+    paths: RuntimePaths,
+    prompt_text: object,
+    codex_bin: str | None = None,
+    codex_model: str | None = None,
+    proof_dir: str | None = None,
+    codex_cwd: str | None = None,
+    sandbox: str = DEFAULT_SANDBOX,
+    timeout_seconds: int = 300,
+    codex_hook_current_hash: str | None = None,
+    probe_codex_app_server: bool = False,
+    max_status_age_seconds: int | None = DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+) -> dict[str, Any]:
+    prompt = _safe_text(prompt_text, limit=4096)
+    context_path = runtime_context_path(paths=paths)
+    runtime_context, _context_metadata = load_runtime_context_packet(context_path)
+    secret_values = [prompt] if prompt else []
+    secret_values.extend(_runtime_secret_values(runtime_context))
+    base_proof_root = _run_proof_root(paths, proof_dir)
+    status_path = _run_status_packet_output_path(base_proof_root)
+    work_path = _run_work_packet_output_path(base_proof_root)
+    chain_join_path = _run_chain_join_packet_output_path(base_proof_root)
+    run_path = _run_packet_output_path(base_proof_root)
+    write_failures: list[str] = []
+    status_written = False
+    work_written = False
+    chain_join_written = False
+    status_packet = run_dip_operator_status_command(
+        paths=paths,
+        proof_file=None,
+        max_age_seconds=max_status_age_seconds,
+    )
+    try:
+        _persist_json_packet(status_path, status_packet, secret_values=secret_values)
+        status_written = True
+    except OSError:
+        write_failures.append("status_packet_write_failed")
+
+    work_packet: dict[str, Any] | None = None
+    chain_join_packet: dict[str, Any] | None = None
+    status_unsafe = _run_source_packet_unsafe(status_packet, secret_values=secret_values)
+    if not status_unsafe and not write_failures:
+        work_packet = run_real_custom_dip_operator_work_command(
+            paths=paths,
+            prompt_text=prompt,
+            codex_bin=codex_bin,
+            codex_model=codex_model,
+            proof_dir=str(base_proof_root / "work"),
+            codex_cwd=codex_cwd,
+            sandbox=sandbox,
+            timeout_seconds=timeout_seconds,
+            codex_hook_current_hash=codex_hook_current_hash,
+            probe_codex_app_server=probe_codex_app_server,
+        )
+        try:
+            _persist_json_packet(work_path, work_packet, secret_values=secret_values)
+            work_written = True
+        except OSError:
+            write_failures.append("work_packet_write_failed")
+        if work_written:
+            chain_join_packet = run_dip_work_chain_join_command(
+                status_file=str(status_path),
+                work_file=str(work_path),
+                runner_file=None,
+                max_status_age_seconds=max_status_age_seconds,
+            )
+            try:
+                _persist_json_packet(
+                    chain_join_path,
+                    chain_join_packet,
+                    secret_values=secret_values,
+                )
+                chain_join_written = True
+            except OSError:
+                write_failures.append("chain_join_packet_write_failed")
+
+    packet = build_real_custom_dip_operator_run_packet(
+        prompt_text=prompt,
+        status_packet=status_packet,
+        work_packet=work_packet,
+        chain_join_packet=chain_join_packet,
+        status_packet_path=status_path,
+        work_packet_path=work_path if work_packet is not None else None,
+        chain_join_packet_path=(
+            chain_join_path if chain_join_packet is not None else None
+        ),
+        run_packet_path=run_path,
+        status_packet_written=status_written,
+        work_packet_written=work_written,
+        chain_join_packet_written=chain_join_written,
+        run_packet_file_written=True,
+        write_failures=write_failures,
+        secret_values=secret_values,
+    )
+    try:
+        _persist_json_packet(run_path, packet, secret_values=secret_values)
+        return packet
+    except OSError:
+        return build_real_custom_dip_operator_run_packet(
+            prompt_text=prompt,
+            status_packet=status_packet,
+            work_packet=work_packet,
+            chain_join_packet=chain_join_packet,
+            status_packet_path=status_path,
+            work_packet_path=work_path if work_packet is not None else None,
+            chain_join_packet_path=(
+                chain_join_path if chain_join_packet is not None else None
+            ),
+            run_packet_path=run_path,
+            status_packet_written=status_written,
+            work_packet_written=work_written,
+            chain_join_packet_written=chain_join_written,
+            run_packet_file_written=False,
+            write_failures=write_failures + ["run_packet_write_failed"],
+            secret_values=secret_values,
+        )
