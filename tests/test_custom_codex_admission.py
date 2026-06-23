@@ -604,6 +604,64 @@ class CustomCodexAdmissionTests(unittest.TestCase):
 
         self.assertEqual(env["WBP_EXTERNAL_MODELS_DIR"], str(external_root))
 
+    def test_runner_env_injects_local_listener_token_for_codex_exec(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            paths.config_toml.write_text(
+                "\n".join(
+                    [
+                        'model = "gpt-5.5"',
+                        'model_provider = "cliproxy"',
+                        "",
+                        "[model_providers.cliproxy]",
+                        'base_url = "http://127.0.0.1:8318/v1"',
+                        'env_key = "OPENAI_API_KEY"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            paths.stable_runtime_generated_config_file.write_text(
+                "api-keys:\n- local-runner-token-123456\n",
+                encoding="utf-8",
+            )
+
+            env = admission._runner_env(paths, _runtime_context())
+
+        self.assertEqual(env["OPENAI_API_KEY"], "local-runner-token-123456")
+        self.assertEqual(env["CODEX_HOME"], str(paths.profile_dir))
+        self.assertEqual(env["WBP_PROFILE_DIR"], str(paths.profile_dir))
+
+    def test_runner_env_does_not_inject_local_token_for_remote_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_profile(paths)
+            paths.config_toml.write_text(
+                "\n".join(
+                    [
+                        'model = "remote-model"',
+                        'model_provider = "remote"',
+                        "",
+                        "[model_providers.remote]",
+                        'base_url = "https://api.example.test/v1"',
+                        'env_key = "OPENAI_API_KEY"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            paths.stable_runtime_generated_config_file.write_text(
+                "api-keys:\n- local-runner-token-123456\n",
+                encoding="utf-8",
+            )
+
+            env = admission._runner_env(paths, _runtime_context())
+
+        self.assertNotIn("OPENAI_API_KEY", env)
+
     def test_positive_runner_proves_repeatable_admission_without_product_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

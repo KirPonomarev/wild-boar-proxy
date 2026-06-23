@@ -583,7 +583,7 @@ class FreshSealedE2EProofTests(unittest.TestCase):
             observer_timeout_seconds=45.0,
             native_auto_launch_custom_codex=False,
             native_auto_launch_endpoint="http://127.0.0.1:8318/v1",
-            native_auto_launch_model="gpt-5.3-codex",
+            native_auto_launch_model="gpt-5.5",
             native_auto_launch_owner_authorization_phrase=None,
             native_auto_launch_repo_root=None,
             native_auto_launch_stable_runtime_generated_config_file=None,

@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ import subprocess
 from threading import Event, Thread
 import tomllib
 from typing import Any
+from urllib.parse import urlparse
 
 from .codex_transcript_delivery_observation import (
     _codex_exec_transcript_digest,
@@ -53,6 +55,7 @@ from .runtime import (
     write_json_atomic,
     write_text_atomic,
 )
+from .token_command import emit_local_token
 from .user_prompt_submit_hook_producer import hook_ledger_path
 
 
@@ -187,6 +190,41 @@ def _select_external_models_dir(
     return managed_candidate, "profile_managed_default"
 
 
+def _hostname_is_loopback(hostname: str | None) -> bool:
+    normalized = (hostname or "").strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _runner_config_accepts_local_listener_token(paths: RuntimePaths) -> bool:
+    try:
+        parsed = tomllib.loads(paths.config_toml.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    if not isinstance(parsed, Mapping):
+        return False
+    provider_id = parsed.get("model_provider")
+    if not isinstance(provider_id, str) or not provider_id:
+        return False
+    providers = parsed.get("model_providers")
+    if not isinstance(providers, Mapping):
+        return False
+    provider = providers.get(provider_id)
+    if not isinstance(provider, Mapping):
+        return False
+    if provider.get("env_key") != "OPENAI_API_KEY":
+        return False
+    base_url = provider.get("base_url")
+    if not isinstance(base_url, str):
+        return False
+    parsed_url = urlparse(base_url)
+    return _hostname_is_loopback(parsed_url.hostname)
+
+
 def _runner_env(paths: RuntimePaths, runtime_context: Mapping[str, Any]) -> dict[str, str]:
     env = build_launcher_subprocess_env(paths)
     external_models_dir, _ = _select_external_models_dir(paths, runtime_context)
@@ -194,6 +232,13 @@ def _runner_env(paths: RuntimePaths, runtime_context: Mapping[str, Any]) -> dict
     env["CODEX_HOME"] = str(paths.profile_dir)
     env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
     env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
+    if _runner_config_accepts_local_listener_token(paths):
+        try:
+            local_token = emit_local_token(paths)
+        except Exception:
+            local_token = ""
+        if local_token:
+            env["OPENAI_API_KEY"] = local_token
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
     return env
