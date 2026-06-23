@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -157,6 +158,25 @@ def _account_read_summary_from_response(response: Mapping[str, Any]) -> dict[str
     }
 
 
+def _prepare_account_probe_codex_home(
+    paths: RuntimePaths,
+    temp_dir: Path,
+) -> tuple[Path, dict[str, Any]]:
+    probe_home = temp_dir / "codex-home"
+    probe_home.mkdir(parents=True, exist_ok=True)
+    auth_copied = False
+    if paths.auth_file.exists():
+        shutil.copy2(paths.auth_file, probe_home / "auth.json")
+        auth_copied = True
+    return probe_home, {
+        "app_server_account_probe_auth_shadow_home": True,
+        "app_server_account_probe_runtime_config_isolated": True,
+        "app_server_account_probe_auth_json_copied": auth_copied,
+        "app_server_account_probe_config_toml_copied": False,
+        "app_server_account_probe_auth_json_source_recorded": False,
+    }
+
+
 def probe_codex_app_server_account_read(
     paths: RuntimePaths,
     *,
@@ -171,20 +191,39 @@ def probe_codex_app_server_account_read(
         "app_server_account_probe_transport_ok": False,
         "app_server_account_probe_error_code": "",
         "app_server_account_notifications_seen": 0,
+        "app_server_account_probe_auth_shadow_home": False,
+        "app_server_account_probe_runtime_config_isolated": False,
+        "app_server_account_probe_auth_json_copied": False,
+        "app_server_account_probe_config_toml_copied": False,
+        "app_server_account_probe_auth_json_source_recorded": False,
         **_account_read_summary_from_response({}),
     }
     if binary is None:
         summary["app_server_account_probe_error_code"] = "codex_app_server_binary_missing"
         return summary
     with tempfile.TemporaryDirectory() as temp_dir:
-        socket_path = Path(temp_dir) / "codex-app-server.sock"
+        temp_root = Path(temp_dir)
+        socket_path = temp_root / "codex-app-server.sock"
+        probe_home, probe_home_metadata = _prepare_account_probe_codex_home(
+            paths,
+            temp_root,
+        )
+        summary.update(probe_home_metadata)
         env = os.environ.copy()
+        for key in (
+            "OPENAI_API_KEY",
+            "CODEX_HOME",
+            "WBP_PROFILE_DIR",
+            "WBP_MANAGED_DIR",
+            "WBP_CONFIG_TOML",
+            "CODEX_CONFIG_TOML",
+        ):
+            env.pop(key, None)
         env.update(
             {
-                "CODEX_HOME": str(paths.profile_dir),
-                "WBP_PROFILE_DIR": str(paths.profile_dir),
-                "WBP_MANAGED_DIR": str(paths.managed_dir),
-                "WBP_CONFIG_TOML": str(paths.config_toml),
+                "CODEX_HOME": str(probe_home),
+                "WBP_PROFILE_DIR": str(probe_home),
+                "WBP_MANAGED_DIR": str(probe_home / "managed"),
             }
         )
         proc = subprocess.Popen(
@@ -419,7 +458,6 @@ def build_custom_codex_auth_session_readiness_packet(
     account_type = str(account_read_metadata.get("app_server_account_type") or "")
     logged_in_ui_session_proven = (
         account_type == "chatgpt"
-        and account_read_metadata.get("app_server_requires_openai_auth") is not True
         and account_read_metadata.get("app_server_account_response_has_error") is not True
     )
     api_key_only = bool(
@@ -433,8 +471,7 @@ def build_custom_codex_auth_session_readiness_packet(
         not logged_in_ui_session_proven
         and not api_key_only
         and (
-            account_read_metadata.get("app_server_requires_openai_auth") is True
-            or account_read_metadata.get("app_server_account_type") == ""
+            account_read_metadata.get("app_server_account_type") == ""
             or auth.get("auth_mode") in {"missing", "missing_credentials", "invalid"}
         )
     )

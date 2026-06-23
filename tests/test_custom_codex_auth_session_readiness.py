@@ -154,6 +154,66 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertNotIn(SECRET, json.dumps(packet, ensure_ascii=True))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_chatgpt_account_with_openai_auth_requirement_still_proves_login(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+
+            packet = readiness.build_custom_codex_auth_session_readiness_packet(
+                paths=paths,
+                process_inventory=_process_inventory(paths),
+                process_inventory_live=True,
+                hook_readiness_packet=_hook_ready_packet(),
+                account_read_metadata=_account_read(
+                    account_type="chatgpt",
+                    requires_openai_auth=True,
+                ),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(packet["session_state"], readiness.SESSION_STATE_READY)
+            self.assertTrue(packet["logged_in_ui_session_proven"])
+            self.assertTrue(packet["app_server_requires_openai_auth"])
+            self.assertNotIn("custom_codex_login_required", packet["blocking_reasons"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_account_probe_home_copies_auth_without_runtime_provider_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+            paths.config_toml.write_text(
+                "\n".join(
+                    [
+                        'model_provider = "wbp"',
+                        "",
+                        "[model_providers.wbp]",
+                        'base_url = "http://127.0.0.1:8318/v1"',
+                        "requires_openai_auth = false",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            probe_root = Path(temp_dir) / "probe"
+
+            probe_home, metadata = readiness._prepare_account_probe_codex_home(
+                paths,
+                probe_root,
+            )
+
+            self.assertTrue((probe_home / "auth.json").exists())
+            self.assertFalse((probe_home / "config.toml").exists())
+            self.assertTrue(metadata["app_server_account_probe_auth_shadow_home"])
+            self.assertTrue(metadata["app_server_account_probe_runtime_config_isolated"])
+            self.assertTrue(metadata["app_server_account_probe_auth_json_copied"])
+            self.assertFalse(metadata["app_server_account_probe_config_toml_copied"])
+            self.assertFalse(metadata["app_server_account_probe_auth_json_source_recorded"])
+            self.assertEqual(
+                json.loads((probe_home / "auth.json").read_text(encoding="utf-8")),
+                {"auth_mode": "chatgpt", "access_token": SECRET},
+            )
+
     def test_api_key_only_blocks_and_never_counts_as_ui_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
