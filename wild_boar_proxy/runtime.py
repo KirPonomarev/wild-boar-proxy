@@ -820,7 +820,7 @@ def run_rollout_attestation_healthcheck(
     return retried_payload, retry_summary
 
 
-def get_model(paths: RuntimePaths, fallback: str = "gpt-5.3-codex") -> str:
+def get_model(paths: RuntimePaths, fallback: str = "gpt-5.5") -> str:
     return read_toml_string(paths.config_toml, "model") or fallback
 
 
@@ -18203,7 +18203,7 @@ def _run_installer_init_impl(paths: RuntimePaths) -> dict[str, Any]:
         if not paths.state_file.exists():
             write_json_atomic(paths.state_file, build_installer_default_state_payload())
         if not paths.config_toml.exists():
-            write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
+            write_text_atomic(paths.config_toml, 'model = "gpt-5.5"\nbase_url = "http://127.0.0.1:8318/v1"')
         ensure_repo_owned_owner_helper_chain(paths)
         ensure_repo_owned_operator_wrapper_chain(paths)
         ensure_installed_layout(external_paths)

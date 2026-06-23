@@ -31,7 +31,7 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
-DEFAULT_MODEL = "gpt-5.3-codex"
+DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
 FORBIDDEN_BROWSER_FIELD_NAMES = {
     "api_key",
