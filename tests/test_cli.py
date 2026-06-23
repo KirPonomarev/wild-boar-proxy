@@ -23625,10 +23625,13 @@ class CliTests(unittest.TestCase):
         self.assertIn('"$CODEX_APP_BIN"', launcher_text)
         self.assertNotIn('proxy_env "$CODEX_APP_BIN"', launcher_text)
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', launcher_text)
+        self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', launcher_text)
+        self.assertIn("set_launch_env", launcher_text)
+        self.assertIn("find_launched_pid() {", launcher_text)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', launcher_text)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', launcher_text)
         self.assertIn(
-            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            'printf "%s\\n" "$launched_pid" > "$APP_PID_FILE"',
             launcher_text,
         )
         self.assertIn(
@@ -23706,10 +23709,13 @@ class CliTests(unittest.TestCase):
         self.assertIn('"$CODEX_APP_BIN"', payload)
         self.assertNotIn('proxy_env "$CODEX_APP_BIN"', payload)
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', payload)
+        self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', payload)
+        self.assertIn("set_launch_env", payload)
+        self.assertIn("find_launched_pid() {", payload)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', payload)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
         self.assertIn(
-            'printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            'printf "%s\\n" "$launched_pid" > "$APP_PID_FILE"',
             payload,
         )
         self.assertIn(

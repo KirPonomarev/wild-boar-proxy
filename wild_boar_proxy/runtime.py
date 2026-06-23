@@ -1192,31 +1192,84 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '    unset OPENAI_API_KEY',
             "  fi",
             '  cd "$CODEX_APP_RESOURCES"',
-            "  launch_codex_app() {",
-            '    if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
-            '      nohup env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
-            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' all_proxy="$WBP_CURRENT_PROXY_URL"'
-            ' "$CODEX_APP_BIN"'
-            ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
-            ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
-            ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
-            ' "--user-data-dir=$APP_USER_DATA_DIR"'
-            ' "$@"'
-            ' < /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
+            "  launchctl_setenv() {",
+            '    /bin/launchctl setenv "$1" "$2" 2>> "$APP_STDERR_LOG"',
+            "  }",
+            "  launchctl_unsetenv() {",
+            '    /bin/launchctl unsetenv "$1" 2>> "$APP_STDERR_LOG" || true',
+            "  }",
+            "  LAUNCH_ENV_KEYS=\"CODEX_HOME WBP_PROFILE_DIR WBP_MANAGED_DIR WBP_EXTERNAL_MODELS_DIR HOME XDG_CONFIG_HOME XDG_CACHE_HOME TMPDIR CODEX_ELECTRON_USER_DATA_PATH OPENAI_API_KEY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\"",
+            '  LAUNCH_ENV_BACKUP_DIR="$APP_TMP_DIR/launcher-env.$$"',
+            "  save_launch_env() {",
+            '    rm -rf "$LAUNCH_ENV_BACKUP_DIR"',
+            '    mkdir -p "$LAUNCH_ENV_BACKUP_DIR"',
+            "    for key in $LAUNCH_ENV_KEYS; do",
+            '      /bin/launchctl getenv "$key" > "$LAUNCH_ENV_BACKUP_DIR/$key" 2>> "$APP_STDERR_LOG" || :',
+            "    done",
+            "  }",
+            "  restore_launch_env() {",
+            '    [ -d "$LAUNCH_ENV_BACKUP_DIR" ] || return 0',
+            "    for key in $LAUNCH_ENV_KEYS; do",
+            '      if [ -s "$LAUNCH_ENV_BACKUP_DIR/$key" ]; then',
+            '        launchctl_setenv "$key" "$(/bin/cat "$LAUNCH_ENV_BACKUP_DIR/$key")"',
+            "      else",
+            '        launchctl_unsetenv "$key"',
+            "      fi",
+            "    done",
+            '    rm -rf "$LAUNCH_ENV_BACKUP_DIR"',
+            "  }",
+            "  set_launch_env() {",
+            "    save_launch_env",
+            '    launchctl_setenv CODEX_HOME "$PROFILE_DIR"',
+            '    launchctl_setenv WBP_PROFILE_DIR "$PROFILE_DIR"',
+            '    launchctl_setenv WBP_MANAGED_DIR "$PROFILE_DIR/managed"',
+            '    launchctl_setenv WBP_EXTERNAL_MODELS_DIR "$OWNER_EXTERNAL_MODELS_DIR"',
+            '    launchctl_setenv HOME "$APP_HOME"',
+            '    launchctl_setenv XDG_CONFIG_HOME "$APP_HOME/.config"',
+            '    launchctl_setenv XDG_CACHE_HOME "$APP_HOME/.cache"',
+            '    launchctl_setenv TMPDIR "$APP_RUNTIME_TMPDIR"',
+            '    launchctl_setenv CODEX_ELECTRON_USER_DATA_PATH "$APP_USER_DATA_DIR"',
+            '    if [ -n "${OPENAI_API_KEY:-}" ]; then',
+            '      launchctl_setenv OPENAI_API_KEY "$OPENAI_API_KEY"',
             "    else",
-            '      nohup "$CODEX_APP_BIN"'
+            "      launchctl_unsetenv OPENAI_API_KEY",
+            "    fi",
+            '    if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            '      launchctl_setenv HTTP_PROXY "$WBP_CURRENT_PROXY_URL"',
+            '      launchctl_setenv HTTPS_PROXY "$WBP_CURRENT_PROXY_URL"',
+            '      launchctl_setenv ALL_PROXY "$WBP_CURRENT_PROXY_URL"',
+            '      launchctl_setenv http_proxy "$WBP_CURRENT_PROXY_URL"',
+            '      launchctl_setenv https_proxy "$WBP_CURRENT_PROXY_URL"',
+            '      launchctl_setenv all_proxy "$WBP_CURRENT_PROXY_URL"',
+            "    else",
+            "      for key in HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; do",
+            '        launchctl_unsetenv "$key"',
+            "      done",
+            "    fi",
+            "  }",
+            "  find_launched_pid() {",
+            '    /bin/ps axww -o pid=,args= | /usr/bin/awk -v app="$CODEX_APP_BIN" -v ud="--user-data-dir=$APP_USER_DATA_DIR" \'index($0, app) && index($0, ud) { pid=$1 } END { if (pid) print pid }\'',
+            "  }",
+            '  trap restore_launch_env EXIT HUP INT TERM',
+            "  launch_codex_app() {",
+            "    set_launch_env",
+            '    /usr/bin/open -n "$CODEX_APP_PATH" --args'
             ' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'
             ' "--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'
             ' "--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'
             ' "--user-data-dir=$APP_USER_DATA_DIR"'
             ' "$@"'
-            ' < /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &',
-            "    fi",
-            '    printf "%s\\n" "$!" > "$APP_PID_FILE"',
+            ' >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG"',
+            "    sleep 2",
+            "    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do",
+            '      launched_pid="$(find_launched_pid)"',
+            '      if [ -n "$launched_pid" ]; then',
+            '        printf "%s\\n" "$launched_pid" > "$APP_PID_FILE"',
+            "        return 0",
+            "      fi",
+            "      sleep 1",
+            "    done",
+            "    return 9",
             "  }",
             "  shift || true",
             '  WORKSPACE_PATH="${1:-}"',

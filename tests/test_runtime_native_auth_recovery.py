@@ -56,7 +56,7 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             payload.count(' "$CODEX_RENDERER_ACCESSIBILITY_FLAG"'),
-            2,
+            1,
         )
         self.assertIn(
             'CODEX_REMOTE_DEBUGGING_ADDRESS="127.0.0.1"',
@@ -68,11 +68,11 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             payload.count('"--remote-debugging-address=$CODEX_REMOTE_DEBUGGING_ADDRESS"'),
-            2,
+            1,
         )
         self.assertEqual(
             payload.count('"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT"'),
-            2,
+            1,
         )
         self.assertIn(
             '"--remote-debugging-port=$CODEX_REMOTE_DEBUGGING_PORT" "--user-data-dir=$APP_USER_DATA_DIR"',
@@ -94,13 +94,12 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             payload,
         )
         self.assertIn("launch_codex_app() {", payload)
-        self.assertEqual(payload.count('nohup "$CODEX_APP_BIN"'), 1)
-        self.assertEqual(payload.count("nohup env HTTP_PROXY="), 1)
-        self.assertEqual(
-            payload.count('< /dev/null >> "$APP_STDOUT_LOG" 2>> "$APP_STDERR_LOG" &'),
-            2,
-        )
-        self.assertEqual(payload.count('printf "%s\\n" "$!" > "$APP_PID_FILE"'), 1)
+        self.assertNotIn('nohup "$CODEX_APP_BIN"', payload)
+        self.assertNotIn("nohup env HTTP_PROXY=", payload)
+        self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', payload)
+        self.assertIn("set_launch_env", payload)
+        self.assertIn("find_launched_pid() {", payload)
+        self.assertIn('printf "%s\\n" "$launched_pid" > "$APP_PID_FILE"', payload)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
         self.assertIn("  launch_codex_app\n  sleep 3", payload)
 
