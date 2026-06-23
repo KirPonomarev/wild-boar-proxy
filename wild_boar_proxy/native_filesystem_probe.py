@@ -19,6 +19,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +55,8 @@ DEFAULT_CODEX_PROCESS_PATTERNS = (
     "Contents/Resources/codex app-server",
 )
 AGENT_RUNTIME_CONTEXT_FILENAME = "wbp-agent-runtime-context.json"
+DEFAULT_CUSTOM_NATIVE_MODEL = "gpt-5.5"
+CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0
 
 
 def utc_now() -> str:
@@ -4299,6 +4303,138 @@ def preserved_hooks_toml_sections(config_text: str) -> str:
     return "\n".join(preserved).strip()
 
 
+def _models_endpoint_from_base_url(endpoint: str) -> str:
+    parsed = urllib.parse.urlparse(endpoint)
+    path = (parsed.path or "").rstrip("/")
+    if path.endswith("/responses"):
+        path = path[: -len("/responses")]
+    elif path.endswith("/chat/completions"):
+        path = path[: -len("/chat/completions")]
+
+    if path.endswith("/models"):
+        models_path = path
+    elif path.endswith("/v1"):
+        models_path = f"{path}/models"
+    elif path in {"", "/"}:
+        models_path = "/v1/models"
+    else:
+        models_path = f"{path}/models"
+
+    return urllib.parse.urlunparse(
+        parsed._replace(path=models_path, params="", query="", fragment="")
+    )
+
+
+def _extract_model_ids_from_models_payload(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    model_ids: list[str] = []
+    raw_data = payload.get("data")
+    if isinstance(raw_data, list):
+        for item in raw_data:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            if model_id:
+                model_ids.append(model_id)
+    raw_model_ids = payload.get("model_ids")
+    if isinstance(raw_model_ids, list):
+        for item in raw_model_ids:
+            model_id = str(item or "").strip()
+            if model_id:
+                model_ids.append(model_id)
+    return list(dict.fromkeys(model_ids))
+
+
+def build_configured_model_availability_packet(
+    *,
+    endpoint: str,
+    model: str,
+    local_token: str = "",
+    timeout_seconds: float = CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    configured_model = str(model or "").strip()
+    models_endpoint = _models_endpoint_from_base_url(endpoint)
+    base = {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_native_configured_model_availability",
+        "configured_model_id": configured_model,
+        "models_endpoint_redacted": True,
+        "models_endpoint_localhost_only": urllib.parse.urlparse(models_endpoint).hostname
+        in {"127.0.0.1", "localhost", "::1"},
+        "models_endpoint_probe_attempted": True,
+        "available_model_ids_recorded": True,
+        "configured_model_available": False,
+    }
+    if not configured_model:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODEL_MISSING",
+            "reason_class": "configured_model_missing",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": "",
+        }
+    try:
+        headers = {}
+        if str(local_token or "").strip():
+            headers["Authorization"] = f"Bearer {str(local_token).strip()}"
+        request = urllib.request.Request(models_endpoint, headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(getattr(response, "status", response.getcode()) or 0)
+            body = response.read()
+    except Exception as exc:  # pragma: no cover - exact urllib exception varies by host
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_UNAVAILABLE",
+            "reason_class": "models_endpoint_unavailable",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": type(exc).__name__,
+        }
+    if status_code < 200 or status_code >= 300:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_HTTP_ERROR",
+            "reason_class": "models_endpoint_http_error",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "http_status_code": status_code,
+            "transport_error_class": "",
+        }
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_BAD_JSON",
+            "reason_class": "models_endpoint_bad_json",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": type(exc).__name__,
+        }
+    model_ids = _extract_model_ids_from_models_payload(payload)
+    model_available = configured_model in model_ids
+    return {
+        **base,
+        "status": "ok" if model_available else "blocked",
+        "machine_error_code": (
+            "OK"
+            if model_available
+            else "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT"
+        ),
+        "reason_class": "" if model_available else "configured_model_not_advertised",
+        "available_model_count": len(model_ids),
+        "available_model_ids": model_ids[:100],
+        "transport_error_class": "",
+        "configured_model_available": model_available,
+    }
+
+
 def materialize_probe_profile(
     *,
     layout: NativeProbeLayout,
@@ -4307,7 +4443,69 @@ def materialize_probe_profile(
     auth_command_path: Path,
     local_token: str,
     agent_runtime_context: Mapping[str, Any] | None = None,
+    validate_model_against_endpoint: bool = False,
 ) -> dict[str, Any]:
+    model_availability_packet = (
+        build_configured_model_availability_packet(
+            endpoint=endpoint,
+            model=model,
+            local_token=local_token,
+        )
+        if validate_model_against_endpoint
+        else {
+            "captured_at_utc": utc_now(),
+            "packet_kind": "custom_native_configured_model_availability",
+            "status": "not_required",
+            "machine_error_code": "NOT_REQUIRED",
+            "configured_model_id": str(model or "").strip(),
+            "configured_model_available": False,
+            "models_endpoint_probe_attempted": False,
+            "models_endpoint_redacted": True,
+            "available_model_ids_recorded": False,
+            "available_model_ids": [],
+        }
+    )
+    base_packet = {
+        "profile_dir": str(layout.profile_dir),
+        "launcher_path": str(layout.launcher_path),
+        "config_path": str(layout.profile_dir / "config.toml"),
+        "hooks_config_sections_preserved": False,
+        "hooks_config_preservation_scope": "top_level_hooks_toml_tables_only",
+        "hooks_config_preserved_sha256": "",
+        "auth_path": str(layout.profile_dir / "auth.json"),
+        "agent_runtime_context_path": "",
+        "agent_runtime_context_profile_relative_path": "",
+        "agent_runtime_context_written": False,
+        "agent_runtime_context_sha256": "",
+        "native_alias_context_written": False,
+        "context_file_present": False,
+        "context_file_sha256_present": False,
+        "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
+        "custom_user_data_dir": str(layout.custom_user_data_dir),
+        "custom_home_dir": str(layout.custom_home_dir),
+        "custom_tmp_dir": str(layout.custom_tmp_dir),
+        "configured_model_validation_attempted": validate_model_against_endpoint,
+        "configured_model_validation_packet": model_availability_packet,
+        "configured_model_available": (
+            model_availability_packet.get("configured_model_available") is True
+        ),
+        "model_config_written": False,
+    }
+    if model_availability_packet.get("status") == "blocked":
+        return {
+            **base_packet,
+            "status": "blocked",
+            "machine_error_code": str(
+                model_availability_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_CONFIG_MODEL_NOT_AVAILABLE"
+            ),
+            "reason_class": str(model_availability_packet.get("reason_class") or ""),
+            "human_message": (
+                "Custom native profile config was not written because the configured "
+                "model is not available from the local models endpoint."
+            ),
+            "next_action": "select_model_advertised_by_local_models_endpoint",
+        }
     layout.tmp_root.mkdir(parents=True, exist_ok=True)
     layout.profile_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_user_data_dir.mkdir(parents=True, exist_ok=True)
@@ -4355,9 +4553,9 @@ def materialize_probe_profile(
         ).hexdigest()
     layout.launcher_path.chmod(0o755)
     return {
-        "profile_dir": str(layout.profile_dir),
-        "launcher_path": str(layout.launcher_path),
-        "config_path": str(layout.profile_dir / "config.toml"),
+        **base_packet,
+        "status": "ok",
+        "machine_error_code": "OK",
         "hooks_config_sections_preserved": bool(preserved_hooks_sections),
         "hooks_config_preservation_scope": "top_level_hooks_toml_tables_only",
         "hooks_config_preserved_sha256": (
@@ -4365,7 +4563,6 @@ def materialize_probe_profile(
             if preserved_hooks_sections
             else ""
         ),
-        "auth_path": str(layout.profile_dir / "auth.json"),
         "agent_runtime_context_path": (
             str(agent_runtime_context_path) if agent_runtime_context_written else ""
         ),
@@ -4377,10 +4574,7 @@ def materialize_probe_profile(
         "native_alias_context_written": agent_runtime_context_written,
         "context_file_present": agent_runtime_context_written,
         "context_file_sha256_present": bool(agent_runtime_context_sha256),
-        "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
-        "custom_user_data_dir": str(layout.custom_user_data_dir),
-        "custom_home_dir": str(layout.custom_home_dir),
-        "custom_tmp_dir": str(layout.custom_tmp_dir),
+        "model_config_written": True,
     }
 
 

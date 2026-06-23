@@ -20,6 +20,7 @@ from .fresh_sealed_e2e_proof import (
     FRESH_SEALED_E2E_PACKET_KIND,
     run_fresh_sealed_e2e_proof_command,
 )
+from .native_filesystem_probe import DEFAULT_CUSTOM_NATIVE_MODEL
 from .proof_seal import sha256_file
 from .repeatable_proof_status import (
     DEFAULT_PROVIDER_PREFLIGHT_MARKER,
@@ -322,7 +323,7 @@ def run_fresh_router_ready_proof_command(
     observer_timeout_seconds: float | None = None,
     native_auto_launch_custom_codex: bool = False,
     native_auto_launch_endpoint: str = "http://127.0.0.1:8318/v1",
-    native_auto_launch_model: str = "gpt-5.3-codex",
+    native_auto_launch_model: str = DEFAULT_CUSTOM_NATIVE_MODEL,
     native_auto_launch_owner_authorization_phrase: str | None = None,
     native_auto_launch_repo_root: str | None = None,
     native_auto_launch_stable_runtime_generated_config_file: str | None = None,

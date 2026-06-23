@@ -4597,6 +4597,7 @@ def launch_custom_native_app_packet(
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
             agent_runtime_context=agent_runtime_context,
+            validate_model_against_endpoint=True,
         )
         persistent_fields = {
             "profile_mode": "persistent_custom",
@@ -4641,7 +4642,47 @@ def launch_custom_native_app_packet(
             "local_token_source_kind": "stable_runtime_generated_config",
             "local_token_present": bool(local_token),
             "local_token_value_recorded": False,
+            "configured_model_validation_attempted": materialized_profile.get(
+                "configured_model_validation_attempted"
+            )
+            is True,
+            "configured_model_available": materialized_profile.get(
+                "configured_model_available"
+            )
+            is True,
+            "configured_model_validation_packet": materialized_profile.get(
+                "configured_model_validation_packet",
+                {},
+            ),
+            "model_config_written": materialized_profile.get("model_config_written")
+            is True,
         }
+        if materialized_profile.get("status") == "blocked":
+            cleanup_error = remove_tree_with_retry(tmp_root)
+            return {
+                **base,
+                **persistent_fields,
+                "status": "blocked",
+                "machine_error_code": str(
+                    materialized_profile.get("machine_error_code")
+                    or "CUSTOM_NATIVE_CONFIG_MODEL_NOT_AVAILABLE"
+                ),
+                "human_message": str(
+                    materialized_profile.get("human_message")
+                    or "Custom native launch stopped before launch because the configured model is unavailable."
+                ),
+                "next_action": str(
+                    materialized_profile.get("next_action")
+                    or "select_model_advertised_by_local_models_endpoint"
+                ),
+                "selection_model_id": model,
+                "cleanup_result": {
+                    "attempted": True,
+                    "status": "ok" if not cleanup_error else "blocked",
+                    "termination": {},
+                    "cleanup_error_class": cleanup_error,
+                },
+            }
         keychain_preflight = prepare_isolated_home_keychain(
             isolated_home=layout.custom_home_dir,
         )

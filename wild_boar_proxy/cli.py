@@ -83,6 +83,7 @@ from .native_free_chat_router_dispatch_admission import (
 from .native_free_chat_router_handoff_working_flow_join import (
     run_handoff_to_working_flow_join_command,
 )
+from .native_filesystem_probe import DEFAULT_CUSTOM_NATIVE_MODEL
 from .natural_free_chat_router_proof import (
     run_natural_free_chat_router_proof_command,
 )
@@ -557,7 +558,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_fresh_router_ready.add_argument(
         "--native-auto-launch-model",
-        default="gpt-5.3-codex",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
     )
     codex_runner_fresh_router_ready.add_argument(
         "--native-auto-launch-owner-authorization-phrase"
@@ -669,7 +670,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_fresh_sealed_e2e.add_argument(
         "--native-auto-launch-model",
-        default="gpt-5.3-codex",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
     )
     codex_runner_fresh_sealed_e2e.add_argument(
         "--native-auto-launch-owner-authorization-phrase"
@@ -710,7 +711,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_native_ui.add_argument(
         "--auto-launch-model",
-        default="gpt-5.3-codex",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
     )
     codex_runner_native_ui.add_argument("--auto-launch-owner-authorization-phrase")
     codex_runner_native_ui.add_argument("--auto-launch-repo-root")

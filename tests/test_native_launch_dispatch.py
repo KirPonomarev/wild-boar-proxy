@@ -86,6 +86,18 @@ def admitted_custom_packet(**overrides: object) -> dict[str, object]:
     )
 
 
+def advertised_model_packet(model: str = "gpt-5.5") -> dict[str, object]:
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "configured_model_id": model,
+        "configured_model_available": True,
+        "available_model_ids": [model],
+        "models_endpoint_probe_attempted": True,
+        "models_endpoint_redacted": True,
+    }
+
+
 class NativeLaunchDispatchTests(unittest.TestCase):
     def test_native_window_probe_runner_command_matches_custom_native_mode(self) -> None:
         command = native_window_probe_command()
@@ -130,6 +142,69 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["isolated_default_keychain_verified"])
         self.assertFalse(packet["isolated_search_list_verified"])
         self.assertEqual(packet["prompt_avoidance_claim_scope"], "keychain_not_found_prompt_only")
+
+    def test_live_custom_native_launch_blocks_before_keychain_when_model_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            blocked_materialize = {
+                "status": "blocked",
+                "machine_error_code": (
+                    "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT"
+                ),
+                "human_message": "model unavailable",
+                "next_action": "select_model_advertised_by_local_models_endpoint",
+                "configured_model_validation_attempted": True,
+                "configured_model_available": False,
+                "configured_model_validation_packet": {
+                    "status": "blocked",
+                    "machine_error_code": (
+                        "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT"
+                    ),
+                    "configured_model_id": "gpt-5.3-codex",
+                },
+                "model_config_written": False,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(managed_dir=root / "managed"),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.emit_local_token",
+                    return_value="local-token",
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.materialize_probe_profile",
+                    return_value=blocked_materialize,
+                ) as materialize,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain"
+                ) as keychain,
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    persistent_profile_base_dir=root,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT",
+        )
+        self.assertTrue(packet["configured_model_validation_attempted"])
+        self.assertFalse(packet["configured_model_available"])
+        self.assertFalse(packet["model_config_written"])
+        self.assertEqual(packet["selection_model_id"], "gpt-5.3-codex")
+        self.assertEqual(
+            packet["next_action"],
+            "select_model_advertised_by_local_models_endpoint",
+        )
+        self.assertTrue(packet["cleanup_result"]["attempted"])
+        self.assertTrue(materialize.call_args.kwargs["validate_model_against_endpoint"])
+        keychain.assert_not_called()
 
     def test_window_observation_uses_custom_pid_and_requires_real_window_count(self) -> None:
         process_inventory = {
@@ -4049,6 +4124,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
                 mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.build_configured_model_availability_packet",
+                    return_value=advertised_model_packet("gpt-5.3-codex"),
+                ),
+                mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
                     return_value={
                         "status": "ok",
@@ -4141,6 +4220,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
                 mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.build_configured_model_availability_packet",
+                    return_value=advertised_model_packet("gpt-5.3-codex"),
+                ),
+                mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
                     return_value={
                         "status": "ok",
@@ -4212,6 +4295,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                         return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
                     ),
                     mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                    mock.patch(
+                        "wild_boar_proxy.native_filesystem_probe.build_configured_model_availability_packet",
+                        return_value=advertised_model_packet("wbp-deepseek-v4-pro-max"),
+                    ),
                     mock.patch(
                         "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
                         return_value={
@@ -4454,6 +4541,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     ),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.build_configured_model_availability_packet",
+                    return_value=advertised_model_packet("gpt-5.3-codex"),
+                ),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
                     return_value={

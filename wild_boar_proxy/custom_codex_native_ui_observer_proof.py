@@ -12,13 +12,14 @@ from .native_window_probe import (
     launch_custom_native_app_packet,
     submit_custom_native_window_prompt_packet,
 )
+from .native_filesystem_probe import DEFAULT_CUSTOM_NATIVE_MODEL
 from .runtime import RuntimePaths, write_json_atomic
 
 
 NATIVE_UI_OBSERVER_PACKET_FILE_NAME = "native-ui-observer.packet.json"
 NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME = "native-ui-auto-launch.packet.json"
 DEFAULT_AUTO_LAUNCH_ENDPOINT = "http://127.0.0.1:8318/v1"
-DEFAULT_AUTO_LAUNCH_MODEL = "gpt-5.3-codex"
+DEFAULT_AUTO_LAUNCH_MODEL = DEFAULT_CUSTOM_NATIVE_MODEL
 
 _AUTO_LAUNCH_MACHINE_ERROR_CODES = frozenset(
     {
