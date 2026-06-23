@@ -32,6 +32,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
     WBP_DIP_TOOL_OK,
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
+    _build_live_result_prompt,
     build_codex_exec_argv,
     build_delegate_prompt,
     build_wbp_dip_tool_packet,
@@ -93,6 +94,11 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "runtime_context_bridge_used": False,
         "runtime_context_file_bridge_used": False,
         "bridge_or_file_bridge_used": False,
+        "dip_work_mode": "standard",
+        "dip_full_work_mode": False,
+        "live_result_text_limit": 2400,
+        "live_result_output_token_limit": 768,
+        "repo_bridge_max_steps": 8,
         "direct_provider_auth_proven": True,
         "direct_provider_response_observed": True,
         "provider_auth_ok": True,
@@ -135,6 +141,11 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "repo_bridge_tool_result_sha256s": [],
         "repo_bridge_raw_tool_results_recorded": False,
         "repo_bridge_blocked": False,
+        "dip_evidence_trace_available": False,
+        "dip_evidence_trace_recorded": False,
+        "dip_evidence_trace_count": 0,
+        "dip_evidence_trace": [],
+        "dip_evidence_trace_raw_output_recorded": False,
     }
     packet.update(overrides)
     return packet
@@ -177,6 +188,24 @@ class WbpDipToolTests(unittest.TestCase):
             default_python_bin({PYTHON_BIN_ENV: "/opt/custom/python3.14"}),
             Path("/opt/custom/python3.14"),
         )
+
+    def test_live_result_prompt_keeps_standard_mode_bounded(self) -> None:
+        prompt = _build_live_result_prompt(
+            task="DIP: проверь repo read-only",
+            expected_alias="DIP",
+        )
+
+        self.assertIn("2-6 concise bullets", prompt)
+
+    def test_live_result_prompt_full_mode_removes_artificial_bullet_limit(self) -> None:
+        prompt = _build_live_result_prompt(
+            task="DIP: изучи repo и дай полный отчет",
+            expected_alias="DIP",
+            dip_work_mode="full",
+        )
+
+        self.assertIn("complete structured operator answer", prompt)
+        self.assertNotIn("2-6 concise bullets", prompt)
 
     def test_default_codex_bin_falls_back_to_available_app_binary(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -306,6 +335,27 @@ class WbpDipToolTests(unittest.TestCase):
                     dip_code_verification_required=True,
                     dip_code_verified=True,
                     dip_action_mutated_files=["demo.py"],
+                    dip_evidence_trace=[
+                        {
+                            "step": 1,
+                            "tool": "apply_patch",
+                            "origin": "",
+                            "status": "ok",
+                            "machine_error_code": "OK",
+                            "path": "",
+                            "result_text_sha256": "d" * 64,
+                            "result_text_truncated": False,
+                            "patch_sha256": "e" * 64,
+                            "patch_recorded": False,
+                            "touched_files": ["demo.py"],
+                            "command_sha256": "",
+                            "command_recorded": False,
+                            "command_exit_code": None,
+                            "mutation_applied": True,
+                            "mutated_files": ["demo.py"],
+                            "raw_result_recorded": False,
+                        }
+                    ],
                 ),
             )
 
@@ -341,6 +391,13 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["dip_action_mutated_files"], ["demo.py"])
         self.assertFalse(packet["dip_action_raw_patch_recorded"])
         self.assertFalse(packet["dip_action_raw_command_recorded"])
+        self.assertTrue(packet["dip_evidence_trace_available"])
+        self.assertTrue(packet["dip_evidence_trace_recorded"])
+        self.assertEqual(packet["dip_evidence_trace_count"], 1)
+        self.assertEqual(packet["dip_evidence_trace"][0]["tool"], "apply_patch")
+        self.assertEqual(packet["dip_evidence_trace"][0]["mutated_files"], ["demo.py"])
+        self.assertFalse(packet["dip_evidence_trace"][0]["raw_result_recorded"])
+        self.assertFalse(packet["dip_evidence_trace"][0]["patch_recorded"])
 
     def test_packet_rejects_proof_only_dispatch_when_live_result_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -661,6 +718,42 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["planned_codex_exec"])
         self.assertEqual(packet["planned_model"], DEFAULT_MODEL)
         self.assertEqual(packet["planned_sandbox"], DEFAULT_SANDBOX)
+        self.assertEqual(packet["dip_work_mode"], "standard")
+        self.assertFalse(packet["dip_full_work_mode"])
+        self.assertEqual(packet["live_result_text_limit"], 2400)
+        self.assertEqual(packet["live_result_output_token_limit"], 768)
+        self.assertEqual(packet["repo_bridge_max_steps"], 8)
+        self.assertFalse(packet_contains_text(packet, TASK))
+
+    def test_tool_dry_run_full_work_mode_reports_full_packet_limits(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "tools/wbp_dip",
+                "--dry-run",
+                "--json",
+                "--work-mode",
+                "full",
+                "--codex-bin",
+                "/bin/echo",
+                TASK,
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        packet = json.loads(completed.stdout)
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_DRY_RUN)
+        self.assertEqual(packet["planned_dip_work_mode"], "full")
+        self.assertEqual(packet["dip_work_mode"], "full")
+        self.assertTrue(packet["dip_full_work_mode"])
+        self.assertEqual(packet["live_result_text_limit"], 12000)
+        self.assertEqual(packet["live_result_output_token_limit"], 4096)
+        self.assertEqual(packet["repo_bridge_max_steps"], 16)
         self.assertFalse(packet_contains_text(packet, TASK))
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
@@ -881,6 +974,65 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["positive_provider_proof_gate_satisfied"])
         self.assertFalse(result["bridge_or_file_bridge_used"])
         request_json_mock.assert_called_once()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_full_mode_raises_budget_and_text_limit(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        long_text = "x" * 3000
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=12,
+            payload={"choices": [{"message": {"content": long_text}}]},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: дай подробный отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_bridge_mode="off",
+                dip_work_mode="full",
+                timeout_seconds=0.01,
+            )
+
+        payload = request_json_mock.call_args.kwargs["payload"]
+        self.assertEqual(payload["max_tokens"], 4096)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["dip_work_mode"], "full")
+        self.assertTrue(result["dip_full_work_mode"])
+        self.assertEqual(result["live_result_text_limit"], 12000)
+        self.assertEqual(result["live_result_output_token_limit"], 4096)
+        self.assertEqual(result["result_text"], long_text)
+        self.assertFalse(result["result_text_truncated"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
@@ -1196,6 +1348,16 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["dip_action_mutated_files"], ["demo.py"])
         self.assertFalse(result["dip_action_raw_patch_recorded"])
         self.assertFalse(result["dip_action_raw_command_recorded"])
+        self.assertTrue(result["dip_evidence_trace_available"])
+        self.assertTrue(result["dip_evidence_trace_recorded"])
+        self.assertEqual(result["dip_evidence_trace_count"], 3)
+        self.assertEqual(
+            [entry["tool"] for entry in result["dip_evidence_trace"]],
+            ["read_file", "apply_patch", "run_tests"],
+        )
+        self.assertTrue(result["dip_evidence_trace"][1]["mutation_applied"])
+        self.assertFalse(result["dip_evidence_trace"][1]["patch_recorded"])
+        self.assertFalse(result["dip_evidence_trace"][2]["command_recorded"])
         self.assertEqual(request_json_mock.call_count, 3)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})

@@ -10775,6 +10775,7 @@ def _custom_native_agent_runtime_context(
     launch_model_id: str,
     route_model_id: str,
     bridge_endpoint: str = "",
+    route_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     packet = execution_packet if isinstance(execution_packet, dict) else {}
     execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
@@ -10819,18 +10820,20 @@ def _custom_native_agent_runtime_context(
         if isinstance(coding_slot, dict)
         else ""
     )
-    route_records = (
-        [
-            {
-                "route_id": api_model_id,
-                "provider": coding_provider or "deepseek",
-                "enabled": True,
-                "auth": {"secret_ref": "server_owned_redacted"},
-            }
-        ]
-        if api_model_id
-        else []
-    )
+    selected_route_record = {
+        "route_id": api_model_id,
+        "provider": coding_provider or "deepseek",
+        "enabled": True,
+        "auth": {"secret_ref": "server_owned_redacted"},
+    } if api_model_id else {}
+    effective_route_records = [
+        dict(route) for route in (route_records or []) if isinstance(route, dict)
+    ]
+    if selected_route_record and not any(
+        str(route.get("route_id") or "").strip() == api_model_id
+        for route in effective_route_records
+    ):
+        effective_route_records.append(selected_route_record)
     bindings_state_path = agent_bindings_state_path(RuntimePaths.from_env().managed_dir)
     bindings_packet = read_agent_bindings_packet(
         bindings_state_path,
@@ -10839,7 +10842,7 @@ def _custom_native_agent_runtime_context(
             api_route_id=api_model_id,
         ),
         primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
-        route_records=route_records,
+        route_records=effective_route_records,
         require_api_route_binding=execution_mode == "chatgpt_plus_api",
     )
     if (
@@ -10864,9 +10867,24 @@ def _custom_native_agent_runtime_context(
             "next_action": "repair_chatgpt_plus_api_provider_selection",
         }
     bindings_ok = bindings_packet.get("status") == "ok"
+    runtime_agent_bindings = [
+        dict(binding)
+        for binding in (
+            bindings_packet.get("agent_bindings", []) if bindings_ok else []
+        )
+        if isinstance(binding, dict)
+    ]
+    if execution_mode == "chatgpt_plus_api" and api_model_id:
+        for binding in runtime_agent_bindings:
+            if (
+                binding.get("lane") == API_ROUTE_LANE
+                and binding.get("enabled") is True
+            ):
+                binding["route_id"] = api_model_id
+                break
     bindings_projection = project_agent_bindings_for_runtime_context(
-        bindings_packet.get("agent_bindings", []) if bindings_ok else [],
-        route_records=route_records,
+        runtime_agent_bindings,
+        route_records=effective_route_records,
     )
     primary_aliases = list(bindings_projection.get("primary_aliases") or []) if bindings_ok else []
     coding_aliases = list(bindings_projection.get("coding_aliases") or []) if bindings_ok else []
@@ -16255,6 +16273,7 @@ def build_handler(
             launch_model_id=chatgpt_model_id,
             route_model_id=api_route_id,
             bridge_endpoint=bridge_endpoint,
+            route_records=route_records,
         )
         context["context_truth_source"] = "server_current_agent_bindings_state"
         context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"

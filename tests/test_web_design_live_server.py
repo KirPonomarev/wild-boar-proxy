@@ -2096,8 +2096,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     live_server,
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
-                        route_id="wbp-deepseek-chat",
+                        route_id="wbp-deepseek-v4-pro-max",
                         output_text="WBP_MODEL_REASONING_MATRIX_API_OK",
+                        thinking={"type": "enabled", "reasoning_effort": "max"},
+                        api_parameter_sent=True,
                     ),
                 ) as urlopen,
             ):
@@ -2255,8 +2257,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     live_server,
                     "proxyless_urlopen",
                     return_value=self._bridge_response(
-                        route_id="wbp-deepseek-chat",
+                        route_id="wbp-deepseek-v4-pro-max",
                         output_text="WBP_MODEL_REASONING_MATRIX_API_OK",
+                        thinking={"type": "enabled", "reasoning_effort": "max"},
+                        api_parameter_sent=True,
                     ),
                 ) as urlopen,
             ):
@@ -23661,7 +23665,7 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertEqual(registry["status"], "degraded")
         self.assertEqual(registry["machine_error_code"], "CLAIM_GATE_BLOCKED")
         self.assertTrue(registry["server_issued"])
-        self.assertEqual(registry["model_count"], 2)
+        self.assertEqual(registry["model_count"], 3)
         self.assertFalse(registry["route_or_backend_exposed"])
         self.assertEqual(registry["token_burn"], 0)
         self.assertFalse(registry["models_endpoint_called"])
@@ -23969,8 +23973,8 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                 thread.join(timeout=2)
                 server.server_close()
 
-        self.assertEqual(selector["status"], "degraded")
-        self.assertEqual(selector["machine_error_code"], "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE")
+        self.assertEqual(selector["status"], "ok")
+        self.assertEqual(selector["machine_error_code"], "OK")
         self.assertTrue(selector["server_issued"])
         self.assertFalse(selector["flat_model_truth_presented"])
         self.assertFalse(selector["selector_runtime_readiness_claimed"])
@@ -23991,11 +23995,11 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
             all(entry["selection_enabled"] is False for entry in selector["seed_only_reference"]["models"])
         )
         self.assertEqual(selector["chatgpt_lane"]["preferred_default_model_id"], "gpt-5.5")
-        self.assertFalse(selector["chatgpt_lane"]["preferred_default_available"])
-        self.assertTrue(selector["chatgpt_lane"]["default_model_fallback_used"])
+        self.assertTrue(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertFalse(selector["chatgpt_lane"]["default_model_fallback_used"])
         self.assertEqual(
             selector["chatgpt_lane"]["default_resolution_reason"],
-            "preferred_selectable_default_unavailable_using_recommended_default_fallback",
+            "preferred_selectable_default_available",
         )
 
     def test_codex_custom_dual_lane_selector_timeout_returns_degraded_api_lane_fallback(self) -> None:
