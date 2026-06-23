@@ -65,6 +65,7 @@ WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED = "WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED"
+WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED = "WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED"
 
 REPO_BRIDGE_MODES = ("auto", "on", "off")
 REPO_BRIDGE_TASK_KEYWORDS = (
@@ -109,6 +110,26 @@ ACTION_BRIDGE_TASK_KEYWORDS = (
     "тест",
     "проверь",
     "запусти",
+)
+CODE_MUTATION_TASK_KEYWORDS = (
+    "fix",
+    "repair",
+    "implement",
+    "patch",
+    "change",
+    "edit",
+    "write code",
+    "почини",
+    "чинить",
+    "исправь",
+    "исправить",
+    "реализуй",
+    "реализовать",
+    "доделай",
+    "добавь",
+    "создай",
+    "напиши",
+    "патч",
 )
 ACTION_BRIDGE_TOOLS = {
     "propose_patch",
@@ -536,6 +557,13 @@ def _action_bridge_requested(*, task: str, repo_bridge_required: bool) -> bool:
         return False
     task_key = task.casefold()
     return any(keyword in task_key for keyword in ACTION_BRIDGE_TASK_KEYWORDS)
+
+
+def _code_mutation_requested(*, task: str, action_required: bool) -> bool:
+    if not action_required:
+        return False
+    task_key = task.casefold()
+    return any(keyword in task_key for keyword in CODE_MUTATION_TASK_KEYWORDS)
 
 
 def _path_is_sensitive(relative_path: str) -> bool:
@@ -977,6 +1005,9 @@ def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
         "returns evidence. For repository inspection/report tasks, request at "
         "least one repo tool before the final answer. For implementation/fix/test "
         "tasks, request action tools until the work is either completed or blocked. "
+        "For implementation/fix/edit tasks, completion requires an apply_patch "
+        "tool call that actually changes code; a final answer without an applied "
+        "patch will be rejected by WBP. "
         "To request a tool, output only one JSON object and no prose:\n"
         '{"wbp_repo_tool_call":{"tool":"list_files","path":"wild_boar_proxy"}}\n'
         '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}\n'
@@ -1109,6 +1140,7 @@ def _repo_bridge_fields(
     *,
     required: bool,
     action_required: bool,
+    code_mutation_required: bool,
     available: bool,
     context_pack: Mapping[str, Any] | None,
     tool_results: Sequence[Mapping[str, Any]],
@@ -1166,6 +1198,9 @@ def _repo_bridge_fields(
             result.get("tool") == "propose_patch" for result in action_results
         ),
         "dip_action_patch_applied": bool(mutation_results),
+        "dip_code_mutation_required": code_mutation_required,
+        "dip_code_written": bool(mutation_results),
+        "dip_code_patch_applied": bool(mutation_results),
         "dip_action_mutated_files": sorted(
             {
                 str(path)
@@ -1485,6 +1520,10 @@ def request_live_result(
         task=task,
         repo_bridge_required=repo_bridge_required,
     )
+    code_mutation_required = _code_mutation_requested(
+        task=task,
+        action_required=action_bridge_required,
+    )
     repo_bridge_available = bool(repo_root and Path(repo_root).is_dir())
     repo_context_pack = (
         _build_repo_context_pack(Path(repo_root))
@@ -1495,6 +1534,7 @@ def request_live_result(
     repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
         action_required=action_bridge_required,
+        code_mutation_required=code_mutation_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
         tool_results=repo_tool_results,
@@ -1578,6 +1618,7 @@ def request_live_result(
                 **_repo_bridge_fields(
                     required=repo_bridge_required,
                     action_required=action_bridge_required,
+                    code_mutation_required=code_mutation_required,
                     available=repo_bridge_available,
                     context_pack=repo_context_pack,
                     tool_results=repo_tool_results,
@@ -1597,6 +1638,7 @@ def request_live_result(
     final_repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
         action_required=action_bridge_required,
+        code_mutation_required=code_mutation_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
         tool_results=repo_tool_results,
@@ -1620,6 +1662,14 @@ def request_live_result(
             **base,
             **final_repo_fields,
             "machine_error_code": WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+        }
+    if code_mutation_required and final_repo_fields["dip_code_written"] is not True:
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED,
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
@@ -1829,6 +1879,13 @@ def build_wbp_dip_tool_packet(
         ),
         "dip_action_patch_applied": (
             live_result_data.get("dip_action_patch_applied") is True
+        ),
+        "dip_code_mutation_required": (
+            live_result_data.get("dip_code_mutation_required") is True
+        ),
+        "dip_code_written": live_result_data.get("dip_code_written") is True,
+        "dip_code_patch_applied": (
+            live_result_data.get("dip_code_patch_applied") is True
         ),
         "dip_action_mutated_files": [
             _safe_text(item, limit=500)

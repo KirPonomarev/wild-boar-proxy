@@ -85,9 +85,11 @@ Admitted bridge tools:
 
 A repo-inspection claim must not succeed unless at least one repo bridge tool
 call succeeds. A fix/implementation/test claim must not succeed unless at least
-one action bridge tool call succeeds. Patches are accepted only as bounded
-unified diffs and are checked with `git apply --check` before any apply.
-Commands are allowlisted and executed without shell interpolation.
+one action bridge tool call succeeds. A fix/implementation/edit/code-writing
+claim must not succeed unless an `apply_patch` tool call actually mutates code.
+Patches are accepted only as bounded unified diffs and are checked with
+`git apply --check` before any apply. Commands are allowlisted and executed
+without shell interpolation.
 
 Canonical operator entry:
 
@@ -126,6 +128,7 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `dip_repo_direct_access=false`
 - `dip_repo_tool_bridge_used=true` for repo-inspection success paths
 - `dip_action_bridge_used=true` for fix/implementation/test success paths
+- `dip_code_written=true` for fix/implementation/edit/code-writing success paths
 - `dip_action_raw_patch_recorded=false`
 - `dip_action_raw_command_recorded=false`
 - `repo_bridge_context_pack_recorded=false`
