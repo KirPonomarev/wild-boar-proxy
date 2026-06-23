@@ -279,6 +279,26 @@ def _read_process_inventory_file(path: Path | None) -> tuple[dict[str, Any] | No
     return dict(parsed) if isinstance(parsed, Mapping) else {}, False
 
 
+def _process_inventory_lines(process_inventory: Mapping[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for key in ("sample", "custom_process_lines", "default_process_lines"):
+        values = process_inventory.get(key)
+        if isinstance(values, Sequence) and not isinstance(values, (str, bytes)):
+            lines.extend(str(value) for value in values)
+    return lines
+
+
+def _custom_user_data_dir_observed(
+    process_inventory: Mapping[str, Any],
+    custom_user_data_dir: str,
+) -> bool:
+    expected = str(Path(custom_user_data_dir).expanduser())
+    expected_arg = f"--user-data-dir={expected}"
+    return bool(expected) and any(
+        expected_arg in line for line in _process_inventory_lines(process_inventory)
+    )
+
+
 def _hook_ready(hook_readiness_packet: Mapping[str, Any]) -> bool:
     app_server_status_required = (
         hook_readiness_packet.get("codex_hook_app_server_trust_status_required")
@@ -371,6 +391,10 @@ def build_custom_codex_auth_session_readiness_packet(
         process_inventory,
         process_inventory_live=process_inventory_live,
     )
+    custom_user_data_dir_observed = _custom_user_data_dir_observed(
+        process_inventory,
+        user_data_dir,
+    )
     auth = _read_auth_file_classification(paths.auth_file)
     if hook_readiness_packet is None and probe_hook_readiness:
         hook_readiness_packet = build_user_prompt_submit_readiness_packet(
@@ -389,6 +413,7 @@ def build_custom_codex_auth_session_readiness_packet(
         process_observation.get("process_inventory_live") is True
         and process_observation.get("wbp_clean_app_process_observed") is True
         and process_observation.get("wbp_clean_app_server_process_observed") is True
+        and custom_user_data_dir_observed
     )
     hook_trusted_ready = _hook_ready(hook_readiness_packet)
     account_type = str(account_read_metadata.get("app_server_account_type") or "")
@@ -430,6 +455,8 @@ def build_custom_codex_auth_session_readiness_packet(
             blocking_reasons.append("wbp_clean_app_server_process_not_observed")
         if process_observation.get("process_inventory_live") is not True:
             blocking_reasons.append("process_inventory_not_live")
+        if not custom_user_data_dir_observed:
+            blocking_reasons.append("custom_user_data_dir_not_observed")
     if not hook_trusted_ready:
         blocking_reasons.append("user_prompt_submit_hook_not_ready")
         blocking_reasons.extend(_safe_reasons(hook_readiness_packet.get("blocking_reasons")))
@@ -445,6 +472,8 @@ def build_custom_codex_auth_session_readiness_packet(
         "packet_kind": CUSTOM_CODEX_AUTH_SESSION_READINESS_PACKET_KIND,
         "session_state": session_state,
         "custom_user_data_dir_recorded": False,
+        "custom_user_data_dir_binding_required": True,
+        "expected_custom_user_data_dir_observed": custom_user_data_dir_observed,
         **process_observation,
         **auth,
         **account_read_metadata,

@@ -56,10 +56,30 @@ def _write_auth(paths: RuntimePaths, payload: dict[str, object]) -> None:
     paths.auth_file.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
-def _process_inventory() -> dict[str, object]:
+def _process_inventory(paths: RuntimePaths) -> dict[str, object]:
+    custom_user_data_dir = str(paths.profile_dir / "electron-user-data")
+    app_line = (
+        "/Users/example/Applications/Codex WBP Clean.app/Contents/MacOS/Codex "
+        f"--user-data-dir={custom_user_data_dir}"
+    )
     return {
         "sample": [
-            "101 /Users/example/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir=/tmp/wbp-custom-main",
+            f"101 {app_line}",
+            "102 /Users/example/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --listen unix://sock",
+        ],
+        "custom_process_lines": [f"101 {app_line}"],
+        "default_process_lines": [],
+    }
+
+
+def _process_inventory_with_wrong_user_data() -> dict[str, object]:
+    app_line = (
+        "/Users/example/Applications/Codex WBP Clean.app/Contents/MacOS/Codex "
+        "--user-data-dir=/tmp/not-the-wbp-profile"
+    )
+    return {
+        "sample": [
+            f"101 {app_line}",
             "102 /Users/example/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --listen unix://sock",
         ],
         "custom_process_lines": [],
@@ -111,7 +131,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
 
             packet = readiness.build_custom_codex_auth_session_readiness_packet(
                 paths=paths,
-                process_inventory=_process_inventory(),
+                process_inventory=_process_inventory(paths),
                 process_inventory_live=True,
                 hook_readiness_packet=_hook_ready_packet(),
                 account_read_metadata=_account_read(account_type="chatgpt"),
@@ -124,6 +144,8 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertTrue(packet["hook_readiness_trusted"])
             self.assertTrue(packet["wbp_clean_app_process_observed"])
             self.assertTrue(packet["wbp_clean_app_server_process_observed"])
+            self.assertTrue(packet["custom_user_data_dir_binding_required"])
+            self.assertTrue(packet["expected_custom_user_data_dir_observed"])
             self.assertFalse(packet["api_lane_called"])
             self.assertFalse(packet["dispatch_attempted"])
             self.assertFalse(packet["product_ready"])
@@ -139,7 +161,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
 
             packet = readiness.build_custom_codex_auth_session_readiness_packet(
                 paths=paths,
-                process_inventory=_process_inventory(),
+                process_inventory=_process_inventory(paths),
                 process_inventory_live=True,
                 hook_readiness_packet=_hook_ready_packet(),
                 account_read_metadata=_account_read(account_type="apiKey"),
@@ -164,7 +186,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
 
             packet = readiness.build_custom_codex_auth_session_readiness_packet(
                 paths=paths,
-                process_inventory=_process_inventory(),
+                process_inventory=_process_inventory(paths),
                 process_inventory_live=True,
                 hook_readiness_packet=_hook_ready_packet(),
                 account_read_metadata=_account_read(
@@ -202,6 +224,31 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertIn("wbp_clean_app_process_not_observed", packet["blocking_reasons"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_process_inventory_must_match_expected_custom_user_data_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+
+            packet = readiness.build_custom_codex_auth_session_readiness_packet(
+                paths=paths,
+                process_inventory=_process_inventory_with_wrong_user_data(),
+                process_inventory_live=True,
+                hook_readiness_packet=_hook_ready_packet(),
+                account_read_metadata=_account_read(account_type="chatgpt"),
+            )
+
+            self.assertEqual(
+                packet["machine_error_code"],
+                readiness.CUSTOM_CODEX_AUTH_SESSION_PROCESS_NOT_LIVE,
+            )
+            self.assertTrue(packet["wbp_clean_app_process_observed"])
+            self.assertTrue(packet["wbp_clean_app_server_process_observed"])
+            self.assertFalse(packet["expected_custom_user_data_dir_observed"])
+            self.assertFalse(packet["process_inventory_raw_lines_recorded"])
+            self.assertIn("custom_user_data_dir_not_observed", packet["blocking_reasons"])
+            self.assertNotIn(str(paths.profile_dir), json.dumps(packet, ensure_ascii=True))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_hook_readiness_must_be_trusted(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
@@ -209,7 +256,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
 
             packet = readiness.build_custom_codex_auth_session_readiness_packet(
                 paths=paths,
-                process_inventory=_process_inventory(),
+                process_inventory=_process_inventory(paths),
                 process_inventory_live=True,
                 hook_readiness_packet=_hook_blocked_packet(),
                 account_read_metadata=_account_read(account_type="chatgpt"),
@@ -240,7 +287,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
 
             packet = readiness.build_custom_codex_auth_session_readiness_packet(
                 paths=paths,
-                process_inventory=_process_inventory(),
+                process_inventory=_process_inventory(paths),
                 process_inventory_live=True,
                 hook_readiness_packet=hook_packet,
                 account_read_metadata=_account_read(account_type="chatgpt"),
@@ -265,7 +312,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
             inventory_file = root / "inventory.json"
             inventory_file.write_text(
-                json.dumps(_process_inventory()) + "\n",
+                json.dumps(_process_inventory(paths)) + "\n",
                 encoding="utf-8",
             )
             env = os.environ.copy()
