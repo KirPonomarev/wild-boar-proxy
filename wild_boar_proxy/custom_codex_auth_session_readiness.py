@@ -180,6 +180,7 @@ def _prepare_account_probe_codex_home(
 def probe_codex_app_server_account_read(
     paths: RuntimePaths,
     *,
+    electron_user_data_dir: str | None = None,
     timeout_seconds: float = 4.0,
 ) -> dict[str, Any]:
     binary = _codex_app_server_binary()
@@ -196,12 +197,14 @@ def probe_codex_app_server_account_read(
         "app_server_account_probe_auth_json_copied": False,
         "app_server_account_probe_config_toml_copied": False,
         "app_server_account_probe_auth_json_source_recorded": False,
+        "app_server_account_probe_electron_user_data_bound": False,
+        "app_server_account_probe_electron_user_data_path_recorded": False,
         **_account_read_summary_from_response({}),
     }
     if binary is None:
         summary["app_server_account_probe_error_code"] = "codex_app_server_binary_missing"
         return summary
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
         temp_root = Path(temp_dir)
         socket_path = temp_root / "codex-app-server.sock"
         probe_home, probe_home_metadata = _prepare_account_probe_codex_home(
@@ -213,6 +216,7 @@ def probe_codex_app_server_account_read(
         for key in (
             "OPENAI_API_KEY",
             "CODEX_HOME",
+            "CODEX_ELECTRON_USER_DATA_PATH",
             "WBP_PROFILE_DIR",
             "WBP_MANAGED_DIR",
             "WBP_CONFIG_TOML",
@@ -226,6 +230,11 @@ def probe_codex_app_server_account_read(
                 "WBP_MANAGED_DIR": str(probe_home / "managed"),
             }
         )
+        if electron_user_data_dir:
+            env["CODEX_ELECTRON_USER_DATA_PATH"] = str(
+                Path(electron_user_data_dir).expanduser()
+            )
+            summary["app_server_account_probe_electron_user_data_bound"] = True
         proc = subprocess.Popen(
             [str(binary), "app-server", "--listen", f"unix://{socket_path}"],
             cwd=str(Path.cwd()),
@@ -442,11 +451,18 @@ def build_custom_codex_auth_session_readiness_packet(
         )
     hook_readiness_packet = hook_readiness_packet or {}
     if account_read_metadata is None and probe_account_app_server:
-        account_read_metadata = probe_codex_app_server_account_read(paths)
+        account_read_metadata = probe_codex_app_server_account_read(
+            paths,
+            electron_user_data_dir=user_data_dir,
+        )
     account_read_metadata = dict(account_read_metadata or {
         "app_server_account_probe_attempted": False,
         **_account_read_summary_from_response({}),
     })
+    account_bound_to_expected_user_data = (
+        account_read_metadata.get("app_server_account_probe_electron_user_data_bound")
+        is True
+    )
 
     process_ready = (
         process_observation.get("process_inventory_live") is True
@@ -459,6 +475,7 @@ def build_custom_codex_auth_session_readiness_packet(
     logged_in_ui_session_proven = (
         account_type == "chatgpt"
         and account_read_metadata.get("app_server_account_response_has_error") is not True
+        and account_bound_to_expected_user_data
     )
     api_key_only = bool(
         account_type == "apiKey"
@@ -499,6 +516,8 @@ def build_custom_codex_auth_session_readiness_packet(
         blocking_reasons.extend(_safe_reasons(hook_readiness_packet.get("blocking_reasons")))
     if api_key_only:
         blocking_reasons.append("api_key_only_not_ui_session")
+    elif account_type == "chatgpt" and not account_bound_to_expected_user_data:
+        blocking_reasons.append("app_server_account_electron_user_data_not_bound")
     elif login_required:
         blocking_reasons.append("custom_codex_login_required")
     elif not logged_in_ui_session_proven:
@@ -521,6 +540,7 @@ def build_custom_codex_auth_session_readiness_packet(
         )[:128],
         "hook_readiness_trusted": hook_trusted_ready,
         "user_prompt_submit_hook_ready": hook_trusted_ready,
+        "app_server_account_bound_to_expected_user_data": account_bound_to_expected_user_data,
         "logged_in_ui_session_proven": logged_in_ui_session_proven,
         "custom_codex_login_required": login_required,
         "api_key_only": api_key_only,

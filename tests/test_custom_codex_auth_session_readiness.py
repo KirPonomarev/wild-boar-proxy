@@ -111,6 +111,8 @@ def _account_read(*, account_type: str, requires_openai_auth: bool = False) -> d
     return {
         "app_server_account_probe_attempted": True,
         "app_server_account_probe_transport_ok": True,
+        "app_server_account_probe_electron_user_data_bound": True,
+        "app_server_account_probe_electron_user_data_path_recorded": False,
         "app_server_account_response_seen": True,
         "app_server_account_response_has_error": False,
         "app_server_account_response_has_result": True,
@@ -141,6 +143,7 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertEqual(packet["machine_error_code"], "OK")
             self.assertEqual(packet["session_state"], readiness.SESSION_STATE_READY)
             self.assertTrue(packet["logged_in_ui_session_proven"])
+            self.assertTrue(packet["app_server_account_bound_to_expected_user_data"])
             self.assertTrue(packet["hook_readiness_trusted"])
             self.assertTrue(packet["wbp_clean_app_process_observed"])
             self.assertTrue(packet["wbp_clean_app_server_process_observed"])
@@ -152,6 +155,32 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertFalse(packet["raw_account_payload_recorded"])
             self.assertFalse(packet["auth_json_content_recorded"])
             self.assertNotIn(SECRET, json.dumps(packet, ensure_ascii=True))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_chatgpt_account_without_electron_user_data_binding_cannot_green_ui_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+            account = {
+                **_account_read(account_type="chatgpt"),
+                "app_server_account_probe_electron_user_data_bound": False,
+            }
+
+            packet = readiness.build_custom_codex_auth_session_readiness_packet(
+                paths=paths,
+                process_inventory=_process_inventory(paths),
+                process_inventory_live=True,
+                hook_readiness_packet=_hook_ready_packet(),
+                account_read_metadata=account,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertFalse(packet["logged_in_ui_session_proven"])
+            self.assertFalse(packet["app_server_account_bound_to_expected_user_data"])
+            self.assertIn(
+                "app_server_account_electron_user_data_not_bound",
+                packet["blocking_reasons"],
+            )
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_chatgpt_account_with_openai_auth_requirement_still_proves_login(self) -> None:
@@ -364,6 +393,82 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
                 packet["blocking_reasons"],
             )
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_account_probe_is_bound_to_expected_electron_user_data_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _paths(Path(temp_dir))
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+            expected_user_data_dir = str(paths.profile_dir / "electron-user-data")
+
+            with mock.patch.object(
+                readiness,
+                "probe_codex_app_server_account_read",
+                return_value={
+                    **_account_read(account_type="chatgpt"),
+                    "app_server_account_probe_electron_user_data_bound": True,
+                    "app_server_account_probe_electron_user_data_path_recorded": False,
+                },
+            ) as probe:
+                packet = readiness.build_custom_codex_auth_session_readiness_packet(
+                    paths=paths,
+                    process_inventory=_process_inventory(paths),
+                    process_inventory_live=True,
+                    hook_readiness_packet=_hook_ready_packet(),
+                )
+
+            self.assertEqual(packet["status"], "ok")
+            probe.assert_called_once()
+            _, kwargs = probe.call_args
+            self.assertEqual(kwargs["electron_user_data_dir"], expected_user_data_dir)
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_account_probe_exports_electron_user_data_env_without_recording_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_auth(paths, {"auth_mode": "chatgpt", "access_token": SECRET})
+            fake_binary = root / "codex"
+            fake_binary.write_text("#!/bin/sh\n", encoding="utf-8")
+            fake_binary.chmod(0o755)
+            expected_user_data_dir = str(paths.profile_dir / "electron-user-data")
+            captured_env: dict[str, str] = {}
+
+            class FakeProcess:
+                def poll(self) -> None:
+                    return None
+
+                def terminate(self) -> None:
+                    return None
+
+                def wait(self, timeout: float | None = None) -> int:
+                    return 0
+
+            def fake_popen(argv: list[str], **kwargs: object) -> FakeProcess:
+                captured_env.update(dict(kwargs["env"]))  # type: ignore[index]
+                socket_arg = str(argv[-1]).removeprefix("unix://")
+                Path(socket_arg).touch()
+                return FakeProcess()
+
+            with (
+                mock.patch.object(readiness, "_codex_app_server_binary", return_value=fake_binary),
+                mock.patch.object(subprocess, "Popen", side_effect=fake_popen),
+            ):
+                packet = readiness.probe_codex_app_server_account_read(
+                    paths,
+                    electron_user_data_dir=expected_user_data_dir,
+                    timeout_seconds=0.01,
+                )
+
+            self.assertEqual(
+                captured_env["CODEX_ELECTRON_USER_DATA_PATH"],
+                expected_user_data_dir,
+            )
+            self.assertTrue(captured_env["CODEX_HOME"].endswith("/codex-home"))
+            self.assertNotEqual(captured_env["CODEX_HOME"], str(paths.profile_dir))
+            self.assertTrue(packet["app_server_account_probe_electron_user_data_bound"])
+            self.assertFalse(
+                packet["app_server_account_probe_electron_user_data_path_recorded"]
+            )
 
     def test_cli_emits_strict_json_without_green_from_provided_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
