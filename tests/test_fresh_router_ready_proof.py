@@ -189,6 +189,12 @@ class FreshRouterReadyProofTests(unittest.TestCase):
         self.assertTrue(packet["provider_lane_expected_text_exact"])
         self.assertFalse(packet["provider_lane_preflight_is_dispatch_proof"])
         self.assertFalse(packet["product_ready"])
+        self.assertTrue(packet["execution_core_repair_closed_and_design_gate_ready"])
+        self.assertEqual(
+            packet["design_gate_marker_sha256"],
+            router_ready._sha256_text(router_ready.DESIGN_GATE_READY_TOKEN),
+        )
+        self.assertFalse(packet["design_gate_marker_recorded"])
         _assert_no_raw_sensitive_text(self, packet)
         self.assertEqual(
             packets.inspect_command_packet_semantics(
@@ -232,6 +238,8 @@ class FreshRouterReadyProofTests(unittest.TestCase):
         )
         self.assertFalse(packet["router_ready"])
         self.assertTrue(packet["proof_only"])
+        self.assertFalse(packet["execution_core_repair_closed_and_design_gate_ready"])
+        self.assertEqual(packet["design_gate_marker_sha256"], "")
         self.assertIn("fresh_router_ready_proof_only", packet["blocking_reasons"])
         self.assertIn("user_prompt_submit_hook_not_ready", packet["blocking_reasons"])
         _assert_no_raw_sensitive_text(self, packet)
@@ -357,6 +365,114 @@ class FreshRouterReadyProofTests(unittest.TestCase):
         self.assertEqual(status_kwargs["route_id"], ROUTE_ID)
         self.assertEqual(status_kwargs["provider_expected_text"], PROVIDER_EXPECTED_TEXT)
         _assert_no_raw_sensitive_text(self, packet)
+
+    def test_runner_auto_selects_productized_defaults_from_persistent_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            paths = _paths(root / "cli")
+            paths.profile_dir.mkdir(parents=True)
+            paths.managed_dir.mkdir(parents=True)
+            paths.stable_runtime_generated_config_file.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            paths.stable_runtime_generated_config_file.write_text(
+                "api-keys:\n- local-runner-token\n",
+                encoding="utf-8",
+            )
+            profile_base = root / "profiles"
+            persistent_profile = profile_base / "wbp-custom-main"
+            persistent_managed = persistent_profile / "managed"
+            persistent_external_models = persistent_managed / "external-models"
+            persistent_external_models.mkdir(parents=True)
+            persistent_profile.joinpath("config.toml").write_text(
+                'model = "gpt-5.5"\n',
+                encoding="utf-8",
+            )
+            persistent_profile.joinpath("hooks.json").write_text(
+                '{"hooks":{"UserPromptSubmit":[{"hooks":[]}]}}\n',
+                encoding="utf-8",
+            )
+            persistent_profile.joinpath("wbp-agent-runtime-context.json").write_text(
+                json.dumps(_runtime_context()) + "\n",
+                encoding="utf-8",
+            )
+            persistent_external_models.joinpath("routes.json").write_text(
+                json.dumps({"routes": [{"route_id": ROUTE_ID}]}) + "\n",
+                encoding="utf-8",
+            )
+            proof_dir = root / "proof"
+            fresh = _fresh_packet()
+
+            def status_side_effect(**kwargs: object) -> dict[str, object]:
+                fresh_file = Path(str(kwargs["fresh_proof_file"]))
+                return _repeatable_status_packet(
+                    fresh_proof_file=fresh_file,
+                    fresh=json.loads(fresh_file.read_text(encoding="utf-8")),
+                )
+
+            with (
+                mock.patch(
+                    "wild_boar_proxy.fresh_router_ready_proof.run_fresh_sealed_e2e_proof_command",
+                    return_value=fresh,
+                ) as run_fresh,
+                mock.patch(
+                    "wild_boar_proxy.fresh_router_ready_proof.run_repeatable_proof_status_command",
+                    side_effect=status_side_effect,
+                ) as run_status,
+            ):
+                packet = router_ready.run_fresh_router_ready_proof_command(
+                    paths=paths,
+                    route_id=ROUTE_ID,
+                    prompt_text=PROMPT,
+                    proof_dir=str(proof_dir),
+                    codex_cwd=str(ROOT),
+                    provider_expected_text=PROVIDER_EXPECTED_TEXT,
+                    persistent_profile_base_dir=str(profile_base),
+                    native_auto_launch_custom_codex=True,
+                )
+
+        _, fresh_kwargs = run_fresh.call_args
+        _, status_kwargs = run_status.call_args
+        self.assertEqual(fresh_kwargs["paths"].profile_dir, persistent_profile)
+        self.assertEqual(status_kwargs["paths"].profile_dir, persistent_profile)
+        self.assertEqual(fresh_kwargs["codex_model"], "gpt-5.5")
+        self.assertEqual(
+            fresh_kwargs["native_auto_launch_stable_runtime_generated_config_file"],
+            str(paths.stable_runtime_generated_config_file),
+        )
+        self.assertEqual(
+            status_kwargs["external_models_dir"],
+            str(persistent_external_models),
+        )
+        self.assertTrue(status_kwargs["probe_codex_app_server"])
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["router_ready"])
+        self.assertTrue(packet["admission_profile_auto_selected"])
+        self.assertEqual(packet["admission_profile_source"], "persistent_custom_profile")
+        self.assertTrue(packet["codex_model_auto_defaulted"])
+        self.assertTrue(packet["codex_hook_current_hash_probe_auto_enabled"])
+        self.assertTrue(packet["external_models_dir_auto_selected"])
+        self.assertTrue(
+            packet["native_auto_launch_stable_runtime_config_auto_selected"]
+        )
+        self.assertTrue(packet["execution_core_repair_closed_and_design_gate_ready"])
+        _assert_no_raw_sensitive_text(self, packet)
+
+    def test_persistent_profile_id_rejects_dot_segments(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            paths = _paths(root / "cli")
+
+            for profile_id in (".", "..", "nested/profile"):
+                candidate = router_ready._persistent_profile_candidate(
+                    base_paths=paths,
+                    persistent_profile_id=profile_id,
+                    persistent_profile_base_dir=str(root / "profiles"),
+                )
+                self.assertIsNone(candidate)
 
     def test_cli_parses_orchestrator_as_mutate_and_dispatches(self) -> None:
         parser = cli_mod.build_parser()

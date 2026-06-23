@@ -6,7 +6,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import hashlib
+import json
 from pathlib import Path
+import re
 from typing import Any
 
 from .command_effects import EFFECT_MUTATE
@@ -31,11 +33,14 @@ from .repeatable_proof_status import (
     REPEATABLE_PROOF_STATUS_PACKET_KIND,
     run_repeatable_proof_status_command,
 )
-from .router_hook_entry import _safe_text
+from .router_hook_entry import RUNTIME_CONTEXT_FILENAME, _safe_text
 from .runtime import RuntimePaths, write_json_atomic
+from .user_prompt_submit_hook_producer import HOOKS_JSON_FILENAME
 
 
 FRESH_ROUTER_READY_PROOF_PACKET_KIND = "wbp_fresh_router_ready_proof"
+DESIGN_GATE_READY_TOKEN = "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+PERSISTENT_PROFILE_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 FRESH_ROUTER_READY_PROOF_OK = "OK"
 FRESH_ROUTER_READY_PROOF_PROOF_ONLY = "WBP_FRESH_ROUTER_READY_PROOF_PROOF_ONLY"
@@ -57,6 +62,143 @@ def _sha256_text(value: str) -> str:
 def _write_packet(path: Path, packet: Mapping[str, Any]) -> str:
     write_json_atomic(path, dict(packet))
     return str(path)
+
+
+def _default_persistent_profile_base_dir() -> Path:
+    return (
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "WildBoarProxy"
+        / "CodexProfiles"
+    )
+
+
+def _runtime_paths_for_profile_dir(base: RuntimePaths, profile_dir: Path) -> RuntimePaths:
+    profile = profile_dir.expanduser()
+    managed = profile / "managed"
+    return RuntimePaths(
+        profile_dir=profile,
+        managed_dir=managed,
+        stable_config=base.stable_config,
+        auth_file=profile / "auth.json",
+        config_toml=profile / "config.toml",
+        runtime_mode_file=profile / "runtime-mode.txt",
+        runtime_effective_mode_file=profile / "runtime-effective-mode.txt",
+        registry_file=managed / "backend-registry.json",
+        state_file=managed / "supervisor-state.json",
+        managed_config_file=managed / "managed-config.yaml",
+        launcher_script=profile / "codex-custom-launch.sh",
+        sync_script=managed / "supervisor-sync.sh",
+        accounts_bin=managed / "bin" / "codex-accounts",
+        onboard_bin=managed / "bin" / "codex-account-onboard",
+        lock_file=managed / "wild-boar-proxy.lock",
+        launcher_lock_file=managed / "stable-runtime-launch.lock",
+        repair_target_inventory_dir=managed / "stable-repair-target",
+        repair_target_reference_file=managed / "approved-repair-target.json",
+        target_switch_transaction_file=managed / "target-switch-transaction.json",
+        stable_runtime_generated_config_file=managed
+        / "stable-runtime-config.generated.yaml",
+    )
+
+
+def _profile_runtime_contract_present(paths: RuntimePaths) -> bool:
+    return bool(
+        paths.config_toml.is_file()
+        and (paths.profile_dir / RUNTIME_CONTEXT_FILENAME).is_file()
+        and (paths.profile_dir / HOOKS_JSON_FILENAME).is_file()
+    )
+
+
+def _persistent_profile_candidate(
+    *,
+    base_paths: RuntimePaths,
+    persistent_profile_id: str,
+    persistent_profile_base_dir: str | None,
+) -> RuntimePaths | None:
+    profile_id = _safe_text(persistent_profile_id, limit=128)
+    if (
+        not profile_id
+        or profile_id in {".", ".."}
+        or Path(profile_id).name != profile_id
+        or not PERSISTENT_PROFILE_ID_PATTERN.fullmatch(profile_id)
+    ):
+        return None
+    base_dir = (
+        Path(persistent_profile_base_dir).expanduser()
+        if persistent_profile_base_dir
+        else _default_persistent_profile_base_dir()
+    )
+    return _runtime_paths_for_profile_dir(base_paths, base_dir / profile_id)
+
+
+def _select_admission_paths(
+    *,
+    paths: RuntimePaths,
+    persistent_profile_id: str,
+    persistent_profile_base_dir: str | None,
+) -> tuple[RuntimePaths, dict[str, Any]]:
+    if _profile_runtime_contract_present(paths):
+        return paths, {
+            "admission_profile_source": "runtime_paths",
+            "admission_profile_auto_selected": False,
+            "admission_profile_runtime_contract_present": True,
+        }
+    candidate = _persistent_profile_candidate(
+        base_paths=paths,
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    if candidate is not None and _profile_runtime_contract_present(candidate):
+        return candidate, {
+            "admission_profile_source": "persistent_custom_profile",
+            "admission_profile_auto_selected": True,
+            "admission_profile_runtime_contract_present": True,
+        }
+    return paths, {
+        "admission_profile_source": "runtime_paths_missing_contract",
+        "admission_profile_auto_selected": False,
+        "admission_profile_runtime_contract_present": False,
+    }
+
+
+def _routes_file_contains_route(routes_file: Path, route_id: str) -> bool:
+    if not route_id or not routes_file.is_file():
+        return False
+    try:
+        parsed = json.loads(routes_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    routes = parsed.get("routes") if isinstance(parsed, Mapping) else None
+    if isinstance(routes, (str, bytes)) or not isinstance(routes, Sequence):
+        return False
+    for route in routes:
+        if isinstance(route, Mapping) and route.get("route_id") == route_id:
+            return True
+    return False
+
+
+def _default_external_models_dir(paths: RuntimePaths, route_id: str) -> str | None:
+    candidate = paths.managed_dir / "external-models"
+    if _routes_file_contains_route(candidate / "routes.json", route_id):
+        return str(candidate)
+    return None
+
+
+def _default_native_auto_launch_stable_runtime_config(
+    *,
+    selected_paths: RuntimePaths,
+    original_paths: RuntimePaths,
+) -> str | None:
+    candidates = [
+        selected_paths.stable_runtime_generated_config_file,
+        original_paths.stable_runtime_generated_config_file,
+        Path("~/.codex-custom-cli/managed/stable-runtime-config.generated.yaml").expanduser(),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def _safe_reasons(value: object) -> list[str]:
@@ -135,6 +277,7 @@ def build_fresh_router_ready_proof_packet(
     repeatable_status_packet: Mapping[str, Any],
     repeatable_status_file: Path,
     changed_files: Sequence[str],
+    productization_metadata: Mapping[str, Any] | None = None,
     secret_values: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     fresh = dict(fresh_proof_packet)
@@ -268,6 +411,9 @@ def build_fresh_router_ready_proof_packet(
         "product_ready": False,
         "does_not_prove_product_ready": True,
         "custom_codex_ui_visibility_product_ready": False,
+        "execution_core_repair_closed_and_design_gate_ready": ok,
+        "design_gate_marker_sha256": _sha256_text(DESIGN_GATE_READY_TOKEN) if ok else "",
+        "design_gate_marker_recorded": False,
         "raw_prompt_recorded": False,
         "prompt_text_recorded": False,
         "natural_phrase_recorded": False,
@@ -287,6 +433,7 @@ def build_fresh_router_ready_proof_packet(
         "blocking_reasons": [] if ok else blocking_reasons,
         "changed_files": sorted(set(changed_files)),
     }
+    extra.update(dict(productization_metadata or {}))
     return packets.build_command_packet(
         ok=ok,
         human_message=(
@@ -332,6 +479,48 @@ def run_fresh_router_ready_proof_command(
     codex_hook_current_hash: str = "",
     probe_codex_app_server: bool = False,
 ) -> dict[str, Any]:
+    original_paths = paths
+    paths, productization_metadata = _select_admission_paths(
+        paths=paths,
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    effective_codex_model = codex_model or native_auto_launch_model
+    effective_native_auto_launch_stable_config = (
+        native_auto_launch_stable_runtime_generated_config_file
+        or _default_native_auto_launch_stable_runtime_config(
+            selected_paths=paths,
+            original_paths=original_paths,
+        )
+    )
+    effective_external_models_dir = external_models_dir or _default_external_models_dir(
+        paths,
+        route_id,
+    )
+    effective_probe_codex_app_server = bool(
+        probe_codex_app_server or not codex_hook_current_hash
+    )
+    productization_metadata.update(
+        {
+            "codex_model_auto_defaulted": codex_model is None,
+            "codex_model_selection_id": _safe_text(effective_codex_model, limit=128),
+            "native_auto_launch_stable_runtime_config_auto_selected": bool(
+                not native_auto_launch_stable_runtime_generated_config_file
+                and effective_native_auto_launch_stable_config
+            ),
+            "native_auto_launch_stable_runtime_config_present": bool(
+                effective_native_auto_launch_stable_config
+            ),
+            "native_auto_launch_stable_runtime_config_path_recorded": False,
+            "external_models_dir_auto_selected": bool(
+                not external_models_dir and effective_external_models_dir
+            ),
+            "external_models_dir_path_recorded": False,
+            "codex_hook_current_hash_probe_auto_enabled": bool(
+                not codex_hook_current_hash and effective_probe_codex_app_server
+            ),
+        }
+    )
     proof_root = _proof_root(paths, proof_dir)
     fresh_proof_dir = proof_root / "fresh-sealed"
     proof_root.mkdir(parents=True, exist_ok=True)
@@ -343,7 +532,7 @@ def run_fresh_router_ready_proof_command(
         prompt_text=prompt_text,
         custom_codex_ui_visibility_proof_file=custom_codex_ui_visibility_proof_file,
         codex_bin=codex_bin,
-        codex_model=codex_model,
+        codex_model=effective_codex_model,
         proof_dir=str(fresh_proof_dir),
         codex_cwd=codex_cwd,
         expected_text=expected_text,
@@ -360,7 +549,7 @@ def run_fresh_router_ready_proof_command(
         ),
         native_auto_launch_repo_root=native_auto_launch_repo_root,
         native_auto_launch_stable_runtime_generated_config_file=(
-            native_auto_launch_stable_runtime_generated_config_file
+            effective_native_auto_launch_stable_config
         ),
     )
     changed_files.extend(str(path) for path in fresh_packet.get("changed_files", []))
@@ -375,9 +564,9 @@ def run_fresh_router_ready_proof_command(
         fresh_proof_file=str(fresh_packet_file),
         provider_expected_text=provider_expected_text,
         run_provider_preflight=True,
-        external_models_dir=external_models_dir,
+        external_models_dir=effective_external_models_dir,
         codex_hook_current_hash=codex_hook_current_hash,
-        probe_codex_app_server=probe_codex_app_server,
+        probe_codex_app_server=effective_probe_codex_app_server,
     )
     status_packet_file = proof_root / "repeatable-proof-status.packet.json"
     changed_files.append(_write_packet(status_packet_file, status_packet))
@@ -391,6 +580,7 @@ def run_fresh_router_ready_proof_command(
         repeatable_status_packet=status_packet,
         repeatable_status_file=status_packet_file,
         changed_files=[*changed_files, str(final_packet_file)],
+        productization_metadata=productization_metadata,
         secret_values=secret_values,
     )
     _write_packet(final_packet_file, final_packet)
