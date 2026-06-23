@@ -70,13 +70,24 @@ It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
 CLI flow, then requires a bounded live result from the runtime-context allowed
 API route before returning success. It emits one JSON packet.
 
-For repository inspection tasks, `tools/wbp_dip` also owns the WBP-mediated
-read-only repo bridge. The bridge is enabled by default in `auto` mode for
-repo/project/code/audit/report prompts and can be controlled with
+For repository and development tasks, `tools/wbp_dip` also owns the WBP-mediated
+repo/action bridge. The bridge is enabled by default in `auto` mode for
+repo/project/code/audit/report/fix/test prompts and can be controlled with
 `--repo-bridge auto|on|off`. The remote DIP route never receives direct local
-filesystem authority; it must request approved WBP repo tools through strict
-JSON tool-call text, and WBP executes those tools locally. A repo-inspection
-claim must not succeed unless at least one repo bridge tool call succeeds.
+filesystem or shell authority; it must request approved WBP tools through strict
+JSON tool-call text, and WBP executes those tools locally.
+
+Admitted bridge tools:
+
+- `list_files`, `read_file`, `search`, `git_status`
+- `propose_patch`, `apply_patch`
+- `run_tests`, `run_command`
+
+A repo-inspection claim must not succeed unless at least one repo bridge tool
+call succeeds. A fix/implementation/test claim must not succeed unless at least
+one action bridge tool call succeeds. Patches are accepted only as bounded
+unified diffs and are checked with `git apply --check` before any apply.
+Commands are allowlisted and executed without shell interpolation.
 
 Canonical operator entry:
 
@@ -114,6 +125,9 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `live_result_route_id_recorded=false`
 - `dip_repo_direct_access=false`
 - `dip_repo_tool_bridge_used=true` for repo-inspection success paths
+- `dip_action_bridge_used=true` for fix/implementation/test success paths
+- `dip_action_raw_patch_recorded=false`
+- `dip_action_raw_command_recorded=false`
 - `repo_bridge_context_pack_recorded=false`
 - `repo_bridge_raw_tool_results_recorded=false`
 

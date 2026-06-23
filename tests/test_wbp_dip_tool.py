@@ -25,6 +25,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE,
     WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
     WBP_DIP_TOOL_DRY_RUN,
+    WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
     WBP_DIP_TOOL_LIVE_RESULT_UNSAFE,
     WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
     WBP_DIP_TOOL_OK,
@@ -100,8 +101,21 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "dip_repo_tool_bridge_required": False,
         "dip_repo_tool_bridge_available": False,
         "dip_repo_tool_bridge_used": False,
+        "dip_action_bridge_required": False,
+        "dip_action_bridge_available": False,
+        "dip_action_bridge_used": False,
+        "dip_action_tool_call_count": 0,
+        "dip_action_successful_tool_call_count": 0,
+        "dip_action_mutation_applied": False,
+        "dip_action_tests_run": False,
+        "dip_action_commands_run": False,
+        "dip_action_patch_proposed": False,
+        "dip_action_patch_applied": False,
+        "dip_action_mutated_files": [],
+        "dip_action_raw_patch_recorded": False,
+        "dip_action_raw_command_recorded": False,
         "repo_bridge_readonly": True,
-        "repo_bridge_mutation_allowed": False,
+        "repo_bridge_mutation_allowed": True,
         "repo_bridge_context_pack_used": False,
         "repo_bridge_context_pack_sha256": "",
         "repo_bridge_context_pack_recorded": False,
@@ -267,6 +281,15 @@ class WbpDipToolTests(unittest.TestCase):
                     repo_bridge_tool_call_count=2,
                     repo_bridge_successful_tool_call_count=2,
                     repo_bridge_tool_result_sha256s=["b" * 64, "c" * 64],
+                    dip_action_bridge_required=True,
+                    dip_action_bridge_available=True,
+                    dip_action_bridge_used=True,
+                    dip_action_tool_call_count=2,
+                    dip_action_successful_tool_call_count=2,
+                    dip_action_mutation_applied=True,
+                    dip_action_tests_run=True,
+                    dip_action_patch_applied=True,
+                    dip_action_mutated_files=["demo.py"],
                 ),
             )
 
@@ -282,7 +305,18 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["repo_bridge_successful_tool_call_count"], 2)
         self.assertEqual(packet["repo_bridge_tool_result_sha256s"], ["b" * 64, "c" * 64])
         self.assertFalse(packet["repo_bridge_raw_tool_results_recorded"])
-        self.assertFalse(packet["repo_bridge_mutation_allowed"])
+        self.assertTrue(packet["repo_bridge_mutation_allowed"])
+        self.assertTrue(packet["dip_action_bridge_required"])
+        self.assertTrue(packet["dip_action_bridge_available"])
+        self.assertTrue(packet["dip_action_bridge_used"])
+        self.assertEqual(packet["dip_action_tool_call_count"], 2)
+        self.assertEqual(packet["dip_action_successful_tool_call_count"], 2)
+        self.assertTrue(packet["dip_action_mutation_applied"])
+        self.assertTrue(packet["dip_action_tests_run"])
+        self.assertTrue(packet["dip_action_patch_applied"])
+        self.assertEqual(packet["dip_action_mutated_files"], ["demo.py"])
+        self.assertFalse(packet["dip_action_raw_patch_recorded"])
+        self.assertFalse(packet["dip_action_raw_command_recorded"])
 
     def test_packet_rejects_proof_only_dispatch_when_live_result_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -924,7 +958,7 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["repo_bridge_successful_tool_call_count"], 1)
         self.assertEqual(len(result["repo_bridge_tool_result_sha256s"]), 1)
         self.assertFalse(result["repo_bridge_raw_tool_results_recorded"])
-        self.assertFalse(result["repo_bridge_mutation_allowed"])
+        self.assertTrue(result["repo_bridge_mutation_allowed"])
         self.assertEqual(request_json_mock.call_count, 2)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
@@ -996,6 +1030,227 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["dip_repo_tool_bridge_available"])
         self.assertFalse(result["dip_repo_tool_bridge_used"])
         self.assertEqual(result["repo_bridge_tool_call_count"], 0)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_action_bridge_applies_patch_and_runs_tests(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        patch_text = """diff --git a/demo.py b/demo.py
+--- a/demo.py
++++ b/demo.py
+@@ -1 +1 @@
+-VALUE = "bad"
++VALUE = "good"
+"""
+        request_json_mock.side_effect = [
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=11,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "apply_patch",
+                                            "patch": patch_text,
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "run_tests",
+                                            "args": [
+                                                "python3",
+                                                "-m",
+                                                "py_compile",
+                                                "demo.py",
+                                            ],
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=13,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Fixed demo.py and verified py_compile."
+                            }
+                        }
+                    ]
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "bad"\n', encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: почини demo.py и запусти тест",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+            changed_text = (repo / "demo.py").read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(changed_text, 'VALUE = "good"\n')
+        self.assertTrue(result["dip_action_bridge_required"])
+        self.assertTrue(result["dip_action_bridge_used"])
+        self.assertEqual(result["dip_action_tool_call_count"], 2)
+        self.assertEqual(result["dip_action_successful_tool_call_count"], 2)
+        self.assertTrue(result["dip_action_mutation_applied"])
+        self.assertTrue(result["dip_action_patch_applied"])
+        self.assertTrue(result["dip_action_tests_run"])
+        self.assertEqual(result["dip_action_mutated_files"], ["demo.py"])
+        self.assertFalse(result["dip_action_raw_patch_recorded"])
+        self.assertFalse(result["dip_action_raw_command_recorded"])
+        self.assertEqual(request_json_mock.call_count, 3)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_blocks_fix_task_without_action_tool(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.side_effect = [
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=11,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "read_file",
+                                            "path": "demo.py",
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "I inspected but did not patch anything."
+                            }
+                        }
+                    ]
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "bad"\n', encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: почини demo.py",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED)
+        self.assertTrue(result["dip_repo_tool_bridge_used"])
+        self.assertTrue(result["dip_action_bridge_required"])
+        self.assertFalse(result["dip_action_bridge_used"])
+        self.assertEqual(result["dip_action_successful_tool_call_count"], 0)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
     def test_request_live_result_reports_missing_alias_context(

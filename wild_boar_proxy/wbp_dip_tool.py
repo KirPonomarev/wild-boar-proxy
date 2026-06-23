@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,8 @@ DEFAULT_REPO_BRIDGE_CONTEXT_TEXT_LIMIT = 18000
 DEFAULT_REPO_BRIDGE_TOOL_RESULT_TEXT_LIMIT = 16000
 DEFAULT_REPO_BRIDGE_SEARCH_LINE_LIMIT = 80
 DEFAULT_REPO_BRIDGE_FILE_LIST_LIMIT = 400
+DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS = 60.0
+DEFAULT_ACTION_PATCH_TEXT_LIMIT = 120000
 MIN_SUPPORTED_PYTHON = (3, 10)
 PYTHON_BIN_ENV = "WBP_PYTHON_BIN"
 
@@ -61,6 +64,7 @@ WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
 WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
+WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED = "WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED"
 
 REPO_BRIDGE_MODES = ("auto", "on", "off")
 REPO_BRIDGE_TASK_KEYWORDS = (
@@ -82,6 +86,44 @@ REPO_BRIDGE_TASK_KEYWORDS = (
     "изучи",
     "изучить",
     "отчет",
+)
+ACTION_BRIDGE_TASK_KEYWORDS = (
+    "fix",
+    "repair",
+    "implement",
+    "patch",
+    "change",
+    "edit",
+    "test",
+    "verify",
+    "run",
+    "почини",
+    "чинить",
+    "исправь",
+    "исправить",
+    "реализуй",
+    "реализовать",
+    "сделай",
+    "доделай",
+    "патч",
+    "тест",
+    "проверь",
+    "запусти",
+)
+ACTION_BRIDGE_TOOLS = {
+    "propose_patch",
+    "apply_patch",
+    "run_tests",
+    "run_command",
+}
+ACTION_ALLOWED_COMMAND_PREFIXES = (
+    ("python3", "-m", "unittest"),
+    ("python3", "-m", "pytest"),
+    ("python3", "-m", "py_compile"),
+    ("git", "diff", "--check"),
+    ("git", "diff", "--stat"),
+    ("git", "status"),
+    ("rg",),
 )
 REPO_BRIDGE_CANONICAL_FILES = (
     "AGENTS.md",
@@ -489,6 +531,13 @@ def _repo_bridge_requested(*, task: str, mode: str) -> bool:
     return any(keyword in task_key for keyword in REPO_BRIDGE_TASK_KEYWORDS)
 
 
+def _action_bridge_requested(*, task: str, repo_bridge_required: bool) -> bool:
+    if not repo_bridge_required:
+        return False
+    task_key = task.casefold()
+    return any(keyword in task_key for keyword in ACTION_BRIDGE_TASK_KEYWORDS)
+
+
 def _path_is_sensitive(relative_path: str) -> bool:
     parts = [part.casefold() for part in Path(relative_path).parts]
     if any(part in REPO_BRIDGE_SENSITIVE_PART_NAMES for part in parts):
@@ -539,6 +588,198 @@ def _run_repo_process(
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, _safe_text(exc, limit=500)
     return int(completed.returncode), _bounded_repo_text(completed.stdout)
+
+
+def _command_from_call(call: Mapping[str, Any]) -> list[str]:
+    raw_args = call.get("args")
+    if isinstance(raw_args, list):
+        args = [_safe_text(item, limit=500) for item in raw_args]
+        return [arg for arg in args if arg]
+    raw_command = _safe_text(call.get("command"), limit=2000)
+    if not raw_command:
+        return []
+    try:
+        return shlex.split(raw_command)
+    except ValueError:
+        return []
+
+
+def _command_allowed(argv: Sequence[str]) -> tuple[bool, str]:
+    if not argv:
+        return False, "command_required"
+    if any(not part or "\x00" in part for part in argv):
+        return False, "command_invalid"
+    command = Path(argv[0]).name
+    normalized = (command, *tuple(argv[1:]))
+    for prefix in ACTION_ALLOWED_COMMAND_PREFIXES:
+        if len(normalized) >= len(prefix) and normalized[: len(prefix)] == prefix:
+            if command == "rg" and any(part.startswith("-r") or part == "--replace" for part in argv[1:]):
+                return False, "rg_replace_not_allowed"
+            return True, "ok"
+    return False, "command_not_allowlisted"
+
+
+def _run_action_command(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    argv = _command_from_call(call)
+    allowed, reason = _command_allowed(argv)
+    if not allowed:
+        return {
+            "status": "error",
+            "machine_error_code": reason,
+            "result_text": "",
+            "command_exit_code": None,
+        }
+    code, output = _run_repo_process(
+        argv,
+        repo_root=repo_root,
+        timeout_seconds=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+    )
+    return {
+        "status": "ok" if code == 0 else "error",
+        "machine_error_code": "OK" if code == 0 else "command_failed",
+        "result_text": output,
+        "command_exit_code": code,
+        "command_sha256": _sha256_text(json.dumps(list(argv), separators=(",", ":"))),
+        "command_recorded": False,
+    }
+
+
+def _run_tests(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    if not call.get("args") and not call.get("command"):
+        call = {"args": ["python3", "-m", "unittest"]}
+    return _run_action_command(repo_root, call)
+
+
+def _patch_text_from_call(call: Mapping[str, Any]) -> str:
+    patch_text = str(call.get("patch") or call.get("diff") or "")
+    return patch_text.replace("\r\n", "\n").replace("\r", "\n")[:DEFAULT_ACTION_PATCH_TEXT_LIMIT]
+
+
+def _patch_paths(patch_text: str) -> list[str]:
+    paths: list[str] = []
+    for line in patch_text.splitlines():
+        candidate = ""
+        if line.startswith("diff --git "):
+            parts = line.split()
+            if len(parts) >= 4:
+                candidate = parts[2]
+        elif line.startswith("--- ") or line.startswith("+++ "):
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                candidate = parts[1]
+        if not candidate or candidate == "/dev/null":
+            continue
+        if candidate.startswith("a/") or candidate.startswith("b/"):
+            candidate = candidate[2:]
+        candidate = candidate.split("\t", 1)[0].strip()
+        if candidate and candidate not in paths:
+            paths.append(candidate)
+    return paths
+
+
+def _patch_safety(repo_root: Path, patch_text: str) -> tuple[bool, str, list[str]]:
+    if not patch_text.strip():
+        return False, "patch_required", []
+    if len(patch_text) >= DEFAULT_ACTION_PATCH_TEXT_LIMIT:
+        return False, "patch_too_large", []
+    touched = _patch_paths(patch_text)
+    if not touched:
+        return False, "patch_paths_missing", []
+    for relative in touched:
+        if relative.startswith("/") or ".." in Path(relative).parts:
+            return False, "patch_path_unsafe", touched
+        path, _relative, status = _repo_relative_path(repo_root, relative)
+        if status != "ok" or path is None:
+            return False, status, touched
+    return True, "ok", touched
+
+
+def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[str, Any]:
+    safe, reason, touched = _patch_safety(repo_root, patch_text)
+    patch_sha256 = _sha256_text(patch_text) if patch_text else ""
+    if not safe:
+        return {
+            "status": "error",
+            "machine_error_code": reason,
+            "result_text": "",
+            "patch_sha256": patch_sha256,
+            "patch_recorded": False,
+            "touched_files": touched,
+            "mutation_applied": False,
+        }
+    try:
+        check = subprocess.run(
+            ["git", "apply", "--check", "-"],
+            cwd=str(repo_root),
+            input=patch_text,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "patch_check_exec_failed",
+            "result_text": _safe_text(exc, limit=500),
+            "patch_sha256": patch_sha256,
+            "patch_recorded": False,
+            "touched_files": touched,
+            "mutation_applied": False,
+        }
+    check_output = _bounded_repo_text(check.stdout)
+    if check.returncode != 0:
+        return {
+            "status": "error",
+            "machine_error_code": "patch_check_failed",
+            "result_text": check_output,
+            "patch_sha256": patch_sha256,
+            "patch_recorded": False,
+            "touched_files": touched,
+            "mutation_applied": False,
+        }
+    if not apply:
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "result_text": "Patch proposal validated by git apply --check.",
+            "patch_sha256": patch_sha256,
+            "patch_recorded": False,
+            "touched_files": touched,
+            "mutation_applied": False,
+        }
+    try:
+        applied = subprocess.run(
+            ["git", "apply", "-"],
+            cwd=str(repo_root),
+            input=patch_text,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "patch_apply_exec_failed",
+            "result_text": _safe_text(exc, limit=500),
+            "patch_sha256": patch_sha256,
+            "patch_recorded": False,
+            "touched_files": touched,
+            "mutation_applied": False,
+        }
+    output = _bounded_repo_text(applied.stdout)
+    return {
+        "status": "ok" if applied.returncode == 0 else "error",
+        "machine_error_code": "OK" if applied.returncode == 0 else "patch_apply_failed",
+        "result_text": output or ("Patch applied." if applied.returncode == 0 else ""),
+        "patch_sha256": patch_sha256,
+        "patch_recorded": False,
+        "touched_files": touched,
+        "mutation_applied": applied.returncode == 0,
+    }
 
 
 def _repo_file_list(repo_root: Path, *, limit: int = DEFAULT_REPO_BRIDGE_FILE_LIST_LIMIT) -> list[str]:
@@ -714,7 +955,10 @@ def _build_repo_context_pack(repo_root: Path) -> dict[str, Any]:
         "file_list_sample": files[:240],
         "canonical_file_excerpts": excerpts,
         "sensitive_paths_blocked": True,
-        "mutations_allowed": False,
+        "mutations_allowed": True,
+        "mutation_tools": ["propose_patch", "apply_patch"],
+        "command_tools": ["run_tests", "run_command"],
+        "command_allowlist_recorded": False,
     }
     return pack
 
@@ -727,16 +971,21 @@ def _repo_context_pack_sha256(pack: Mapping[str, Any]) -> str:
 
 def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
     return (
-        "\n\nWBP repo bridge: You have WBP-mediated read-only access to the local "
+        "\n\nWBP action bridge: You have WBP-mediated access to the local "
         "repository through a strict JSON tool protocol. You do not have direct "
-        "filesystem access; WBP executes approved read-only tools locally and "
+        "filesystem or shell access; WBP executes approved tools locally and "
         "returns evidence. For repository inspection/report tasks, request at "
-        "least one tool before the final answer. To request a tool, output only "
-        "one JSON object and no prose:\n"
+        "least one repo tool before the final answer. For implementation/fix/test "
+        "tasks, request action tools until the work is either completed or blocked. "
+        "To request a tool, output only one JSON object and no prose:\n"
         '{"wbp_repo_tool_call":{"tool":"list_files","path":"wild_boar_proxy"}}\n'
         '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}\n'
         '{"wbp_repo_tool_call":{"tool":"search","pattern":"delegate_to_dip","glob":"wild_boar_proxy/**/*.py"}}\n'
         '{"wbp_repo_tool_call":{"tool":"git_status"}}\n'
+        '{"wbp_repo_tool_call":{"tool":"propose_patch","patch":"<unified diff>"}}\n'
+        '{"wbp_repo_tool_call":{"tool":"apply_patch","patch":"<unified diff>"}}\n'
+        '{"wbp_repo_tool_call":{"tool":"run_tests","args":["python3","-m","unittest","tests.test_wbp_dip_tool"]}}\n'
+        '{"wbp_repo_tool_call":{"tool":"run_command","args":["git","diff","--check"]}}\n'
         "After WBP returns tool evidence, continue with another tool request or "
         "give the final answer. Initial WBP context pack follows; treat it as "
         "evidence, not as memory:\n"
@@ -781,6 +1030,22 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
         result = _list_repo_files(repo_root, call)
     elif tool == "git_status":
         result = _git_status_repo(repo_root)
+    elif tool == "propose_patch":
+        result = _git_apply_patch(
+            repo_root,
+            _patch_text_from_call(call),
+            apply=False,
+        )
+    elif tool == "apply_patch":
+        result = _git_apply_patch(
+            repo_root,
+            _patch_text_from_call(call),
+            apply=True,
+        )
+    elif tool == "run_tests":
+        result = _run_tests(repo_root, call)
+    elif tool == "run_command":
+        result = _run_action_command(repo_root, call)
     else:
         result = {
             "status": "error",
@@ -801,9 +1066,31 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
         "result_text_sha256": _sha256_text(result_text),
         "result_text_truncated": result.get("result_text_truncated") is True
         or result.get("result_truncated") is True,
+        "patch_sha256": _safe_text(result.get("patch_sha256"), limit=80),
+        "patch_recorded": False,
+        "touched_files": [
+            _safe_text(item, limit=500)
+            for item in (
+                result.get("touched_files")
+                if isinstance(result.get("touched_files"), list)
+                else []
+            )
+        ],
+        "command_sha256": _safe_text(result.get("command_sha256"), limit=80),
+        "command_recorded": False,
+        "command_exit_code": result.get("command_exit_code"),
+        "mutation_applied": result.get("mutation_applied") is True,
         "raw_result_recorded": False,
         "repo_root_recorded": False,
-        "mutated_files": [],
+        "mutated_files": [
+            _safe_text(item, limit=500)
+            for item in (
+                result.get("touched_files")
+                if result.get("mutation_applied") is True
+                and isinstance(result.get("touched_files"), list)
+                else []
+            )
+        ],
     }
     return safe_result
 
@@ -821,6 +1108,7 @@ def _repo_tool_result_prompt(tool_result: Mapping[str, Any]) -> str:
 def _repo_bridge_fields(
     *,
     required: bool,
+    action_required: bool,
     available: bool,
     context_pack: Mapping[str, Any] | None,
     tool_results: Sequence[Mapping[str, Any]],
@@ -828,6 +1116,21 @@ def _repo_bridge_fields(
 ) -> dict[str, Any]:
     successful_results = [
         result for result in tool_results if result.get("status") == "ok"
+    ]
+    action_results = [
+        result for result in tool_results if result.get("tool") in ACTION_BRIDGE_TOOLS
+    ]
+    successful_action_results = [
+        result for result in action_results if result.get("status") == "ok"
+    ]
+    mutation_results = [
+        result for result in action_results if result.get("mutation_applied") is True
+    ]
+    test_results = [
+        result for result in action_results if result.get("tool") == "run_tests"
+    ]
+    command_results = [
+        result for result in action_results if result.get("tool") == "run_command"
     ]
     tool_result_digests = [
         _sha256_text(
@@ -851,8 +1154,33 @@ def _repo_bridge_fields(
         "dip_repo_tool_bridge_required": required,
         "dip_repo_tool_bridge_available": available,
         "dip_repo_tool_bridge_used": bool(successful_results),
+        "dip_action_bridge_required": action_required,
+        "dip_action_bridge_available": available,
+        "dip_action_bridge_used": bool(successful_action_results),
+        "dip_action_tool_call_count": len(action_results),
+        "dip_action_successful_tool_call_count": len(successful_action_results),
+        "dip_action_mutation_applied": bool(mutation_results),
+        "dip_action_tests_run": bool(test_results),
+        "dip_action_commands_run": bool(command_results),
+        "dip_action_patch_proposed": any(
+            result.get("tool") == "propose_patch" for result in action_results
+        ),
+        "dip_action_patch_applied": bool(mutation_results),
+        "dip_action_mutated_files": sorted(
+            {
+                str(path)
+                for result in mutation_results
+                for path in (
+                    result.get("mutated_files")
+                    if isinstance(result.get("mutated_files"), list)
+                    else []
+                )
+            }
+        ),
+        "dip_action_raw_patch_recorded": False,
+        "dip_action_raw_command_recorded": False,
         "repo_bridge_readonly": True,
-        "repo_bridge_mutation_allowed": False,
+        "repo_bridge_mutation_allowed": True,
         "repo_bridge_context_pack_used": context_pack is not None,
         "repo_bridge_context_pack_sha256": (
             _repo_context_pack_sha256(context_pack) if context_pack is not None else ""
@@ -1153,6 +1481,10 @@ def request_live_result(
     context = _load_runtime_context(profile_dir)
     route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
     repo_bridge_required = _repo_bridge_requested(task=task, mode=repo_bridge_mode)
+    action_bridge_required = _action_bridge_requested(
+        task=task,
+        repo_bridge_required=repo_bridge_required,
+    )
     repo_bridge_available = bool(repo_root and Path(repo_root).is_dir())
     repo_context_pack = (
         _build_repo_context_pack(Path(repo_root))
@@ -1162,6 +1494,7 @@ def request_live_result(
     repo_tool_results: list[dict[str, Any]] = []
     repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
+        action_required=action_bridge_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
         tool_results=repo_tool_results,
@@ -1244,6 +1577,7 @@ def request_live_result(
                 **last_result,
                 **_repo_bridge_fields(
                     required=repo_bridge_required,
+                    action_required=action_bridge_required,
                     available=repo_bridge_available,
                     context_pack=repo_context_pack,
                     tool_results=repo_tool_results,
@@ -1262,6 +1596,7 @@ def request_live_result(
 
     final_repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
+        action_required=action_bridge_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
         tool_results=repo_tool_results,
@@ -1274,6 +1609,17 @@ def request_live_result(
             **base,
             **final_repo_fields,
             "machine_error_code": WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+        }
+    if (
+        action_bridge_required
+        and final_repo_fields["dip_action_successful_tool_call_count"] < 1
+    ):
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
@@ -1458,6 +1804,42 @@ def build_wbp_dip_tool_packet(
         "dip_repo_tool_bridge_used": (
             live_result_data.get("dip_repo_tool_bridge_used") is True
         ),
+        "dip_action_bridge_required": (
+            live_result_data.get("dip_action_bridge_required") is True
+        ),
+        "dip_action_bridge_available": (
+            live_result_data.get("dip_action_bridge_available") is True
+        ),
+        "dip_action_bridge_used": (
+            live_result_data.get("dip_action_bridge_used") is True
+        ),
+        "dip_action_tool_call_count": int(
+            live_result_data.get("dip_action_tool_call_count") or 0
+        ),
+        "dip_action_successful_tool_call_count": int(
+            live_result_data.get("dip_action_successful_tool_call_count") or 0
+        ),
+        "dip_action_mutation_applied": (
+            live_result_data.get("dip_action_mutation_applied") is True
+        ),
+        "dip_action_tests_run": live_result_data.get("dip_action_tests_run") is True,
+        "dip_action_commands_run": live_result_data.get("dip_action_commands_run") is True,
+        "dip_action_patch_proposed": (
+            live_result_data.get("dip_action_patch_proposed") is True
+        ),
+        "dip_action_patch_applied": (
+            live_result_data.get("dip_action_patch_applied") is True
+        ),
+        "dip_action_mutated_files": [
+            _safe_text(item, limit=500)
+            for item in (
+                live_result_data.get("dip_action_mutated_files")
+                if isinstance(live_result_data.get("dip_action_mutated_files"), list)
+                else []
+            )
+        ],
+        "dip_action_raw_patch_recorded": False,
+        "dip_action_raw_command_recorded": False,
         "repo_bridge_readonly": live_result_data.get("repo_bridge_readonly") is True,
         "repo_bridge_mutation_allowed": (
             live_result_data.get("repo_bridge_mutation_allowed") is True
