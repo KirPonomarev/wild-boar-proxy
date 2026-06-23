@@ -1063,8 +1063,18 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(packet["api_coding_slot_proven"])
         self.assertTrue(packet["coding_slot_provider_is_deepseek"])
         self.assertTrue(packet["coding_slot_model_is_deepseek_v4_pro_max"])
+        self.assertTrue(packet["coding_slot_model_is_recommended_deepseek_v4_pro_max"])
+        self.assertTrue(packet["coding_slot_upstream_model_is_deepseek_v4_pro"])
+        self.assertTrue(packet["coding_slot_reasoning_operator_level_admitted"])
+        self.assertTrue(packet["coding_slot_model_is_admitted_deepseek_reasoning_variant"])
         self.assertEqual(packet["required_coding_api_provider_id"], "deepseek")
-        self.assertEqual(packet["required_coding_api_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(packet["required_coding_api_upstream_model_id"], "deepseek-v4-pro")
+        self.assertEqual(packet["required_coding_api_operator_levels"], ["fast", "high", "max"])
+        self.assertEqual(
+            packet["required_coding_api_route_family"],
+            "server_issued_deepseek_v4_pro_reasoning_variant",
+        )
+        self.assertEqual(packet["recommended_coding_api_model_id"], "wbp-deepseek-v4-pro-max")
         self.assertTrue(packet["api_line_selected_as_coding_agent"])
         self.assertTrue(packet["api_line_used_as_coding_agent"])
         self.assertTrue(packet["chatgpt_line_used_as_executor"])
@@ -1090,6 +1100,46 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["live_paid_call_attempted"])
         self.assertFalse(packet["full_delegation_claimed"])
         self.assertFalse(packet["simultaneous_execution_proven"])
+
+    def test_chatgpt_plus_api_slot_truth_accepts_all_deepseek_reasoning_levels(self) -> None:
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
+        specs = [
+            ("wbp-deepseek-v4-pro-fast", "provider_declared_fast", "fast"),
+            ("wbp-deepseek-v4-pro-high", "provider_declared_high", "high"),
+            ("wbp-deepseek-v4-pro-max", "provider_declared_max", "max"),
+        ]
+
+        for model_id, option_id, operator_level in specs:
+            packet = build_chatgpt_plus_api_slot_truth_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.3-codex",
+                    "api_model_id": model_id,
+                    "api_reasoning_option_id": option_id,
+                },
+                operator_status(claim_gate="passed"),
+                api_snapshot=api_snapshot,
+            )
+
+            self.assertEqual(packet["status"], "ok", model_id)
+            self.assertEqual(packet["machine_error_code"], "OK", model_id)
+            self.assertTrue(packet["slot_truth_proven"], model_id)
+            self.assertEqual(packet["selected_api_model"], model_id)
+            self.assertEqual(packet["api_reasoning_option_id"], option_id)
+            self.assertEqual(packet["api_reasoning_operator_level"], operator_level)
+            self.assertTrue(packet["coding_slot_provider_is_deepseek"], model_id)
+            self.assertTrue(packet["coding_slot_upstream_model_is_deepseek_v4_pro"], model_id)
+            self.assertTrue(packet["coding_slot_reasoning_operator_level_admitted"], model_id)
+            self.assertTrue(
+                packet["coding_slot_model_is_admitted_deepseek_reasoning_variant"],
+                model_id,
+            )
+            self.assertEqual(
+                packet["coding_slot_model_is_deepseek_v4_pro_max"],
+                model_id == "wbp-deepseek-v4-pro-max",
+            )
+            self.assertFalse(packet["api_reasoning_intelligence_measured"])
+            self.assertFalse(packet["runtime_execution_proven"])
 
     def test_chatgpt_plus_api_slot_truth_blocks_wrong_mode_and_bad_inputs(self) -> None:
         api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
@@ -1254,7 +1304,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             deepseek_not_max["machine_error_code"],
-            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_MAX",
+            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_REASONING_VARIANT",
         )
         self.assertEqual(
             non_deepseek_api["machine_error_code"],
@@ -1513,6 +1563,47 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(
             all(row["not_intelligence_proof"] is True for row in packet["matrix_rows"])
         )
+
+    def test_model_reasoning_availability_matrix_proves_combined_with_selected_reasoning_levels(
+        self,
+    ) -> None:
+        specs = [
+            ("wbp-deepseek-v4-pro-fast", "provider_declared_fast", "fast"),
+            ("wbp-deepseek-v4-pro-high", "provider_declared_high", "high"),
+        ]
+
+        for model_id, option_id, operator_level in specs:
+            packet = build_model_reasoning_availability_matrix_truth_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.3-codex",
+                    "api_model_id": model_id,
+                    "api_reasoning_option_id": option_id,
+                    "request_id": f"matrix-ok-{operator_level}",
+                },
+                operator_status(claim_gate="passed"),
+                api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+                reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+                command_loop_packet=command_loop_ok_packet(),
+                native_execution_packet=native_execution_ok_packet(),
+            )
+
+            self.assertEqual(packet["status"], "ok", model_id)
+            self.assertEqual(packet["machine_error_code"], "OK", model_id)
+            self.assertTrue(packet["combined_full_proven"], model_id)
+            self.assertTrue(packet["combined_status_counts_as_full_success"], model_id)
+            self.assertTrue(packet["provider_declared_reasoning_levels_proven"], model_id)
+            self.assertFalse(packet["intelligence_measured"], model_id)
+            combined_row = [
+                row
+                for row in packet["matrix_rows"]
+                if row["execution_mode"] == "chatgpt_plus_api"
+            ][0]
+            self.assertTrue(combined_row["slot_truth_proven"], model_id)
+            self.assertTrue(combined_row["combined_slot_binding_proven"], model_id)
+            self.assertEqual(combined_row["api_model_id"], model_id)
+            self.assertEqual(combined_row["reasoning_option_id"], option_id)
+            self.assertEqual(combined_row["operator_level"], operator_level)
 
     def test_model_reasoning_availability_matrix_accepts_server_issued_deepseek_chat_lane(
         self,

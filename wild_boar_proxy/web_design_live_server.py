@@ -376,6 +376,14 @@ CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS = 10 * 60
 CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS = 2 * 60
 CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID = "wbp-deepseek-chat"
 CUSTOM_GPT_PLUS_API_ACCEPTANCE_EXPECTED_TEXT = "WBP_CHATGPT_PLUS_API_ACCEPTANCE_OK"
+DEEPSEEK_V4_PRO_REASONING_ROUTE_SPECS: tuple[tuple[str, str, dict[str, str]], ...] = (
+    ("fast", "wbp-deepseek-v4-pro-fast", {"type": "disabled"}),
+    ("high", "wbp-deepseek-v4-pro-high", {"type": "enabled", "reasoning_effort": "high"}),
+    ("max", "wbp-deepseek-v4-pro-max", {"type": "enabled", "reasoning_effort": "max"}),
+)
+DEEPSEEK_V4_PRO_REASONING_ROUTE_IDS = tuple(
+    route_id for _level, route_id, _thinking in DEEPSEEK_V4_PRO_REASONING_ROUTE_SPECS
+)
 VISIBLE_HISTORY_CONFIRMED_STATUS = "VISIBLE_THREAD_HISTORY_RESTORE_OWNER_CONFIRMED_WITH_LIMITS"
 VISIBLE_HISTORY_NOT_PROVEN_STATUS = "VISIBLE_THREAD_HISTORY_NOT_PROVEN_WITH_STORAGE_CONTINUITY"
 VISIBLE_HISTORY_RELAUNCH_CONFIRMED_STATUS = (
@@ -6766,6 +6774,80 @@ def _server_owned_api_route_spec(runner: CommandRunner) -> dict[str, Any]:
         "lane_role": "candidate",
         "fallback_eligible": False,
         "enabled": True,
+    }
+
+
+def _deepseek_v4_pro_reasoning_route_specs(
+    runner: CommandRunner,
+    *,
+    credential_ref: str,
+) -> list[dict[str, Any]]:
+    base = _server_owned_api_route_spec(runner)
+    auth = base.get("auth") if isinstance(base.get("auth"), dict) else {}
+    secret_ref = credential_ref or str(auth.get("secret_ref") or "DEEPSEEK_API_KEY")
+    base_is_deepseek = str(base.get("provider") or "").strip().lower() == "deepseek"
+    base_url = (
+        str(base.get("base_url") or "https://api.deepseek.com/v1")
+        if base_is_deepseek
+        else "https://api.deepseek.com/v1"
+    )
+    endpoint_path = (
+        str(base.get("endpoint_path") or "/chat/completions")
+        if base_is_deepseek
+        else "/chat/completions"
+    )
+    cost_class = str(base.get("cost_class") or "paid_or_free_limited")
+    transform_profile = str(
+        base.get("transform_profile") or "openai_chat_developer_to_system"
+    )
+    specs: list[dict[str, Any]] = []
+    for operator_level, route_id, thinking in DEEPSEEK_V4_PRO_REASONING_ROUTE_SPECS:
+        spec = {
+            "schema_version": 1,
+            "route_id": route_id,
+            "display_name": f"DeepSeek V4 Pro {operator_level.title()}",
+            "provider": "deepseek",
+            "base_url": base_url,
+            "endpoint_path": endpoint_path,
+            "upstream_model": "deepseek-v4-pro",
+            "compatibility": "openai_chat_completions",
+            "auth": {"type": "bearer", "secret_ref": secret_ref},
+            "cost_class": cost_class,
+            "lane_role": "candidate",
+            "fallback_eligible": False,
+            "enabled": True,
+            "transform_profile": transform_profile,
+            "thinking": dict(thinking),
+        }
+        specs.append(spec)
+    return specs
+
+
+def _snapshot_contains_deepseek_v4_pro_reasoning_family(snapshot: dict[str, Any]) -> bool:
+    routes = snapshot.get("routes")
+    if not isinstance(routes, list):
+        return False
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        route_id = str(route.get("route_id") or "").strip()
+        provider = str(route.get("provider") or "").strip().lower()
+        upstream_model = str(route.get("upstream_model") or "").strip()
+        if route_id in DEEPSEEK_V4_PRO_REASONING_ROUTE_IDS:
+            return True
+        if provider == "deepseek" and upstream_model == "deepseek-v4-pro":
+            return True
+    return False
+
+
+def _snapshot_route_ids(snapshot: dict[str, Any]) -> set[str]:
+    routes = snapshot.get("routes")
+    if not isinstance(routes, list):
+        return set()
+    return {
+        str(route.get("route_id") or "").strip()
+        for route in routes
+        if isinstance(route, dict) and str(route.get("route_id") or "").strip()
     }
 
 
@@ -20805,6 +20887,201 @@ def _run_api_route_credential_bridge(
     return credential_status_result, credential_admit_result, "credential_admitted", None
 
 
+def _run_deepseek_v4_pro_reasoning_route_set_connect(
+    runner: CommandRunner,
+    launch_copy_contract: LaunchCopyContract | None,
+    *,
+    api_snapshot_before: dict[str, Any],
+    preflight: dict[str, Any],
+    provider: str,
+    credential_ref: str,
+    credential_status_result: dict[str, Any] | None,
+    credential_admit_result: dict[str, Any] | None,
+    credential_phase: str,
+) -> dict[str, Any] | None:
+    base_spec = _server_owned_api_route_spec(runner)
+    server_owned_v4_pro = bool(
+        str(base_spec.get("provider") or "").strip().lower() == "deepseek"
+        and str(base_spec.get("upstream_model") or "").strip() == "deepseek-v4-pro"
+    )
+    snapshot_v4_pro = _snapshot_contains_deepseek_v4_pro_reasoning_family(
+        api_snapshot_before
+    )
+    if str(provider).strip().lower() != "deepseek" or not (
+        server_owned_v4_pro or snapshot_v4_pro
+    ):
+        return None
+
+    existing_route_ids = _snapshot_route_ids(api_snapshot_before)
+    specs = _deepseek_v4_pro_reasoning_route_specs(
+        runner,
+        credential_ref=credential_ref,
+    )
+    required_route_ids = [str(spec["route_id"]) for spec in specs]
+    missing_specs = [
+        spec for spec in specs if str(spec.get("route_id") or "") not in existing_route_ids
+    ]
+    added_route_ids: list[str] = []
+    add_results: dict[str, dict[str, Any]] = {}
+    validate_results: dict[str, dict[str, Any]] = {}
+    last_add_result: dict[str, Any] | None = None
+    last_validate_result: dict[str, Any] | None = None
+
+    for spec in missing_specs:
+        route_id = str(spec["route_id"])
+        route_spec_path = _server_owned_api_route_spec_path(
+            runner,
+            launch_copy_contract,
+            route_id,
+        )
+        try:
+            _write_server_owned_api_route_spec(route_spec_path, spec)
+        except OSError as exc:
+            result = _api_route_connect_result(
+                status="integration_failure",
+                machine_error_code="UI_DEEPSEEK_REASONING_ROUTE_SET_SPEC_WRITE_FAILED",
+                human_message=str(exc),
+                next_action="retry",
+                route_id=route_id,
+                connect_phase="deepseek_reasoning_route_set_spec_write_failed",
+                admission_mode="ensure_deepseek_reasoning_route_set",
+                preflight=preflight,
+                provider_fallback="deepseek",
+                credential_ref_fallback=credential_ref,
+                credential_status_result=credential_status_result,
+                credential_admit_result=credential_admit_result,
+                credential_phase=credential_phase,
+                add_result=None,
+                validate_result=None,
+            )
+            result["data"].update(
+                {
+                    "reasoning_route_set_proven": False,
+                    "required_route_ids": required_route_ids,
+                    "added_route_ids": added_route_ids,
+                    "missing_route_ids": [str(item["route_id"]) for item in missing_specs],
+                    "route_spec_path_exposed": False,
+                }
+            )
+            return _ui_action_response_from_result("api_route_connect", result)
+
+        add_result = execute_command(
+            runner,
+            "external_models_routes_add_server_owned",
+            structured_args={"route_spec_ref": str(route_spec_path)},
+            allow_disabled=True,
+        )
+        add_results[route_id] = add_result
+        last_add_result = add_result
+        if add_result["status"] != "ok":
+            result = _api_route_connect_result(
+                status="command_error",
+                machine_error_code=str(add_result["machine_error_code"]),
+                human_message=str(add_result["human_message"]),
+                next_action=str(add_result["next_action"]),
+                route_id=route_id,
+                connect_phase="deepseek_reasoning_route_set_add_failed",
+                admission_mode="ensure_deepseek_reasoning_route_set",
+                preflight=preflight,
+                provider_fallback="deepseek",
+                credential_ref_fallback=credential_ref,
+                credential_status_result=credential_status_result,
+                credential_admit_result=credential_admit_result,
+                credential_phase=credential_phase,
+                add_result=add_result,
+                validate_result=None,
+            )
+            result["data"].update(
+                {
+                    "reasoning_route_set_proven": False,
+                    "required_route_ids": required_route_ids,
+                    "added_route_ids": added_route_ids,
+                    "missing_route_ids": [str(item["route_id"]) for item in missing_specs],
+                    "add_route_ids": list(add_results),
+                    "validate_route_ids": [],
+                }
+            )
+            return _ui_action_response_from_result("api_route_connect", result)
+        added_route_ids.append(route_id)
+
+    for route_id in required_route_ids:
+        validate_result = execute_command(
+            runner,
+            "external_models_routes_validate",
+            structured_args={"route_id": route_id},
+        )
+        validate_results[route_id] = validate_result
+        last_validate_result = validate_result
+        if validate_result["status"] != "ok":
+            result = _api_route_connect_result(
+                status="command_error",
+                machine_error_code=str(validate_result["machine_error_code"]),
+                human_message=str(validate_result["human_message"]),
+                next_action=str(validate_result["next_action"]),
+                route_id=route_id,
+                connect_phase="deepseek_reasoning_route_set_validate_failed",
+                admission_mode="ensure_deepseek_reasoning_route_set",
+                preflight=preflight,
+                provider_fallback="deepseek",
+                credential_ref_fallback=credential_ref,
+                credential_status_result=credential_status_result,
+                credential_admit_result=credential_admit_result,
+                credential_phase=credential_phase,
+                add_result=last_add_result,
+                validate_result=validate_result,
+            )
+            result["data"].update(
+                {
+                    "reasoning_route_set_proven": False,
+                    "required_route_ids": required_route_ids,
+                    "added_route_ids": added_route_ids,
+                    "missing_route_ids": [str(item["route_id"]) for item in missing_specs],
+                    "add_route_ids": list(add_results),
+                    "validate_route_ids": list(validate_results),
+                }
+            )
+            return _ui_action_response_from_result("api_route_connect", result)
+
+    result = _api_route_connect_result(
+        status="ok",
+        machine_error_code="OK",
+        human_message="DeepSeek v4-pro reasoning route set is admitted and validated.",
+        next_action="none",
+        route_id="wbp-deepseek-v4-pro-max",
+        connect_phase=(
+            "deepseek_reasoning_route_set_created_and_validated"
+            if added_route_ids
+            else "deepseek_reasoning_route_set_adopted_and_validated"
+        ),
+        admission_mode="ensure_deepseek_reasoning_route_set",
+        preflight=preflight,
+        provider_fallback="deepseek",
+        credential_ref_fallback=credential_ref,
+        credential_status_result=credential_status_result,
+        credential_admit_result=credential_admit_result,
+        credential_phase=credential_phase,
+        add_result=last_add_result,
+        validate_result=last_validate_result,
+    )
+    result["data"].update(
+        {
+            "reasoning_route_set_proven": True,
+            "required_route_ids": required_route_ids,
+            "added_route_ids": added_route_ids,
+            "missing_route_ids": [str(item["route_id"]) for item in missing_specs],
+            "add_route_ids": list(add_results),
+            "validate_route_ids": list(validate_results),
+            "reasoning_supported_operator_levels": [
+                level for level, _route_id, _thinking in DEEPSEEK_V4_PRO_REASONING_ROUTE_SPECS
+            ],
+            "browser_route_id_intake": False,
+            "browser_secret_intake": False,
+            "route_spec_path_exposed": False,
+        }
+    )
+    return _ui_action_response_from_result("api_route_connect", result)
+
+
 def _run_api_route_credential_check_action(runner: CommandRunner) -> dict[str, Any]:
     api_snapshot_before = build_api_connections_readonly_snapshot(runner)
     preflight = _api_route_connect_preflight(api_snapshot_before)
@@ -20909,6 +21186,20 @@ def _run_api_route_connect_action(
             validate_result=None,
         )
         return _ui_action_response_from_result("api_route_connect", result)
+
+    deepseek_reasoning_route_set = _run_deepseek_v4_pro_reasoning_route_set_connect(
+        runner,
+        launch_copy_contract,
+        api_snapshot_before=api_snapshot_before,
+        preflight=preflight,
+        provider=provider,
+        credential_ref=credential_ref,
+        credential_status_result=credential_status_result,
+        credential_admit_result=credential_admit_result,
+        credential_phase=credential_phase,
+    )
+    if deepseek_reasoning_route_set is not None:
+        return deepseek_reasoning_route_set
 
     existing_route = _primary_api_route_from_snapshot(api_snapshot_before)
     if existing_route is not None:

@@ -46,7 +46,9 @@ SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_FINAL_STATUS = (
 SERVER_MODEL_SELECTION_AND_REASONING_TRUTH_BLOCKER = (
     "KNOWN_BLOCKER_CUSTOM_CODEX_SERVER_MODEL_SELECTION_TRUTH_NOT_PROVEN"
 )
-CHATGPT_PLUS_API_CODING_MODEL_REQUIRED = "wbp-deepseek-v4-pro-max"
+CHATGPT_PLUS_API_CODING_MODEL_RECOMMENDED_DEFAULT = "wbp-deepseek-v4-pro-max"
+CHATGPT_PLUS_API_CODING_UPSTREAM_MODEL_REQUIRED = "deepseek-v4-pro"
+CHATGPT_PLUS_API_CODING_OPERATOR_LEVELS_REQUIRED = ("fast", "high", "max")
 CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED = "deepseek"
 CHATGPT_PLUS_API_SLOT_TRUTH_FINAL_STATUS = (
     "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS"
@@ -1771,6 +1773,11 @@ def _execution_mode_slot_binding(
         "provider": str(selection.get("provider") or ""),
         "provider_label": str(selection.get("provider_label") or ""),
         "provider_model_id": str(selection.get("provider_model_id") or ""),
+        "upstream_model": str(
+            selection.get("upstream_model") or selection.get("provider_model_id") or ""
+        ),
+        "thinking": dict(selection.get("thinking") or {}),
+        "api_parameter_sent": selection.get("api_parameter_sent") is True,
         "runtime_execution_proven": False,
         "live_call_attempted": False,
     }
@@ -2470,10 +2477,24 @@ def build_chatgpt_plus_api_slot_truth_packet(
         == CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED
         == str(server_truth_packet.get("api_provider_id") or "")
     )
-    coding_slot_model_is_required_deepseek = (
+    coding_slot_model_is_recommended_deepseek = (
         str(coding_slot.get("model_id") or "")
-        == CHATGPT_PLUS_API_CODING_MODEL_REQUIRED
+        == CHATGPT_PLUS_API_CODING_MODEL_RECOMMENDED_DEFAULT
         == str(server_truth_packet.get("selected_api_model") or "")
+    )
+    coding_slot_upstream_model_is_required = (
+        str(coding_slot.get("upstream_model") or coding_slot.get("provider_model_id") or "")
+        == CHATGPT_PLUS_API_CODING_UPSTREAM_MODEL_REQUIRED
+    )
+    coding_slot_reasoning_operator_level_admitted = (
+        str(server_truth_packet.get("api_reasoning_operator_level") or "")
+        in CHATGPT_PLUS_API_CODING_OPERATOR_LEVELS_REQUIRED
+    )
+    coding_slot_model_is_admitted_deepseek_reasoning_variant = (
+        coding_slot_provider_is_deepseek
+        and coding_slot_upstream_model_is_required
+        and coding_slot_reasoning_operator_level_admitted
+        and server_truth_packet.get("api_reasoning_option_model_bound") is True
     )
     slots_collapsed = (
         primary_slot.get("slot_id") == coding_slot.get("slot_id")
@@ -2515,7 +2536,7 @@ def build_chatgpt_plus_api_slot_truth_packet(
         and chatgpt_primary_slot_proven
         and api_coding_slot_proven
         and coding_slot_provider_is_deepseek
-        and coding_slot_model_is_required_deepseek
+        and coding_slot_model_is_admitted_deepseek_reasoning_variant
         and not slots_collapsed
         and server_truth_packet.get("api_reasoning_option_model_bound") is True
         and no_runtime_claims
@@ -2533,8 +2554,16 @@ def build_chatgpt_plus_api_slot_truth_packet(
             machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_API"
         elif not coding_slot_provider_is_deepseek:
             machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK"
-        elif not coding_slot_model_is_required_deepseek:
-            machine_error_code = "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_MAX"
+        elif not coding_slot_upstream_model_is_required:
+            machine_error_code = (
+                "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_REASONING_VARIANT"
+            )
+        elif not coding_slot_reasoning_operator_level_admitted:
+            machine_error_code = "CHATGPT_PLUS_API_CODING_REASONING_LEVEL_NOT_ADMITTED"
+        elif not coding_slot_model_is_admitted_deepseek_reasoning_variant:
+            machine_error_code = (
+                "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_REASONING_VARIANT"
+            )
         elif slots_collapsed:
             machine_error_code = "CHATGPT_PLUS_API_SLOTS_COLLAPSED"
         else:
@@ -2587,6 +2616,12 @@ def build_chatgpt_plus_api_slot_truth_packet(
             "api_reasoning_option_model_bound"
         )
         is True,
+        "api_reasoning_intelligence_measured": server_truth_packet.get(
+            "api_reasoning_intelligence_measured"
+        )
+        is True,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
         "browser_route_authority": False,
         "browser_secret_authority": False,
         "browser_model_authority": False,
@@ -2601,9 +2636,34 @@ def build_chatgpt_plus_api_slot_truth_packet(
         "chatgpt_primary_slot_proven": chatgpt_primary_slot_proven,
         "api_coding_slot_proven": api_coding_slot_proven,
         "coding_slot_provider_is_deepseek": coding_slot_provider_is_deepseek,
-        "coding_slot_model_is_deepseek_v4_pro_max": coding_slot_model_is_required_deepseek,
+        "coding_slot_model_is_deepseek_v4_pro_max": (
+            coding_slot_model_is_recommended_deepseek
+        ),
+        "coding_slot_model_is_recommended_deepseek_v4_pro_max": (
+            coding_slot_model_is_recommended_deepseek
+        ),
+        "coding_slot_upstream_model_is_deepseek_v4_pro": (
+            coding_slot_upstream_model_is_required
+        ),
+        "coding_slot_reasoning_operator_level_admitted": (
+            coding_slot_reasoning_operator_level_admitted
+        ),
+        "coding_slot_model_is_admitted_deepseek_reasoning_variant": (
+            coding_slot_model_is_admitted_deepseek_reasoning_variant
+        ),
         "required_coding_api_provider_id": CHATGPT_PLUS_API_CODING_PROVIDER_REQUIRED,
-        "required_coding_api_model_id": CHATGPT_PLUS_API_CODING_MODEL_REQUIRED,
+        "required_coding_api_upstream_model_id": (
+            CHATGPT_PLUS_API_CODING_UPSTREAM_MODEL_REQUIRED
+        ),
+        "required_coding_api_operator_levels": list(
+            CHATGPT_PLUS_API_CODING_OPERATOR_LEVELS_REQUIRED
+        ),
+        "required_coding_api_route_family": (
+            "server_issued_deepseek_v4_pro_reasoning_variant"
+        ),
+        "recommended_coding_api_model_id": (
+            CHATGPT_PLUS_API_CODING_MODEL_RECOMMENDED_DEFAULT
+        ),
         "api_line_selected_as_coding_agent": api_coding_slot_proven,
         "api_line_used_as_coding_agent": api_coding_slot_proven,
         "chatgpt_line_used_as_executor": chatgpt_primary_slot_proven,

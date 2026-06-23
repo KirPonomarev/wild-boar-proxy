@@ -8986,6 +8986,174 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 runner.calls,
             )
 
+    def test_api_route_connect_repairs_missing_deepseek_reasoning_variant_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_root = data_dir / "external-models" / "server-owned-route-specs"
+            fast_spec_path = route_spec_root / "wbp-deepseek-v4-pro-fast.json"
+            high_spec_path = route_spec_root / "wbp-deepseek-v4-pro-high.json"
+            payloads = live_payloads()
+            max_route = {
+                "schema_version": 1,
+                "route_id": "wbp-deepseek-v4-pro-max",
+                "display_name": "DeepSeek V4 Pro Max",
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-v4-pro",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+                "synthetic_adapter_state": "stopped",
+                "profile_ready": False,
+                "transform_profile": "openai_chat_developer_to_system",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            }
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 1, "routes": [max_route]},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 1,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [max_route],
+                },
+            )
+            payloads[
+                ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+            ] = credential_status_packet(
+                present=True,
+                provider="deepseek",
+                credential_ref="DEEPSEEK_API_KEY",
+                expected_refs=["DEEPSEEK_API_KEY"],
+                provider_dashboard_url="https://platform.deepseek.com/api_keys",
+            )
+            for route_id, spec_path in (
+                ("wbp-deepseek-v4-pro-fast", fast_spec_path),
+                ("wbp-deepseek-v4-pro-high", high_spec_path),
+            ):
+                payloads[
+                    (
+                        "external-models",
+                        "routes",
+                        "add",
+                        "--file",
+                        str(spec_path),
+                        "--json",
+                    )
+                ] = command_packet(
+                    human_message=f"External-models route added: {route_id}.",
+                    changed_files=[str(data_dir / "external-models" / "routes.json")],
+                    data={"route_id": route_id},
+                )
+            for route_id in (
+                "wbp-deepseek-v4-pro-fast",
+                "wbp-deepseek-v4-pro-high",
+                "wbp-deepseek-v4-pro-max",
+            ):
+                payloads[
+                    (
+                        "external-models",
+                        "routes",
+                        "validate",
+                        "--route",
+                        route_id,
+                        "--json",
+                    )
+                ] = command_packet(
+                    human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+                    data={
+                        "route_id": route_id,
+                        "route_state": "model_visible",
+                        "verification_scope": "route_provider_only",
+                        "requested_model": route_id,
+                        "effective_model": "deepseek-v4-pro",
+                        "provider": "deepseek",
+                    },
+                )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok", (result, runner.calls))
+            self.assertEqual(
+                result["result"]["data"]["api_route_connect_phase"],
+                "deepseek_reasoning_route_set_created_and_validated",
+            )
+            self.assertEqual(
+                result["result"]["data"]["admission_mode"],
+                "ensure_deepseek_reasoning_route_set",
+            )
+            self.assertTrue(result["result"]["data"]["reasoning_route_set_proven"])
+            self.assertEqual(
+                result["result"]["data"]["required_route_ids"],
+                [
+                    "wbp-deepseek-v4-pro-fast",
+                    "wbp-deepseek-v4-pro-high",
+                    "wbp-deepseek-v4-pro-max",
+                ],
+            )
+            self.assertEqual(
+                result["result"]["data"]["added_route_ids"],
+                ["wbp-deepseek-v4-pro-fast", "wbp-deepseek-v4-pro-high"],
+            )
+            self.assertEqual(
+                result["result"]["data"]["reasoning_supported_operator_levels"],
+                ["fast", "high", "max"],
+            )
+            self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertFalse(result["result"]["data"]["browser_secret_intake"])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            fast_spec = json.loads(fast_spec_path.read_text(encoding="utf-8"))
+            high_spec = json.loads(high_spec_path.read_text(encoding="utf-8"))
+            self.assertEqual(fast_spec["route_id"], "wbp-deepseek-v4-pro-fast")
+            self.assertEqual(fast_spec["thinking"], {"type": "disabled"})
+            self.assertEqual(high_spec["route_id"], "wbp-deepseek-v4-pro-high")
+            self.assertEqual(
+                high_spec["thinking"],
+                {"type": "enabled", "reasoning_effort": "high"},
+            )
+            self.assertEqual(fast_spec["provider"], "deepseek")
+            self.assertEqual(high_spec["provider"], "deepseek")
+            self.assertEqual(fast_spec["base_url"], "https://api.deepseek.com/v1")
+            self.assertEqual(high_spec["base_url"], "https://api.deepseek.com/v1")
+            self.assertEqual(fast_spec["upstream_model"], "deepseek-v4-pro")
+            self.assertEqual(high_spec["upstream_model"], "deepseek-v4-pro")
+            self.assertEqual(fast_spec["auth"]["secret_ref"], "DEEPSEEK_API_KEY")
+            self.assertEqual(high_spec["auth"]["secret_ref"], "DEEPSEEK_API_KEY")
+            self.assertIn(
+                (
+                    "external-models",
+                    "routes",
+                    "validate",
+                    "--route",
+                    "wbp-deepseek-v4-pro-max",
+                    "--json",
+                ),
+                runner.calls,
+            )
+
     def test_api_route_connect_adopts_existing_primary_route_without_add(self) -> None:
         payloads = live_payloads()
         runner = MappingRunner(payloads)
