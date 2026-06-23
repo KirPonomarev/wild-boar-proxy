@@ -125,8 +125,14 @@ def _ledger_packet(prompt: str) -> dict[str, object]:
     }
 
 
-def _wbp_dip_packet(prompt: str, *, ok: bool = True) -> dict[str, object]:
+def _wbp_dip_packet(
+    prompt: str,
+    *,
+    ok: bool = True,
+    dip_work_mode: str = "standard",
+) -> dict[str, object]:
     live_text = "live provider result"
+    dip_full_work_mode = dip_work_mode == "full"
     return {
         "packet_kind": WBP_DIP_TOOL_PACKET_KIND,
         "status": "ok" if ok else "error",
@@ -149,6 +155,11 @@ def _wbp_dip_packet(prompt: str, *, ok: bool = True) -> dict[str, object]:
         "live_result_bridge_or_file_bridge_used": False,
         "live_result_runtime_context_bridge_used": False,
         "live_result_runtime_context_file_bridge_used": False,
+        "dip_work_mode": dip_work_mode,
+        "dip_full_work_mode": dip_full_work_mode,
+        "live_result_text_limit": 12000 if dip_full_work_mode else 2400,
+        "live_result_output_token_limit": 4096 if dip_full_work_mode else 768,
+        "repo_bridge_max_steps": 16 if dip_full_work_mode else 8,
         "direct_provider_auth_proven": ok,
         "direct_provider_response_observed": ok,
         "provider_auth_ok": ok,
@@ -259,8 +270,10 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         counter = {"codex": 0}
         captured_readiness_kwargs: list[dict[str, object]] = []
         captured_ledger_kwargs: list[dict[str, object]] = []
+        captured_wbp_dip_argv: list[list[str]] = []
         self._last_readiness_kwargs = captured_readiness_kwargs
         self._last_ledger_kwargs = captured_ledger_kwargs
+        self._last_wbp_dip_argv = captured_wbp_dip_argv
 
         def fake_readiness(**kwargs: object) -> dict[str, object]:
             captured_readiness_kwargs.append(dict(kwargs))
@@ -285,6 +298,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
 
         def fake_subprocess_run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             if argv and Path(argv[0]).resolve() == wbp_dip.resolve():
+                captured_wbp_dip_argv.append(list(argv))
                 env = _kwargs.get("env")
                 self.assertIsInstance(env, dict)
                 self.assertEqual(
@@ -292,7 +306,16 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                     str(paths.managed_dir / "external-models"),
                 )
                 proof_dir = Path(argv[argv.index("--proof-dir") + 1])
-                packet = _wbp_dip_packet(str(argv[-1]), ok=wbp_dip_ok)
+                dip_work_mode = (
+                    str(argv[argv.index("--work-mode") + 1])
+                    if "--work-mode" in argv
+                    else "standard"
+                )
+                packet = _wbp_dip_packet(
+                    str(argv[-1]),
+                    ok=wbp_dip_ok,
+                    dip_work_mode=dip_work_mode,
+                )
                 if wbp_dip_bridge_backed:
                     packet.update(
                         {
@@ -454,6 +477,13 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["first_run_approved_delivery_surface_proven"])
             self.assertTrue(packet["first_run_assistant_response_bound_to_handoff_digest"])
             self.assertFalse(packet["first_run_live_result_bridge_or_file_bridge_used"])
+            self.assertEqual(packet["first_run_wbp_dip_work_mode"], "standard")
+            self.assertFalse(packet["first_run_wbp_dip_full_work_mode"])
+            self.assertEqual(packet["first_run_wbp_dip_live_result_text_limit"], 2400)
+            self.assertEqual(packet["first_run_wbp_dip_live_result_output_token_limit"], 768)
+            self.assertEqual(packet["first_run_wbp_dip_repo_bridge_max_steps"], 8)
+            self.assertTrue(packet["proof_mode_uses_standard_dip_work_mode"])
+            self.assertFalse(packet["work_mode_uses_full_dip_work_mode"])
             self.assertEqual(packet["first_run_wbp_dip_machine_error_code"], "OK")
             self.assertTrue(packet["partial_first_run_diagnostics_recorded"])
             self.assertTrue(packet["partial_first_run_diagnostics_are_not_product_ready"])
@@ -479,6 +509,12 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+            wbp_dip_argv = getattr(self, "_last_wbp_dip_argv")
+            self.assertEqual(len(wbp_dip_argv), 2)
+            self.assertTrue(all("--work-mode" in argv for argv in wbp_dip_argv))
+            self.assertTrue(
+                all(argv[argv.index("--work-mode") + 1] == "standard" for argv in wbp_dip_argv)
+            )
 
     def test_work_mode_runs_once_but_cannot_mint_admission_proof(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -518,6 +554,13 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["direct_provider_auth_proven"])
             self.assertTrue(packet["codex_working_flow_delivery_proven"])
             self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
+            self.assertEqual(packet["first_run_wbp_dip_work_mode"], "full")
+            self.assertTrue(packet["first_run_wbp_dip_full_work_mode"])
+            self.assertEqual(packet["first_run_wbp_dip_live_result_text_limit"], 12000)
+            self.assertEqual(packet["first_run_wbp_dip_live_result_output_token_limit"], 4096)
+            self.assertEqual(packet["first_run_wbp_dip_repo_bridge_max_steps"], 16)
+            self.assertTrue(packet["work_mode_uses_full_dip_work_mode"])
+            self.assertFalse(packet["proof_mode_uses_standard_dip_work_mode"])
             self.assertFalse(packet["proof_mode_admission_proven"])
             self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
             self.assertFalse(packet["real_custom_codex_hook_origin_dip_proof_proven"])
@@ -530,6 +573,10 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+            wbp_dip_argv = getattr(self, "_last_wbp_dip_argv")
+            self.assertEqual(len(wbp_dip_argv), 1)
+            self.assertIn("--work-mode", wbp_dip_argv[0])
+            self.assertEqual(wbp_dip_argv[0][wbp_dip_argv[0].index("--work-mode") + 1], "full")
 
     def test_runner_rejects_status_mode_in_proof_surface(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

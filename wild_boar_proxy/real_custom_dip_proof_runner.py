@@ -448,6 +448,7 @@ def _run_wbp_dip_tool(
     expected_alias: str,
     task: str,
     timeout_seconds: int,
+    dip_work_mode: str,
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, Any], Path]:
     proof_dir.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -474,6 +475,8 @@ def _run_wbp_dip_tool(
             model,
             "--sandbox",
             sandbox,
+            "--work-mode",
+            dip_work_mode,
             "--cd",
             str(repo_root),
             "--proof-dir",
@@ -1034,6 +1037,7 @@ def _run_once(
     timeout_seconds: int,
     codex_hook_current_hash: str,
     probe_codex_app_server: bool,
+    run_mode: str,
 ) -> dict[str, Any]:
     run_dir.mkdir(parents=True, exist_ok=True)
     ledger_path = hook_ledger_path(paths)
@@ -1096,6 +1100,7 @@ def _run_once(
         }
 
     wbp_dip_dir = run_dir / "wbp-dip"
+    dip_work_mode = "full" if run_mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK else "standard"
     dip_completed, dip_packet, dip_file = _run_wbp_dip_tool(
         repo_root=repo_root,
         profile_dir=paths.profile_dir,
@@ -1106,6 +1111,7 @@ def _run_once(
         expected_alias=expected_alias,
         task=prompt_text,
         timeout_seconds=timeout_seconds,
+        dip_work_mode=dip_work_mode,
     )
     dip_failures = _dip_failures(dip_packet, dip_completed)
     if dip_failures:
@@ -1281,6 +1287,21 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
         join_packet.get("live_result_bridge_or_file_bridge_used") is True
         or dip_packet.get("live_result_bridge_or_file_bridge_used") is True
     )
+    wbp_dip_live_result_text_limit = int(
+        dip_packet.get("live_result_text_limit")
+        if isinstance(dip_packet.get("live_result_text_limit"), int)
+        else 0
+    )
+    wbp_dip_live_result_output_token_limit = int(
+        dip_packet.get("live_result_output_token_limit")
+        if isinstance(dip_packet.get("live_result_output_token_limit"), int)
+        else 0
+    )
+    wbp_dip_repo_bridge_max_steps = int(
+        dip_packet.get("repo_bridge_max_steps")
+        if isinstance(dip_packet.get("repo_bridge_max_steps"), int)
+        else 0
+    )
     return {
         "run_index": run_index,
         "prompt_digest": _hex_sha256(run.get("prompt_digest")),
@@ -1328,6 +1349,11 @@ def _run_summary(run_index: int, run: Mapping[str, Any]) -> dict[str, Any]:
             assistant_response_bound_to_handoff_digest
         ),
         "live_result_bridge_or_file_bridge_used": live_result_bridge_or_file_bridge_used,
+        "wbp_dip_work_mode": _safe_text(dip_packet.get("dip_work_mode"), limit=40),
+        "wbp_dip_full_work_mode": dip_packet.get("dip_full_work_mode") is True,
+        "wbp_dip_live_result_text_limit": wbp_dip_live_result_text_limit,
+        "wbp_dip_live_result_output_token_limit": wbp_dip_live_result_output_token_limit,
+        "wbp_dip_repo_bridge_max_steps": wbp_dip_repo_bridge_max_steps,
         "bridge_green_counts_as_provider_proof": False,
         "provider_auth_smoke_required_before_full_runner": True,
         "fallback_used": join_packet.get("fallback_used") is True,
@@ -1731,6 +1757,34 @@ def build_real_custom_dip_proof_runner_packet(
         "first_run_live_result_bridge_or_file_bridge_used": (
             first_run.get("live_result_bridge_or_file_bridge_used") is True
         ),
+        "first_run_wbp_dip_work_mode": _safe_text(
+            first_run.get("wbp_dip_work_mode"),
+            limit=40,
+        ),
+        "first_run_wbp_dip_full_work_mode": (
+            first_run.get("wbp_dip_full_work_mode") is True
+        ),
+        "first_run_wbp_dip_live_result_text_limit": int(
+            first_run.get("wbp_dip_live_result_text_limit")
+            if isinstance(first_run.get("wbp_dip_live_result_text_limit"), int)
+            else 0
+        ),
+        "first_run_wbp_dip_live_result_output_token_limit": int(
+            first_run.get("wbp_dip_live_result_output_token_limit")
+            if isinstance(first_run.get("wbp_dip_live_result_output_token_limit"), int)
+            else 0
+        ),
+        "first_run_wbp_dip_repo_bridge_max_steps": int(
+            first_run.get("wbp_dip_repo_bridge_max_steps")
+            if isinstance(first_run.get("wbp_dip_repo_bridge_max_steps"), int)
+            else 0
+        ),
+        "work_mode_uses_full_dip_work_mode": bool(
+            work_ok and first_run.get("wbp_dip_full_work_mode") is True
+        ),
+        "proof_mode_uses_standard_dip_work_mode": bool(
+            admission_ok and first_run.get("wbp_dip_work_mode") == "standard"
+        ),
         "first_run_ledger_machine_error_code": _safe_text(
             first_run.get("ledger_machine_error_code"),
             limit=128,
@@ -2021,6 +2075,7 @@ def run_real_custom_dip_proof_runner_command(
                     timeout_seconds=timeout_seconds,
                     codex_hook_current_hash=hook_hash,
                     probe_codex_app_server=probe_codex_app_server,
+                    run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
                 )
             )
             if runs[-1].get("run_blocking_reasons"):
