@@ -77,6 +77,12 @@ repo/project/code/audit/report/fix/test prompts and can be controlled with
 filesystem or shell authority; it must request approved WBP tools through strict
 JSON tool-call text, and WBP executes those tools locally.
 
+WBP may also perform bounded repo bootstrap reads before the first provider
+turn, such as reading explicitly named files or listing files for broad repo
+tasks. If DIP answers with prose before required repo/action/code/verification
+facts exist, WBP must issue an in-run corrective gate prompt and continue until
+the required fact exists or the bounded step budget is exhausted.
+
 Admitted bridge tools:
 
 - `list_files`, `read_file`, `search`, `git_status`
@@ -135,6 +141,7 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `dip_action_raw_command_recorded=false`
 - `repo_bridge_mutation_controlled=true`
 - `repo_bridge_direct_shell_access=false`
+- `repo_bridge_bootstrap_used=true|false`
 - `repo_bridge_context_pack_recorded=false`
 - `repo_bridge_raw_tool_results_recorded=false`
 

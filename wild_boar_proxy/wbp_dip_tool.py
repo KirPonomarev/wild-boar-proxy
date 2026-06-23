@@ -40,7 +40,7 @@ DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
 DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS = 2.0
 DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
 DEFAULT_REPO_BRIDGE_MODE = "auto"
-DEFAULT_REPO_BRIDGE_MAX_STEPS = 4
+DEFAULT_REPO_BRIDGE_MAX_STEPS = 8
 DEFAULT_REPO_BRIDGE_FILE_TEXT_LIMIT = 12000
 DEFAULT_REPO_BRIDGE_CONTEXT_TEXT_LIMIT = 18000
 DEFAULT_REPO_BRIDGE_TOOL_RESULT_TEXT_LIMIT = 16000
@@ -145,6 +145,14 @@ CODE_MUTATION_NEGATED_PHRASES = (
     "не редактируй",
     "не изменяй",
     "не меняй",
+)
+REPO_BRIDGE_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_./-])"
+    r"([A-Za-z0-9_./-]+\.(?:"
+    r"py|md|js|ts|tsx|jsx|json|toml|yaml|yml|txt|css|html|sh|rs|go|java|rb|swift|kt|sql"
+    r"))"
+    r"(?![A-Za-z0-9_./-])",
+    re.IGNORECASE,
 )
 ACTION_BRIDGE_TOOLS = {
     "propose_patch",
@@ -572,6 +580,36 @@ def _task_contains_keyword(task_key: str, keywords: Sequence[str]) -> bool:
         if keyword_key in task_key:
             return True
     return False
+
+
+def _task_path_candidates(task: str, *, limit: int = 4) -> list[str]:
+    candidates: list[str] = []
+    for match in REPO_BRIDGE_PATH_PATTERN.finditer(task):
+        candidate = match.group(1).strip("`'\".,:;()[]{}")
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
+def _repo_bridge_bootstrap_calls(
+    *,
+    task: str,
+    repo_bridge_required: bool,
+    action_bridge_required: bool,
+) -> list[dict[str, Any]]:
+    if not repo_bridge_required:
+        return []
+    path_calls = [
+        {"tool": "read_file", "path": candidate, "origin": "wbp_bootstrap"}
+        for candidate in _task_path_candidates(task)
+    ]
+    if path_calls:
+        return path_calls
+    if action_bridge_required:
+        return [{"tool": "git_status", "origin": "wbp_bootstrap"}]
+    return [{"tool": "list_files", "path": ".", "origin": "wbp_bootstrap"}]
 
 
 def _repo_bridge_requested(*, task: str, mode: str) -> bool:
@@ -1135,6 +1173,7 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
     safe_result = {
         "schema_version": 1,
         "tool": tool,
+        "origin": _safe_text(call.get("origin"), limit=80),
         "status": _safe_text(result.get("status"), limit=40),
         "machine_error_code": _safe_text(result.get("machine_error_code"), limit=120),
         "path": _safe_text(result.get("path"), limit=500),
@@ -1172,13 +1211,65 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
 
 
 def _repo_tool_result_prompt(tool_result: Mapping[str, Any]) -> str:
+    retry_text = (
+        "The previous tool call failed. Correct the next JSON tool call using "
+        "the machine_error_code above; do not repeat an identical failing call. "
+        if tool_result.get("status") != "ok"
+        else ""
+    )
     return (
         "\n\nWBP repo tool result JSON:\n"
         f"{json.dumps(dict(tool_result), ensure_ascii=False, sort_keys=True)}\n\n"
+        f"{retry_text}"
         "Use the evidence above. If more repository evidence is needed, output "
-        "exactly one next wbp_repo_tool_call JSON object. Otherwise answer the "
-        "operator directly."
+        "exactly one next wbp_repo_tool_call JSON object. If the task is a "
+        "fix/implementation/edit task, do not answer finally until apply_patch "
+        "has succeeded and a verification command has succeeded. Otherwise "
+        "answer the operator directly."
     )
+
+
+def _repo_required_gate_prompt(fields: Mapping[str, Any]) -> str:
+    if (
+        fields.get("dip_repo_tool_bridge_required") is True
+        and int(fields.get("repo_bridge_successful_tool_call_count") or 0) < 1
+    ):
+        return (
+            "\n\nWBP REQUIRED TOOL GATE: your previous answer cannot be accepted "
+            "because no repo bridge tool succeeded. Output exactly one JSON "
+            "tool call now, no prose. Prefer read_file for named files, otherwise "
+            "use git_status or list_files."
+        )
+    if (
+        fields.get("dip_action_bridge_required") is True
+        and int(fields.get("dip_action_successful_tool_call_count") or 0) < 1
+    ):
+        return (
+            "\n\nWBP REQUIRED ACTION GATE: your previous answer cannot be accepted "
+            "because no action bridge tool succeeded. Output exactly one JSON "
+            "tool call now, no prose. For checks use run_command or run_tests. "
+            "For fixes, read the target file if needed, then use apply_patch."
+        )
+    if (
+        fields.get("dip_code_mutation_required") is True
+        and fields.get("dip_code_written") is not True
+    ):
+        return (
+            "\n\nWBP REQUIRED CODE GATE: your previous answer cannot be accepted "
+            "because no patch was applied. Output exactly one apply_patch JSON "
+            "tool call now, no prose. Use a valid unified diff with diff --git, "
+            "---, +++, and @@ hunk headers."
+        )
+    if (
+        fields.get("dip_code_mutation_required") is True
+        and fields.get("dip_code_verified") is not True
+    ):
+        return (
+            "\n\nWBP REQUIRED VERIFY GATE: the patch has applied, but the code task "
+            "is not complete until verification succeeds. Output exactly one "
+            "run_tests or run_command JSON tool call now, no prose."
+        )
+    return ""
 
 
 def _repo_bridge_fields(
@@ -1193,6 +1284,9 @@ def _repo_bridge_fields(
 ) -> dict[str, Any]:
     successful_results = [
         result for result in tool_results if result.get("status") == "ok"
+    ]
+    bootstrap_results = [
+        result for result in tool_results if result.get("origin") == "wbp_bootstrap"
     ]
     action_results = [
         result for result in tool_results if result.get("tool") in ACTION_BRIDGE_TOOLS
@@ -1230,6 +1324,7 @@ def _repo_bridge_fields(
             json.dumps(
                 {
                     "tool": result.get("tool"),
+                    "origin": result.get("origin"),
                     "status": result.get("status"),
                     "machine_error_code": result.get("machine_error_code"),
                     "path": result.get("path"),
@@ -1282,6 +1377,8 @@ def _repo_bridge_fields(
         "repo_bridge_mutation_controlled": True,
         "repo_bridge_direct_shell_access": False,
         "repo_bridge_context_pack_used": context_pack is not None,
+        "repo_bridge_bootstrap_used": bool(bootstrap_results),
+        "repo_bridge_bootstrap_tool_call_count": len(bootstrap_results),
         "repo_bridge_context_pack_sha256": (
             _repo_context_pack_sha256(context_pack) if context_pack is not None else ""
         ),
@@ -1669,6 +1766,18 @@ def request_live_result(
             base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
 
     conversation_prompt = prompt
+    if repo_bridge_required and repo_root is not None:
+        for bootstrap_call in _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=repo_bridge_required,
+            action_bridge_required=action_bridge_required,
+        ):
+            tool_result = _execute_repo_tool_call(
+                bootstrap_call,
+                repo_root=Path(repo_root),
+            )
+            repo_tool_results.append(tool_result)
+            conversation_prompt += _repo_tool_result_prompt(tool_result)
     last_result: dict[str, Any] = {}
     for _step in range(DEFAULT_REPO_BRIDGE_MAX_STEPS + 1):
         last_result = _direct_provider_live_result(
@@ -1695,6 +1804,18 @@ def request_live_result(
             else {}
         )
         if not tool_call:
+            current_repo_fields = _repo_bridge_fields(
+                required=repo_bridge_required,
+                action_required=action_bridge_required,
+                code_mutation_required=code_mutation_required,
+                available=repo_bridge_available,
+                context_pack=repo_context_pack,
+                tool_results=repo_tool_results,
+            )
+            gate_prompt = _repo_required_gate_prompt(current_repo_fields)
+            if gate_prompt and _step < DEFAULT_REPO_BRIDGE_MAX_STEPS:
+                conversation_prompt += gate_prompt
+                continue
             break
         tool_result = _execute_repo_tool_call(tool_call, repo_root=Path(repo_root))
         repo_tool_results.append(tool_result)
@@ -1986,6 +2107,12 @@ def build_wbp_dip_tool_packet(
         ),
         "repo_bridge_context_pack_used": (
             live_result_data.get("repo_bridge_context_pack_used") is True
+        ),
+        "repo_bridge_bootstrap_used": (
+            live_result_data.get("repo_bridge_bootstrap_used") is True
+        ),
+        "repo_bridge_bootstrap_tool_call_count": int(
+            live_result_data.get("repo_bridge_bootstrap_tool_call_count") or 0
         ),
         "repo_bridge_context_pack_sha256": _safe_text(
             live_result_data.get("repo_bridge_context_pack_sha256"),
