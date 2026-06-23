@@ -70,6 +70,14 @@ It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
 CLI flow, then requires a bounded live result from the runtime-context allowed
 API route before returning success. It emits one JSON packet.
 
+For repository inspection tasks, `tools/wbp_dip` also owns the WBP-mediated
+read-only repo bridge. The bridge is enabled by default in `auto` mode for
+repo/project/code/audit/report prompts and can be controlled with
+`--repo-bridge auto|on|off`. The remote DIP route never receives direct local
+filesystem authority; it must request approved WBP repo tools through strict
+JSON tool-call text, and WBP executes those tools locally. A repo-inspection
+claim must not succeed unless at least one repo bridge tool call succeeds.
+
 Canonical operator entry:
 
 ```sh
@@ -104,6 +112,10 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `raw_prompt_recorded=false`
 - `prompt_text_recorded=false`
 - `live_result_route_id_recorded=false`
+- `dip_repo_direct_access=false`
+- `dip_repo_tool_bridge_used=true` for repo-inspection success paths
+- `repo_bridge_context_pack_recorded=false`
+- `repo_bridge_raw_tool_results_recorded=false`
 
 `tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
 diagnostics. It is not a working-result success path.
