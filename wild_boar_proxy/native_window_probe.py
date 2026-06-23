@@ -4387,6 +4387,35 @@ def _runtime_ready_from_launcher_stdout(
     }
 
 
+def _runtime_ready_with_input_capable_renderer_fallback(
+    runtime_ready_packet: dict[str, Any],
+    usability_packet: dict[str, Any],
+) -> dict[str, Any]:
+    if runtime_ready_packet.get("runtime_ready_observed") is True:
+        return {
+            **runtime_ready_packet,
+            "runtime_ready_renderer_fallback_used": False,
+        }
+    renderer_ready = (
+        usability_packet.get("native_window_usable") is True
+        and usability_packet.get("cdp_localhost_only") is True
+        and usability_packet.get("cdp_target_bound_to_custom_launch") is True
+        and usability_packet.get("cdp_editable_surface_observed") is True
+    )
+    if not renderer_ready:
+        return {
+            **runtime_ready_packet,
+            "runtime_ready_renderer_fallback_used": False,
+        }
+    return {
+        **runtime_ready_packet,
+        "runtime_ready_observed": True,
+        "runtime_ready_source": "cdp_pid_bound_input_capable_renderer",
+        "runtime_ready_missing_markers": [],
+        "runtime_ready_renderer_fallback_used": True,
+    }
+
+
 def _build_identity_binding(
     window_packet: dict[str, Any],
     layout: NativeProbeLayout,
@@ -4972,6 +5001,10 @@ def launch_custom_native_app_packet(
             launcher_stderr_path=launch_result.get("launcher_stderr_path"),
         )
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
+        runtime_ready_packet = _runtime_ready_with_input_capable_renderer_fallback(
+            runtime_ready_packet,
+            usability_packet,
+        )
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
         native_window_observed = window_packet.get("window_observed") is True
