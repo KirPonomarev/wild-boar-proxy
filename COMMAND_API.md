@@ -86,7 +86,8 @@ Admitted bridge tools:
 A repo-inspection claim must not succeed unless at least one repo bridge tool
 call succeeds. A fix/implementation/test claim must not succeed unless at least
 one action bridge tool call succeeds. A fix/implementation/edit/code-writing
-claim must not succeed unless an `apply_patch` tool call actually mutates code.
+claim must not succeed unless an `apply_patch` tool call actually mutates code
+and a subsequent `run_tests` or `run_command` verification succeeds.
 Patches are accepted only as bounded unified diffs and are checked with
 `git apply --check` before any apply. Commands are allowlisted and executed
 without shell interpolation.
@@ -129,8 +130,11 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `dip_repo_tool_bridge_used=true` for repo-inspection success paths
 - `dip_action_bridge_used=true` for fix/implementation/test success paths
 - `dip_code_written=true` for fix/implementation/edit/code-writing success paths
+- `dip_code_verified=true` for fix/implementation/edit/code-writing success paths
 - `dip_action_raw_patch_recorded=false`
 - `dip_action_raw_command_recorded=false`
+- `repo_bridge_mutation_controlled=true`
+- `repo_bridge_direct_shell_access=false`
 - `repo_bridge_context_pack_recorded=false`
 - `repo_bridge_raw_tool_results_recorded=false`
 

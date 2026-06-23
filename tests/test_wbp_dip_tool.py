@@ -27,6 +27,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_DRY_RUN,
     WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
     WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED,
+    WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN,
     WBP_DIP_TOOL_LIVE_RESULT_UNSAFE,
     WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
     WBP_DIP_TOOL_OK,
@@ -115,11 +116,15 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "dip_code_mutation_required": False,
         "dip_code_written": False,
         "dip_code_patch_applied": False,
+        "dip_code_verification_required": False,
+        "dip_code_verified": False,
         "dip_action_mutated_files": [],
         "dip_action_raw_patch_recorded": False,
         "dip_action_raw_command_recorded": False,
-        "repo_bridge_readonly": True,
+        "repo_bridge_readonly": False,
         "repo_bridge_mutation_allowed": True,
+        "repo_bridge_mutation_controlled": True,
+        "repo_bridge_direct_shell_access": False,
         "repo_bridge_context_pack_used": False,
         "repo_bridge_context_pack_sha256": "",
         "repo_bridge_context_pack_recorded": False,
@@ -296,6 +301,8 @@ class WbpDipToolTests(unittest.TestCase):
                     dip_code_mutation_required=True,
                     dip_code_written=True,
                     dip_code_patch_applied=True,
+                    dip_code_verification_required=True,
+                    dip_code_verified=True,
                     dip_action_mutated_files=["demo.py"],
                 ),
             )
@@ -312,7 +319,10 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["repo_bridge_successful_tool_call_count"], 2)
         self.assertEqual(packet["repo_bridge_tool_result_sha256s"], ["b" * 64, "c" * 64])
         self.assertFalse(packet["repo_bridge_raw_tool_results_recorded"])
+        self.assertFalse(packet["repo_bridge_readonly"])
         self.assertTrue(packet["repo_bridge_mutation_allowed"])
+        self.assertTrue(packet["repo_bridge_mutation_controlled"])
+        self.assertFalse(packet["repo_bridge_direct_shell_access"])
         self.assertTrue(packet["dip_action_bridge_required"])
         self.assertTrue(packet["dip_action_bridge_available"])
         self.assertTrue(packet["dip_action_bridge_used"])
@@ -324,6 +334,8 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["dip_code_mutation_required"])
         self.assertTrue(packet["dip_code_written"])
         self.assertTrue(packet["dip_code_patch_applied"])
+        self.assertTrue(packet["dip_code_verification_required"])
+        self.assertTrue(packet["dip_code_verified"])
         self.assertEqual(packet["dip_action_mutated_files"], ["demo.py"])
         self.assertFalse(packet["dip_action_raw_patch_recorded"])
         self.assertFalse(packet["dip_action_raw_command_recorded"])
@@ -1152,7 +1164,7 @@ class WbpDipToolTests(unittest.TestCase):
                 expected_alias="DIP",
                 profile_dir=profile,
                 repo_root=repo,
-                repo_bridge_mode="on",
+                repo_bridge_mode="auto",
                 timeout_seconds=0.01,
             )
             changed_text = (repo / "demo.py").read_text(encoding="utf-8")
@@ -1169,7 +1181,12 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["dip_code_mutation_required"])
         self.assertTrue(result["dip_code_written"])
         self.assertTrue(result["dip_code_patch_applied"])
+        self.assertTrue(result["dip_code_verification_required"])
+        self.assertTrue(result["dip_code_verified"])
         self.assertTrue(result["dip_action_tests_run"])
+        self.assertFalse(result["repo_bridge_readonly"])
+        self.assertTrue(result["repo_bridge_mutation_controlled"])
+        self.assertFalse(result["repo_bridge_direct_shell_access"])
         self.assertEqual(result["dip_action_mutated_files"], ["demo.py"])
         self.assertFalse(result["dip_action_raw_patch_recorded"])
         self.assertFalse(result["dip_action_raw_command_recorded"])
@@ -1264,6 +1281,200 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["dip_action_bridge_required"])
         self.assertFalse(result["dip_action_bridge_used"])
         self.assertEqual(result["dip_action_successful_tool_call_count"], 0)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_run_command_does_not_imply_code_mutation(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.side_effect = [
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=11,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "run_command",
+                                            "args": ["rg", "VALUE", "demo.py"],
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Command ran and no files were edited."
+                            }
+                        }
+                    ]
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "ok"\n', encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: run command rg VALUE demo.py. Do not edit files.",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="auto",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertTrue(result["dip_action_bridge_required"])
+        self.assertTrue(result["dip_action_bridge_used"])
+        self.assertTrue(result["dip_action_commands_run"])
+        self.assertFalse(result["dip_code_mutation_required"])
+        self.assertFalse(result["dip_code_written"])
+        self.assertFalse(result["dip_code_verification_required"])
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_blocks_fix_task_without_verification(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        patch_text = """diff --git a/demo.py b/demo.py
+--- a/demo.py
++++ b/demo.py
+@@ -1 +1 @@
+-VALUE = "bad"
++VALUE = "good"
+"""
+        request_json_mock.side_effect = [
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=11,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "apply_patch",
+                                            "patch": patch_text,
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Fixed demo.py without running verification."
+                            }
+                        }
+                    ]
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "bad"\n', encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: почини demo.py",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="auto",
+                timeout_seconds=0.01,
+            )
+            changed_text = (repo / "demo.py").read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN)
+        self.assertEqual(changed_text, 'VALUE = "good"\n')
+        self.assertTrue(result["dip_action_bridge_used"])
+        self.assertTrue(result["dip_action_patch_applied"])
+        self.assertTrue(result["dip_code_mutation_required"])
+        self.assertTrue(result["dip_code_written"])
+        self.assertTrue(result["dip_code_patch_applied"])
+        self.assertTrue(result["dip_code_verification_required"])
+        self.assertFalse(result["dip_code_verified"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})

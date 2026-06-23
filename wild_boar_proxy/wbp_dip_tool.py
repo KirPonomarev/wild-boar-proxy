@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -66,6 +67,7 @@ WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED = "WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED = "WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED"
+WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN = "WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN"
 
 REPO_BRIDGE_MODES = ("auto", "on", "off")
 REPO_BRIDGE_TASK_KEYWORDS = (
@@ -130,6 +132,19 @@ CODE_MUTATION_TASK_KEYWORDS = (
     "создай",
     "напиши",
     "патч",
+)
+CODE_MUTATION_NEGATED_PHRASES = (
+    "do not edit",
+    "do not change",
+    "do not modify",
+    "don't edit",
+    "don't change",
+    "don't modify",
+    "without editing",
+    "without changing",
+    "не редактируй",
+    "не изменяй",
+    "не меняй",
 )
 ACTION_BRIDGE_TOOLS = {
     "propose_patch",
@@ -542,6 +557,23 @@ def _route_status_machine_error_code(route_status: str) -> str:
     return WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
 
 
+def _task_contains_keyword(task_key: str, keywords: Sequence[str]) -> bool:
+    for keyword in keywords:
+        keyword_key = keyword.casefold()
+        ascii_wordish = all(
+            char.isascii() and (char.isalnum() or char in {"_", " "})
+            for char in keyword_key
+        )
+        if ascii_wordish:
+            pattern = rf"(?<![a-z0-9_]){re.escape(keyword_key)}(?![a-z0-9_])"
+            if re.search(pattern, task_key):
+                return True
+            continue
+        if keyword_key in task_key:
+            return True
+    return False
+
+
 def _repo_bridge_requested(*, task: str, mode: str) -> bool:
     safe_mode = mode if mode in REPO_BRIDGE_MODES else DEFAULT_REPO_BRIDGE_MODE
     if safe_mode == "on":
@@ -549,21 +581,33 @@ def _repo_bridge_requested(*, task: str, mode: str) -> bool:
     if safe_mode == "off":
         return False
     task_key = task.casefold()
-    return any(keyword in task_key for keyword in REPO_BRIDGE_TASK_KEYWORDS)
+    auto_keywords = (
+        REPO_BRIDGE_TASK_KEYWORDS
+        + tuple(
+            keyword
+            for keyword in ACTION_BRIDGE_TASK_KEYWORDS
+            if keyword not in {"проверь", "run", "verify", "запусти"}
+        )
+        + CODE_MUTATION_TASK_KEYWORDS
+    )
+    return _task_contains_keyword(task_key, auto_keywords)
 
 
 def _action_bridge_requested(*, task: str, repo_bridge_required: bool) -> bool:
     if not repo_bridge_required:
         return False
     task_key = task.casefold()
-    return any(keyword in task_key for keyword in ACTION_BRIDGE_TASK_KEYWORDS)
+    return _task_contains_keyword(task_key, ACTION_BRIDGE_TASK_KEYWORDS)
 
 
 def _code_mutation_requested(*, task: str, action_required: bool) -> bool:
     if not action_required:
         return False
     task_key = task.casefold()
-    return any(keyword in task_key for keyword in CODE_MUTATION_TASK_KEYWORDS)
+    normalized_task_key = task_key
+    for phrase in CODE_MUTATION_NEGATED_PHRASES:
+        normalized_task_key = normalized_task_key.replace(phrase, "")
+    return _task_contains_keyword(normalized_task_key, CODE_MUTATION_TASK_KEYWORDS)
 
 
 def _path_is_sensitive(relative_path: str) -> bool:
@@ -975,7 +1019,7 @@ def _build_repo_context_pack(repo_root: Path) -> dict[str, Any]:
         )
     pack = {
         "schema_version": 1,
-        "source": "wbp_local_repo_readonly_bridge_context_pack",
+        "source": "wbp_local_repo_action_bridge_context_pack",
         "repo_root_recorded": False,
         "repo_root_sha256": _sha256_text(str(repo_root.resolve(strict=False))),
         "git_status_text": status.get("result_text", ""),
@@ -1006,8 +1050,9 @@ def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
         "least one repo tool before the final answer. For implementation/fix/test "
         "tasks, request action tools until the work is either completed or blocked. "
         "For implementation/fix/edit tasks, completion requires an apply_patch "
-        "tool call that actually changes code; a final answer without an applied "
-        "patch will be rejected by WBP. "
+        "tool call that actually changes code followed by a successful run_tests "
+        "or run_command verification; a final answer without both facts will be "
+        "rejected by WBP. "
         "To request a tool, output only one JSON object and no prose:\n"
         '{"wbp_repo_tool_call":{"tool":"list_files","path":"wild_boar_proxy"}}\n'
         '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}\n'
@@ -1164,6 +1209,22 @@ def _repo_bridge_fields(
     command_results = [
         result for result in action_results if result.get("tool") == "run_command"
     ]
+    post_mutation_verification_results: list[Mapping[str, Any]] = []
+    mutation_seen = False
+    for result in tool_results:
+        if (
+            result.get("tool") in ACTION_BRIDGE_TOOLS
+            and result.get("status") == "ok"
+            and result.get("mutation_applied") is True
+        ):
+            mutation_seen = True
+            continue
+        if (
+            mutation_seen
+            and result.get("tool") in {"run_tests", "run_command"}
+            and result.get("status") == "ok"
+        ):
+            post_mutation_verification_results.append(result)
     tool_result_digests = [
         _sha256_text(
             json.dumps(
@@ -1201,6 +1262,8 @@ def _repo_bridge_fields(
         "dip_code_mutation_required": code_mutation_required,
         "dip_code_written": bool(mutation_results),
         "dip_code_patch_applied": bool(mutation_results),
+        "dip_code_verification_required": code_mutation_required,
+        "dip_code_verified": bool(post_mutation_verification_results),
         "dip_action_mutated_files": sorted(
             {
                 str(path)
@@ -1214,8 +1277,10 @@ def _repo_bridge_fields(
         ),
         "dip_action_raw_patch_recorded": False,
         "dip_action_raw_command_recorded": False,
-        "repo_bridge_readonly": True,
+        "repo_bridge_readonly": False,
         "repo_bridge_mutation_allowed": True,
+        "repo_bridge_mutation_controlled": True,
+        "repo_bridge_direct_shell_access": False,
         "repo_bridge_context_pack_used": context_pack is not None,
         "repo_bridge_context_pack_sha256": (
             _repo_context_pack_sha256(context_pack) if context_pack is not None else ""
@@ -1673,6 +1738,14 @@ def request_live_result(
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
+    if code_mutation_required and final_repo_fields["dip_code_verified"] is not True:
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+        }
     return {**last_result, **final_repo_fields}
 
 
@@ -1887,6 +1960,10 @@ def build_wbp_dip_tool_packet(
         "dip_code_patch_applied": (
             live_result_data.get("dip_code_patch_applied") is True
         ),
+        "dip_code_verification_required": (
+            live_result_data.get("dip_code_verification_required") is True
+        ),
+        "dip_code_verified": live_result_data.get("dip_code_verified") is True,
         "dip_action_mutated_files": [
             _safe_text(item, limit=500)
             for item in (
@@ -1900,6 +1977,12 @@ def build_wbp_dip_tool_packet(
         "repo_bridge_readonly": live_result_data.get("repo_bridge_readonly") is True,
         "repo_bridge_mutation_allowed": (
             live_result_data.get("repo_bridge_mutation_allowed") is True
+        ),
+        "repo_bridge_mutation_controlled": (
+            live_result_data.get("repo_bridge_mutation_controlled") is True
+        ),
+        "repo_bridge_direct_shell_access": (
+            live_result_data.get("repo_bridge_direct_shell_access") is True
         ),
         "repo_bridge_context_pack_used": (
             live_result_data.get("repo_bridge_context_pack_used") is True
@@ -2063,7 +2146,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--repo-bridge",
         choices=REPO_BRIDGE_MODES,
         default=DEFAULT_REPO_BRIDGE_MODE,
-        help="allow WBP-mediated read-only repository tools for repo inspection tasks",
+        help="allow WBP-mediated controlled repo/action tools for development tasks",
     )
     parser.add_argument("--proof-dir")
     parser.add_argument("--output-jsonl")
