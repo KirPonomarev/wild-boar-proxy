@@ -17,6 +17,12 @@ from typing import Any
 
 from .command_effects import EFFECT_MUTATE, EFFECT_READ
 from .core import packets
+from .runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_CHATGPT_API,
+    EXECUTOR_DIP_API_ROUTE,
+    ORCHESTRATOR_CHATGPT,
+    dispatch_mode_truth_fields,
+)
 from .runtime import RuntimePaths, write_json_atomic
 
 
@@ -77,6 +83,9 @@ _DIP_ACTION_REQUIRED_FALSE_BOOL_FIELDS = (
     "live_result_route_id_recorded",
     "live_result_raw_backend_details_exposed",
     "live_result_secret_value_exposed",
+    "wrapper_substitution_used",
+    "wrapper_substitution_detected",
+    "wrapper_substitution_allowed",
 )
 
 
@@ -319,8 +328,44 @@ def _dip_action_failures(packet: dict[str, Any]) -> list[str]:
         "dip_code_verified",
         "repo_bridge_mutation_allowed",
         "repo_bridge_mutation_controlled",
+        "runtime_dispatch_mode_truth_recorded",
+        "dispatch_mode_truth_proven",
+        "chatgpt_plus_api_mode_proven",
+        "gpt_api_mode_proven",
+        "chatgpt_lane_selected",
+        "api_route_selected",
+        "chatgpt_lane_called",
+        "api_route_called",
     ):
         _check_true(packet, field, failures, "dip_action")
+    _check_equals(
+        packet,
+        "execution_mode",
+        DISPATCH_MODE_CHATGPT_API,
+        failures,
+        "dip_action",
+    )
+    _check_equals(
+        packet,
+        "selected_mode",
+        DISPATCH_MODE_CHATGPT_API,
+        failures,
+        "dip_action",
+    )
+    _check_equals(
+        packet,
+        "orchestrator",
+        ORCHESTRATOR_CHATGPT,
+        failures,
+        "dip_action",
+    )
+    _check_equals(
+        packet,
+        "executor",
+        EXECUTOR_DIP_API_ROUTE,
+        failures,
+        "dip_action",
+    )
     _check_equals(packet, "status", "ok", failures, "dip_action")
     _check_equals(packet, "machine_error_code", "OK", failures, "dip_action")
     if int(packet.get("dip_action_successful_tool_call_count") or 0) <= 0:
@@ -388,6 +433,21 @@ def build_gpt_api_dip_acceptance_gate_packet(
         "feature_ready": ok,
         "feature_ready_mode": "gpt_api_dip_custom_codex" if ok else "blocked",
         "gpt_api_dip_ready": ok,
+        **dispatch_mode_truth_fields(
+            execution_mode=DISPATCH_MODE_CHATGPT_API,
+            truth_source="gpt_api_dip_acceptance_gate_join",
+            orchestrator=ORCHESTRATOR_CHATGPT,
+            executor=EXECUTOR_DIP_API_ROUTE,
+            mode_proven=ok,
+            chatgpt_lane_selected=dip_action_packet.get("chatgpt_lane_selected") is True,
+            api_route_selected=dip_action_packet.get("api_route_selected") is True,
+            chatgpt_lane_called=dip_action_packet.get("chatgpt_lane_called") is True,
+            api_route_called=dip_action_packet.get("api_route_called") is True,
+            target_repo_required=dip_action_packet.get("target_repo_required") is True,
+            target_repo_available=dip_action_packet.get("target_repo_available") is True,
+            target_repo_fallback_used=dip_action_packet.get("target_repo_fallback_used")
+            is True,
+        ),
         "dip_action_bridge_proven": not action_failures,
         "dip_code_written": dip_action_packet.get("dip_code_written") is True,
         "dip_code_verified": dip_action_packet.get("dip_code_verified") is True,
@@ -418,6 +478,9 @@ def build_gpt_api_dip_acceptance_gate_packet(
         "does_not_prove_product_ready": True,
         "fallback_used": False,
         "local_imitation_used": False,
+        "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "native_codex_subagent_used_as_dip": False,
         "codex_native_subagent_used_as_dip": False,
         "raw_prompt_recorded": False,

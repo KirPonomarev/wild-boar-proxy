@@ -61,6 +61,25 @@ def _acceptance_packet(**overrides: object) -> dict[str, object]:
         "feature_ready": True,
         "feature_ready_mode": "gpt_api_dip_custom_codex",
         "gpt_api_dip_ready": True,
+        "execution_mode": "chatgpt_plus_api",
+        "selected_mode": "chatgpt_plus_api",
+        "dispatch_mode_truth_source": "gpt_api_dip_acceptance_gate_join",
+        "runtime_dispatch_mode_truth_recorded": True,
+        "dispatch_mode_truth_proven": True,
+        "orchestrator": "custom_codex_chatgpt",
+        "executor": "dip_api_route",
+        "orchestrator_lane": "custom_codex_chatgpt",
+        "executor_lane": "dip_api_route",
+        "chatgpt_lane_selected": True,
+        "api_route_selected": True,
+        "chatgpt_lane_called": True,
+        "api_route_called": True,
+        "chatgpt_only_mode_proven": False,
+        "gpt_mode_proven": False,
+        "api_only_mode_proven": False,
+        "api_mode_proven": False,
+        "chatgpt_plus_api_mode_proven": True,
+        "gpt_api_mode_proven": True,
         "dip_action_bridge_proven": True,
         "dip_code_written": True,
         "dip_code_verified": True,
@@ -80,6 +99,12 @@ def _acceptance_packet(**overrides: object) -> dict[str, object]:
         "does_not_prove_product_ready": True,
         "fallback_used": False,
         "local_imitation_used": False,
+        "target_repo_required": True,
+        "target_repo_available": True,
+        "target_repo_fallback_used": False,
+        "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "native_codex_subagent_used_as_dip": False,
         "codex_native_subagent_used_as_dip": False,
         "raw_prompt_recorded": False,
@@ -138,6 +163,24 @@ class GptApiDipProductReadyGateTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], GPT_API_DIP_PRODUCT_READY_OK)
         self.assertEqual(packet["packet_kind"], GPT_API_DIP_PRODUCT_READY_PACKET_KIND)
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["selected_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["orchestrator"], "custom_codex_chatgpt")
+        self.assertEqual(packet["executor"], "dip_api_route")
+        self.assertTrue(packet["runtime_dispatch_mode_truth_recorded"])
+        self.assertTrue(packet["dispatch_mode_truth_proven"])
+        self.assertTrue(packet["chatgpt_plus_api_mode_proven"])
+        self.assertTrue(packet["gpt_api_mode_proven"])
+        self.assertTrue(packet["chatgpt_lane_selected"])
+        self.assertTrue(packet["api_route_selected"])
+        self.assertTrue(packet["chatgpt_lane_called"])
+        self.assertTrue(packet["api_route_called"])
+        self.assertTrue(packet["target_repo_required"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_fallback_used"])
+        self.assertFalse(packet["wrapper_substitution_used"])
+        self.assertFalse(packet["wrapper_substitution_detected"])
+        self.assertFalse(packet["wrapper_substitution_allowed"])
         self.assertTrue(packet["feature_ready"])
         self.assertTrue(packet["gpt_api_dip_ready"])
         self.assertTrue(packet["product_ready"])

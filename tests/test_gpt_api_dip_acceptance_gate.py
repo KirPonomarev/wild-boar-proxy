@@ -168,6 +168,25 @@ def _dip_action_packet(**overrides: object) -> dict[str, object]:
         "packet_kind": "wbp_dip_working_tool_run",
         "status": "ok",
         "machine_error_code": "OK",
+        "execution_mode": "chatgpt_plus_api",
+        "selected_mode": "chatgpt_plus_api",
+        "dispatch_mode_truth_source": "wbp_dip_working_tool_run",
+        "runtime_dispatch_mode_truth_recorded": True,
+        "dispatch_mode_truth_proven": True,
+        "orchestrator": "custom_codex_chatgpt",
+        "executor": "dip_api_route",
+        "orchestrator_lane": "custom_codex_chatgpt",
+        "executor_lane": "dip_api_route",
+        "chatgpt_lane_selected": True,
+        "api_route_selected": True,
+        "chatgpt_lane_called": True,
+        "api_route_called": True,
+        "chatgpt_only_mode_proven": False,
+        "gpt_mode_proven": False,
+        "api_only_mode_proven": False,
+        "api_mode_proven": False,
+        "chatgpt_plus_api_mode_proven": True,
+        "gpt_api_mode_proven": True,
         "delegate_to_dip_proven": True,
         "api_lane_called": True,
         "route_bound_dispatch_proven": True,
@@ -194,6 +213,12 @@ def _dip_action_packet(**overrides: object) -> dict[str, object]:
         "dip_code_verified": True,
         "repo_bridge_mutation_allowed": True,
         "repo_bridge_mutation_controlled": True,
+        "target_repo_required": True,
+        "target_repo_available": True,
+        "target_repo_fallback_used": False,
+        "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "dip_repo_direct_access": False,
         "repo_bridge_readonly": False,
         "repo_bridge_direct_shell_access": False,
@@ -262,6 +287,24 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], GPT_API_DIP_ACCEPTANCE_OK)
         self.assertEqual(packet["packet_kind"], GPT_API_DIP_ACCEPTANCE_PACKET_KIND)
+        self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["selected_mode"], "chatgpt_plus_api")
+        self.assertEqual(packet["orchestrator"], "custom_codex_chatgpt")
+        self.assertEqual(packet["executor"], "dip_api_route")
+        self.assertTrue(packet["runtime_dispatch_mode_truth_recorded"])
+        self.assertTrue(packet["dispatch_mode_truth_proven"])
+        self.assertTrue(packet["chatgpt_plus_api_mode_proven"])
+        self.assertTrue(packet["gpt_api_mode_proven"])
+        self.assertTrue(packet["chatgpt_lane_selected"])
+        self.assertTrue(packet["api_route_selected"])
+        self.assertTrue(packet["chatgpt_lane_called"])
+        self.assertTrue(packet["api_route_called"])
+        self.assertTrue(packet["target_repo_required"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_fallback_used"])
+        self.assertFalse(packet["wrapper_substitution_used"])
+        self.assertFalse(packet["wrapper_substitution_detected"])
+        self.assertFalse(packet["wrapper_substitution_allowed"])
         self.assertTrue(packet["feature_ready"])
         self.assertTrue(packet["gpt_api_dip_ready"])
         self.assertTrue(packet["custom_codex_ui_visibility_proven"])
@@ -343,6 +386,24 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
         )
         self.assertIn(
             "dip_action_dip_code_verified_not_true",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_dip_action_without_runtime_dispatch_mode_truth(self) -> None:
+        action = _dip_action_packet()
+        del action["dispatch_mode_truth_proven"]
+        del action["gpt_api_mode_proven"]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(Path(temp_dir), action=action)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["feature_ready"])
+        self.assertIn(
+            "dip_action_dispatch_mode_truth_proven_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "dip_action_gpt_api_mode_proven_not_true",
             packet["blocking_reasons"],
         )
 

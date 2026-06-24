@@ -23,6 +23,12 @@ from .router_hook_entry import (
     runtime_context_path,
 )
 from .runtime import RuntimePaths
+from .runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_API_ONLY,
+    EXECUTOR_API_ROUTE,
+    ORCHESTRATOR_API_ROUTE,
+    dispatch_mode_truth_fields,
+)
 
 
 CONTROLLED_API_DISPATCH_PACKET_KIND = "wbp_controlled_api_dispatch_proof"
@@ -203,6 +209,17 @@ def build_controlled_api_dispatch_packet(
     extra = {
         "schema_version": 1,
         "packet_kind": CONTROLLED_API_DISPATCH_PACKET_KIND,
+        **dispatch_mode_truth_fields(
+            execution_mode=DISPATCH_MODE_API_ONLY,
+            truth_source=CONTROLLED_API_DISPATCH_PACKET_KIND,
+            orchestrator=ORCHESTRATOR_API_ROUTE,
+            executor=EXECUTOR_API_ROUTE,
+            mode_proven=ok,
+            chatgpt_lane_selected=False,
+            api_route_selected=router_dispatch_admitted,
+            chatgpt_lane_called=False,
+            api_route_called=controlled_provider_called,
+        ),
         "hook_entry_packet_kind": hook_packet.get("packet_kind", ""),
         "hook_entry_status": hook_packet.get("status", ""),
         "hook_entry_machine_error_code": hook_packet.get("machine_error_code", ""),

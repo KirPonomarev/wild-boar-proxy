@@ -25,6 +25,12 @@ from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
 from .external_models.validate import _completion_url, _provider_headers
 from .runtime import RuntimeErrorInfo, write_json_atomic, write_text_atomic
+from .runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_CHATGPT_API,
+    EXECUTOR_DIP_API_ROUTE,
+    ORCHESTRATOR_CHATGPT,
+    dispatch_mode_truth_fields,
+)
 
 
 WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
@@ -2626,6 +2632,14 @@ def build_wbp_dip_tool_packet(
         machine_error_code = WBP_DIP_TOOL_DELEGATE_NOT_PROVEN
 
     ok = machine_error_code in {WBP_DIP_TOOL_OK, WBP_DIP_TOOL_DRY_RUN}
+    target_repo_required = target_repo_data.get("target_repo_required") is True
+    target_repo_available = target_repo_data.get("target_repo_available") is True
+    target_repo_fallback_used = target_repo_data.get("target_repo_fallback_used") is True
+    gpt_api_mode_proven = bool(
+        machine_error_code == WBP_DIP_TOOL_OK
+        and delegate_ok
+        and (not require_live_result or live_result_available)
+    )
     return {
         "schema_version": 1,
         "packet_kind": WBP_DIP_TOOL_PACKET_KIND,
@@ -2650,6 +2664,20 @@ def build_wbp_dip_tool_packet(
         "blocking_reasons": sorted(set(blocking_reasons)),
         "changed_files": list(changed_files),
         "product_ready": False,
+        **dispatch_mode_truth_fields(
+            execution_mode=DISPATCH_MODE_CHATGPT_API,
+            truth_source=WBP_DIP_TOOL_PACKET_KIND,
+            orchestrator=ORCHESTRATOR_CHATGPT,
+            executor=EXECUTOR_DIP_API_ROUTE,
+            mode_proven=gpt_api_mode_proven,
+            chatgpt_lane_selected=True,
+            api_route_selected=delegate_packet.get("api_lane_called") is True,
+            chatgpt_lane_called=bool(not dry_run and codex_executable and task),
+            api_route_called=delegate_packet.get("api_lane_called") is True,
+            target_repo_required=target_repo_required,
+            target_repo_available=target_repo_available,
+            target_repo_fallback_used=target_repo_fallback_used,
+        ),
         "custom_codex_exec_invoked": bool(not dry_run and codex_executable and task),
         "mcp_delegate_configured": True,
         "delegate_to_dip_tool_call_observed": delegate_packet.get("delegate_to_dip_tool_called") is True,
@@ -2683,8 +2711,8 @@ def build_wbp_dip_tool_packet(
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": live_result_output_token_limit,
         "repo_bridge_max_steps": repo_bridge_max_steps,
-        "target_repo_required": target_repo_data.get("target_repo_required") is True,
-        "target_repo_available": target_repo_data.get("target_repo_available") is True,
+        "target_repo_required": target_repo_required,
+        "target_repo_available": target_repo_available,
         "target_repo_source": _safe_text(
             target_repo_data.get("target_repo_source"),
             limit=80,
@@ -2700,7 +2728,7 @@ def build_wbp_dip_tool_packet(
         ),
         "target_repo_is_wbp_repo": target_repo_data.get("target_repo_is_wbp_repo") is True,
         "target_repo_git_available": target_repo_data.get("target_repo_git_available") is True,
-        "target_repo_fallback_used": target_repo_data.get("target_repo_fallback_used") is True,
+        "target_repo_fallback_used": target_repo_fallback_used,
         "dip_repo_direct_access": live_result_data.get("dip_repo_direct_access") is True,
         "dip_repo_tool_bridge_required": (
             live_result_data.get("dip_repo_tool_bridge_required") is True

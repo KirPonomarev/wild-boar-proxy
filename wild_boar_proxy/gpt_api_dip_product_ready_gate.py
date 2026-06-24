@@ -14,6 +14,12 @@ from .command_effects import EFFECT_MUTATE, EFFECT_READ
 from .core import packets
 from .gpt_api_dip_acceptance_gate import GPT_API_DIP_ACCEPTANCE_PACKET_KIND
 from .runtime import RuntimePaths, write_json_atomic
+from .runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_CHATGPT_API,
+    EXECUTOR_DIP_API_ROUTE,
+    ORCHESTRATOR_CHATGPT,
+    dispatch_mode_truth_fields,
+)
 
 
 GPT_API_DIP_PRODUCT_READY_PACKET_KIND = "wbp_gpt_api_dip_product_ready_gate"
@@ -37,6 +43,14 @@ _ACCEPTANCE_REQUIRED_TRUE_FIELDS = (
     "api_backed_custom_codex_dip_feature_ready",
     "api_backed_custom_codex_auth_session_proven",
     "api_key_only",
+    "runtime_dispatch_mode_truth_recorded",
+    "dispatch_mode_truth_proven",
+    "chatgpt_plus_api_mode_proven",
+    "gpt_api_mode_proven",
+    "chatgpt_lane_selected",
+    "api_route_selected",
+    "chatgpt_lane_called",
+    "api_route_called",
 )
 
 _ACCEPTANCE_REQUIRED_FALSE_FIELDS = (
@@ -61,6 +75,9 @@ _ACCEPTANCE_REQUIRED_FALSE_FIELDS = (
     "provider_response_preview_recorded",
     "raw_backend_details_exposed",
     "secret_value_exposed",
+    "wrapper_substitution_used",
+    "wrapper_substitution_detected",
+    "wrapper_substitution_allowed",
 )
 
 
@@ -159,6 +176,21 @@ def build_gpt_api_dip_product_ready_gate_packet(
         "feature_ready_mode": "gpt_api_dip_custom_codex" if ok else "blocked",
         "gpt_api_dip_ready": ok,
         "product_ready": ok,
+        **dispatch_mode_truth_fields(
+            execution_mode=DISPATCH_MODE_CHATGPT_API,
+            truth_source="gpt_api_dip_product_ready_gate_join",
+            orchestrator=ORCHESTRATOR_CHATGPT,
+            executor=EXECUTOR_DIP_API_ROUTE,
+            mode_proven=ok,
+            chatgpt_lane_selected=acceptance_packet.get("chatgpt_lane_selected") is True,
+            api_route_selected=acceptance_packet.get("api_route_selected") is True,
+            chatgpt_lane_called=acceptance_packet.get("chatgpt_lane_called") is True,
+            api_route_called=acceptance_packet.get("api_route_called") is True,
+            target_repo_required=acceptance_packet.get("target_repo_required") is True,
+            target_repo_available=acceptance_packet.get("target_repo_available") is True,
+            target_repo_fallback_used=acceptance_packet.get("target_repo_fallback_used")
+            is True,
+        ),
         "product_ready_scope": "gpt_api_dip_custom_codex_feature",
         "product_ready_is_feature_scoped": True,
         "production_release_ready": False,
@@ -204,6 +236,9 @@ def build_gpt_api_dip_product_ready_gate_packet(
         "custom_codex_ui_session_ready": False,
         "fallback_used": False,
         "local_imitation_used": False,
+        "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "native_codex_subagent_used_as_dip": False,
         "codex_native_subagent_used_as_dip": False,
         "raw_prompt_recorded": False,

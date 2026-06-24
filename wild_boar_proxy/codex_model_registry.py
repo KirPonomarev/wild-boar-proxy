@@ -17,6 +17,17 @@ from wild_boar_proxy.model_availability import (
 )
 from wild_boar_proxy.operator_surface import DEFAULT_ENDPOINT, DEFAULT_MODEL
 from wild_boar_proxy.runtime import REPO_ROOT
+from wild_boar_proxy.runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_API_ONLY,
+    DISPATCH_MODE_CHATGPT_API,
+    DISPATCH_MODE_CHATGPT_ONLY,
+    EXECUTOR_API_ROUTE,
+    EXECUTOR_CHATGPT,
+    EXECUTOR_DIP_API_ROUTE,
+    ORCHESTRATOR_API_ROUTE,
+    ORCHESTRATOR_CHATGPT,
+    dispatch_mode_truth_fields,
+)
 
 
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
@@ -95,9 +106,9 @@ API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_ALLOWED_FIELDS = {
     "api_model_id",
     "api_reasoning_option_id",
 }
-CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = "chatgpt_only"
-CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = "chatgpt_plus_api"
-CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = "api_only"
+CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY = DISPATCH_MODE_CHATGPT_ONLY
+CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API = DISPATCH_MODE_CHATGPT_API
+CUSTOM_CODEX_EXECUTION_MODE_API_ONLY = DISPATCH_MODE_API_ONLY
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_EXPECTED_TEXT = "API_ONLY_DEEPSEEK_READY"
 API_ONLY_DEEPSEEK_LIVE_ROUTE_FORMAT_PROMPT = (
     "Return exactly this single line, with no quotes and no extra text: "
@@ -2042,6 +2053,18 @@ def build_custom_codex_execution_mode_selector_packet(
         if status == "ok"
         else machine_error_code
     )
+    if execution_mode == CUSTOM_CODEX_EXECUTION_MODE_API_ONLY:
+        mode_orchestrator = ORCHESTRATOR_API_ROUTE
+        mode_executor = EXECUTOR_API_ROUTE
+    elif execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_API:
+        mode_orchestrator = ORCHESTRATOR_CHATGPT
+        mode_executor = EXECUTOR_DIP_API_ROUTE
+    elif execution_mode == CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY:
+        mode_orchestrator = ORCHESTRATOR_CHATGPT
+        mode_executor = EXECUTOR_CHATGPT
+    else:
+        mode_orchestrator = ""
+        mode_executor = ""
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_execution_mode_selector",
@@ -2049,6 +2072,17 @@ def build_custom_codex_execution_mode_selector_packet(
         "status": status,
         "machine_error_code": machine_error_code,
         "final_status": final_status,
+        **dispatch_mode_truth_fields(
+            execution_mode=execution_mode,
+            truth_source="custom_codex_execution_mode_selector",
+            orchestrator=mode_orchestrator,
+            executor=mode_executor,
+            mode_proven=status == "ok",
+            chatgpt_lane_selected=chatgpt_executor_selected,
+            api_route_selected=api_executor_selected,
+            chatgpt_lane_called=False,
+            api_route_called=False,
+        ),
         "execution_mode": execution_mode,
         "allowed_execution_modes": [
             CUSTOM_CODEX_EXECUTION_MODE_CHATGPT_ONLY,
@@ -2579,6 +2613,17 @@ def build_chatgpt_plus_api_slot_truth_packet(
             if slot_truth_proven
             else CHATGPT_PLUS_API_SLOT_TRUTH_BLOCKER
         ),
+        **dispatch_mode_truth_fields(
+            execution_mode=execution_mode,
+            truth_source="chatgpt_plus_api_slot_truth",
+            orchestrator=ORCHESTRATOR_CHATGPT,
+            executor=EXECUTOR_DIP_API_ROUTE,
+            mode_proven=slot_truth_proven,
+            chatgpt_lane_selected=chatgpt_primary_slot_proven,
+            api_route_selected=api_coding_slot_proven,
+            chatgpt_lane_called=False,
+            api_route_called=False,
+        ),
         "slot_truth_proven": slot_truth_proven,
         "execution_mode": execution_mode,
         "allowed_browser_fields": server_truth_packet.get("allowed_browser_fields", []),
@@ -2796,6 +2841,17 @@ def build_api_only_executor_truth_packet(
             API_ONLY_EXECUTOR_TRUTH_FINAL_STATUS
             if executor_truth_proven
             else API_ONLY_EXECUTOR_TRUTH_BLOCKER
+        ),
+        **dispatch_mode_truth_fields(
+            execution_mode=execution_mode,
+            truth_source="api_only_executor_truth",
+            orchestrator=ORCHESTRATOR_API_ROUTE,
+            executor=EXECUTOR_API_ROUTE,
+            mode_proven=executor_truth_proven,
+            chatgpt_lane_selected=False,
+            api_route_selected=api_primary_slot_proven,
+            chatgpt_lane_called=False,
+            api_route_called=False,
         ),
         "executor_truth_proven": executor_truth_proven,
         "execution_mode": execution_mode,
@@ -3847,6 +3903,19 @@ def build_api_only_deepseek_live_route_format_packet(
             "status": "rejected",
             "machine_error_code": "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
             "final_status": "API_ONLY_DEEPSEEK_BROWSER_AUTHORITY_REJECTED",
+            **dispatch_mode_truth_fields(
+                execution_mode=str(
+                    payload.get("execution_mode") if isinstance(payload, dict) else ""
+                ),
+                truth_source="api_only_deepseek_live_route_and_format",
+                orchestrator=ORCHESTRATOR_API_ROUTE,
+                executor=EXECUTOR_API_ROUTE,
+                mode_proven=False,
+                chatgpt_lane_selected=False,
+                api_route_selected=False,
+                chatgpt_lane_called=False,
+                api_route_called=False,
+            ),
             "execution_mode": str(
                 payload.get("execution_mode") if isinstance(payload, dict) else ""
             ),
@@ -4014,6 +4083,17 @@ def build_api_only_deepseek_live_route_format_packet(
         "status": status,
         "machine_error_code": machine_error_code,
         "final_status": final_status,
+        **dispatch_mode_truth_fields(
+            execution_mode=str(selector_packet.get("execution_mode") or ""),
+            truth_source="api_only_deepseek_live_route_and_format",
+            orchestrator=ORCHESTRATOR_API_ROUTE,
+            executor=EXECUTOR_API_ROUTE,
+            mode_proven=status == "ok",
+            chatgpt_lane_selected=False,
+            api_route_selected=mode_ok,
+            chatgpt_lane_called=False,
+            api_route_called=live_result_packet["provider_called"],
+        ),
         "execution_mode": str(selector_packet.get("execution_mode") or ""),
         "api_provider_id": str((api_selection or {}).get("provider") or ""),
         "api_model_id": api_model_id,

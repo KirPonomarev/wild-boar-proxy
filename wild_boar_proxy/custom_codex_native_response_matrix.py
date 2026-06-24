@@ -13,6 +13,12 @@ from typing import Any, Sequence
 from .custom_codex_native_ui_observer_proof import run_native_ui_observer_proof_command
 from .native_window_probe import DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
 from .runtime import RuntimePaths, write_json_atomic
+from .runtime_dispatch_mode_truth import (
+    DISPATCH_MODE_CHATGPT_ONLY,
+    EXECUTOR_CHATGPT,
+    ORCHESTRATOR_CHATGPT,
+    dispatch_mode_truth_fields,
+)
 
 
 NATIVE_RESPONSE_MATRIX_PACKET_FILE_NAME = "native-response-matrix.packet.json"
@@ -240,6 +246,17 @@ def run_native_response_matrix_command(
         "matrix_id": matrix_id,
         "status": "ok" if positive_case_count else "error",
         "machine_error_code": machine_code,
+        **dispatch_mode_truth_fields(
+            execution_mode=DISPATCH_MODE_CHATGPT_ONLY,
+            truth_source="custom_codex_native_response_matrix",
+            orchestrator=ORCHESTRATOR_CHATGPT,
+            executor=EXECUTOR_CHATGPT,
+            mode_proven=positive_case_count > 0,
+            chatgpt_lane_selected=True,
+            api_route_selected=False,
+            chatgpt_lane_called=positive_case_count > 0,
+            api_route_called=False,
+        ),
         "native_response_matrix_proven": positive_case_count > 0,
         "positive_case_count": positive_case_count,
         "case_count": len(case_summaries),
