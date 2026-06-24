@@ -56,6 +56,7 @@ DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS = 60.0
 DEFAULT_ACTION_PATCH_TEXT_LIMIT = 120000
 MIN_SUPPORTED_PYTHON = (3, 11)
 PYTHON_BIN_ENV = "WBP_PYTHON_BIN"
+TARGET_REPO_ENV = "WBP_TARGET_REPO"
 
 WBP_DIP_TOOL_OK = "OK"
 WBP_DIP_TOOL_DRY_RUN = "WBP_DIP_TOOL_DRY_RUN"
@@ -71,6 +72,7 @@ WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT = "WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT"
 WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
 WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
+WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE = "WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING = (
     "WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING"
@@ -205,6 +207,19 @@ REPO_BRIDGE_SENSITIVE_NAME_MARKERS = (
     "private-key",
     "api_key",
     "api-key",
+)
+TARGET_REPO_BLOCKED_EXACT_PATHS = frozenset(
+    Path(path).resolve(strict=False)
+    for path in (
+        "/",
+        "/System",
+        "/Library",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/etc",
+        "/private/etc",
+    )
 )
 
 
@@ -464,6 +479,10 @@ def default_proof_dir(profile_dir: Path) -> Path:
     return profile_dir / "managed" / "wbp-dip-tool" / _utc_stamp()
 
 
+def default_control_repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def build_delegate_prompt(*, task: str, expected_alias: str) -> str:
     payload = {
         "task": task,
@@ -483,7 +502,9 @@ def build_codex_exec_argv(
     *,
     codex_bin: Path,
     python_bin: Path | None = None,
-    repo_root: Path,
+    repo_root: Path | None = None,
+    wbp_repo_root: Path | None = None,
+    codex_cwd: Path | None = None,
     model: str,
     sandbox: str,
     prompt: str,
@@ -495,8 +516,14 @@ def build_codex_exec_argv(
     extra_mcp_env: Mapping[str, str] | None = None,
 ) -> list[str]:
     mcp_python_bin = python_bin or default_python_bin()
+    control_repo_root = (
+        wbp_repo_root or repo_root or default_control_repo_root()
+    ).expanduser().resolve(strict=False)
+    exec_cwd = (
+        codex_cwd or repo_root or control_repo_root
+    ).expanduser().resolve(strict=False)
     env_table = {
-        "PYTHONPATH": str(repo_root),
+        "PYTHONPATH": str(control_repo_root),
         "WBP_ENTRY_HOOK_EVIDENCE_PATH": str(entry_evidence_file),
         "WBP_PROFILE_DIR": str(profile_dir),
         PYTHON_BIN_ENV: str(mcp_python_bin),
@@ -513,7 +540,7 @@ def build_codex_exec_argv(
         str(codex_bin),
         "exec",
         "--cd",
-        str(repo_root),
+        str(exec_cwd),
         "--sandbox",
         sandbox,
         "--json",
@@ -832,6 +859,80 @@ def _path_is_sensitive(relative_path: str) -> bool:
     if name.startswith(".env"):
         return True
     return any(marker in name for marker in REPO_BRIDGE_SENSITIVE_NAME_MARKERS)
+
+
+def _target_repo_block_reason(path: Path | None) -> str:
+    if path is None:
+        return "target_repo_missing"
+    resolved = path.expanduser().resolve(strict=False)
+    if resolved in TARGET_REPO_BLOCKED_EXACT_PATHS:
+        return "target_repo_blocked_system_dir"
+    if _path_is_sensitive(resolved.name):
+        return "target_repo_blocked_sensitive_name"
+    if not resolved.exists():
+        return "target_repo_missing"
+    if not resolved.is_dir():
+        return "target_repo_not_directory"
+    return ""
+
+
+def _target_repo_git_available(path: Path) -> bool:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except Exception:
+        return False
+    return completed.returncode == 0 and completed.stdout.strip() == "true"
+
+
+def _target_repo_metadata(
+    raw_path: Path | str | None,
+    *,
+    source: str,
+    wbp_repo_root: Path | None,
+    required: bool,
+) -> tuple[Path | None, dict[str, Any]]:
+    candidate = Path(raw_path).expanduser().resolve(strict=False) if raw_path else None
+    status = _target_repo_block_reason(candidate)
+    available = status == ""
+    control_root = (
+        wbp_repo_root or default_control_repo_root()
+    ).expanduser().resolve(strict=False)
+    fields: dict[str, Any] = {
+        "target_repo_required": bool(required),
+        "target_repo_available": available,
+        "target_repo_source": _safe_text(source, limit=80),
+        "target_repo_status": "ok" if available else status,
+        "target_repo_path_recorded": False,
+        "target_repo_sha256": _sha256_text(str(candidate)) if candidate else "",
+        "target_repo_is_wbp_repo": bool(available and candidate == control_root),
+        "target_repo_git_available": bool(
+            available and candidate is not None and _target_repo_git_available(candidate)
+        ),
+        "target_repo_fallback_used": False,
+    }
+    return (candidate if available else None), fields
+
+
+def _select_target_repo_candidate(
+    *,
+    target_repo_arg: str | None,
+    codex_cwd: Path,
+    env: Mapping[str, str],
+) -> tuple[Path, str]:
+    if target_repo_arg:
+        return Path(target_repo_arg).expanduser().resolve(strict=False), "cli_arg"
+    env_target = _safe_text(env.get(TARGET_REPO_ENV), limit=4096)
+    if env_target:
+        return Path(env_target).expanduser().resolve(strict=False), "env"
+    return codex_cwd.expanduser().resolve(strict=False), "codex_cwd"
 
 
 def _repo_relative_path(repo_root: Path, raw_path: object) -> tuple[Path | None, str, str]:
@@ -2051,6 +2152,8 @@ def request_live_result(
     expected_alias: str,
     profile_dir: Path,
     repo_root: Path | None = None,
+    target_repo_source: str = "direct_argument",
+    wbp_repo_root: Path | None = None,
     repo_bridge_mode: str = DEFAULT_REPO_BRIDGE_MODE,
     dip_work_mode: str = DEFAULT_DIP_WORK_MODE,
     timeout_seconds: float = DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
@@ -2071,10 +2174,16 @@ def request_live_result(
         task=task,
         action_required=action_bridge_required,
     )
-    repo_bridge_available = bool(repo_root and Path(repo_root).is_dir())
+    target_repo, target_repo_fields = _target_repo_metadata(
+        repo_root,
+        source=target_repo_source,
+        wbp_repo_root=wbp_repo_root,
+        required=repo_bridge_required,
+    )
+    repo_bridge_available = bool(target_repo_fields["target_repo_available"])
     repo_context_pack = (
-        _build_repo_context_pack(Path(repo_root))
-        if repo_bridge_required and repo_bridge_available and repo_root is not None
+        _build_repo_context_pack(target_repo)
+        if repo_bridge_required and repo_bridge_available and target_repo is not None
         else None
     )
     repo_tool_results: list[dict[str, Any]] = []
@@ -2111,6 +2220,7 @@ def request_live_result(
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": output_token_limit,
         "repo_bridge_max_steps": repo_bridge_max_steps,
+        **target_repo_fields,
         **repo_fields,
         **_provider_proof_fields(direct_provider_response_observed=False),
     }
@@ -2119,7 +2229,7 @@ def request_live_result(
     if repo_bridge_required and not repo_bridge_available:
         return {
             **base,
-            "machine_error_code": WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE,
+            "machine_error_code": WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE,
             "operator_action": "retry",
         }
 
@@ -2141,7 +2251,7 @@ def request_live_result(
         )
 
     conversation_prompt = prompt
-    if repo_bridge_required and repo_root is not None:
+    if repo_bridge_required and target_repo is not None:
         for bootstrap_call in _repo_bridge_bootstrap_calls(
             task=task,
             repo_bridge_required=repo_bridge_required,
@@ -2149,7 +2259,7 @@ def request_live_result(
         ):
             tool_result = _execute_repo_tool_call(
                 bootstrap_call,
-                repo_root=Path(repo_root),
+                repo_root=target_repo,
             )
             repo_tool_results.append(tool_result)
             conversation_prompt += _repo_tool_result_prompt(tool_result)
@@ -2178,7 +2288,7 @@ def request_live_result(
             }
         tool_call = (
             _extract_repo_tool_call(str(last_result.get("result_text") or ""))
-            if repo_bridge_required and repo_root is not None
+            if repo_bridge_required and target_repo is not None
             else {}
         )
         if not tool_call:
@@ -2195,11 +2305,11 @@ def request_live_result(
                 conversation_prompt += gate_prompt
                 continue
             break
-        tool_result = _execute_repo_tool_call(tool_call, repo_root=Path(repo_root))
+        tool_result = _execute_repo_tool_call(tool_call, repo_root=target_repo)
         repo_tool_results.append(tool_result)
         conversation_prompt += _repo_tool_result_prompt(tool_result)
 
-    if repo_bridge_required and repo_root is not None and last_result.get("status") == "ok":
+    if repo_bridge_required and target_repo is not None and last_result.get("status") == "ok":
         pending_tool_call = _extract_repo_tool_call(
             str(last_result.get("result_text") or "")
         )
@@ -2347,6 +2457,7 @@ def build_wbp_dip_tool_packet(
     changed_files: Sequence[str] = (),
     secret_values: Sequence[str] = (),
     live_result: Mapping[str, Any] | None = None,
+    target_repo: Mapping[str, Any] | None = None,
     require_live_result: bool = True,
     dip_work_mode: str = DEFAULT_DIP_WORK_MODE,
 ) -> dict[str, Any]:
@@ -2368,6 +2479,20 @@ def build_wbp_dip_tool_packet(
     blocking_reasons.extend(forbidden_event_reasons)
 
     live_result_data = dict(live_result or {})
+    target_repo_data = dict(target_repo or {})
+    for key in (
+        "target_repo_required",
+        "target_repo_available",
+        "target_repo_source",
+        "target_repo_status",
+        "target_repo_path_recorded",
+        "target_repo_sha256",
+        "target_repo_is_wbp_repo",
+        "target_repo_git_available",
+        "target_repo_fallback_used",
+    ):
+        if key in live_result_data:
+            target_repo_data[key] = live_result_data[key]
     packet_work_settings = _dip_work_mode_settings(dip_work_mode)
     requested_dip_work_mode = str(packet_work_settings["dip_work_mode"])
     default_live_result_text_limit = int(packet_work_settings["live_result_text_limit"])
@@ -2558,6 +2683,24 @@ def build_wbp_dip_tool_packet(
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": live_result_output_token_limit,
         "repo_bridge_max_steps": repo_bridge_max_steps,
+        "target_repo_required": target_repo_data.get("target_repo_required") is True,
+        "target_repo_available": target_repo_data.get("target_repo_available") is True,
+        "target_repo_source": _safe_text(
+            target_repo_data.get("target_repo_source"),
+            limit=80,
+        ),
+        "target_repo_status": _safe_text(
+            target_repo_data.get("target_repo_status"),
+            limit=120,
+        ),
+        "target_repo_path_recorded": False,
+        "target_repo_sha256": _safe_text(
+            target_repo_data.get("target_repo_sha256"),
+            limit=80,
+        ),
+        "target_repo_is_wbp_repo": target_repo_data.get("target_repo_is_wbp_repo") is True,
+        "target_repo_git_available": target_repo_data.get("target_repo_git_available") is True,
+        "target_repo_fallback_used": target_repo_data.get("target_repo_fallback_used") is True,
         "dip_repo_direct_access": live_result_data.get("dip_repo_direct_access") is True,
         "dip_repo_tool_bridge_required": (
             live_result_data.get("dip_repo_tool_bridge_required") is True
@@ -2859,7 +3002,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sandbox", default=DEFAULT_SANDBOX)
     parser.add_argument("--profile-dir")
     parser.add_argument("--codex-bin")
-    parser.add_argument("--cd", dest="repo_root", default=str(Path.cwd()))
+    parser.add_argument("--cd", dest="codex_cwd", default=str(Path.cwd()))
+    parser.add_argument(
+        "--target-repo",
+        help="local project repository for WBP-mediated DIP repo/action tools",
+    )
     parser.add_argument(
         "--repo-bridge",
         choices=REPO_BRIDGE_MODES,
@@ -2910,7 +3057,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.entry_evidence_file
         else proof_dir / DEFAULT_ENTRY_EVIDENCE_FILENAME
     )
-    repo_root = Path(args.repo_root).expanduser().resolve()
+    control_repo_root = default_control_repo_root()
+    codex_cwd = Path(args.codex_cwd).expanduser().resolve(strict=False)
+    target_repo_candidate, target_repo_source = _select_target_repo_candidate(
+        target_repo_arg=args.target_repo,
+        codex_cwd=codex_cwd,
+        env=os.environ,
+    )
+    target_repo_required = _repo_bridge_requested(task=task, mode=args.repo_bridge)
+    _target_repo_path, target_repo_info = _target_repo_metadata(
+        target_repo_candidate,
+        source=target_repo_source,
+        wbp_repo_root=control_repo_root,
+        required=target_repo_required,
+    )
     codex_bin = Path(args.codex_bin).expanduser() if args.codex_bin else default_codex_bin()
     python_bin = default_python_bin()
     model = _safe_text(args.model, limit=80) or DEFAULT_MODEL
@@ -2919,7 +3079,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     argv_to_run = build_codex_exec_argv(
         codex_bin=codex_bin,
         python_bin=python_bin,
-        repo_root=repo_root,
+        wbp_repo_root=control_repo_root,
+        codex_cwd=codex_cwd,
         model=model,
         sandbox=sandbox,
         prompt=prompt,
@@ -2927,6 +3088,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_last_message=output_last_message,
         profile_dir=profile_dir,
         entry_evidence_file=entry_evidence_file,
+        extra_mcp_env={TARGET_REPO_ENV: str(target_repo_candidate)},
     )
     codex_executable = codex_bin.is_file() and os.access(codex_bin, os.X_OK)
     changed_files = [str(output_jsonl), str(output_last_message), str(entry_evidence_file)]
@@ -2944,6 +3106,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             codex_executable=codex_executable,
             changed_files=[],
             secret_values=[task],
+            target_repo=target_repo_info,
             require_live_result=False,
             dip_work_mode=args.work_mode,
         )
@@ -2971,6 +3134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "WBP_PROFILE_DIR": str(profile_dir),
             "WBP_MANAGED_DIR": str(profile_dir / "managed"),
             "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
+            TARGET_REPO_ENV: str(target_repo_candidate),
         }
     )
     profile_repair_before = _repair_stale_profile_config_model(profile_dir, model=model)
@@ -2983,7 +3147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         with output_jsonl.open("w", encoding="utf-8") as stdout_handle:
             completed = subprocess.run(
                 argv_to_run,
-                cwd=str(repo_root),
+                cwd=str(control_repo_root),
                 env=env,
                 stdout=stdout_handle,
                 stderr=subprocess.DEVNULL,
@@ -3003,7 +3167,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 task=task,
                 expected_alias=expected_alias,
                 profile_dir=profile_dir,
-                repo_root=repo_root,
+                repo_root=target_repo_candidate,
+                target_repo_source=target_repo_source,
+                wbp_repo_root=control_repo_root,
                 repo_bridge_mode=args.repo_bridge,
                 dip_work_mode=args.work_mode,
             )
@@ -3021,6 +3187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         changed_files=[*existing_changed_files, str(proof_dir / "wbp-dip-tool.packet.json")],
         secret_values=[task],
         live_result=live_result,
+        target_repo=target_repo_info,
         require_live_result=not args.proof_only,
         dip_work_mode=args.work_mode,
     )

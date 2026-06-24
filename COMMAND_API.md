@@ -77,6 +77,15 @@ repo/project/code/audit/report/fix/test prompts and can be controlled with
 filesystem or shell authority; it must request approved WBP tools through strict
 JSON tool-call text, and WBP executes those tools locally.
 
+The repository inspected or mutated by that bridge is the target repository, not
+implicitly the WBP checkout. Operators may pass `--target-repo <path>`; if it is
+omitted, WBP uses `WBP_TARGET_REPO` when present, otherwise the `--cd` directory.
+Missing, non-directory, system-root, or sensitive-name targets fail closed before
+any provider turn. Packets must expose target proof fields such as
+`target_repo_available`, `target_repo_source`, `target_repo_sha256`,
+`target_repo_is_wbp_repo`, and `target_repo_fallback_used=false`, while keeping
+`target_repo_path_recorded=false`.
+
 `--work-mode full` raises the live-result budget for deep investigation and
 large reports. A successful live result must also write
 `live-result-full-text.txt` inside the proof directory and expose only artifact
@@ -118,7 +127,7 @@ tools/wbp_dip "DIP: <bounded task>"
 Canonical Custom Codex DIP entry for repository work:
 
 ```sh
-tools/wbp_dip --json --work-mode full --repo-bridge on "DIP: <bounded repository task>"
+tools/wbp_dip --json --work-mode full --repo-bridge on --target-repo "$PWD" "DIP: <bounded repository task>"
 ```
 
 This is the only admitted Custom Codex operator path for `DIP` repository
