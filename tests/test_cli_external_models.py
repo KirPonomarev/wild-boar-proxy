@@ -1217,6 +1217,143 @@ class ExternalModelsCliTests(unittest.TestCase):
             evidence_payload["result"]["effective_model"], "deepseek/deepseek-chat"
         )
 
+    def test_check_provider_network_failure_reports_runtime_bridge_without_provider_proof(
+        self,
+    ) -> None:
+        expected_text = "pong"
+        route_id = "wbp-deepseek-v3"
+        with mocked_runtime_bridge(response_text=expected_text) as (bridge_base_url, bridge):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(
+                    sample_route(
+                        route_id=route_id,
+                        base_url=f"http://127.0.0.1:{_free_port()}/v1",
+                    )
+                ),
+            )
+            (self.profile_dir / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "allowed_api_route_ids": [route_id],
+                        "agent_id_to_route": {"dip": route_id},
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "bridge_kind": "local_wbp_responses_bridge",
+                            "model": route_id,
+                            "method": "POST",
+                            "url_candidates": [f"{bridge_base_url}/responses"],
+                            "request_json_template": {
+                                "model": route_id,
+                                "input": "Answer exactly one line: <expected_text>",
+                                "request_id": "<unique-id>",
+                                "stream": False,
+                            },
+                            "response_text_field": "output_text",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                route_id,
+            )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "provider_network_failed")
+        self.assertEqual(
+            payload["data"]["route_state"],
+            "provider_network_failed_bridge_observed",
+        )
+        self.assertTrue(payload["data"]["runtime_context_bridge_used"])
+        self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertTrue(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertTrue(payload["data"]["bridge_live_response_observed"])
+        self.assertTrue(payload["data"]["bridge_expected_text_observed"])
+        self.assertEqual(payload["data"]["bridge_response_preview_bounded"], expected_text)
+        self.assertFalse(payload["data"]["direct_provider_auth_proven"])
+        self.assertFalse(payload["data"]["direct_provider_response_observed"])
+        self.assertFalse(payload["data"]["provider_auth_ok"])
+        self.assertFalse(payload["data"]["positive_provider_proof_gate_satisfied"])
+        self.assertFalse(payload["data"]["bridge_green_counts_as_provider_proof"])
+        self.assertEqual(bridge.request_count, 1)  # type: ignore[attr-defined]
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            state_payload["routes"][route_id]["availability_state"],
+            "provider_network_failed_bridge_observed",
+        )
+        self.assertTrue(
+            state_payload["routes"][route_id]["bridge_live_response_observed"]
+        )
+
+    def test_check_auth_failure_does_not_fallback_to_runtime_bridge(self) -> None:
+        expected_text = "pong"
+        route_id = "wbp-deepseek-v3"
+        with mocked_runtime_bridge(response_text=expected_text) as (bridge_base_url, bridge):
+            with mocked_provider(expected_token="expected-token") as (base_url, _server):
+                self.run_cli(
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--json",
+                    "--stdin",
+                    stdin_text=json.dumps(sample_route(route_id=route_id, base_url=base_url)),
+                )
+                (self.profile_dir / "wbp-agent-runtime-context.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "allowed_api_route_ids": [route_id],
+                            "agent_id_to_route": {"dip": route_id},
+                            "deepseek_live_format_check_bridge": {
+                                "enabled": True,
+                                "bridge_kind": "local_wbp_responses_bridge",
+                                "model": route_id,
+                                "method": "POST",
+                                "url_candidates": [f"{bridge_base_url}/responses"],
+                                "request_json_template": {
+                                    "model": route_id,
+                                    "input": "Answer exactly one line: <expected_text>",
+                                    "request_id": "<unique-id>",
+                                    "stream": False,
+                                },
+                                "response_text_field": "output_text",
+                            },
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                result = self.run_cli(
+                    "external-models",
+                    "check",
+                    "--json",
+                    "--route",
+                    route_id,
+                )
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "provider_auth_failed")
+        self.assertEqual(payload["data"]["route_state"], "provider_auth_failed")
+        self.assertFalse(payload["data"]["runtime_context_bridge_used"])
+        self.assertFalse(payload["data"]["runtime_context_file_bridge_used"])
+        self.assertFalse(payload["data"]["bridge_or_file_bridge_used"])
+        self.assertFalse(payload["data"]["direct_provider_auth_proven"])
+        self.assertFalse(payload["data"]["direct_provider_response_observed"])
+        self.assertEqual(bridge.request_count, 0)  # type: ignore[attr-defined]
+
     def test_live_format_check_calls_provider_once_without_state_or_evidence_writes(self) -> None:
         with mocked_provider(
             smoke_payload={

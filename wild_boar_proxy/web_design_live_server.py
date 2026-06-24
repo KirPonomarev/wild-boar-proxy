@@ -10863,6 +10863,7 @@ def _custom_native_agent_runtime_context(
     execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
     api_model_id = str(packet.get("api_model_id") or route_model_id or "")
     chatgpt_model_id = str(packet.get("chatgpt_model_id") or launch_model_id or "")
+    api_only_primary_executor = bool(execution_mode == "api_only" and api_model_id)
     stale_route_ids = sorted(
         route_id
         for route_id in {"wbp-deepseek-v3"}
@@ -10872,7 +10873,7 @@ def _custom_native_agent_runtime_context(
     local_bridge_enabled = bool(
         api_model_id
         and bridge_endpoint.startswith("http://127.0.0.1:")
-        and execution_mode == "chatgpt_plus_api"
+        and execution_mode in {"chatgpt_plus_api", "api_only"}
     )
     bridge_base_url_candidates: list[str] = []
     bridge_url_candidates: list[str] = []
@@ -10896,6 +10897,12 @@ def _custom_native_agent_runtime_context(
     file_bridge_worker = _CustomNativeFileBridgeWorker(
         bridge_root=_custom_native_file_bridge_root()
     )
+    primary_slot = packet.get("primary_model_slot")
+    primary_provider = (
+        str(primary_slot.get("provider") or "")
+        if isinstance(primary_slot, dict)
+        else ""
+    )
     coding_slot = packet.get("coding_agent_model_slot")
     coding_provider = (
         str(coding_slot.get("provider") or "")
@@ -10904,7 +10911,7 @@ def _custom_native_agent_runtime_context(
     )
     selected_route_record = {
         "route_id": api_model_id,
-        "provider": coding_provider or "deepseek",
+        "provider": coding_provider or primary_provider or "deepseek",
         "enabled": True,
         "auth": {"secret_ref": "server_owned_redacted"},
     } if api_model_id else {}
@@ -10917,16 +10924,73 @@ def _custom_native_agent_runtime_context(
     ):
         effective_route_records.append(selected_route_record)
     bindings_state_path = agent_bindings_state_path(RuntimePaths.from_env().managed_dir)
-    bindings_packet = read_agent_bindings_packet(
-        bindings_state_path,
-        default_bindings=default_agent_bindings(
-            primary_model_id=chatgpt_model_id,
-            api_route_id=api_model_id,
-        ),
-        primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
-        route_records=effective_route_records,
-        require_api_route_binding=execution_mode == "chatgpt_plus_api",
-    )
+    if api_only_primary_executor:
+        runtime_agent_bindings = [
+            {
+                "agent_id": "codex",
+                "display_name": "Codex",
+                "role": "api_primary_orchestrator",
+                "aliases": ["Codex", "Agent 1", "1"],
+                "lane": API_ROUTE_LANE,
+                "route_id": api_model_id,
+                "enabled": True,
+                "allowed_actions": ["plan", "inspect", "patch", "verify"],
+            },
+            {
+                "agent_id": "dip",
+                "display_name": "DIP",
+                "role": "api_coding_agent_alias",
+                "aliases": ["DIP", "Agent 2", "2"],
+                "lane": API_ROUTE_LANE,
+                "route_id": api_model_id,
+                "enabled": True,
+                "allowed_actions": [
+                    "code_review",
+                    "implementation_help",
+                    "format_check",
+                ],
+            },
+        ]
+        bindings_packet = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "source": "server_execution_mode_packet",
+            "state_file_present": False,
+            "agent_bindings": runtime_agent_bindings,
+        }
+        bindings_projection: dict[str, Any] = {
+            "agent_binding_truth_source": "server_owned_api_only_primary_route_binding",
+            "agent_bindings": runtime_agent_bindings,
+            "alias_to_agent_id": {
+                "Codex": "codex",
+                "Agent 1": "codex",
+                "1": "codex",
+                "DIP": "dip",
+                "Agent 2": "dip",
+                "2": "dip",
+            },
+            "agent_id_to_route": {"codex": api_model_id, "dip": api_model_id},
+            "agent_id_to_model": {},
+            "allowed_api_route_ids": [api_model_id],
+            "forbidden_stale_route_ids": stale_route_ids,
+            "route_providers": {
+                api_model_id: coding_provider or primary_provider or "deepseek"
+            },
+            "primary_aliases": ["Codex", "Agent 1", "1"],
+            "coding_aliases": ["DIP", "Agent 2", "2"],
+        }
+    else:
+        bindings_packet = read_agent_bindings_packet(
+            bindings_state_path,
+            default_bindings=default_agent_bindings(
+                primary_model_id=chatgpt_model_id,
+                api_route_id=api_model_id,
+            ),
+            primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
+            route_records=effective_route_records,
+            require_api_route_binding=execution_mode == "chatgpt_plus_api",
+        )
+        bindings_projection = {}
     if (
         execution_mode == "chatgpt_plus_api"
         and api_model_id
@@ -10949,25 +11013,26 @@ def _custom_native_agent_runtime_context(
             "next_action": "repair_chatgpt_plus_api_provider_selection",
         }
     bindings_ok = bindings_packet.get("status") == "ok"
-    runtime_agent_bindings = [
-        dict(binding)
-        for binding in (
-            bindings_packet.get("agent_bindings", []) if bindings_ok else []
+    if not bindings_projection:
+        runtime_agent_bindings = [
+            dict(binding)
+            for binding in (
+                bindings_packet.get("agent_bindings", []) if bindings_ok else []
+            )
+            if isinstance(binding, dict)
+        ]
+        if execution_mode == "chatgpt_plus_api" and api_model_id:
+            for binding in runtime_agent_bindings:
+                if (
+                    binding.get("lane") == API_ROUTE_LANE
+                    and binding.get("enabled") is True
+                ):
+                    binding["route_id"] = api_model_id
+                    break
+        bindings_projection = project_agent_bindings_for_runtime_context(
+            runtime_agent_bindings,
+            route_records=effective_route_records,
         )
-        if isinstance(binding, dict)
-    ]
-    if execution_mode == "chatgpt_plus_api" and api_model_id:
-        for binding in runtime_agent_bindings:
-            if (
-                binding.get("lane") == API_ROUTE_LANE
-                and binding.get("enabled") is True
-            ):
-                binding["route_id"] = api_model_id
-                break
-    bindings_projection = project_agent_bindings_for_runtime_context(
-        runtime_agent_bindings,
-        route_records=effective_route_records,
-    )
     primary_aliases = list(bindings_projection.get("primary_aliases") or []) if bindings_ok else []
     coding_aliases = list(bindings_projection.get("coding_aliases") or []) if bindings_ok else []
     allowed_api_route_ids = (
@@ -10982,6 +11047,12 @@ def _custom_native_agent_runtime_context(
         and primary_aliases
         and coding_aliases
         and allowed_api_route_ids
+    )
+    runtime_primary_model_id = api_model_id if api_only_primary_executor else chatgpt_model_id
+    manual_probe_expected_text = (
+        "WBP_API_ONLY_DEEPSEEK_OK"
+        if api_only_primary_executor
+        else "WBP_CHATGPT_PLUS_DEEPSEEK_OK"
     )
     python_executable = os.environ.get("WBP_PYTHON_BIN") or sys.executable or "python3"
     cli_args = [
@@ -11022,9 +11093,14 @@ def _custom_native_agent_runtime_context(
         "agent_binding_state_path_redacted": True,
         "primary_aliases": primary_aliases,
         "coding_aliases": coding_aliases,
-        "primary_model_id": chatgpt_model_id,
+        "primary_model_id": runtime_primary_model_id,
         "coding_agent_model_id": api_model_id,
         "api_model_id": api_model_id,
+        "api_primary_orchestrator_enabled": api_only_primary_executor,
+        "api_primary_orchestrator_route_id": api_model_id if api_only_primary_executor else "",
+        "chatgpt_primary_orchestrator_enabled": (
+            bool(chatgpt_model_id) and not api_only_primary_executor
+        ),
         "api_reasoning_option_id": str(packet.get("api_reasoning_option_id") or ""),
         "api_reasoning_operator_level": str(
             packet.get("api_reasoning_operator_level") or ""
@@ -11050,7 +11126,7 @@ def _custom_native_agent_runtime_context(
         "route_model_id": route_model_id,
         "allowed_api_route_ids": allowed_api_route_ids,
         "forbidden_stale_route_ids": forbidden_stale_route_ids,
-        "manual_probe_expected_text": "WBP_CHATGPT_PLUS_DEEPSEEK_OK",
+        "manual_probe_expected_text": manual_probe_expected_text,
         "deepseek_live_format_check_bridge": {
             "enabled": local_bridge_enabled,
             "bridge_kind": "local_wbp_responses_bridge",

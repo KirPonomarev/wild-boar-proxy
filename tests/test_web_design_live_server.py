@@ -5969,6 +5969,69 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(context["browser_can_supply_route_authority"])
         self.assertFalse(context["secret_value_exposed"])
 
+    def test_custom_native_runtime_context_api_only_projects_route_as_primary_orchestrator(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        execution_packet = {
+            "execution_mode": "api_only",
+            "chatgpt_model_id": "",
+            "api_model_id": route_id,
+            "api_reasoning_option_id": "provider_declared_max",
+            "api_reasoning_operator_level": "max",
+            "api_reasoning_supported_operator_levels": ["fast", "high", "max"],
+            "api_reasoning_option_packet": {
+                "option_id": "provider_declared_max",
+                "provider_option": {
+                    "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                    "api_parameter_sent": True,
+                },
+            },
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": route_id,
+                "provider": "deepseek",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+                "reason": "api_only_uses_primary_model_slot",
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id=route_id,
+                    route_model_id=route_id,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                )
+
+        self.assertEqual(context["execution_mode"], "api_only")
+        self.assertEqual(context["primary_model_id"], route_id)
+        self.assertEqual(context["coding_agent_model_id"], route_id)
+        self.assertTrue(context["api_primary_orchestrator_enabled"])
+        self.assertEqual(context["api_primary_orchestrator_route_id"], route_id)
+        self.assertFalse(context["chatgpt_primary_orchestrator_enabled"])
+        self.assertEqual(context["agent_binding_source"], "server_execution_mode_packet")
+        self.assertEqual(
+            context["agent_binding_truth_source"],
+            "server_owned_api_only_primary_route_binding",
+        )
+        self.assertEqual(context["alias_to_agent_id"]["Codex"], "codex")
+        self.assertEqual(context["alias_to_agent_id"]["DIP"], "dip")
+        self.assertEqual(context["agent_id_to_route"]["codex"], route_id)
+        self.assertEqual(context["agent_id_to_route"]["dip"], route_id)
+        self.assertEqual(context["allowed_api_route_ids"], [route_id])
+        self.assertTrue(context["alias_runtime_binding_present"])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertEqual(context["manual_probe_expected_text"], "WBP_API_ONLY_DEEPSEEK_OK")
+        self.assertTrue(context["deepseek_live_format_check_bridge"]["enabled"])
+        self.assertEqual(context["deepseek_live_format_check_bridge"]["model"], route_id)
+        self.assertTrue(context["deepseek_live_format_check_file_bridge"]["enabled"])
+        self.assertEqual(context["deepseek_live_format_check_file_bridge"]["model"], route_id)
+        self.assertFalse(context["secret_value_exposed"])
+
     def test_custom_native_runtime_context_does_not_synthesize_allowlist_from_empty_projection(self) -> None:
         execution_packet = {
             "execution_mode": "chatgpt_plus_api",

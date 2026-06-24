@@ -719,6 +719,15 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
         )
         return data, [state_path, str(evidence_path)]
     except RuntimeErrorInfo as exc:
+        bridge_data = (
+            _runtime_context_bridge_live_format_data(
+                route=route,
+                route_id=route_id,
+                expected_text="pong",
+            )
+            if exc.machine_error_code == errors.PROVIDER_NETWORK_FAILED
+            else None
+        )
         availability_state = {
             errors.PROVIDER_AUTH_FAILED: "provider_auth_failed",
             errors.PROVIDER_NETWORK_FAILED: "provider_network_failed",
@@ -729,17 +738,34 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             errors.UNSAFE_SECRET_PERMISSIONS: "blocked",
             errors.INVALID_SECRET: "blocked",
         }.get(exc.machine_error_code, "limited")
+        if bridge_data is not None:
+            availability_state = "provider_network_failed_bridge_observed"
+        state_extra = {"last_check": contracts.utc_now_iso()}
+        if bridge_data is not None:
+            state_extra.update(
+                {
+                    "bridge_live_response_observed": True,
+                    "bridge_green_counts_as_provider_proof": False,
+                    "direct_provider_error": exc.machine_error_code,
+                }
+            )
         state_path = _update_route_observation(
             paths=paths,
             route_id=route_id,
             patch=_route_observation_patch(
                 availability_state=availability_state,
                 machine_error_code=exc.machine_error_code,
-                extra={"last_check": contracts.utc_now_iso()},
+                extra=state_extra,
             ),
         )
+        bridge_message_suffix = ""
+        if bridge_data is not None:
+            bridge_message_suffix = (
+                " Runtime context bridge observed a live response, but it does "
+                "not count as direct provider proof."
+            )
         error = RuntimeErrorInfo(
-            exc.message,
+            f"{exc.message}{bridge_message_suffix}",
             machine_error_code=exc.machine_error_code,
             operator_action=exc.operator_action,
             severity=exc.severity,
@@ -763,6 +789,40 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "bridge_or_file_bridge_used": False,
             **_direct_provider_proof_fields(direct_provider_response_observed=False),
         }
+        if bridge_data is not None:
+            error.data.update(
+                {
+                    "runtime_context_bridge_used": (
+                        bridge_data.get("runtime_context_bridge_used") is True
+                    ),
+                    "runtime_context_file_bridge_used": (
+                        bridge_data.get("runtime_context_file_bridge_used") is True
+                    ),
+                    "bridge_or_file_bridge_used": True,
+                    "bridge_live_response_observed": (
+                        bridge_data.get("expected_text_observed") is True
+                    ),
+                    "bridge_expected_text_observed": (
+                        bridge_data.get("expected_text_observed") is True
+                    ),
+                    "bridge_response_preview_bounded": str(
+                        bridge_data.get("response_preview_bounded") or ""
+                    ),
+                    "bridge_response_text_length": int(
+                        bridge_data.get("response_text_length") or 0
+                    ),
+                    "bridge_latency_ms": bridge_data.get("latency_ms"),
+                    "bridge_kind": str(bridge_data.get("bridge_kind") or ""),
+                    "bridge_request_count": int(bridge_data.get("request_count") or 0),
+                    "bridge_state_written": False,
+                    "bridge_evidence_written": False,
+                    "bridge_green_counts_as_provider_proof": False,
+                }
+            )
+            if "file_bridge_response_request_id_sha256" in bridge_data:
+                error.data["file_bridge_response_request_id_sha256"] = bridge_data[
+                    "file_bridge_response_request_id_sha256"
+                ]
         error.data.update(transform_metadata)
         raise error from exc
 
