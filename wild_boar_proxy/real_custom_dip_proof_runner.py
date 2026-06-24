@@ -1660,6 +1660,9 @@ def build_real_custom_dip_proof_runner_packet(
     readiness_packet: Mapping[str, Any],
     auth_session_readiness_packet: Mapping[str, Any] | None = None,
     api_backed_gate_required: bool = False,
+    probe_codex_app_server_requested: bool = False,
+    hook_readiness_probe_codex_app_server: bool = False,
+    hook_readiness_probe_codex_app_server_auto_enabled: bool = False,
     auth_session_file_sha256: str = "",
     auth_session_file_written: bool = False,
     runtime_context: Mapping[str, Any],
@@ -1778,6 +1781,13 @@ def build_real_custom_dip_proof_runner_packet(
             mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK
         ),
         "api_backed_custom_codex_gate_required": api_backed_gate_required,
+        "probe_codex_app_server_requested": bool(probe_codex_app_server_requested),
+        "hook_readiness_probe_codex_app_server": bool(
+            hook_readiness_probe_codex_app_server
+        ),
+        "hook_readiness_probe_codex_app_server_auto_enabled": bool(
+            hook_readiness_probe_codex_app_server_auto_enabled
+        ),
         "api_backed_custom_codex_auth_session_proven": api_backed_gate_ok,
         "api_backed_custom_codex_flow_proven": api_backed_flow_proven,
         "api_backed_custom_codex_flow_is_not_ui_session": bool(
@@ -2190,17 +2200,25 @@ def run_real_custom_dip_proof_runner_command(
         except (OSError, TypeError, ValueError):
             artifact_failures.append("auth_session_readiness_write_failed")
     explicit_hook_hash = _safe_text(codex_hook_current_hash, limit=80)
+    hook_readiness_probe_codex_app_server = bool(
+        probe_codex_app_server or (api_backed_gate_required and not explicit_hook_hash)
+    )
+    hook_readiness_probe_codex_app_server_auto_enabled = bool(
+        api_backed_gate_required
+        and not probe_codex_app_server
+        and not explicit_hook_hash
+    )
     hook_hash = (
         explicit_hook_hash
         if explicit_hook_hash
         else ""
-        if probe_codex_app_server
+        if hook_readiness_probe_codex_app_server
         else expected_hook_trusted_hash(hook_command_for_paths(paths))
     )
     readiness_packet = build_user_prompt_submit_readiness_packet(
         paths=paths,
         codex_hook_current_hash=hook_hash,
-        probe_codex_app_server=probe_codex_app_server,
+        probe_codex_app_server=hook_readiness_probe_codex_app_server,
     )
     readiness_file = proof_root / HOOK_READINESS_FILE_NAME
     try:
@@ -2233,7 +2251,7 @@ def run_real_custom_dip_proof_runner_command(
                     expected_alias=alias,
                     timeout_seconds=timeout_seconds,
                     codex_hook_current_hash=hook_hash,
-                    probe_codex_app_server=probe_codex_app_server,
+                    probe_codex_app_server=hook_readiness_probe_codex_app_server,
                     run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
                 )
             )
@@ -2287,6 +2305,11 @@ def run_real_custom_dip_proof_runner_command(
         readiness_packet=readiness_packet,
         auth_session_readiness_packet=auth_session_readiness_packet,
         api_backed_gate_required=api_backed_gate_required,
+        probe_codex_app_server_requested=probe_codex_app_server,
+        hook_readiness_probe_codex_app_server=hook_readiness_probe_codex_app_server,
+        hook_readiness_probe_codex_app_server_auto_enabled=(
+            hook_readiness_probe_codex_app_server_auto_enabled
+        ),
         auth_session_file_sha256=auth_session_file_sha256,
         auth_session_file_written=auth_session_file_written,
         run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
@@ -2314,6 +2337,11 @@ def run_real_custom_dip_proof_runner_command(
             readiness_packet=readiness_packet,
             auth_session_readiness_packet=auth_session_readiness_packet,
             api_backed_gate_required=api_backed_gate_required,
+            probe_codex_app_server_requested=probe_codex_app_server,
+            hook_readiness_probe_codex_app_server=hook_readiness_probe_codex_app_server,
+            hook_readiness_probe_codex_app_server_auto_enabled=(
+                hook_readiness_probe_codex_app_server_auto_enabled
+            ),
             auth_session_file_sha256=auth_session_file_sha256,
             auth_session_file_written=auth_session_file_written,
             run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,

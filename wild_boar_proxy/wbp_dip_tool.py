@@ -46,7 +46,7 @@ DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS = 768
 FULL_WORK_MAX_OUTPUT_TOKENS = 32768
 DEFAULT_REPO_BRIDGE_MODE = "auto"
 DEFAULT_REPO_BRIDGE_MAX_STEPS = 8
-FULL_WORK_REPO_BRIDGE_MAX_STEPS = 16
+FULL_WORK_REPO_BRIDGE_MAX_STEPS = 24
 DEFAULT_REPO_BRIDGE_FILE_TEXT_LIMIT = 12000
 DEFAULT_REPO_BRIDGE_CONTEXT_TEXT_LIMIT = 18000
 DEFAULT_REPO_BRIDGE_TOOL_RESULT_TEXT_LIMIT = 16000
@@ -839,6 +839,13 @@ def _run_repo_process(
 def _command_from_call(call: Mapping[str, Any]) -> list[str]:
     raw_args = call.get("args")
     if isinstance(raw_args, list):
+        if len(raw_args) == 1:
+            single_arg = _safe_text(raw_args[0], limit=2000)
+            if single_arg and any(char.isspace() for char in single_arg):
+                try:
+                    return [part for part in shlex.split(single_arg) if part]
+                except ValueError:
+                    return []
         args = [_safe_text(item, limit=500) for item in raw_args]
         return [arg for arg in args if arg]
     raw_command = _safe_text(call.get("command"), limit=2000)

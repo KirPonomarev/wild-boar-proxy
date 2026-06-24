@@ -33,6 +33,8 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_OK,
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
     _build_live_result_prompt,
+    _command_from_call,
+    _dip_work_mode_settings,
     build_codex_exec_argv,
     build_delegate_prompt,
     build_wbp_dip_tool_packet,
@@ -152,6 +154,22 @@ def _live_result(**overrides: object) -> dict[str, object]:
 
 
 class WbpDipToolTests(unittest.TestCase):
+    def test_full_work_mode_gives_code_action_bridge_recovery_budget(self) -> None:
+        settings = _dip_work_mode_settings("full")
+
+        self.assertEqual(settings["dip_work_mode"], "full")
+        self.assertEqual(settings["repo_bridge_max_steps"], 24)
+
+    def test_single_string_command_args_are_split_for_allowlisted_commands(self) -> None:
+        argv = _command_from_call(
+            {"args": ["python3 -m unittest tests.test_real_custom_dip_proof_runner"]}
+        )
+
+        self.assertEqual(
+            argv,
+            ["python3", "-m", "unittest", "tests.test_real_custom_dip_proof_runner"],
+        )
+
     def test_build_codex_exec_argv_uses_custom_codex_mcp_delegate_path(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
@@ -753,7 +771,7 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["dip_full_work_mode"])
         self.assertEqual(packet["live_result_text_limit"], 64000)
         self.assertEqual(packet["live_result_output_token_limit"], 32768)
-        self.assertEqual(packet["repo_bridge_max_steps"], 16)
+        self.assertEqual(packet["repo_bridge_max_steps"], 24)
         self.assertFalse(packet_contains_text(packet, TASK))
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")

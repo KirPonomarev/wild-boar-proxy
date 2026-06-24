@@ -203,7 +203,7 @@ def _wbp_dip_packet(
         "dip_full_work_mode": dip_full_work_mode,
         "live_result_text_limit": 12000 if dip_full_work_mode else 2400,
         "live_result_output_token_limit": 4096 if dip_full_work_mode else 768,
-        "repo_bridge_max_steps": 16 if dip_full_work_mode else 8,
+        "repo_bridge_max_steps": 24 if dip_full_work_mode else 8,
         "direct_provider_auth_proven": ok,
         "direct_provider_response_observed": ok,
         "provider_auth_ok": ok,
@@ -595,7 +595,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["first_run_wbp_dip_full_work_mode"])
             self.assertEqual(packet["first_run_wbp_dip_live_result_text_limit"], 12000)
             self.assertEqual(packet["first_run_wbp_dip_live_result_output_token_limit"], 4096)
-            self.assertEqual(packet["first_run_wbp_dip_repo_bridge_max_steps"], 16)
+            self.assertEqual(packet["first_run_wbp_dip_repo_bridge_max_steps"], 24)
             self.assertTrue(packet["work_mode_uses_full_dip_work_mode"])
             self.assertFalse(packet["proof_mode_uses_standard_dip_work_mode"])
             self.assertFalse(packet["proof_mode_admission_proven"])
@@ -627,6 +627,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertEqual(packet["machine_error_code"], "OK")
             self.assertTrue(packet["api_backed_custom_codex_gate_required"])
+            self.assertFalse(packet["probe_codex_app_server_requested"])
+            self.assertTrue(packet["hook_readiness_probe_codex_app_server"])
+            self.assertTrue(packet["hook_readiness_probe_codex_app_server_auto_enabled"])
             self.assertTrue(packet["api_backed_custom_codex_auth_session_proven"])
             self.assertTrue(packet["api_backed_custom_codex_flow_proven"])
             self.assertTrue(packet["api_backed_custom_codex_flow_is_not_ui_session"])
@@ -686,6 +689,32 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
             self.assertEqual(len(getattr(self, "_last_auth_session_kwargs")), 1)
+            self.assertEqual(
+                getattr(self, "_last_auth_session_kwargs")[0]["probe_hook_readiness"],
+                True,
+            )
+            self.assertEqual(
+                getattr(self, "_last_auth_session_kwargs")[0]["probe_account_app_server"],
+                True,
+            )
+            self.assertTrue(getattr(self, "_last_readiness_kwargs"))
+            self.assertEqual(
+                getattr(self, "_last_readiness_kwargs")[0]["codex_hook_current_hash"],
+                "",
+            )
+            self.assertIs(
+                getattr(self, "_last_readiness_kwargs")[0]["probe_codex_app_server"],
+                True,
+            )
+            self.assertTrue(getattr(self, "_last_ledger_kwargs"))
+            self.assertEqual(
+                getattr(self, "_last_ledger_kwargs")[0]["codex_hook_current_hash"],
+                "",
+            )
+            self.assertIs(
+                getattr(self, "_last_ledger_kwargs")[0]["probe_codex_app_server"],
+                True,
+            )
             self.assertEqual(len(getattr(self, "_last_wbp_dip_argv")), 1)
 
     def test_api_backed_gate_blocks_ui_session_false_green(self) -> None:
@@ -845,6 +874,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(self._last_ledger_kwargs)
             self.assertEqual(self._last_ledger_kwargs[0]["codex_hook_current_hash"], "")
             self.assertIs(self._last_ledger_kwargs[0]["probe_codex_app_server"], True)
+            self.assertTrue(packet["probe_codex_app_server_requested"])
+            self.assertTrue(packet["hook_readiness_probe_codex_app_server"])
+            self.assertFalse(packet["hook_readiness_probe_codex_app_server_auto_enabled"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_stale_hook_ledger_blocks_false_green(self) -> None:
