@@ -14923,7 +14923,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(packet["real_codex_app_launched"])
         self.assertEqual(stable_preflight.call_count, 2)
         self.assertEqual(bridge_prewarm.call_count, 2)
-        bridge_retry_sleep.assert_called_once()
+        self.assertEqual(bridge_retry_sleep.call_args_list.count(mock.call(1.0)), 1)
         launch_native.assert_called_once()
 
     def test_custom_native_launch_blocks_api_only_when_stable_bridge_prewarm_fails(self) -> None:

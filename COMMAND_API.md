@@ -262,6 +262,51 @@ If the auth readiness is not exactly API-key-only, if the Custom Codex process
 is not bound to the expected user-data directory, or if the work runner does not
 prove live API-backed DIP dispatch, the gate must fail closed.
 
+## GPT+API+DIP technical acceptance gate
+
+`codex-runner gpt-api-dip-acceptance-gate --fresh-sealed-proof-file <packet> --dip-feature-proof-file <packet> --dip-action-proof-file <packet> --json`
+is a read-only join gate over existing machine-readable proof packets. With
+`--proof-dir`, it may write only its own acceptance packet.
+
+It must not run live dispatch, read audit history, infer from narrative, or
+claim product readiness. The gate passes only when all three owner surfaces are
+simultaneously proven:
+
+- `fresh-sealed-e2e-proof` proves the full Custom Codex runtime/UI dispatch
+  chain, sealed admission, external freshness, and wrong-digest negative;
+- `real-custom-dip-proof --mode work --api-backed-gate` proves API-backed
+  Custom Codex DIP feature readiness without UI-session admission;
+- `tools/wbp_dip --json` proves the controlled action bridge, code mutation, and
+  verification without raw patch/command leakage or direct shell access.
+
+On success the packet must include:
+
+- `feature_ready=true`
+- `feature_ready_mode="gpt_api_dip_custom_codex"`
+- `gpt_api_dip_ready=true`
+- `custom_codex_ui_visibility_proven=true`
+- `native_custom_codex_visible_flow_proven=true`
+- `full_runtime_dispatch_proven=true`
+- `api_backed_custom_codex_dip_feature_ready=true`
+- `api_key_only=true`
+- `api_key_only_counts_as_ui_session=false`
+- `logged_in_ui_session_proven=false`
+- `custom_codex_ui_session_ready=false`
+- `dip_action_bridge_proven=true`
+- `dip_code_written=true`
+- `dip_code_verified=true`
+- `gate_runs_live_dispatch=false`
+- `gate_reads_audit_history=false`
+- `input_file_paths_recorded=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If any input packet has the wrong `packet_kind`, misses a required positive
+claim, overclaims UI-session/product readiness, records raw sensitive material,
+or lacks controlled DIP code-write verification, the gate must fail closed.
+
 ## Runtime invariant check owner surface
 
 `invariant-check --json` is a read-only runtime truth guard. It machine-checks a

@@ -39,6 +39,9 @@ from .fresh_live_custom_codex_e2e_proof import (
 from .fresh_sealed_e2e_proof import (
     run_fresh_sealed_e2e_proof_command,
 )
+from .gpt_api_dip_acceptance_gate import (
+    run_gpt_api_dip_acceptance_gate_command,
+)
 from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from .custom_codex_native_ui_observer_proof import (
@@ -490,6 +493,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
     codex_runner_real_custom_dip.add_argument("--json", action="store_true", required=True)
+    codex_runner_gpt_api_dip_gate = codex_runner_subparsers.add_parser(
+        "gpt-api-dip-acceptance-gate"
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--fresh-sealed-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--dip-feature-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--dip-action-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument("--proof-dir")
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
     codex_runner_repeatable_status = codex_runner_subparsers.add_parser(
         "repeatable-proof-status"
     )
@@ -1903,6 +1927,12 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         and getattr(args, "codex_runner_command", None) == "repeatable-proof-status"
     ):
         return EFFECT_PROBE
+    if (
+        command == "codex-runner"
+        and getattr(args, "codex_runner_command", None)
+        == "gpt-api-dip-acceptance-gate"
+    ):
+        return EFFECT_MUTATE if getattr(args, "proof_dir", None) else EFFECT_READ
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
         "admission",
         "operator-proof",
@@ -2312,6 +2342,19 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     codex_hook_current_hash=args.codex_hook_current_hash,
                     probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "gpt-api-dip-acceptance-gate"
+        ):
+            return emit_json(
+                run_gpt_api_dip_acceptance_gate_command(
+                    paths=paths,
+                    fresh_sealed_proof_file=args.fresh_sealed_proof_file,
+                    dip_feature_proof_file=args.dip_feature_proof_file,
+                    dip_action_proof_file=args.dip_action_proof_file,
+                    proof_dir=args.proof_dir,
                 )
             )
         if (
