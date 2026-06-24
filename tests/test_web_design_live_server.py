@@ -13146,8 +13146,9 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
                         'export HOME="$APP_HOME"',
                         'export OPENAI_API_KEY="$(python3 - "$AUTH_FILE")"',
                         '"--user-data-dir=$APP_USER_DATA_DIR"',
-                        "primary_bin_hash=",
-                        "preferred_asar_hash=",
+                        "preferred_bundle_id=",
+                        "com.wildboarproxy.codex.wbpclean",
+                        "PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar",
                     ]
                 )
                 + "\n",

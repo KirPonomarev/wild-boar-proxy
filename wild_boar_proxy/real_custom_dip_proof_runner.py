@@ -1764,6 +1764,7 @@ def build_real_custom_dip_proof_runner_packet(
         and first_run.get("positive_provider_proof_gate_satisfied") is True
         and first_run.get("wbp_dip_full_work_mode") is True
     )
+    custom_codex_dip_feature_ready = api_backed_flow_proven
     extra = {
         **dict(context_metadata),
         "schema_version": 1,
@@ -1782,6 +1783,15 @@ def build_real_custom_dip_proof_runner_packet(
         "api_backed_custom_codex_flow_is_not_ui_session": bool(
             api_backed_gate_required
         ),
+        "custom_codex_dip_feature_ready": custom_codex_dip_feature_ready,
+        "feature_ready": custom_codex_dip_feature_ready,
+        "feature_ready_mode": (
+            "api_key_backed_custom_codex_dip"
+            if custom_codex_dip_feature_ready
+            else "blocked"
+        ),
+        "feature_ready_does_not_require_ui_session": bool(api_backed_gate_required),
+        "feature_ready_does_not_prove_product_ready": True,
         "auth_session_packet_kind": _safe_text(
             auth_session.get("packet_kind"),
             limit=96,

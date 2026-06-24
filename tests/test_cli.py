@@ -23605,12 +23605,18 @@ class CliTests(unittest.TestCase):
         self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', launcher_text)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', launcher_text)
         self.assertIn('cd "$CODEX_APP_RESOURCES"', launcher_text)
-        self.assertIn("primary_bin_hash=", launcher_text)
-        self.assertIn("preferred_asar_hash=", launcher_text)
+        self.assertNotIn("primary_bin_hash=", launcher_text)
+        self.assertNotIn("preferred_bin_hash=", launcher_text)
+        self.assertNotIn("primary_asar_hash=", launcher_text)
+        self.assertNotIn("preferred_asar_hash=", launcher_text)
         self.assertIn("preferred_bundle_id=", launcher_text)
-        self.assertIn("preferred_codesign_ok=0", launcher_text)
+        self.assertNotIn("preferred_codesign_ok=0", launcher_text)
         self.assertIn(
             '[ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ]',
+            launcher_text,
+        )
+        self.assertIn(
+            '[ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ]',
             launcher_text,
         )
         self.assertNotIn(
@@ -23702,8 +23708,16 @@ class CliTests(unittest.TestCase):
         self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', payload)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', payload)
         self.assertIn('cd "$CODEX_APP_RESOURCES"', payload)
-        self.assertIn("primary_bin_hash=", payload)
-        self.assertIn("preferred_asar_hash=", payload)
+        self.assertNotIn("primary_bin_hash=", payload)
+        self.assertNotIn("preferred_bin_hash=", payload)
+        self.assertNotIn("primary_asar_hash=", payload)
+        self.assertNotIn("preferred_asar_hash=", payload)
+        self.assertIn("preferred_bundle_id=", payload)
+        self.assertNotIn("preferred_codesign_ok=0", payload)
+        self.assertIn(
+            '[ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ]',
+            payload,
+        )
         self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", payload)
         self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", payload)
         self.assertIn('"$CODEX_APP_BIN"', payload)
@@ -23774,6 +23788,44 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertNotIn(str(self.default_launcher_script), payload["changed_files"])
+
+    def test_default_launcher_consumer_repairs_invalid_marked_repo_owned_file(
+        self,
+    ) -> None:
+        invalid_marked_text = (
+            "#!/bin/sh\n"
+            f"{runtime_mod.REPO_MANAGED_DEFAULT_LAUNCHER_MARKER}\n"
+            f"{runtime_mod.REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX}invalid\n"
+            "primary_bin_hash=old\n"
+            "preferred_codesign_ok=0\n"
+            "exit 9\n"
+        )
+        self.default_launcher_script.write_text(invalid_marked_text, encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_LAUNCHER_SCRIPT": str(self.default_launcher_script),
+            },
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            runtime_mod.ensure_repo_owned_default_launcher_consumer(paths)
+
+        launcher_text = self.default_launcher_script.read_text(encoding="utf-8")
+        self.assertTrue(
+            runtime_mod.repo_managed_default_launcher_recognized(
+                self.default_launcher_script
+            )
+        )
+        self.assertNotIn("primary_bin_hash=", launcher_text)
+        self.assertNotIn("preferred_codesign_ok=0", launcher_text)
+        self.assertIn(
+            '[ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ]',
+            launcher_text,
+        )
+        self.assertTrue(os.access(self.default_launcher_script, os.X_OK))
 
     def test_launch_smoke_does_not_overwrite_self_signed_unrecognized_default_launcher_file(
         self,

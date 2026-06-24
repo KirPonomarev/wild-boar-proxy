@@ -630,6 +630,14 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["api_backed_custom_codex_auth_session_proven"])
             self.assertTrue(packet["api_backed_custom_codex_flow_proven"])
             self.assertTrue(packet["api_backed_custom_codex_flow_is_not_ui_session"])
+            self.assertTrue(packet["custom_codex_dip_feature_ready"])
+            self.assertTrue(packet["feature_ready"])
+            self.assertEqual(
+                packet["feature_ready_mode"],
+                "api_key_backed_custom_codex_dip",
+            )
+            self.assertTrue(packet["feature_ready_does_not_require_ui_session"])
+            self.assertTrue(packet["feature_ready_does_not_prove_product_ready"])
             self.assertEqual(
                 packet["auth_session_packet_kind"],
                 "wbp_custom_codex_auth_session_readiness",
@@ -699,6 +707,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["api_backed_custom_codex_gate_required"])
             self.assertFalse(packet["api_backed_custom_codex_auth_session_proven"])
             self.assertFalse(packet["api_backed_custom_codex_flow_proven"])
+            self.assertFalse(packet["custom_codex_dip_feature_ready"])
+            self.assertFalse(packet["feature_ready"])
+            self.assertEqual(packet["feature_ready_mode"], "blocked")
             self.assertEqual(packet["auth_session_machine_error_code"], "OK")
             self.assertEqual(packet["auth_session_state"], "READY")
             self.assertFalse(packet["auth_session_api_key_only"])

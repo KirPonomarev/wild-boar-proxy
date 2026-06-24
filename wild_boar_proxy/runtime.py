@@ -1088,18 +1088,8 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
             'CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"',
             'if [ -d "$PREFERRED_CODEX_APP_PATH" ] && [ -x "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" ]; then',
-            '  primary_bin_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
-            '  preferred_bin_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" | awk \'{print $1}\')"',
-            '  primary_asar_hash="$(shasum -a 256 "$PRIMARY_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
-            '  preferred_asar_hash="$(shasum -a 256 "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" | awk \'{print $1}\')"',
             '  preferred_bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PREFERRED_CODEX_APP_PATH/Contents/Info.plist" 2>/dev/null || printf "")"',
-            '  preferred_codesign_ok=0',
-            '  if /usr/bin/codesign --verify --deep --strict "$PREFERRED_CODEX_APP_PATH" >/dev/null 2>&1; then',
-            '    preferred_codesign_ok=1',
-            "  fi",
-            '  if [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ] && [ "$preferred_codesign_ok" = "1" ]; then',
-            '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
-            '  elif [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ] && [ "$preferred_codesign_ok" = "1" ]; then',
+            '  if [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && { [ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ] || [ -d "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app" ]; }; then',
             '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
             "  fi",
             "fi",
@@ -1697,7 +1687,13 @@ def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
     legacy_recognized = repo_managed_default_launcher_legacy_recognized(
         paths.launcher_script
     )
-    if not recognized and not legacy_recognized:
+    marker_present = repo_managed_default_launcher_marker_present(paths.launcher_script)
+    signature_valid = repo_managed_default_launcher_signature_valid(paths.launcher_script)
+    if (
+        not recognized
+        and not legacy_recognized
+        and (not marker_present or signature_valid)
+    ):
         return
     current_text = paths.launcher_script.read_text(encoding="utf-8").rstrip("\n")
     if current_text != expected_text:

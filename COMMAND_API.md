@@ -216,6 +216,11 @@ On success the packet must include:
 
 - `api_backed_custom_codex_auth_session_proven=true`
 - `api_backed_custom_codex_flow_proven=true`
+- `custom_codex_dip_feature_ready=true`
+- `feature_ready=true`
+- `feature_ready_mode="api_key_backed_custom_codex_dip"`
+- `feature_ready_does_not_require_ui_session=true`
+- `feature_ready_does_not_prove_product_ready=true`
 - `auth_session_machine_error_code="WBP_CUSTOM_CODEX_API_KEY_ONLY"`
 - `api_key_only=true`
 - `api_key_only_counts_as_ui_session=false`
