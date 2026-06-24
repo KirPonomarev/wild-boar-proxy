@@ -42,6 +42,9 @@ from .fresh_sealed_e2e_proof import (
 from .gpt_api_dip_acceptance_gate import (
     run_gpt_api_dip_acceptance_gate_command,
 )
+from .gpt_api_dip_product_ready_gate import (
+    run_gpt_api_dip_product_ready_gate_command,
+)
 from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from .custom_codex_native_ui_observer_proof import (
@@ -510,6 +513,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_gpt_api_dip_gate.add_argument("--proof-dir")
     codex_runner_gpt_api_dip_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_product_gate = codex_runner_subparsers.add_parser(
+        "gpt-api-dip-product-ready-gate"
+    )
+    codex_runner_gpt_api_dip_product_gate.add_argument(
+        "--acceptance-gate-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_product_gate.add_argument("--proof-dir")
+    codex_runner_gpt_api_dip_product_gate.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1930,7 +1946,10 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     if (
         command == "codex-runner"
         and getattr(args, "codex_runner_command", None)
-        == "gpt-api-dip-acceptance-gate"
+        in {
+            "gpt-api-dip-acceptance-gate",
+            "gpt-api-dip-product-ready-gate",
+        }
     ):
         return EFFECT_MUTATE if getattr(args, "proof_dir", None) else EFFECT_READ
     if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
@@ -2354,6 +2373,17 @@ def main(argv: list[str] | None = None) -> int:
                     fresh_sealed_proof_file=args.fresh_sealed_proof_file,
                     dip_feature_proof_file=args.dip_feature_proof_file,
                     dip_action_proof_file=args.dip_action_proof_file,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "gpt-api-dip-product-ready-gate"
+        ):
+            return emit_json(
+                run_gpt_api_dip_product_ready_gate_command(
+                    paths=paths,
+                    acceptance_gate_file=args.acceptance_gate_file,
                     proof_dir=args.proof_dir,
                 )
             )

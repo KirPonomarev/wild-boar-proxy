@@ -307,6 +307,45 @@ If any input packet has the wrong `packet_kind`, misses a required positive
 claim, overclaims UI-session/product readiness, records raw sensitive material,
 or lacks controlled DIP code-write verification, the gate must fail closed.
 
+## GPT+API+DIP product readiness gate
+
+`codex-runner gpt-api-dip-product-ready-gate --acceptance-gate-file <packet> --json`
+is the final product-readiness owner surface for the feature-scoped Custom Codex
+GPT+API+DIP workflow. With `--proof-dir`, it may write only its own
+product-readiness packet.
+
+It must not run live dispatch, read audit history, infer from narrative, or
+claim production/distribution release readiness. It may set `product_ready=true`
+only when the input `gpt-api-dip-acceptance-gate` packet is already green,
+feature-scoped, non-overclaiming, and free of sensitive raw material.
+
+On success the packet must include:
+
+- `feature_ready=true`
+- `feature_ready_mode="gpt_api_dip_custom_codex"`
+- `gpt_api_dip_ready=true`
+- `product_ready=true`
+- `product_ready_scope="gpt_api_dip_custom_codex_feature"`
+- `product_ready_is_feature_scoped=true`
+- `production_release_ready=false`
+- `production_release_claim="not_made"`
+- `distribution_release_ready=false`
+- `signing_status="not_proven"`
+- `notarization_status="not_proven"`
+- `dmg_status="not_proven"`
+- `pkg_status="not_proven"`
+- `does_not_prove_distribution_release=true`
+- `dip_code_written=true`
+- `dip_code_verified=true`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `blocking_reasons=[]`
+
+If the acceptance packet is not green, preclaims `product_ready=true`, records
+raw sensitive material, lacks Custom Codex UI visibility, or lacks controlled DIP
+code-write verification, the product-readiness gate must fail closed and must not
+set `product_ready=true`.
+
 ## Runtime invariant check owner surface
 
 `invariant-check --json` is a read-only runtime truth guard. It machine-checks a
