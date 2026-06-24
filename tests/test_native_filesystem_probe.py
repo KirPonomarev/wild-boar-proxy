@@ -265,7 +265,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         ) as run:
             lines = native_fs_probe._collect_codex_process_lines()
 
-        self.assertEqual(run.call_args.args[0], ["ps", "-axo", "pid=,command="])
+        self.assertEqual(run.call_args.args[0], ["ps", "axww", "-o", "pid=,command="])
         self.assertEqual(len(lines), 3)
         self.assertIn("wbp-custom-main/electron-user-data", lines[0])
 

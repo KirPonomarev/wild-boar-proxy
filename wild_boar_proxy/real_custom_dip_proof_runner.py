@@ -23,6 +23,12 @@ from .codex_working_flow_delivery_proof import (
     run_codex_working_flow_delivery_proof_command,
 )
 from .core import packets
+from .custom_codex_auth_session_readiness import (
+    CUSTOM_CODEX_AUTH_SESSION_API_KEY_ONLY,
+    CUSTOM_CODEX_AUTH_SESSION_READINESS_PACKET_KIND,
+    SESSION_STATE_API_KEY_ONLY,
+    run_custom_codex_auth_session_readiness_command,
+)
 from .observed_machine_handoff_delivery import _canonical_json_digest
 from .real_custom_codex_hook_proof import runtime_context_digest
 from .real_user_prompt_submit_ledger_proof import (
@@ -99,6 +105,9 @@ REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME = (
     "real-custom-dip-proof-runner-manifest.json"
 )
 HOOK_READINESS_FILE_NAME = "user-prompt-submit-readiness.packet.json"
+CUSTOM_CODEX_AUTH_SESSION_READINESS_FILE_NAME = (
+    "custom-codex-auth-session-readiness.packet.json"
+)
 LEDGER_PROOF_FILE_NAME = "real-user-prompt-submit-ledger-proof.packet.json"
 WBP_DIP_HOOK_ORIGIN_FILE_NAME = "wbp-dip-hook-origin-proof.packet.json"
 WORKING_FLOW_SOURCE_FILE_NAME = "working-flow-source-proof.packet.json"
@@ -191,6 +200,45 @@ def _required_runs_for_mode(mode: str) -> int:
     if mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK:
         return 1
     return 2
+
+
+def _api_backed_custom_codex_gate_failures(
+    packet: Mapping[str, Any],
+    *,
+    required: bool,
+) -> list[str]:
+    if not required:
+        return []
+    failures: list[str] = []
+    if not packet:
+        return ["api_backed_auth_session_packet_missing"]
+    if packet.get("packet_kind") != CUSTOM_CODEX_AUTH_SESSION_READINESS_PACKET_KIND:
+        failures.append("api_backed_auth_session_packet_kind_invalid")
+    if packet.get("machine_error_code") != CUSTOM_CODEX_AUTH_SESSION_API_KEY_ONLY:
+        failures.append("api_backed_auth_session_not_api_key_only")
+    if packet.get("session_state") != SESSION_STATE_API_KEY_ONLY:
+        failures.append("api_backed_auth_session_state_not_api_key_only")
+    if packet.get("api_key_only") is not True:
+        failures.append("api_backed_auth_session_api_key_only_not_proven")
+    if packet.get("api_key_only_counts_as_ui_session") is not False:
+        failures.append("api_key_only_counts_as_ui_session")
+    if packet.get("logged_in_ui_session_proven") is not False:
+        failures.append("logged_in_ui_session_proven")
+    if packet.get("user_prompt_submit_hook_ready") is not True:
+        failures.append("api_backed_auth_session_hook_not_ready")
+    if packet.get("expected_custom_user_data_dir_observed") is not True:
+        failures.append("api_backed_custom_user_data_dir_not_observed")
+    if packet.get("app_server_account_bound_to_expected_user_data") is not True:
+        failures.append("api_backed_app_server_account_not_bound_to_user_data")
+    if packet.get("product_ready") is not False:
+        failures.append("api_backed_auth_session_product_ready_claimed")
+    if packet.get("fallback_used") is not False:
+        failures.append("api_backed_auth_session_fallback_used")
+    if packet.get("local_imitation_used") is not False:
+        failures.append("api_backed_auth_session_local_imitation_used")
+    if packet.get("native_codex_subagent_used_as_dip") is not False:
+        failures.append("api_backed_auth_session_native_subagent_used")
+    return sorted(set(failures))
 
 
 def _proof_scope_for_mode(mode: str) -> str:
@@ -1610,6 +1658,10 @@ def build_real_custom_dip_proof_runner_packet(
     run_mode: str = REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
     proof_root: Path,
     readiness_packet: Mapping[str, Any],
+    auth_session_readiness_packet: Mapping[str, Any] | None = None,
+    api_backed_gate_required: bool = False,
+    auth_session_file_sha256: str = "",
+    auth_session_file_written: bool = False,
     runtime_context: Mapping[str, Any],
     context_metadata: Mapping[str, Any],
     run_summaries: Sequence[Mapping[str, Any]],
@@ -1625,6 +1677,14 @@ def build_real_custom_dip_proof_runner_packet(
     secret_values: Sequence[str],
 ) -> dict[str, Any]:
     mode = _normalize_run_mode(run_mode) or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF
+    auth_session = dict(auth_session_readiness_packet or {})
+    api_backed_gate_failures = _api_backed_custom_codex_gate_failures(
+        auth_session,
+        required=api_backed_gate_required,
+    )
+    readiness_failures = sorted(
+        set(list(readiness_failures) + list(api_backed_gate_failures))
+    )
     repeatability_failures = _repeatability_failures(
         run_summaries,
         required_runs=required_runs,
@@ -1679,10 +1739,31 @@ def build_real_custom_dip_proof_runner_packet(
     run_count = len(run_summaries)
     prompt_digests = [_hex_sha256(run.get("prompt_digest")) for run in run_summaries]
     first_run = run_summaries[0] if run_summaries else {}
-    changed_files = [
-        str(proof_root / REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME),
-        str(proof_root / REAL_CUSTOM_DIP_PROOF_RUNNER_FILE_NAME),
-    ]
+    changed_files = []
+    if auth_session_file_written:
+        changed_files.append(str(proof_root / CUSTOM_CODEX_AUTH_SESSION_READINESS_FILE_NAME))
+    changed_files.extend(
+        [
+            str(proof_root / REAL_CUSTOM_DIP_PROOF_RUNNER_MANIFEST_FILE_NAME),
+            str(proof_root / REAL_CUSTOM_DIP_PROOF_RUNNER_FILE_NAME),
+        ]
+    )
+    api_backed_gate_ok = bool(api_backed_gate_required and not api_backed_gate_failures)
+    api_backed_flow_proven = bool(
+        work_ok
+        and api_backed_gate_ok
+        and first_run.get("custom_codex_flow_proven") is True
+        and first_run.get("user_prompt_submit_hook_ran") is True
+        and first_run.get("delegate_to_dip_proven") is True
+        and first_run.get("api_lane_called") is True
+        and first_run.get("route_bound_dispatch_proven") is True
+        and first_run.get("live_result_available") is True
+        and first_run.get("direct_provider_auth_proven") is True
+        and first_run.get("direct_provider_response_observed") is True
+        and first_run.get("provider_auth_ok") is True
+        and first_run.get("positive_provider_proof_gate_satisfied") is True
+        and first_run.get("wbp_dip_full_work_mode") is True
+    )
     extra = {
         **dict(context_metadata),
         "schema_version": 1,
@@ -1695,6 +1776,46 @@ def build_real_custom_dip_proof_runner_packet(
         "work_mode_cannot_mint_admission_proof": (
             mode == REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK
         ),
+        "api_backed_custom_codex_gate_required": api_backed_gate_required,
+        "api_backed_custom_codex_auth_session_proven": api_backed_gate_ok,
+        "api_backed_custom_codex_flow_proven": api_backed_flow_proven,
+        "api_backed_custom_codex_flow_is_not_ui_session": bool(
+            api_backed_gate_required
+        ),
+        "auth_session_packet_kind": _safe_text(
+            auth_session.get("packet_kind"),
+            limit=96,
+        ),
+        "auth_session_machine_error_code": _safe_text(
+            auth_session.get("machine_error_code"),
+            limit=128,
+        ),
+        "auth_session_state": _safe_text(auth_session.get("session_state"), limit=80),
+        "auth_session_api_key_only": auth_session.get("api_key_only") is True,
+        "api_key_only": auth_session.get("api_key_only") is True,
+        "api_key_only_counts_as_ui_session": False,
+        "auth_session_logged_in_ui_session_proven": (
+            auth_session.get("logged_in_ui_session_proven") is True
+        ),
+        "logged_in_ui_session_proven": (
+            auth_session.get("logged_in_ui_session_proven") is True
+        ),
+        "custom_codex_ui_session_ready": (
+            auth_session.get("logged_in_ui_session_proven") is True
+        ),
+        "auth_session_hook_ready": (
+            auth_session.get("user_prompt_submit_hook_ready") is True
+        ),
+        "auth_session_expected_user_data_observed": (
+            auth_session.get("expected_custom_user_data_dir_observed") is True
+        ),
+        "auth_session_app_server_bound_to_expected_user_data": (
+            auth_session.get("app_server_account_bound_to_expected_user_data") is True
+        ),
+        "auth_session_file_written": auth_session_file_written,
+        "auth_session_file_sha256": _hex_sha256(auth_session_file_sha256),
+        "auth_session_file_path_recorded": False,
+        "api_backed_custom_codex_gate_failures": api_backed_gate_failures,
         "real_custom_codex_hook_origin_dip_proof_proven": admission_ok,
         "repeatable_real_custom_dip_proof_proven": admission_ok,
         "custom_codex_flow_proven": bool(ok and first_run.get("custom_codex_flow_proven") is True),
@@ -1984,6 +2105,7 @@ def run_real_custom_dip_proof_runner_command(
     codex_model: str | None = None,
     proof_dir: str | None = None,
     codex_cwd: str | None = None,
+    custom_user_data_dir: str | None = None,
     expected_alias: str = "DIP",
     sandbox: str = DEFAULT_SANDBOX,
     timeout_seconds: int = 300,
@@ -1991,6 +2113,7 @@ def run_real_custom_dip_proof_runner_command(
     probe_codex_app_server: bool = False,
     run_count: int | None = None,
     run_mode: str = REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
+    api_backed_gate_required: bool = False,
 ) -> dict[str, Any]:
     mode = _normalize_run_mode(run_mode)
     required_runs = _required_runs_for_mode(mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF)
@@ -2038,6 +2161,24 @@ def run_real_custom_dip_proof_runner_command(
         input_failures.append("run_count_must_match_mode")
 
     proof_root.mkdir(parents=True, exist_ok=True)
+    artifact_failures: list[str] = []
+    auth_session_readiness_packet: dict[str, Any] = {}
+    auth_session_file_sha256 = ""
+    auth_session_file_written = False
+    if api_backed_gate_required:
+        auth_session_readiness_packet = run_custom_codex_auth_session_readiness_command(
+            paths=paths,
+            custom_user_data_dir=custom_user_data_dir,
+            probe_hook_readiness=True,
+            probe_account_app_server=True,
+        )
+        auth_session_file = proof_root / CUSTOM_CODEX_AUTH_SESSION_READINESS_FILE_NAME
+        try:
+            _write_artifact(auth_session_file, auth_session_readiness_packet)
+            auth_session_file_sha256 = _sha256_file(auth_session_file)
+            auth_session_file_written = bool(auth_session_file_sha256)
+        except (OSError, TypeError, ValueError):
+            artifact_failures.append("auth_session_readiness_write_failed")
     explicit_hook_hash = _safe_text(codex_hook_current_hash, limit=80)
     hook_hash = (
         explicit_hook_hash
@@ -2052,12 +2193,20 @@ def run_real_custom_dip_proof_runner_command(
         probe_codex_app_server=probe_codex_app_server,
     )
     readiness_file = proof_root / HOOK_READINESS_FILE_NAME
-    artifact_failures: list[str] = []
     try:
         _write_artifact(readiness_file, readiness_packet)
     except (OSError, TypeError, ValueError):
         artifact_failures.append("readiness_write_failed")
     readiness_failures = _readiness_failures(readiness_packet)
+    readiness_failures = sorted(
+        set(
+            readiness_failures
+            + _api_backed_custom_codex_gate_failures(
+                auth_session_readiness_packet,
+                required=api_backed_gate_required,
+            )
+        )
+    )
 
     runs: list[dict[str, Any]] = []
     if not input_failures and not readiness_failures and not artifact_failures:
@@ -2126,6 +2275,10 @@ def run_real_custom_dip_proof_runner_command(
     runner_packet = build_real_custom_dip_proof_runner_packet(
         proof_root=proof_root,
         readiness_packet=readiness_packet,
+        auth_session_readiness_packet=auth_session_readiness_packet,
+        api_backed_gate_required=api_backed_gate_required,
+        auth_session_file_sha256=auth_session_file_sha256,
+        auth_session_file_written=auth_session_file_written,
         run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
         runtime_context=runtime_context,
         context_metadata=context_metadata,
@@ -2149,6 +2302,10 @@ def run_real_custom_dip_proof_runner_command(
         runner_packet = build_real_custom_dip_proof_runner_packet(
             proof_root=proof_root,
             readiness_packet=readiness_packet,
+            auth_session_readiness_packet=auth_session_readiness_packet,
+            api_backed_gate_required=api_backed_gate_required,
+            auth_session_file_sha256=auth_session_file_sha256,
+            auth_session_file_written=auth_session_file_written,
             run_mode=mode or REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
             runtime_context=runtime_context,
             context_metadata=context_metadata,

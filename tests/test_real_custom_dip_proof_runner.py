@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 import hashlib
 import io
 import json
@@ -83,6 +84,49 @@ def _readiness(ok: bool = True) -> dict[str, object]:
         "secret_value_exposed": False,
         "product_ready": False,
         "blocking_reasons": [] if ok else ["hook_not_trusted"],
+    }
+
+
+def _auth_session_readiness(
+    *,
+    api_key_only: bool = True,
+    logged_in_ui_session: bool = False,
+    hook_ready: bool = True,
+    product_ready: bool = False,
+) -> dict[str, object]:
+    if logged_in_ui_session:
+        status = "ok"
+        machine = "OK"
+        state = "READY"
+    elif api_key_only:
+        status = "error"
+        machine = "WBP_CUSTOM_CODEX_API_KEY_ONLY"
+        state = "API_KEY_ONLY"
+    else:
+        status = "error"
+        machine = "WBP_CUSTOM_CODEX_LOGIN_REQUIRED"
+        state = "LOGIN_REQUIRED"
+    return {
+        "packet_kind": "wbp_custom_codex_auth_session_readiness",
+        "status": status,
+        "machine_error_code": machine,
+        "effect": "probe",
+        "changed_files": [],
+        "session_state": state,
+        "api_key_only": api_key_only,
+        "api_key_only_counts_as_ui_session": False,
+        "logged_in_ui_session_proven": logged_in_ui_session,
+        "user_prompt_submit_hook_ready": hook_ready,
+        "expected_custom_user_data_dir_observed": True,
+        "app_server_account_bound_to_expected_user_data": True,
+        "product_ready": product_ready,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "native_codex_subagent_used_as_dip": False,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+        "blocking_reasons": ["api_key_only_not_ui_session"] if api_key_only else [],
     }
 
 
@@ -257,6 +301,10 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         probe_codex_app_server: bool = False,
         run_mode: str = runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_PROOF,
         run_count: int | None = None,
+        api_backed_gate_required: bool = False,
+        auth_api_key_only: bool = True,
+        auth_logged_in_ui_session: bool = False,
+        auth_hook_ready: bool = True,
     ) -> dict[str, object]:
         paths = _paths(root)
         codex_bin = root / "codex"
@@ -271,13 +319,23 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
         captured_readiness_kwargs: list[dict[str, object]] = []
         captured_ledger_kwargs: list[dict[str, object]] = []
         captured_wbp_dip_argv: list[list[str]] = []
+        captured_auth_session_kwargs: list[dict[str, object]] = []
         self._last_readiness_kwargs = captured_readiness_kwargs
         self._last_ledger_kwargs = captured_ledger_kwargs
         self._last_wbp_dip_argv = captured_wbp_dip_argv
+        self._last_auth_session_kwargs = captured_auth_session_kwargs
 
         def fake_readiness(**kwargs: object) -> dict[str, object]:
             captured_readiness_kwargs.append(dict(kwargs))
             return _readiness(readiness_ok)
+
+        def fake_auth_session(**kwargs: object) -> dict[str, object]:
+            captured_auth_session_kwargs.append(dict(kwargs))
+            return _auth_session_readiness(
+                api_key_only=auth_api_key_only,
+                logged_in_ui_session=auth_logged_in_ui_session,
+                hook_ready=auth_hook_ready,
+            )
 
         def fake_custom_codex_prompt(*, prompt_text: str, **_kwargs: object) -> subprocess.CompletedProcess[str]:
             counter["codex"] += 1
@@ -376,6 +434,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             mock.patch.object(runner, "_run_custom_codex_prompt", side_effect=fake_custom_codex_prompt),
             mock.patch.object(runner.subprocess, "run", side_effect=fake_subprocess_run),
             mock.patch.object(runner, "_run_working_flow_delivery", side_effect=fake_delivery),
+            mock.patch.object(runner, "run_custom_codex_auth_session_readiness_command", side_effect=fake_auth_session),
         ]
         if join_patch is not None:
             patches.append(
@@ -385,32 +444,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                     side_effect=join_patch,
                 )
             )
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
-            if len(patches) == 5:
-                return runner.run_real_custom_dip_proof_runner_command(
-                    paths=paths,
-                    prompt_text=PROMPT,
-                    codex_bin=str(codex_bin),
-                    codex_cwd=str(root),
-                    proof_dir=str(root / "proof"),
-                    timeout_seconds=3,
-                    probe_codex_app_server=probe_codex_app_server,
-                    run_mode=run_mode,
-                    run_count=run_count,
-                )
-            if len(patches) == 6:
-                with patches[5]:
-                    return runner.run_real_custom_dip_proof_runner_command(
-                        paths=paths,
-                        prompt_text=PROMPT,
-                        codex_bin=str(codex_bin),
-                        codex_cwd=str(root),
-                        proof_dir=str(root / "proof"),
-                        timeout_seconds=3,
-                        probe_codex_app_server=probe_codex_app_server,
-                        run_mode=run_mode,
-                        run_count=run_count,
-                    )
+        with ExitStack() as stack:
+            for patch in patches:
+                stack.enter_context(patch)
             return runner.run_real_custom_dip_proof_runner_command(
                 paths=paths,
                 prompt_text=PROMPT,
@@ -421,6 +457,7 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
                 probe_codex_app_server=probe_codex_app_server,
                 run_mode=run_mode,
                 run_count=run_count,
+                api_backed_gate_required=api_backed_gate_required,
             )
 
     def test_positive_requires_two_fresh_runs_and_file_backed_join(self) -> None:
@@ -577,6 +614,108 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertEqual(len(wbp_dip_argv), 1)
             self.assertIn("--work-mode", wbp_dip_argv[0])
             self.assertEqual(wbp_dip_argv[0][wbp_dip_argv[0].index("--work-mode") + 1], "full")
+
+    def test_api_backed_gate_proves_api_backed_flow_without_ui_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            packet = self._run(
+                root,
+                run_mode=runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+                api_backed_gate_required=True,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertTrue(packet["api_backed_custom_codex_gate_required"])
+            self.assertTrue(packet["api_backed_custom_codex_auth_session_proven"])
+            self.assertTrue(packet["api_backed_custom_codex_flow_proven"])
+            self.assertTrue(packet["api_backed_custom_codex_flow_is_not_ui_session"])
+            self.assertEqual(
+                packet["auth_session_packet_kind"],
+                "wbp_custom_codex_auth_session_readiness",
+            )
+            self.assertEqual(
+                packet["auth_session_machine_error_code"],
+                "WBP_CUSTOM_CODEX_API_KEY_ONLY",
+            )
+            self.assertEqual(packet["auth_session_state"], "API_KEY_ONLY")
+            self.assertTrue(packet["auth_session_api_key_only"])
+            self.assertTrue(packet["api_key_only"])
+            self.assertFalse(packet["api_key_only_counts_as_ui_session"])
+            self.assertFalse(packet["auth_session_logged_in_ui_session_proven"])
+            self.assertFalse(packet["logged_in_ui_session_proven"])
+            self.assertFalse(packet["custom_codex_ui_session_ready"])
+            self.assertTrue(packet["auth_session_hook_ready"])
+            self.assertTrue(packet["auth_session_expected_user_data_observed"])
+            self.assertTrue(packet["auth_session_app_server_bound_to_expected_user_data"])
+            self.assertTrue(packet["auth_session_file_written"])
+            self.assertTrue(
+                (
+                    root
+                    / "proof"
+                    / runner.CUSTOM_CODEX_AUTH_SESSION_READINESS_FILE_NAME
+                ).is_file()
+            )
+            self.assertTrue(packet["work_mode_proven"])
+            self.assertTrue(packet["work_mode_uses_full_dip_work_mode"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertTrue(packet["route_bound_dispatch_proven"])
+            self.assertTrue(packet["live_result_available"])
+            self.assertTrue(packet["direct_provider_auth_proven"])
+            self.assertTrue(packet["direct_provider_response_observed"])
+            self.assertTrue(packet["provider_auth_ok"])
+            self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+            self.assertFalse(packet["proof_mode_admission_proven"])
+            self.assertFalse(packet["product_ready"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertFalse(packet["native_codex_subagent_used_as_dip"])
+            self.assertEqual(packet["api_backed_custom_codex_gate_failures"], [])
+            serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+            self.assertNotIn(PROMPT, serialized)
+            self.assertNotIn(ROUTE_ID, serialized)
+            self.assertFalse(packet_contains_text(packet, PROMPT))
+            self.assertFalse(packet_contains_text(packet, ROUTE_ID))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+            self.assertEqual(len(getattr(self, "_last_auth_session_kwargs")), 1)
+            self.assertEqual(len(getattr(self, "_last_wbp_dip_argv")), 1)
+
+    def test_api_backed_gate_blocks_ui_session_false_green(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            packet = self._run(
+                root,
+                run_mode=runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+                api_backed_gate_required=True,
+                auth_api_key_only=False,
+                auth_logged_in_ui_session=True,
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_READINESS_FAILED,
+            )
+            self.assertTrue(packet["api_backed_custom_codex_gate_required"])
+            self.assertFalse(packet["api_backed_custom_codex_auth_session_proven"])
+            self.assertFalse(packet["api_backed_custom_codex_flow_proven"])
+            self.assertEqual(packet["auth_session_machine_error_code"], "OK")
+            self.assertEqual(packet["auth_session_state"], "READY")
+            self.assertFalse(packet["auth_session_api_key_only"])
+            self.assertTrue(packet["auth_session_logged_in_ui_session_proven"])
+            self.assertTrue(packet["logged_in_ui_session_proven"])
+            self.assertFalse(packet["api_key_only_counts_as_ui_session"])
+            self.assertIn(
+                "api_backed_auth_session_not_api_key_only",
+                packet["blocking_reasons"],
+            )
+            self.assertIn(
+                "logged_in_ui_session_proven",
+                packet["blocking_reasons"],
+            )
+            self.assertEqual(len(getattr(self, "_last_wbp_dip_argv")), 0)
+            self.assertFalse(packet["product_ready"])
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_runner_rejects_status_mode_in_proof_surface(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -819,6 +958,40 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertTrue(mocked.called)
+        self.assertEqual(mocked.call_args.kwargs["run_mode"], "work")
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+
+    def test_cli_wires_api_backed_gate_to_real_custom_dip_runner(self) -> None:
+        with mock.patch.object(
+            cli_mod,
+            "run_real_custom_dip_proof_runner_command",
+            return_value={"status": "ok", "exit_code": 0},
+        ) as mocked:
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                rc = cli_mod.main(
+                    [
+                        "codex-runner",
+                        "real-custom-dip-proof",
+                        "--prompt",
+                        PROMPT,
+                        "--mode",
+                        "work",
+                        "--api-backed-gate",
+                        "--custom-user-data-dir",
+                        "/tmp/wbp-custom-user-data",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(mocked.called)
+        self.assertTrue(mocked.call_args.kwargs["api_backed_gate_required"])
+        self.assertEqual(
+            mocked.call_args.kwargs["custom_user_data_dir"],
+            "/tmp/wbp-custom-user-data",
+        )
         self.assertEqual(mocked.call_args.kwargs["run_mode"], "work")
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["status"], "ok")

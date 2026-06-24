@@ -1751,7 +1751,7 @@ def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> di
 
 def _collect_codex_process_lines() -> list[str]:
     process = subprocess.run(
-        ["ps", "-axo", "pid=,command="],
+        ["ps", "axww", "-o", "pid=,command="],
         text=True,
         capture_output=True,
         check=False,

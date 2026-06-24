@@ -199,6 +199,46 @@ If readiness, work, chain-join, evidence writes, or safety checks fail, `dip run
 must fail closed with machine-readable `blocking_reasons` and must not start an
 acceptance loop or product-readiness claim by default.
 
+## API-backed Custom Codex manual gate
+
+`codex-runner real-custom-dip-proof --mode work --api-backed-gate --prompt <prompt> --json`
+is the bounded live gate for the API-key-backed Custom Codex flow.
+
+This gate is not a ChatGPT UI-session admission and must not be treated as
+product readiness. It joins two live facts:
+
+- `router-hook custom-codex-auth-session-readiness` reports the expected Custom
+  Codex process/user-data binding and `session_state="API_KEY_ONLY"`;
+- the work-mode DIP runner proves one full Custom Codex hook-origin dispatch to
+  DIP through the allowed API route with working-flow delivery.
+
+On success the packet must include:
+
+- `api_backed_custom_codex_auth_session_proven=true`
+- `api_backed_custom_codex_flow_proven=true`
+- `auth_session_machine_error_code="WBP_CUSTOM_CODEX_API_KEY_ONLY"`
+- `api_key_only=true`
+- `api_key_only_counts_as_ui_session=false`
+- `logged_in_ui_session_proven=false`
+- `custom_codex_ui_session_ready=false`
+- `work_mode_proven=true`
+- `work_mode_uses_full_dip_work_mode=true`
+- `delegate_to_dip_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `direct_provider_auth_proven=true`
+- `provider_auth_ok=true`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `native_codex_subagent_used_as_dip=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If the auth readiness is not exactly API-key-only, if the Custom Codex process
+is not bound to the expected user-data directory, or if the work runner does not
+prove live API-backed DIP dispatch, the gate must fail closed.
+
 ## Runtime invariant check owner surface
 
 `invariant-check --json` is a read-only runtime truth guard. It machine-checks a
