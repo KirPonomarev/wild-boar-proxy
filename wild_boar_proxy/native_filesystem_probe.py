@@ -24,7 +24,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .runtime import (
     DETERMINISTIC_RUNTIME_PATH,
@@ -1756,7 +1756,10 @@ def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> di
     }
 
 
-def _collect_codex_process_lines() -> list[str]:
+def _collect_codex_process_lines(
+    *,
+    extra_patterns: Sequence[str] | None = None,
+) -> list[str]:
     process = subprocess.run(
         ["ps", "axww", "-o", "pid=,command="],
         text=True,
@@ -1764,11 +1767,24 @@ def _collect_codex_process_lines() -> list[str]:
         check=False,
     )
     lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
+    patterns = [
+        *DEFAULT_CODEX_PROCESS_PATTERNS,
+        *[
+            str(pattern)
+            for pattern in (extra_patterns or [])
+            if str(pattern).strip()
+        ],
+    ]
     return [
         line
         for line in lines
-        if any(pattern in line for pattern in DEFAULT_CODEX_PROCESS_PATTERNS)
+        if any(pattern in line for pattern in patterns)
     ]
+
+
+def _line_has_user_data_dir(line: str, user_data_dir: str) -> bool:
+    user_data = str(user_data_dir or "").strip()
+    return bool(user_data) and f"--user-data-dir={user_data}" in line
 
 
 def collect_codex_process_inventory(
@@ -1776,9 +1792,15 @@ def collect_codex_process_inventory(
     custom_user_data_dir: str,
     default_user_data_dir: str = DEFAULT_DEFAULT_USER_DATA_DIR,
 ) -> dict[str, Any]:
-    lines = _collect_codex_process_lines()
-    custom_lines = [line for line in lines if custom_user_data_dir in line]
-    default_lines = [line for line in lines if default_user_data_dir in line]
+    lines = _collect_codex_process_lines(
+        extra_patterns=[custom_user_data_dir, default_user_data_dir]
+    )
+    custom_lines = [
+        line for line in lines if _line_has_user_data_dir(line, custom_user_data_dir)
+    ]
+    default_lines = [
+        line for line in lines if _line_has_user_data_dir(line, default_user_data_dir)
+    ]
     root_lines = [
         line
         for line in lines

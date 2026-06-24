@@ -270,6 +270,31 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(len(lines), 3)
         self.assertIn("wbp-custom-main/electron-user-data", lines[0])
 
+    def test_codex_process_inventory_keeps_helper_user_data_lines(self) -> None:
+        custom_user_data_dir = "/Users/k/Library/Application Support/Codex WBP Clean"
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                " 101 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex\n"
+                " 102 /Users/k/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --analytics-default-enabled\n"
+                " 103 /Users/k/Applications/Codex WBP Clean.app/Contents/Frameworks/Codex Framework.framework/Versions/149.0.7827.115/Helpers/Codex (Renderer).app/Contents/MacOS/Codex (Renderer) --type=renderer --user-data-dir=/Users/k/Library/Application Support/Codex WBP Clean\n"
+                " 104 /Applications/Codex.app/Contents/MacOS/Codex\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=custom_user_data_dir,
+            )
+
+        self.assertEqual(inventory["line_count"], 4)
+        self.assertEqual(inventory["custom_process_count"], 1)
+        self.assertIn("--user-data-dir=", inventory["custom_process_lines"][0])
+
     def test_remove_tree_with_retry_unlinks_runtime_tmp_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
