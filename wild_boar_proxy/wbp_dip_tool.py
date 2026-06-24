@@ -54,7 +54,7 @@ DEFAULT_REPO_BRIDGE_SEARCH_LINE_LIMIT = 80
 DEFAULT_REPO_BRIDGE_FILE_LIST_LIMIT = 400
 DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS = 60.0
 DEFAULT_ACTION_PATCH_TEXT_LIMIT = 120000
-MIN_SUPPORTED_PYTHON = (3, 10)
+MIN_SUPPORTED_PYTHON = (3, 11)
 PYTHON_BIN_ENV = "WBP_PYTHON_BIN"
 
 WBP_DIP_TOOL_OK = "OK"
@@ -71,6 +71,9 @@ WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
 WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
+WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING = (
+    "WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING"
+)
 WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED = "WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED = "WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED"
 WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN = "WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN"
@@ -1415,6 +1418,15 @@ def _repo_required_gate_prompt(fields: Mapping[str, Any]) -> str:
     return ""
 
 
+def _repo_final_answer_gate_prompt() -> str:
+    return (
+        "\n\nWBP FINAL ANSWER GATE: the repo bridge step budget is exhausted. "
+        "Do not request another wbp_repo_tool_call. Answer the operator directly "
+        "from the evidence already returned by WBP. If the evidence is not enough, "
+        "state the exact limitation and blocker in prose."
+    )
+
+
 def _repo_evidence_trace(tool_results: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     trace: list[dict[str, Any]] = []
     for index, result in enumerate(tool_results, start=1):
@@ -2100,6 +2112,47 @@ def request_live_result(
         tool_result = _execute_repo_tool_call(tool_call, repo_root=Path(repo_root))
         repo_tool_results.append(tool_result)
         conversation_prompt += _repo_tool_result_prompt(tool_result)
+
+    if repo_bridge_required and repo_root is not None and last_result.get("status") == "ok":
+        pending_tool_call = _extract_repo_tool_call(
+            str(last_result.get("result_text") or "")
+        )
+        if pending_tool_call:
+            final_prompt = conversation_prompt + _repo_final_answer_gate_prompt()
+            final_result = _direct_provider_live_result(
+                route_id=route_id,
+                prompt=final_prompt,
+                base=base,
+                timeout_seconds=timeout_seconds,
+                output_token_limit=output_token_limit,
+                result_text_limit=live_result_text_limit,
+            )
+            final_repo_fields = _repo_bridge_fields(
+                required=repo_bridge_required,
+                action_required=action_bridge_required,
+                code_mutation_required=code_mutation_required,
+                available=repo_bridge_available,
+                context_pack=repo_context_pack,
+                tool_results=repo_tool_results,
+            )
+            if final_result.get("status") != "ok":
+                return {**final_result, **final_repo_fields}
+            if not _extract_repo_tool_call(str(final_result.get("result_text") or "")):
+                last_result = final_result
+            else:
+                return {
+                    **base,
+                    **final_repo_fields,
+                    "status": "error",
+                    "machine_error_code": WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING,
+                    "operator_action": "retry",
+                    "provider_called": True,
+                    "result_available": False,
+                    "result_text": "",
+                    "result_text_sha256": "",
+                    "result_text_length": 0,
+                    "result_text_truncated": False,
+                }
 
     final_repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,

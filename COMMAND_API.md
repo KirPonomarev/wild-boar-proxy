@@ -115,6 +115,20 @@ Canonical operator entry:
 tools/wbp_dip "DIP: <bounded task>"
 ```
 
+Canonical Custom Codex DIP entry for repository work:
+
+```sh
+tools/wbp_dip --json --work-mode full --repo-bridge on "DIP: <bounded repository task>"
+```
+
+This is the only admitted Custom Codex operator path for `DIP` repository
+analysis, coding, testing, and audit tasks. `dip run` is a lower-level operator
+wrapper for readiness/work/chain-join proof and must not be used as a substitute
+for Custom Codex free-chat DIP delegation. If the canonical entrypoint returns a
+provider/network/auth failure, callers must surface the packet
+`machine_error_code` and stop; they must not silently switch to another wrapper,
+ordinary Codex subagent, direct provider request, or local imitation.
+
 Canonical repeatable smoke:
 
 ```sh

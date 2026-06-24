@@ -64,6 +64,19 @@ API route selection. Do not infer route ids from tests, docs, audit history,
 chat history, or old examples. If the context file is missing, answer
 `FAIL_ALIAS_CONTEXT_MISSING`.
 
+For operator requests that ask `DIP` to answer, inspect, audit, code, test, or
+work on a repository, use the canonical WBP working-tool entrypoint only:
+
+`tools/wbp_dip --json --work-mode full --repo-bridge on "<bounded DIP task>"`
+
+For a quick non-repository DIP ping, use the same entrypoint with
+`--repo-bridge off`. Do not use `dip run`, ambient `python3`, ad hoc `mktemp`
+shell flows, ordinary Codex subagents, direct provider calls, or wrapper
+shopping as substitutes for the Custom Codex DIP path. If the canonical
+entrypoint fails, report its `machine_error_code` and proof facts; do not retry
+through a different wrapper unless the user explicitly asks for diagnostics of
+the wrapper itself.
+
 If `deepseek_live_format_check_bridge` is present and enabled, use that local
 WBP bridge before direct external network calls. Try `url_candidates` in order,
 bypassing proxies for local bridge calls. The bridge URL is loopback-only and

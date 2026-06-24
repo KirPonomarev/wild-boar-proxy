@@ -31,6 +31,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_LIVE_RESULT_UNSAFE,
     WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE,
     WBP_DIP_TOOL_OK,
+    WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING,
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
     _build_live_result_prompt,
     _command_from_call,
@@ -1258,6 +1259,169 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["repo_bridge_bootstrap_used"])
         self.assertEqual(result["repo_bridge_bootstrap_tool_call_count"], 1)
         self.assertEqual(result["repo_bridge_tool_call_count"], 1)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_forces_final_answer_when_tool_budget_exhausts(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        tool_call_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "wbp_repo_tool_call": {
+                                    "tool": "read_file",
+                                    "path": "AGENTS.md",
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        final_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "Final DIP report from bounded repo evidence."
+                    }
+                }
+            ]
+        }
+        request_json_mock.side_effect = [
+            SimpleNamespace(status_code=200, latency_ms=10, payload=tool_call_payload)
+            for _ in range(9)
+        ] + [SimpleNamespace(status_code=200, latency_ms=11, payload=final_payload)]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "AGENTS.md").write_text("canon\n", encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: изучи репо и дай полный отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["result_text"], "Final DIP report from bounded repo evidence.")
+        self.assertEqual(request_json_mock.call_count, 10)
+        self.assertTrue(result["dip_repo_tool_bridge_used"])
+        self.assertGreaterEqual(result["repo_bridge_successful_tool_call_count"], 1)
+        final_prompt = request_json_mock.call_args.kwargs["payload"]["messages"][-1]["content"]
+        self.assertIn("WBP FINAL ANSWER GATE", final_prompt)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_fails_closed_when_final_answer_is_still_tool_call(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        tool_call_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "wbp_repo_tool_call": {
+                                    "tool": "read_file",
+                                    "path": "AGENTS.md",
+                                }
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        request_json_mock.side_effect = [
+            SimpleNamespace(status_code=200, latency_ms=10, payload=tool_call_payload)
+            for _ in range(10)
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "AGENTS.md").write_text("canon\n", encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: изучи репо и дай полный отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["machine_error_code"],
+            WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING,
+        )
+        self.assertFalse(result["result_available"])
+        self.assertEqual(result["result_text"], "")
+        self.assertTrue(result["dip_repo_tool_bridge_used"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
