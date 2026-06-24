@@ -63,6 +63,7 @@ WBP_DIP_TOOL_TASK_REQUIRED = "WBP_DIP_TOOL_TASK_REQUIRED"
 WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE = "WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE"
 WBP_DIP_TOOL_CODEX_EXEC_FAILED = "WBP_DIP_TOOL_CODEX_EXEC_FAILED"
 WBP_DIP_TOOL_DELEGATE_NOT_PROVEN = "WBP_DIP_TOOL_DELEGATE_NOT_PROVEN"
+WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT = "WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT"
 WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
 WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
@@ -178,7 +179,6 @@ ACTION_ALLOWED_COMMAND_PREFIXES = (
     ("git", "diff", "--check"),
     ("git", "diff", "--stat"),
     ("git", "status"),
-    ("rg",),
 )
 REPO_BRIDGE_CANONICAL_FILES = (
     "AGENTS.md",
@@ -637,6 +637,43 @@ def _delegate_packet_ok(delegate_packet: Mapping[str, Any]) -> bool:
     )
 
 
+def _codex_exec_forbidden_event_reasons(
+    events: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    reasons: set[str] = set()
+    for event in events:
+        for mapping in _iter_mappings(event):
+            packet = _structured_packet_from_mapping(mapping)
+            if packet.get("packet_kind") == "wbp_mcp_delegate_to_dip_reality":
+                continue
+            item_type = _safe_text(
+                mapping.get("type") or mapping.get("kind") or mapping.get("item_type"),
+                limit=160,
+            ).casefold()
+            if not any(marker in item_type for marker in ("tool", "function", "command")):
+                continue
+            fields = (
+                mapping.get("name"),
+                mapping.get("tool_name"),
+                mapping.get("server"),
+                mapping.get("recipient"),
+                mapping.get("command"),
+                mapping.get("cmd"),
+            )
+            haystack = " ".join(_safe_text(field, limit=240) for field in fields).casefold()
+            if not haystack:
+                continue
+            if "delegate_to_dip" in haystack:
+                continue
+            if any(marker in haystack for marker in ("shell", "exec_command", "bash", "zsh", "terminal")):
+                reasons.add("codex_exec_forbidden_shell_tool_event")
+            elif any(marker in haystack for marker in ("subagent", "multi_agent", "create_thread")):
+                reasons.add("codex_exec_forbidden_subagent_event")
+            else:
+                reasons.add("codex_exec_forbidden_non_delegate_tool_event")
+    return sorted(reasons)
+
+
 def _load_runtime_context(profile_dir: Path) -> dict[str, Any]:
     context_path = profile_dir / "wbp-agent-runtime-context.json"
     try:
@@ -818,6 +855,24 @@ def _bounded_repo_text(value: object, *, limit: int = DEFAULT_REPO_BRIDGE_TOOL_R
     return text.strip()[:limit]
 
 
+def _line_mentions_sensitive_repo_path(line: str) -> bool:
+    for token in re.split(r"[\s:|]+", line):
+        candidate = token.strip("`'\",;()[]{}")
+        if candidate and _path_is_sensitive(candidate):
+            return True
+    return False
+
+
+def _redact_repo_tool_output(text: str) -> str:
+    lines = []
+    for line in str(text or "").splitlines():
+        if _line_mentions_sensitive_repo_path(line):
+            lines.append("[sensitive repo path redacted]")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 def _run_repo_process(
     argv: Sequence[str],
     *,
@@ -836,7 +891,9 @@ def _run_repo_process(
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, _safe_text(exc, limit=500)
-    return int(completed.returncode), _bounded_repo_text(completed.stdout)
+    return int(completed.returncode), _bounded_repo_text(
+        _redact_repo_tool_output(completed.stdout)
+    )
 
 
 def _command_from_call(call: Mapping[str, Any]) -> list[str]:
@@ -869,8 +926,6 @@ def _command_allowed(argv: Sequence[str]) -> tuple[bool, str]:
     normalized = (command, *tuple(argv[1:]))
     for prefix in ACTION_ALLOWED_COMMAND_PREFIXES:
         if len(normalized) >= len(prefix) and normalized[: len(prefix)] == prefix:
-            if command == "rg" and any(part.startswith("-r") or part == "--replace" for part in argv[1:]):
-                return False, "rg_replace_not_allowed"
             return True, "ok"
     return False, "command_not_allowlisted"
 
@@ -1940,6 +1995,56 @@ def _direct_provider_live_result(
     }
 
 
+def _live_result_turn(
+    *,
+    context: Mapping[str, Any],
+    route_id: str,
+    prompt: str,
+    base: Mapping[str, Any],
+    timeout_seconds: float,
+    output_token_limit: int = DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS,
+    result_text_limit: int = DEFAULT_LIVE_RESULT_TEXT_LIMIT,
+) -> dict[str, Any]:
+    turn_base = dict(base)
+    http_bridge_configured = _is_enabled_mapping(
+        context.get("deepseek_live_format_check_bridge")
+    )
+    file_bridge_configured = _is_enabled_mapping(
+        context.get("deepseek_live_format_check_file_bridge")
+    )
+    turn_base["bridge_attempted"] = http_bridge_configured or file_bridge_configured
+    turn_base["file_bridge_attempted"] = file_bridge_configured
+    http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
+        context=context,
+        prompt=prompt,
+        timeout_seconds=timeout_seconds,
+        output_token_limit=output_token_limit,
+        result_text_limit=result_text_limit,
+    )
+    if http_bridge_result is not None:
+        return {**turn_base, **http_bridge_result}
+    if file_bridge_configured:
+        file_bridge_result = _runtime_file_bridge_result(
+            context=context,
+            prompt=prompt,
+            timeout_seconds=timeout_seconds,
+            output_token_limit=output_token_limit,
+            result_text_limit=result_text_limit,
+        )
+        if file_bridge_result is not None:
+            return {**turn_base, **file_bridge_result}
+    elif permission_style_bridge_failure:
+        turn_base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
+    return _direct_provider_live_result(
+        route_id=route_id,
+        prompt=prompt,
+        base=turn_base,
+        timeout_seconds=timeout_seconds,
+        output_token_limit=output_token_limit,
+        result_text_limit=result_text_limit,
+    )
+
+
 def request_live_result(
     *,
     task: str,
@@ -1981,12 +2086,6 @@ def request_live_result(
         context_pack=repo_context_pack,
         tool_results=repo_tool_results,
         blocked=repo_bridge_required and not repo_bridge_available,
-    )
-    http_bridge_configured = _is_enabled_mapping(
-        context.get("deepseek_live_format_check_bridge")
-    )
-    file_bridge_configured = _is_enabled_mapping(
-        context.get("deepseek_live_format_check_file_bridge")
     )
     base: dict[str, Any] = {
         "status": "error",
@@ -2031,29 +2130,15 @@ def request_live_result(
         dip_work_mode=effective_work_mode,
     )
     if not repo_bridge_required:
-        base["bridge_attempted"] = http_bridge_configured or file_bridge_configured
-        http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
+        return _live_result_turn(
             context=context,
+            route_id=route_id,
             prompt=prompt,
+            base=base,
             timeout_seconds=timeout_seconds,
             output_token_limit=output_token_limit,
             result_text_limit=live_result_text_limit,
         )
-        if http_bridge_result is not None:
-            return {**base, **http_bridge_result}
-        if file_bridge_configured:
-            base["file_bridge_attempted"] = True
-            file_bridge_result = _runtime_file_bridge_result(
-                context=context,
-                prompt=prompt,
-                timeout_seconds=timeout_seconds,
-                output_token_limit=output_token_limit,
-                result_text_limit=live_result_text_limit,
-            )
-            if file_bridge_result is not None:
-                return {**base, **file_bridge_result}
-        elif permission_style_bridge_failure:
-            base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
 
     conversation_prompt = prompt
     if repo_bridge_required and repo_root is not None:
@@ -2070,7 +2155,8 @@ def request_live_result(
             conversation_prompt += _repo_tool_result_prompt(tool_result)
     last_result: dict[str, Any] = {}
     for _step in range(repo_bridge_max_steps + 1):
-        last_result = _direct_provider_live_result(
+        last_result = _live_result_turn(
+            context=context,
             route_id=route_id,
             prompt=conversation_prompt,
             base=base,
@@ -2119,7 +2205,8 @@ def request_live_result(
         )
         if pending_tool_call:
             final_prompt = conversation_prompt + _repo_final_answer_gate_prompt()
-            final_result = _direct_provider_live_result(
+            final_result = _live_result_turn(
+                context=context,
                 route_id=route_id,
                 prompt=final_prompt,
                 base=base,
@@ -2268,6 +2355,7 @@ def build_wbp_dip_tool_packet(
     delegate_packet = _find_delegate_packet(events)
     delegate_ok = _delegate_packet_ok(delegate_packet)
     assistant_observed = _assistant_response_observed(events) or output_last_message_file.is_file()
+    forbidden_event_reasons = _codex_exec_forbidden_event_reasons(events)
     blocking_reasons: list[str] = []
     if not task:
         blocking_reasons.append("task_required")
@@ -2277,6 +2365,7 @@ def build_wbp_dip_tool_packet(
         blocking_reasons.append("codex_exec_failed")
     if not dry_run and codex_exit_code == 0 and not delegate_ok:
         blocking_reasons.append("delegate_to_dip_not_proven")
+    blocking_reasons.extend(forbidden_event_reasons)
 
     live_result_data = dict(live_result or {})
     packet_work_settings = _dip_work_mode_settings(dip_work_mode)
@@ -2349,6 +2438,12 @@ def build_wbp_dip_tool_packet(
         live_result_data.get("result_text"),
         limit=live_result_text_limit,
     )
+    live_result_text_for_artifact = live_result_text if live_result_available else ""
+    live_result_text_public = (
+        ""
+        if dip_work_mode == "full"
+        else live_result_text_for_artifact
+    )
     direct_live_result_secret_leak = bool(
         live_result_available
         and any(secret and secret in live_result_text for secret in secret_values)
@@ -2377,6 +2472,8 @@ def build_wbp_dip_tool_packet(
     ) or direct_live_result_secret_leak or live_result_declared_unsafe
     if unsafe:
         live_result_text = ""
+        live_result_text_for_artifact = ""
+        live_result_text_public = ""
         live_result_available = False
         blocking_reasons.append("unsafe_packet_secret_leak")
 
@@ -2394,6 +2491,8 @@ def build_wbp_dip_tool_packet(
         machine_error_code = WBP_DIP_TOOL_DRY_RUN
     elif codex_exit_code != 0:
         machine_error_code = WBP_DIP_TOOL_CODEX_EXEC_FAILED
+    elif forbidden_event_reasons:
+        machine_error_code = WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT
     elif require_live_result and delegate_ok and not live_result_available:
         machine_error_code = live_result_error_code or WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE
     elif delegate_ok:
@@ -2435,6 +2534,8 @@ def build_wbp_dip_tool_packet(
         "fallback_used": delegate_packet.get("fallback_used") is True,
         "local_imitation_used": delegate_packet.get("local_imitation_used") is True,
         "native_codex_subagent_used_as_dip": False,
+        "codex_exec_forbidden_tool_event_observed": bool(forbidden_event_reasons),
+        "codex_exec_forbidden_event_reasons": forbidden_event_reasons,
         "raw_backend_details_exposed": delegate_packet.get("raw_backend_details_exposed") is True,
         "secret_value_exposed": delegate_packet.get("secret_value_exposed") is True,
         "assistant_response_observed": assistant_observed,
@@ -2596,10 +2697,14 @@ def build_wbp_dip_tool_packet(
             live_result_data.get("route_id_sha256"),
             limit=80,
         ),
-        "live_result_text": live_result_text if live_result_available else "",
-        "live_result_text_recorded": live_result_available,
-        "live_result_text_sha256": _sha256_text(live_result_text) if live_result_available else "",
-        "live_result_text_length": len(live_result_text) if live_result_available else 0,
+        "live_result_text": live_result_text_public,
+        "live_result_text_recorded": bool(live_result_text_public),
+        "live_result_text_sha256": (
+            _sha256_text(live_result_text_for_artifact) if live_result_available else ""
+        ),
+        "live_result_text_length": (
+            len(live_result_text_for_artifact) if live_result_available else 0
+        ),
         "live_result_text_truncated": live_result_data.get("result_text_truncated") is True,
         "live_result_text_artifact_written": False,
         "live_result_text_artifact_filename": DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME,
@@ -2669,13 +2774,19 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     write_json_atomic(path, dict(payload))
 
 
-def _attach_live_result_text_artifact(packet: dict[str, Any], proof_dir: Path) -> dict[str, Any]:
-    text = str(packet.get("live_result_text") or "")
+def _attach_live_result_text_artifact(
+    packet: dict[str, Any],
+    proof_dir: Path,
+    *,
+    text_source: str | None = None,
+) -> dict[str, Any]:
+    text = str(text_source if text_source is not None else packet.get("live_result_text") or "")
     if packet.get("live_result_available") is not True or not text:
         return packet
     artifact_path = proof_dir / DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME
     write_text_atomic(artifact_path, text)
     artifact_bytes = artifact_path.stat().st_size
+    artifact_sha256 = _sha256_file(artifact_path)
     changed_files = [
         str(item)
         for item in (
@@ -2692,7 +2803,7 @@ def _attach_live_result_text_artifact(packet: dict[str, Any], proof_dir: Path) -
             "live_result_text_artifact_written": True,
             "live_result_text_artifact_filename": DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME,
             "live_result_text_artifact_path_recorded": False,
-            "live_result_text_artifact_sha256": _sha256_text(text),
+            "live_result_text_artifact_sha256": artifact_sha256,
             "live_result_text_artifact_bytes": artifact_bytes,
         }
     )
@@ -2916,7 +3027,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     packet.update(
         _merge_profile_config_repair_packets(profile_repair_before, profile_repair_after)
     )
-    packet = _attach_live_result_text_artifact(packet, proof_dir)
+    artifact_text_source = (
+        _bounded_result_text(
+            live_result.get("result_text") if isinstance(live_result, Mapping) else "",
+            limit=int(packet.get("live_result_text_limit") or DEFAULT_LIVE_RESULT_TEXT_LIMIT),
+        )
+        if isinstance(live_result, Mapping)
+        else None
+    )
+    packet = _attach_live_result_text_artifact(
+        packet,
+        proof_dir,
+        text_source=artifact_text_source,
+    )
     packet_file = proof_dir / "wbp-dip-tool.packet.json"
     _write_json(packet_file, packet)
     if args.json:
@@ -2927,6 +3050,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.stdout.write(result_text)
             if not result_text.endswith("\n"):
                 sys.stdout.write("\n")
+        elif (
+            packet.get("live_result_available") is True
+            and packet.get("live_result_text_artifact_written") is True
+        ):
+            artifact_file = proof_dir / str(
+                packet.get("live_result_text_artifact_filename")
+                or DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME
+            )
+            if artifact_file.is_file():
+                result_text = artifact_file.read_text(encoding="utf-8")
+                sys.stdout.write(result_text)
+                if not result_text.endswith("\n"):
+                    sys.stdout.write("\n")
+            else:
+                sys.stdout.write(str(packet["human_message"]) + "\n")
         elif output_last_message.is_file():
             last_message = output_last_message.read_text(encoding="utf-8")
             sys.stdout.write(last_message)
