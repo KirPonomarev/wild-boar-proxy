@@ -134,6 +134,19 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertIn('elif [ -n "$OPENAI_API_KEY_FROM_AUTH" ]; then', payload)
         self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
 
+    def test_repo_owned_default_launcher_repairs_stale_native_model_before_desktop_launch(
+        self,
+    ) -> None:
+        payload = runtime.build_repo_owned_default_launcher_script_payload()
+
+        self.assertIn('CONFIG_TOML="${WBP_CONFIG_TOML:-$PROFILE_DIR/config.toml}"', payload)
+        self.assertIn('model = "gpt-5.3-codex"', payload)
+        self.assertIn('model = "gpt-5.5"', payload)
+        self.assertLess(
+            payload.index('model = "gpt-5.3-codex"'),
+            payload.index('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}'),
+        )
+
     def test_auth_pool_hygiene_uses_snapshot_as_observed_selection_when_runtime_loaded_ids_empty(
         self,
     ) -> None:

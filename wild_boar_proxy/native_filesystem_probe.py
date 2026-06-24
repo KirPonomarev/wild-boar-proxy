@@ -56,6 +56,13 @@ DEFAULT_CODEX_PROCESS_PATTERNS = (
 )
 AGENT_RUNTIME_CONTEXT_FILENAME = "wbp-agent-runtime-context.json"
 DEFAULT_CUSTOM_NATIVE_MODEL = "gpt-5.5"
+STALE_CUSTOM_NATIVE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
+CUSTOM_NATIVE_MODEL_REPAIR_TARGETS = (
+    DEFAULT_CUSTOM_NATIVE_MODEL,
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+)
 CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0
 
 
@@ -4346,6 +4353,14 @@ def _extract_model_ids_from_models_payload(payload: object) -> list[str]:
     return list(dict.fromkeys(model_ids))
 
 
+def _repair_target_for_stale_custom_native_model(model_ids: list[str]) -> str:
+    available = set(model_ids)
+    for candidate in CUSTOM_NATIVE_MODEL_REPAIR_TARGETS:
+        if candidate in available:
+            return candidate
+    return ""
+
+
 def build_configured_model_availability_packet(
     *,
     endpoint: str,
@@ -4418,7 +4433,32 @@ def build_configured_model_availability_packet(
             "transport_error_class": type(exc).__name__,
         }
     model_ids = _extract_model_ids_from_models_payload(payload)
-    model_available = configured_model in model_ids
+    requested_model_available = configured_model in model_ids
+    configured_model_stale = configured_model in STALE_CUSTOM_NATIVE_MODEL_IDS
+    repaired_model = (
+        _repair_target_for_stale_custom_native_model(model_ids)
+        if configured_model_stale
+        else configured_model
+    )
+    model_available = bool(repaired_model and repaired_model in model_ids and not configured_model_stale)
+    if configured_model_stale and repaired_model:
+        model_available = True
+    if configured_model_stale and not repaired_model:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_STALE_MODEL_REPAIR_TARGET_UNAVAILABLE",
+            "reason_class": "configured_model_stale_repair_target_unavailable",
+            "available_model_count": len(model_ids),
+            "available_model_ids": model_ids[:100],
+            "transport_error_class": "",
+            "configured_model_available": False,
+            "requested_configured_model_id": configured_model,
+            "requested_configured_model_available": requested_model_available,
+            "effective_configured_model_id": "",
+            "configured_model_stale": True,
+            "configured_model_auto_repaired": False,
+        }
     return {
         **base,
         "status": "ok" if model_available else "blocked",
@@ -4432,6 +4472,11 @@ def build_configured_model_availability_packet(
         "available_model_ids": model_ids[:100],
         "transport_error_class": "",
         "configured_model_available": model_available,
+        "requested_configured_model_id": configured_model,
+        "requested_configured_model_available": requested_model_available,
+        "effective_configured_model_id": repaired_model if model_available else configured_model,
+        "configured_model_stale": configured_model_stale,
+        "configured_model_auto_repaired": configured_model_stale and model_available,
     }
 
 
@@ -4463,8 +4508,18 @@ def materialize_probe_profile(
             "models_endpoint_redacted": True,
             "available_model_ids_recorded": False,
             "available_model_ids": [],
+            "requested_configured_model_id": str(model or "").strip(),
+            "requested_configured_model_available": False,
+            "effective_configured_model_id": str(model or "").strip(),
+            "configured_model_stale": False,
+            "configured_model_auto_repaired": False,
         }
     )
+    effective_model = str(
+        model_availability_packet.get("effective_configured_model_id")
+        or model
+        or ""
+    ).strip()
     base_packet = {
         "profile_dir": str(layout.profile_dir),
         "launcher_path": str(layout.launcher_path),
@@ -4488,6 +4543,21 @@ def materialize_probe_profile(
         "configured_model_validation_packet": model_availability_packet,
         "configured_model_available": (
             model_availability_packet.get("configured_model_available") is True
+        ),
+        "requested_configured_model_id": str(
+            model_availability_packet.get("requested_configured_model_id")
+            or model
+            or ""
+        ).strip(),
+        "requested_configured_model_available": (
+            model_availability_packet.get("requested_configured_model_available") is True
+        ),
+        "effective_configured_model_id": effective_model,
+        "configured_model_stale": (
+            model_availability_packet.get("configured_model_stale") is True
+        ),
+        "configured_model_auto_repaired": (
+            model_availability_packet.get("configured_model_auto_repaired") is True
         ),
         "model_config_written": False,
     }
@@ -4522,7 +4592,7 @@ def materialize_probe_profile(
     preserved_hooks_sections = preserved_hooks_toml_sections(existing_config_text)
     provider_config = build_provider_config(
         endpoint=endpoint,
-        model=model,
+        model=effective_model,
         auth_command_path=auth_command_path,
     )
     if preserved_hooks_sections:
@@ -4537,7 +4607,7 @@ def materialize_probe_profile(
     )
     write_text_atomic(
         layout.launcher_path,
-        build_repo_owned_default_launcher_script_text() + "\n",
+        build_repo_owned_default_launcher_script_text(),
     )
     agent_runtime_context_path = layout.profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
     agent_runtime_context_written = False

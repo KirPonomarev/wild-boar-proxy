@@ -751,8 +751,8 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["planned_dip_work_mode"], "full")
         self.assertEqual(packet["dip_work_mode"], "full")
         self.assertTrue(packet["dip_full_work_mode"])
-        self.assertEqual(packet["live_result_text_limit"], 12000)
-        self.assertEqual(packet["live_result_output_token_limit"], 4096)
+        self.assertEqual(packet["live_result_text_limit"], 64000)
+        self.assertEqual(packet["live_result_output_token_limit"], 32768)
         self.assertEqual(packet["repo_bridge_max_steps"], 16)
         self.assertFalse(packet_contains_text(packet, TASK))
 
@@ -769,9 +769,20 @@ class WbpDipToolTests(unittest.TestCase):
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
             proof_dir = root / "proof"
+            profile_dir = root / "profile"
+            profile_dir.mkdir()
+            (profile_dir / "config.toml").write_text(
+                'model = "gpt-5.3-codex"\n',
+                encoding="utf-8",
+            )
 
             def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
                 stdout = kwargs["stdout"]
+                env = kwargs["env"]
+                Path(str(env["CODEX_HOME"])).joinpath("config.toml").write_text(
+                    'model = "gpt-5.3-codex"\n',
+                    encoding="utf-8",
+                )
                 stdout.write(
                     json.dumps(
                         {
@@ -810,7 +821,7 @@ class WbpDipToolTests(unittest.TestCase):
                         "--codex-bin",
                         str(codex_bin),
                         "--profile-dir",
-                        str(root / "profile"),
+                        str(profile_dir),
                         "--proof-dir",
                         str(proof_dir),
                         "--cd",
@@ -819,6 +830,12 @@ class WbpDipToolTests(unittest.TestCase):
                     ]
                 )
             codex_jsonl = (proof_dir / "codex-exec.jsonl").read_text(encoding="utf-8")
+            live_text_artifact = proof_dir / "live-result-full-text.txt"
+            live_text_artifact_present = live_text_artifact.is_file()
+            live_text_artifact_text = live_text_artifact.read_text(encoding="utf-8")
+            profile_config_text = (profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
 
         self.assertEqual(exit_code, 0)
         packet = json.loads(stdout.getvalue())
@@ -843,6 +860,19 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(packet["codex_stderr_recorded"])
         self.assertFalse(packet["product_ready"])
         self.assertGreater(packet["live_result_text_length"], 0)
+        self.assertTrue(packet["profile_config_model_repaired_before_codex_exec"])
+        self.assertTrue(packet["profile_config_model_repaired_after_codex_exec"])
+        self.assertEqual(packet["profile_config_model_after"], DEFAULT_MODEL)
+        self.assertIn(f'model = "{DEFAULT_MODEL}"', profile_config_text)
+        self.assertFalse(packet["profile_config_path_recorded"])
+        self.assertTrue(packet["live_result_text_artifact_written"])
+        self.assertFalse(packet["live_result_text_artifact_path_recorded"])
+        self.assertEqual(packet["live_result_text_artifact_filename"], "live-result-full-text.txt")
+        self.assertTrue(live_text_artifact_present)
+        self.assertEqual(
+            live_text_artifact_text.rstrip("\n"),
+            packet["live_result_text"],
+        )
         for path in packet["changed_files"]:
             self.assertTrue(str(path).startswith(str(proof_dir)))
         self.assertFalse(packet_contains_text(packet, TASK))
@@ -996,7 +1026,7 @@ class WbpDipToolTests(unittest.TestCase):
             "cost_class": "paid_or_free_limited",
             "enabled": True,
         }
-        long_text = "x" * 3000
+        long_text = "x" * 13000
         request_json_mock.return_value = SimpleNamespace(
             status_code=200,
             latency_ms=12,
@@ -1025,12 +1055,12 @@ class WbpDipToolTests(unittest.TestCase):
             )
 
         payload = request_json_mock.call_args.kwargs["payload"]
-        self.assertEqual(payload["max_tokens"], 4096)
+        self.assertEqual(payload["max_tokens"], 32768)
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["dip_work_mode"], "full")
         self.assertTrue(result["dip_full_work_mode"])
-        self.assertEqual(result["live_result_text_limit"], 12000)
-        self.assertEqual(result["live_result_output_token_limit"], 4096)
+        self.assertEqual(result["live_result_text_limit"], 64000)
+        self.assertEqual(result["live_result_output_token_limit"], 32768)
         self.assertEqual(result["result_text"], long_text)
         self.assertFalse(result["result_text_truncated"])
 
@@ -1679,6 +1709,184 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(result["dip_code_mutation_required"])
         self.assertFalse(result["dip_code_written"])
         self.assertFalse(result["dip_code_verification_required"])
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_full_power_matrix_records_all_bridge_tools(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        patch_text = """diff --git a/demo.py b/demo.py
+--- a/demo.py
++++ b/demo.py
+@@ -1 +1 @@
+-VALUE = "ok"
++VALUE = "better"
+"""
+        request_json_mock.side_effect = [
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=10,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {"wbp_repo_tool_call": {"tool": "list_files", "path": "."}}
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=11,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "search",
+                                            "pattern": "VALUE",
+                                            "glob": "demo.py",
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "propose_patch",
+                                            "patch": patch_text,
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=13,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "wbp_repo_tool_call": {
+                                            "tool": "run_command",
+                                            "args": ["rg", "VALUE", "demo.py"],
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=14,
+                payload={
+                    "choices": [
+                        {"message": {"content": "Matrix complete with bridge evidence."}}
+                    ]
+                },
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "ok"\n', encoding="utf-8")
+            subprocess.run(
+                ["git", "init"],
+                cwd=repo,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=True,
+            )
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: run bridge matrix: list files, search VALUE, validate "
+                    "a dry-run diff proposal, run command without changing files."
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                dip_work_mode="full",
+                timeout_seconds=0.01,
+            )
+            unchanged_text = (repo / "demo.py").read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["dip_work_mode"], "full")
+        self.assertEqual(result["repo_bridge_tool_call_count"], 5)
+        self.assertEqual(result["repo_bridge_successful_tool_call_count"], 5)
+        self.assertEqual(
+            result["repo_bridge_tool_names"],
+            ["git_status", "list_files", "search", "propose_patch", "run_command"],
+        )
+        self.assertEqual(result["dip_action_tool_names"], ["propose_patch", "run_command"])
+        self.assertTrue(result["dip_action_bridge_used"])
+        self.assertEqual(result["dip_action_successful_tool_call_count"], 2)
+        self.assertTrue(result["dip_action_patch_proposed"])
+        self.assertTrue(result["dip_action_commands_run"])
+        self.assertFalse(result["dip_action_patch_applied"])
+        self.assertFalse(result["dip_action_mutation_applied"])
+        self.assertFalse(result["dip_code_mutation_required"])
+        self.assertEqual(unchanged_text, 'VALUE = "ok"\n')
+        self.assertEqual(result["dip_evidence_trace_count"], 5)
+        self.assertFalse(result["dip_evidence_trace"][3]["patch_recorded"])
+        self.assertFalse(result["dip_evidence_trace"][4]["command_recorded"])
+        self.assertEqual(request_json_mock.call_count, 5)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})

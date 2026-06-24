@@ -24,7 +24,7 @@ from .external_models.http_client import request_json
 from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
 from .external_models.validate import _completion_url, _provider_headers
-from .runtime import RuntimeErrorInfo
+from .runtime import RuntimeErrorInfo, write_json_atomic, write_text_atomic
 
 
 WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
@@ -32,16 +32,18 @@ DEFAULT_ALIAS = "DIP"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_SANDBOX = "danger-full-access"
 DEFAULT_CODEX_APP_NAME = "Codex WBP Clean.app"
+STALE_CODEX_PROFILE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
 DEFAULT_ENTRY_EVIDENCE_FILENAME = "mcp-entry-evidence.json"
 DEFAULT_CODEX_JSONL_FILENAME = "codex-exec.jsonl"
 DEFAULT_LAST_MESSAGE_FILENAME = "last-message.txt"
+DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME = "live-result-full-text.txt"
 DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
 DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS = 2.0
 DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
-FULL_WORK_LIVE_RESULT_TEXT_LIMIT = 12000
+FULL_WORK_LIVE_RESULT_TEXT_LIMIT = 64000
 DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS = 768
-FULL_WORK_MAX_OUTPUT_TOKENS = 4096
+FULL_WORK_MAX_OUTPUT_TOKENS = 32768
 DEFAULT_REPO_BRIDGE_MODE = "auto"
 DEFAULT_REPO_BRIDGE_MAX_STEPS = 8
 FULL_WORK_REPO_BRIDGE_MAX_STEPS = 16
@@ -250,6 +252,97 @@ def _dip_work_mode_settings(work_mode: str) -> dict[str, int | str]:
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _repair_stale_profile_config_model(profile_dir: Path, *, model: str) -> dict[str, Any]:
+    target_model = _safe_text(model, limit=120)
+    packet = {
+        "profile_config_model_repair_attempted": False,
+        "profile_config_model_repaired": False,
+        "profile_config_model_before": "",
+        "profile_config_model_after": "",
+        "profile_config_model_target": target_model,
+        "profile_config_path_recorded": False,
+        "profile_config_repair_error": "",
+    }
+    if not target_model or target_model in STALE_CODEX_PROFILE_MODEL_IDS:
+        return packet
+    config_path = profile_dir / "config.toml"
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {**packet, "profile_config_repair_error": "config_missing"}
+    except OSError:
+        return {**packet, "profile_config_repair_error": "config_read_failed"}
+    match = re.search(r'(?m)^model\s*=\s*"([^"]*)"', text)
+    current_model = _safe_text(match.group(1), limit=120) if match else ""
+    packet["profile_config_model_before"] = current_model
+    packet["profile_config_model_after"] = current_model
+    if current_model not in STALE_CODEX_PROFILE_MODEL_IDS:
+        return packet
+    repaired = re.sub(
+        r'(?m)^model\s*=\s*"[^"]*"',
+        f'model = "{target_model}"',
+        text,
+        count=1,
+    )
+    try:
+        write_text_atomic(config_path, repaired.rstrip("\n"))
+    except OSError:
+        return {
+            **packet,
+            "profile_config_model_repair_attempted": True,
+            "profile_config_repair_error": "config_write_failed",
+        }
+    return {
+        **packet,
+        "profile_config_model_repair_attempted": True,
+        "profile_config_model_repaired": True,
+        "profile_config_model_after": target_model,
+        "profile_config_repair_error": "",
+    }
+
+
+def _merge_profile_config_repair_packets(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "profile_config_model_repair_attempted": (
+            before.get("profile_config_model_repair_attempted") is True
+            or after.get("profile_config_model_repair_attempted") is True
+        ),
+        "profile_config_model_repaired": (
+            before.get("profile_config_model_repaired") is True
+            or after.get("profile_config_model_repaired") is True
+        ),
+        "profile_config_model_repaired_before_codex_exec": (
+            before.get("profile_config_model_repaired") is True
+        ),
+        "profile_config_model_repaired_after_codex_exec": (
+            after.get("profile_config_model_repaired") is True
+        ),
+        "profile_config_model_before": _safe_text(
+            before.get("profile_config_model_before"),
+            limit=120,
+        ),
+        "profile_config_model_after": _safe_text(
+            after.get("profile_config_model_after")
+            or before.get("profile_config_model_after"),
+            limit=120,
+        ),
+        "profile_config_model_target": _safe_text(
+            after.get("profile_config_model_target")
+            or before.get("profile_config_model_target"),
+            limit=120,
+        ),
+        "profile_config_path_recorded": False,
+        "profile_config_repair_error": _safe_text(
+            after.get("profile_config_repair_error")
+            or before.get("profile_config_repair_error"),
+            limit=120,
+        ),
+    }
 
 
 def _provider_proof_fields(*, direct_provider_response_observed: bool) -> dict[str, Any]:
@@ -1428,6 +1521,11 @@ def _repo_bridge_fields(
         for result in tool_results
     ]
     evidence_trace = _repo_evidence_trace(tool_results)
+    repo_tool_names = [_safe_text(result.get("tool"), limit=80) for result in tool_results]
+    action_tool_names = [
+        _safe_text(result.get("tool"), limit=80)
+        for result in action_results
+    ]
     return {
         "dip_repo_direct_access": False,
         "dip_repo_tool_bridge_required": required,
@@ -1476,6 +1574,8 @@ def _repo_bridge_fields(
         "repo_bridge_context_pack_recorded": False,
         "repo_bridge_tool_call_count": len(tool_results),
         "repo_bridge_successful_tool_call_count": len(successful_results),
+        "repo_bridge_tool_names": repo_tool_names,
+        "dip_action_tool_names": action_tool_names,
         "repo_bridge_tool_result_sha256s": tool_result_digests,
         "repo_bridge_raw_tool_results_recorded": False,
         "repo_bridge_blocked": blocked,
@@ -2384,6 +2484,22 @@ def build_wbp_dip_tool_packet(
         "repo_bridge_successful_tool_call_count": int(
             live_result_data.get("repo_bridge_successful_tool_call_count") or 0
         ),
+        "repo_bridge_tool_names": [
+            _safe_text(item, limit=80)
+            for item in (
+                live_result_data.get("repo_bridge_tool_names")
+                if isinstance(live_result_data.get("repo_bridge_tool_names"), list)
+                else []
+            )
+        ],
+        "dip_action_tool_names": [
+            _safe_text(item, limit=80)
+            for item in (
+                live_result_data.get("dip_action_tool_names")
+                if isinstance(live_result_data.get("dip_action_tool_names"), list)
+                else []
+            )
+        ],
         "repo_bridge_tool_result_sha256s": [
             _safe_text(item, limit=80)
             for item in (
@@ -2425,6 +2541,11 @@ def build_wbp_dip_tool_packet(
         "live_result_text_sha256": _sha256_text(live_result_text) if live_result_available else "",
         "live_result_text_length": len(live_result_text) if live_result_available else 0,
         "live_result_text_truncated": live_result_data.get("result_text_truncated") is True,
+        "live_result_text_artifact_written": False,
+        "live_result_text_artifact_filename": DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME,
+        "live_result_text_artifact_path_recorded": False,
+        "live_result_text_artifact_sha256": "",
+        "live_result_text_artifact_bytes": 0,
         "live_result_provider_recorded": live_result_data.get("provider_recorded") is True,
         "live_result_provider": _safe_text(live_result_data.get("provider"), limit=120)
         if live_result_data.get("provider_recorded") is True
@@ -2439,6 +2560,15 @@ def build_wbp_dip_tool_packet(
         ),
         "live_result_secret_value_exposed": live_result_data.get("secret_value_exposed") is True,
         "expected_alias": expected_alias,
+        "profile_config_model_repair_attempted": False,
+        "profile_config_model_repaired": False,
+        "profile_config_model_repaired_before_codex_exec": False,
+        "profile_config_model_repaired_after_codex_exec": False,
+        "profile_config_model_before": "",
+        "profile_config_model_after": "",
+        "profile_config_model_target": "",
+        "profile_config_path_recorded": False,
+        "profile_config_repair_error": "",
         "task_sha256": task_digest,
         "prompt_text_recorded": False,
         "raw_prompt_recorded": False,
@@ -2476,11 +2606,37 @@ def _task_from_args(values: Sequence[str]) -> str:
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(dict(payload), ensure_ascii=True, sort_keys=True) + "\n",
-        encoding="utf-8",
+    write_json_atomic(path, dict(payload))
+
+
+def _attach_live_result_text_artifact(packet: dict[str, Any], proof_dir: Path) -> dict[str, Any]:
+    text = str(packet.get("live_result_text") or "")
+    if packet.get("live_result_available") is not True or not text:
+        return packet
+    artifact_path = proof_dir / DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME
+    write_text_atomic(artifact_path, text)
+    artifact_bytes = artifact_path.stat().st_size
+    changed_files = [
+        str(item)
+        for item in (
+            packet.get("changed_files")
+            if isinstance(packet.get("changed_files"), list)
+            else []
+        )
+    ]
+    if str(artifact_path) not in changed_files:
+        changed_files.append(str(artifact_path))
+    packet.update(
+        {
+            "changed_files": changed_files,
+            "live_result_text_artifact_written": True,
+            "live_result_text_artifact_filename": DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME,
+            "live_result_text_artifact_path_recorded": False,
+            "live_result_text_artifact_sha256": _sha256_text(text),
+            "live_result_text_artifact_bytes": artifact_bytes,
+        }
     )
+    return packet
 
 
 def _json_string_content(value: str, *, ensure_ascii: bool) -> str:
@@ -2627,6 +2783,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "planned_model": model,
                 "planned_dip_work_mode": args.work_mode,
                 "planned_prompt_sha256": _sha256_text(prompt),
+                "profile_config_model_repair_planned": True,
             }
         )
         if args.json:
@@ -2645,6 +2802,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
         }
     )
+    profile_repair_before = _repair_stale_profile_config_model(profile_dir, model=model)
+    profile_repair_after: dict[str, Any] = {
+        **profile_repair_before,
+        "profile_config_model_repaired": False,
+        "profile_config_model_repair_attempted": False,
+    }
     if codex_executable and task:
         with output_jsonl.open("w", encoding="utf-8") as stdout_handle:
             completed = subprocess.run(
@@ -2660,6 +2823,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         redactions = _redaction_replacements(task=task, prompt=prompt)
         _redact_text_file(output_jsonl, redactions)
         _redact_text_file(output_last_message, redactions)
+        profile_repair_after = _repair_stale_profile_config_model(profile_dir, model=model)
     live_result: dict[str, Any] | None = None
     if not args.proof_only and codex_exit_code == 0:
         delegate_packet = _find_delegate_packet(_read_codex_exec_jsonl(output_jsonl))
@@ -2687,7 +2851,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         secret_values=[task],
         live_result=live_result,
         require_live_result=not args.proof_only,
+        dip_work_mode=args.work_mode,
     )
+    packet.update(
+        _merge_profile_config_repair_packets(profile_repair_before, profile_repair_after)
+    )
+    packet = _attach_live_result_text_artifact(packet, proof_dir)
     packet_file = proof_dir / "wbp-dip-tool.packet.json"
     _write_json(packet_file, packet)
     if args.json:

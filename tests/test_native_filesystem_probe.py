@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
 import wild_boar_proxy.native_filesystem_probe as native_fs_probe
+from wild_boar_proxy.runtime import repo_managed_default_launcher_recognized
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -4694,6 +4695,9 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             config_text = (layout.profile_dir / "config.toml").read_text(
                 encoding="utf-8"
             )
+            launcher_recognized = repo_managed_default_launcher_recognized(
+                layout.launcher_path
+            )
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
@@ -4702,8 +4706,45 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["model_config_written"])
         self.assertIn('model = "gpt-5.5"', config_text)
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 3.0)
+        self.assertTrue(launcher_recognized)
 
     def test_materialize_probe_profile_blocks_unadvertised_model_without_config_write(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4-mini"}]}
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            with mock.patch(
+                "wild_boar_proxy.native_filesystem_probe.urllib.request.urlopen",
+                return_value=response,
+            ):
+                packet = native_fs_probe.materialize_probe_profile(
+                    layout=layout,
+                    endpoint="http://127.0.0.1:8788/v1",
+                    model="not-server-issued",
+                    auth_command_path=root / "auth.py",
+                    local_token="local-token",
+                    validate_model_against_endpoint=True,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT",
+        )
+        self.assertFalse(packet["configured_model_available"])
+        self.assertFalse(packet["model_config_written"])
+        self.assertFalse((layout.profile_dir / "config.toml").exists())
+        self.assertNotIn("local-token", json.dumps(packet, sort_keys=True))
+
+    def test_materialize_probe_profile_repairs_stale_native_model_to_advertised_default(
+        self,
+    ) -> None:
         response = mock.MagicMock()
         response.__enter__ = mock.Mock(return_value=response)
         response.__exit__ = mock.Mock(return_value=None)
@@ -4726,16 +4767,23 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                     local_token="local-token",
                     validate_model_against_endpoint=True,
                 )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            launcher_recognized = repo_managed_default_launcher_recognized(
+                layout.launcher_path
+            )
 
-        self.assertEqual(packet["status"], "blocked")
-        self.assertEqual(
-            packet["machine_error_code"],
-            "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT",
-        )
-        self.assertFalse(packet["configured_model_available"])
-        self.assertFalse(packet["model_config_written"])
-        self.assertFalse((layout.profile_dir / "config.toml").exists())
-        self.assertNotIn("local-token", json.dumps(packet, sort_keys=True))
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["configured_model_auto_repaired"])
+        self.assertTrue(packet["configured_model_stale"])
+        self.assertEqual(packet["requested_configured_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["effective_configured_model_id"], "gpt-5.5")
+        self.assertTrue(packet["model_config_written"])
+        self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertNotIn('model = "gpt-5.3-codex"', config_text)
+        self.assertTrue(launcher_recognized)
 
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(

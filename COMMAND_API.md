@@ -77,6 +77,17 @@ repo/project/code/audit/report/fix/test prompts and can be controlled with
 filesystem or shell authority; it must request approved WBP tools through strict
 JSON tool-call text, and WBP executes those tools locally.
 
+`--work-mode full` raises the live-result budget for deep investigation and
+large reports. A successful live result must also write
+`live-result-full-text.txt` inside the proof directory and expose only artifact
+metadata in the packet (`live_result_text_artifact_written=true`,
+`live_result_text_artifact_path_recorded=false`).
+
+Before and after the `codex exec` hop, `tools/wbp_dip` must repair a known stale
+Custom Codex profile model (`gpt-5.3-codex`) back to the requested working model
+(`gpt-5.5` by default). The packet must record the repair booleans without
+recording the profile config path.
+
 WBP may also perform bounded repo bootstrap reads before the first provider
 turn, such as reading explicitly named files or listing files for broad repo
 tasks. If DIP answers with prose before required repo/action/code/verification
@@ -142,8 +153,15 @@ With `--json`, stdout is exactly one JSON object and must include:
 - `repo_bridge_mutation_controlled=true`
 - `repo_bridge_direct_shell_access=false`
 - `repo_bridge_bootstrap_used=true|false`
+- `repo_bridge_tool_names=[...]`
+- `dip_action_tool_names=[...]`
 - `repo_bridge_context_pack_recorded=false`
 - `repo_bridge_raw_tool_results_recorded=false`
+- `live_result_text_artifact_written=true` for working-result success paths
+- `live_result_text_artifact_path_recorded=false`
+- `profile_config_model_repaired_before_codex_exec=true|false`
+- `profile_config_model_repaired_after_codex_exec=true|false`
+- `profile_config_path_recorded=false`
 
 `tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
 diagnostics. It is not a working-result success path.
