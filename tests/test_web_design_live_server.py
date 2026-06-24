@@ -11,6 +11,7 @@ import re
 import socket
 import sqlite3
 import subprocess
+import sys
 import threading
 import tempfile
 import time
@@ -814,6 +815,78 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(response_packet["output_text"], "WBP_FILE_BRIDGE_OK")
             self.assertTrue((worker.processed_dir / "manual-proof.json").exists())
             self.assertFalse(request_path.exists())
+
+    def test_custom_native_file_bridge_worker_falls_back_to_live_format_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bridge_root = Path(temp_dir) / "file-bridge"
+            worker = live_server._CustomNativeFileBridgeWorker(bridge_root=bridge_root)
+            worker.request_dir.mkdir(parents=True)
+            worker.response_dir.mkdir(parents=True)
+            worker.processed_dir.mkdir(parents=True)
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+
+            request_path = worker.request_dir / "manual-cli-fallback.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "request_id": "manual-cli-fallback",
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "expected_text": "WBP_FILE_BRIDGE_CLI_OK",
+                        "input": "Answer exactly one line: WBP_FILE_BRIDGE_CLI_OK",
+                        "stream": False,
+                        "max_output_tokens": 32,
+                        "temperature": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cli_stdout = json.dumps(
+                {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "data": {
+                        "provider": "deepseek",
+                        "requested_model": "wbp-deepseek-v4-pro-max",
+                        "fallback_used": False,
+                        "expected_text_observed": True,
+                        "response_preview_bounded": "WBP_FILE_BRIDGE_CLI_OK",
+                        "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                        "api_parameter_sent": True,
+                        "intelligence_measured": False,
+                        "label_source": "provider_declared_plus_operator_mapping",
+                    },
+                }
+            )
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=cli_stdout,
+                stderr="",
+            )
+
+            with (
+                mock.patch.object(live_server, "proxyless_urlopen", side_effect=OSError("bridge down")),
+                mock.patch.object(live_server.subprocess, "run", return_value=completed) as run,
+            ):
+                packet = worker._process_request_file(request_path)
+
+            command = run.call_args.args[0]
+            self.assertEqual(command[:4], [sys.executable, "-m", "wild_boar_proxy", "external-models"])
+            self.assertIn("--route", command)
+            self.assertIn("wbp-deepseek-v4-pro-max", command)
+            self.assertIn("--expected-text", command)
+            self.assertIn("WBP_FILE_BRIDGE_CLI_OK", command)
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(packet["provider"], "deepseek")
+            self.assertEqual(packet["requested_model"], "wbp-deepseek-v4-pro-max")
+            self.assertEqual(packet["output_text"], "WBP_FILE_BRIDGE_CLI_OK")
+            self.assertTrue(packet["api_parameter_sent"])
+            self.assertTrue(packet["file_bridge_cli_fallback_used"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["secret_value_exposed"])
 
     def test_custom_native_acceptance_smoke_passes_only_fresh_exact_deepseek_response(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -6013,7 +6086,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(context["api_primary_orchestrator_enabled"])
         self.assertEqual(context["api_primary_orchestrator_route_id"], route_id)
         self.assertFalse(context["chatgpt_primary_orchestrator_enabled"])
-        self.assertEqual(context["agent_binding_source"], "server_execution_mode_packet")
+        self.assertEqual(context["agent_binding_source"], "server_default")
         self.assertEqual(
             context["agent_binding_truth_source"],
             "server_owned_api_only_primary_route_binding",
@@ -6030,6 +6103,166 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(context["deepseek_live_format_check_bridge"]["model"], route_id)
         self.assertTrue(context["deepseek_live_format_check_file_bridge"]["enabled"])
         self.assertEqual(context["deepseek_live_format_check_file_bridge"]["model"], route_id)
+        self.assertFalse(context["secret_value_exposed"])
+
+    def test_custom_native_runtime_context_api_only_exports_persisted_agent_aliases(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        execution_packet = {
+            "execution_mode": "api_only",
+            "chatgpt_model_id": "",
+            "api_model_id": route_id,
+            "api_reasoning_option_id": "provider_declared_max",
+            "api_reasoning_operator_level": "max",
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": route_id,
+                "provider": "deepseek",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+                "reason": "api_only_uses_primary_model_slot",
+            },
+        }
+        route_records = [
+            {
+                "route_id": route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=route_id,
+            )
+            bindings[0]["display_name"] = "Командир"
+            bindings[0]["aliases"] = ["Командир", "Планер", "Codex", "Agent 1", "1"]
+            bindings[1]["display_name"] = "Кодер"
+            bindings[1]["aliases"] = ["Кодер", "Дип", "DIP", "Agent 2", "2"]
+            write_packet = live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": bindings},
+                primary_model_ids=["gpt-5.5"],
+                route_records=route_records,
+                require_api_route_binding=True,
+            )
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id=route_id,
+                    route_model_id=route_id,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    route_records=route_records,
+                )
+
+        self.assertEqual(write_packet["status"], "ok")
+        self.assertEqual(context["execution_mode"], "api_only")
+        self.assertEqual(context["agent_binding_source"], "persisted_state")
+        self.assertTrue(context["agent_binding_state_file_present"])
+        self.assertEqual(context["primary_aliases"], ["Командир", "Планер", "Codex", "Agent 1", "1"])
+        self.assertEqual(context["coding_aliases"], ["Кодер", "Дип", "DIP", "Agent 2", "2"])
+        self.assertEqual(context["alias_to_agent_id"]["Командир"], "codex")
+        self.assertEqual(context["alias_to_agent_id"]["Кодер"], "dip")
+        self.assertEqual(context["agent_id_to_route"]["codex"], route_id)
+        self.assertEqual(context["agent_id_to_route"]["dip"], route_id)
+        self.assertEqual(context["agent_id_to_model"], {})
+        self.assertEqual(context["allowed_api_route_ids"], [route_id])
+        self.assertTrue(context["alias_runtime_binding_present"])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertTrue(context["api_primary_orchestrator_enabled"])
+        self.assertFalse(context["chatgpt_primary_orchestrator_enabled"])
+        self.assertEqual(context["agent_bindings"][0]["role"], "api_primary_orchestrator")
+        self.assertEqual(context["agent_bindings"][0]["lane"], live_server.API_ROUTE_LANE)
+        self.assertEqual(context["agent_bindings"][1]["role"], "coding_agent")
+        self.assertEqual(context["agent_bindings"][1]["lane"], live_server.API_ROUTE_LANE)
+        self.assertFalse(context["browser_can_supply_route_authority"])
+        self.assertFalse(context["secret_value_exposed"])
+
+    def test_custom_native_runtime_context_api_only_uses_aliases_from_current_route_binding(self) -> None:
+        active_route_id = "wbp-deepseek-v4-pro-max"
+        stale_route_id = "wbp-deepseek-v4-pro-fast"
+        execution_packet = {
+            "execution_mode": "api_only",
+            "chatgpt_model_id": "",
+            "api_model_id": active_route_id,
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": active_route_id,
+                "provider": "deepseek",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+                "reason": "api_only_uses_primary_model_slot",
+            },
+        }
+        route_records = [
+            {
+                "route_id": stale_route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+            {
+                "route_id": active_route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=stale_route_id,
+            )
+            bindings[0]["display_name"] = "Командир"
+            bindings[0]["aliases"] = ["Командир", "Codex", "1"]
+            bindings[1]["display_name"] = "Старый Кодер"
+            bindings[1]["aliases"] = ["Старый Кодер", "DIP", "2"]
+            bindings.append(
+                {
+                    "agent_id": "max-coder",
+                    "display_name": "Макс Кодер",
+                    "role": "coding_agent",
+                    "aliases": ["Макс Кодер", "Max API"],
+                    "lane": live_server.API_ROUTE_LANE,
+                    "route_id": active_route_id,
+                    "enabled": True,
+                    "allowed_actions": ["code_review", "implementation_help"],
+                }
+            )
+            write_packet = live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": bindings},
+                primary_model_ids=["gpt-5.5"],
+                route_records=route_records,
+                require_api_route_binding=True,
+            )
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id=active_route_id,
+                    route_model_id=active_route_id,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    route_records=route_records,
+                )
+
+        self.assertEqual(write_packet["status"], "ok")
+        self.assertEqual(context["execution_mode"], "api_only")
+        self.assertEqual(context["primary_aliases"], ["Командир", "Codex", "1"])
+        self.assertEqual(context["coding_aliases"], ["Макс Кодер", "Max API"])
+        self.assertEqual(context["alias_to_agent_id"]["Макс Кодер"], "dip")
+        self.assertNotIn("Старый Кодер", context["alias_to_agent_id"])
+        self.assertEqual(context["agent_id_to_route"]["dip"], active_route_id)
+        self.assertEqual(context["allowed_api_route_ids"], [active_route_id])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertFalse(context["browser_can_supply_route_authority"])
         self.assertFalse(context["secret_value_exposed"])
 
     def test_custom_native_runtime_context_does_not_synthesize_allowlist_from_empty_projection(self) -> None:

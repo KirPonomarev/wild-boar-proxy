@@ -2535,7 +2535,7 @@ def _build_live_native_availability_lattice_packet(
         return None
     try:
         local_api_key = extract_local_api_key(default_runtime_config_path())
-    except RuntimeError:
+    except (OSError, RuntimeError):
         return None
     current_packets: list[dict[str, Any]] = []
     runtime_ready = True
@@ -2628,7 +2628,7 @@ class _CustomNativeBridgeLease:
             return downstream_endpoint
         try:
             expected_api_key = extract_local_api_key(default_runtime_config_path())
-        except RuntimeError:
+        except (OSError, RuntimeError):
             self.close()
             return downstream_endpoint
         signature_source = {
@@ -2891,10 +2891,19 @@ class _CustomNativeFileBridgeWorker:
                 response_body = response.read().decode("utf-8")
                 status_code = int(getattr(response, "status", 0) or response.getcode())
         except Exception as exc:
+            cli_packet = self._execute_payload_via_cli(
+                payload,
+                fallback_request_id=request_id,
+            )
+            if cli_packet:
+                return cli_packet
             return self._error_packet(
                 request_id=request_id,
                 machine_error_code="FILE_BRIDGE_PROVIDER_REQUEST_FAILED",
-                human_message=f"Server-owned file bridge provider request failed: {exc}",
+                human_message=(
+                    "Server-owned file bridge provider request failed before "
+                    f"CLI fallback could produce evidence: {type(exc).__name__}"
+                ),
             )
         try:
             provider_packet = json.loads(response_body)
@@ -2936,6 +2945,119 @@ class _CustomNativeFileBridgeWorker:
             "intelligence_measured": provider_packet.get("intelligence_measured") is True,
             "label_source": str(provider_packet.get("label_source") or ""),
             "response_text_field": "output_text",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+
+    def _expected_text_from_payload(self, payload: dict[str, Any]) -> str:
+        expected_text = str(payload.get("expected_text") or "").strip()
+        if expected_text:
+            return expected_text
+        prompt = str(payload.get("input") or "")
+        marker = "token below.\n"
+        if marker in prompt:
+            return prompt.split(marker, 1)[1].splitlines()[0].strip()
+        marker = "Answer exactly one line:"
+        if marker in prompt:
+            return prompt.split(marker, 1)[1].splitlines()[0].strip()
+        return ""
+
+    def _execute_payload_via_cli(
+        self,
+        payload: dict[str, Any],
+        *,
+        fallback_request_id: str,
+    ) -> dict[str, Any]:
+        request_id = str(payload.get("request_id") or fallback_request_id)
+        route_id = str(payload.get("model") or "").strip()
+        prompt = str(payload.get("input") or "")
+        expected_text = self._expected_text_from_payload(payload)
+        if not route_id or not prompt or not expected_text:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_CLI_FALLBACK_INPUT_INCOMPLETE",
+                human_message="Server-owned file bridge CLI fallback requires route, prompt, and expected_text.",
+            )
+        command = [
+            sys.executable,
+            "-m",
+            "wild_boar_proxy",
+            "external-models",
+            "live-format-check",
+            "--route",
+            route_id,
+            "--prompt",
+            prompt,
+            "--expected-text",
+            expected_text,
+            "--json",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            packet = json.loads(completed.stdout)
+        except OSError as exc:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_CLI_FALLBACK_EXEC_FAILED",
+                human_message=f"Server-owned file bridge CLI fallback could not start: {type(exc).__name__}.",
+            )
+        except subprocess.TimeoutExpired:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_CLI_FALLBACK_TIMEOUT",
+                human_message="Server-owned file bridge CLI fallback timed out.",
+            )
+        except json.JSONDecodeError:
+            return self._error_packet(
+                request_id=request_id,
+                machine_error_code="FILE_BRIDGE_CLI_FALLBACK_INVALID_JSON",
+                human_message="Server-owned file bridge CLI fallback did not return JSON.",
+            )
+        data = packet.get("data") if isinstance(packet, dict) else {}
+        if not isinstance(data, dict):
+            data = {}
+        output_text = str(data.get("response_preview_bounded") or "")
+        thinking = data.get("thinking") if isinstance(data.get("thinking"), dict) else {}
+        ok = bool(
+            completed.returncode == 0
+            and packet.get("status") == "ok"
+            and packet.get("machine_error_code") == "OK"
+            and data.get("expected_text_observed") is True
+            and output_text
+        )
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_native_file_bridge_response",
+            "captured_at_utc": utc_now(),
+            "status": "ok" if ok else "blocked",
+            "machine_error_code": "OK" if ok else "FILE_BRIDGE_CLI_FALLBACK_FAILED",
+            "human_message": (
+                "Server-owned file bridge CLI fallback passed with exact provider response evidence."
+                if ok
+                else "Server-owned file bridge CLI fallback did not satisfy live-format-check."
+            ),
+            "request_id": request_id,
+            "model": route_id,
+            "bridge_http_status": 0,
+            "provider_status": "completed" if ok else str(packet.get("status") or ""),
+            "provider": str(data.get("provider") or ""),
+            "requested_model": str(data.get("requested_model") or ""),
+            "fallback_used": data.get("fallback_used") is True,
+            "output_text": output_text,
+            "thinking": dict(thinking),
+            "api_parameter_sent": data.get("api_parameter_sent") is True,
+            "max_tokens_sent": int(data.get("max_tokens_sent") or 0),
+            "intelligence_measured": data.get("intelligence_measured") is True,
+            "label_source": str(data.get("label_source") or ""),
+            "response_text_field": "output_text",
+            "file_bridge_cli_fallback_used": True,
             "raw_backend_details_exposed": False,
             "secret_value_exposed": False,
         }
@@ -3415,6 +3537,7 @@ def _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         "schema_version": 1,
         "request_id": request_id,
         "model": expected_route_id,
+        "expected_text": expected_text,
         "input": (
             "Machine protocol check. The entire response must be exactly one "
             "line and must contain only the token below.\n"
@@ -9080,7 +9203,7 @@ def _custom_native_stable_bridge_prewarm_packet(
 
     try:
         local_api_key = extract_local_api_key(default_runtime_config_path())
-    except RuntimeError as exc:
+    except (OSError, RuntimeError) as exc:
         return {
             "schema_version": 1,
             "packet_kind": "custom_native_stable_bridge_prewarm",
@@ -9344,7 +9467,7 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
 
     try:
         local_api_key = extract_local_api_key(default_runtime_config_path())
-    except RuntimeError as exc:
+    except (OSError, RuntimeError) as exc:
         return with_dispatch_fields(
             {
                 **before_packet,
@@ -10851,6 +10974,142 @@ def _custom_native_bridge_truth_fields(
     }
 
 
+def _first_agent_binding(
+    agent_bindings: list[dict[str, Any]],
+    *,
+    agent_id: str,
+    lane: str,
+    route_id: str = "",
+) -> dict[str, Any]:
+    if route_id:
+        for binding in agent_bindings:
+            if (
+                str(binding.get("agent_id") or "") == agent_id
+                and str(binding.get("lane") or "") == lane
+                and str(binding.get("route_id") or "") == route_id
+                and binding.get("enabled") is True
+            ):
+                return dict(binding)
+        for binding in agent_bindings:
+            if (
+                str(binding.get("lane") or "") == lane
+                and str(binding.get("route_id") or "") == route_id
+                and binding.get("enabled") is True
+            ):
+                return dict(binding)
+        if lane == API_ROUTE_LANE:
+            return {}
+    for binding in agent_bindings:
+        if (
+            str(binding.get("agent_id") or "") == agent_id
+            and str(binding.get("lane") or "") == lane
+            and binding.get("enabled") is True
+        ):
+            return dict(binding)
+    for binding in agent_bindings:
+        if (
+            str(binding.get("lane") or "") == lane
+            and binding.get("enabled") is True
+        ):
+            return dict(binding)
+    return {}
+
+
+def _binding_aliases(binding: dict[str, Any], fallback: list[str]) -> list[str]:
+    aliases = [
+        str(alias)
+        for alias in binding.get("aliases", [])
+        if isinstance(alias, str) and str(alias)
+    ]
+    return aliases or list(fallback)
+
+
+def _custom_native_api_only_runtime_agent_bindings(
+    agent_bindings: list[dict[str, Any]],
+    *,
+    api_model_id: str,
+) -> list[dict[str, Any]]:
+    primary_source = _first_agent_binding(
+        agent_bindings,
+        agent_id="codex",
+        lane=PRIMARY_CHATGPT_LANE,
+    )
+    coding_source = _first_agent_binding(
+        agent_bindings,
+        agent_id="dip",
+        lane=API_ROUTE_LANE,
+        route_id=api_model_id,
+    )
+    primary_aliases = _binding_aliases(primary_source, ["Codex", "Agent 1", "1"])
+    coding_aliases = _binding_aliases(coding_source, ["DIP", "Agent 2", "2"])
+    return [
+        {
+            "agent_id": "codex",
+            "display_name": str(primary_source.get("display_name") or primary_aliases[0]),
+            "role": "api_primary_orchestrator",
+            "aliases": primary_aliases,
+            "lane": API_ROUTE_LANE,
+            "route_id": api_model_id,
+            "enabled": True,
+            "allowed_actions": (
+                list(primary_source.get("allowed_actions"))
+                if isinstance(primary_source.get("allowed_actions"), list)
+                else ["plan", "inspect", "patch", "verify"]
+            ),
+        },
+        {
+            "agent_id": "dip",
+            "display_name": str(coding_source.get("display_name") or coding_aliases[0]),
+            "role": "coding_agent",
+            "aliases": coding_aliases,
+            "lane": API_ROUTE_LANE,
+            "route_id": api_model_id,
+            "enabled": True,
+            "allowed_actions": (
+                list(coding_source.get("allowed_actions"))
+                if isinstance(coding_source.get("allowed_actions"), list)
+                else ["code_review", "implementation_help", "format_check"]
+            ),
+        },
+    ]
+
+
+def _custom_native_api_only_runtime_binding_projection(
+    runtime_agent_bindings: list[dict[str, Any]],
+    *,
+    api_model_id: str,
+    provider: str,
+    stale_route_ids: list[str],
+) -> dict[str, Any]:
+    alias_to_agent_id: dict[str, str] = {}
+    for binding in runtime_agent_bindings:
+        agent_id = str(binding.get("agent_id") or "")
+        for alias in _binding_aliases(binding, []):
+            alias_to_agent_id[alias] = agent_id
+    primary_aliases = (
+        _binding_aliases(runtime_agent_bindings[0], [])
+        if len(runtime_agent_bindings) > 0
+        else []
+    )
+    coding_aliases = (
+        _binding_aliases(runtime_agent_bindings[1], [])
+        if len(runtime_agent_bindings) > 1
+        else []
+    )
+    return {
+        "agent_binding_truth_source": "server_owned_api_only_primary_route_binding",
+        "agent_bindings": runtime_agent_bindings,
+        "alias_to_agent_id": alias_to_agent_id,
+        "agent_id_to_route": {"codex": api_model_id, "dip": api_model_id},
+        "agent_id_to_model": {},
+        "allowed_api_route_ids": [api_model_id] if api_model_id else [],
+        "forbidden_stale_route_ids": stale_route_ids,
+        "route_providers": {api_model_id: provider} if api_model_id else {},
+        "primary_aliases": primary_aliases,
+        "coding_aliases": coding_aliases,
+    }
+
+
 def _custom_native_agent_runtime_context(
     *,
     execution_packet: dict[str, Any] | None,
@@ -10925,60 +11184,50 @@ def _custom_native_agent_runtime_context(
         effective_route_records.append(selected_route_record)
     bindings_state_path = agent_bindings_state_path(RuntimePaths.from_env().managed_dir)
     if api_only_primary_executor:
-        runtime_agent_bindings = [
-            {
-                "agent_id": "codex",
-                "display_name": "Codex",
-                "role": "api_primary_orchestrator",
-                "aliases": ["Codex", "Agent 1", "1"],
-                "lane": API_ROUTE_LANE,
-                "route_id": api_model_id,
-                "enabled": True,
-                "allowed_actions": ["plan", "inspect", "patch", "verify"],
-            },
-            {
-                "agent_id": "dip",
-                "display_name": "DIP",
-                "role": "api_coding_agent_alias",
-                "aliases": ["DIP", "Agent 2", "2"],
-                "lane": API_ROUTE_LANE,
-                "route_id": api_model_id,
-                "enabled": True,
-                "allowed_actions": [
-                    "code_review",
-                    "implementation_help",
-                    "format_check",
+        bindings_packet = read_agent_bindings_packet(
+            bindings_state_path,
+            default_bindings=default_agent_bindings(
+                primary_model_id=chatgpt_model_id,
+                api_route_id=api_model_id,
+            ),
+            primary_model_ids=[],
+            route_records=effective_route_records,
+            require_api_route_binding=True,
+        )
+        runtime_agent_bindings = (
+            _custom_native_api_only_runtime_agent_bindings(
+                [
+                    dict(binding)
+                    for binding in bindings_packet.get("agent_bindings", [])
+                    if isinstance(binding, dict)
                 ],
-            },
-        ]
-        bindings_packet = {
-            "status": "ok",
-            "machine_error_code": "OK",
-            "source": "server_execution_mode_packet",
-            "state_file_present": False,
-            "agent_bindings": runtime_agent_bindings,
-        }
-        bindings_projection: dict[str, Any] = {
-            "agent_binding_truth_source": "server_owned_api_only_primary_route_binding",
-            "agent_bindings": runtime_agent_bindings,
-            "alias_to_agent_id": {
-                "Codex": "codex",
-                "Agent 1": "codex",
-                "1": "codex",
-                "DIP": "dip",
-                "Agent 2": "dip",
-                "2": "dip",
-            },
-            "agent_id_to_route": {"codex": api_model_id, "dip": api_model_id},
-            "agent_id_to_model": {},
-            "allowed_api_route_ids": [api_model_id],
-            "forbidden_stale_route_ids": stale_route_ids,
-            "route_providers": {
-                api_model_id: coding_provider or primary_provider or "deepseek"
-            },
-            "primary_aliases": ["Codex", "Agent 1", "1"],
-            "coding_aliases": ["DIP", "Agent 2", "2"],
-        }
+                api_model_id=api_model_id,
+            )
+            if bindings_packet.get("status") == "ok"
+            else []
+        )
+        bindings_packet = {**bindings_packet, "agent_bindings": runtime_agent_bindings}
+        bindings_projection: dict[str, Any] = (
+            _custom_native_api_only_runtime_binding_projection(
+                runtime_agent_bindings,
+                api_model_id=api_model_id,
+                provider=coding_provider or primary_provider or "deepseek",
+                stale_route_ids=stale_route_ids,
+            )
+            if bindings_packet.get("status") == "ok"
+            else {
+                "agent_binding_truth_source": "server_owned_api_only_primary_route_binding",
+                "agent_bindings": [],
+                "alias_to_agent_id": {},
+                "agent_id_to_route": {},
+                "agent_id_to_model": {},
+                "allowed_api_route_ids": [],
+                "forbidden_stale_route_ids": stale_route_ids,
+                "route_providers": {},
+                "primary_aliases": [],
+                "coding_aliases": [],
+            }
+        )
     else:
         bindings_packet = read_agent_bindings_packet(
             bindings_state_path,
