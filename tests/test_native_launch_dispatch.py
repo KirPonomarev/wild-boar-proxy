@@ -2939,6 +2939,148 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
         )
 
+    def test_cdp_response_observer_allows_slow_dip_ui_turn_budget(self) -> None:
+        scan_count: list[int] = []
+
+        def fake_cdp_command(_ws_url: str, _message: dict[str, Any], **_kwargs: object) -> dict[str, Any]:
+            scan_count.append(1)
+            return {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 0,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            }
+
+        self.assertGreaterEqual(
+            native_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
+            240.0,
+        )
+        self.assertGreaterEqual(
+            native_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS,
+            240.0,
+        )
+        monotonic_values = iter([0.0, 0.0, 120.0, 239.9, 240.1])
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.time.monotonic",
+                side_effect=lambda: next(monotonic_values),
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS",
+                0.0,
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.time.sleep",
+            ),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=fake_cdp_command,
+            ),
+        ):
+            packet = native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-slow-dip-turn",
+                request_id="native-submit-slow-dip-turn",
+                timeout_seconds=999.0,
+            )
+
+        self.assertEqual(len(scan_count), 3)
+        self.assertEqual(
+            packet["assistant_turn_machine_error_code"],
+            "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
+        )
+
+    def test_cdp_response_observer_scopes_blocker_markers_to_current_turn(self) -> None:
+        expressions: list[str] = []
+
+        def fake_cdp_command(_ws_url: str, message: dict[str, Any], **_kwargs: object) -> dict[str, Any]:
+            params = message.get("params")
+            if isinstance(params, dict):
+                expressions.append(str(params.get("expression") or ""))
+            return {
+                "id": 3700,
+                "result": {
+                    "result": {
+                        "value": {
+                            "responseObserverScanPerformed": True,
+                            "responseTextReadWithoutStoring": True,
+                            "assistantTurnProbeScanPerformed": True,
+                            "assistantTurnActivityObserved": False,
+                            "assistantTurnStartedObserved": False,
+                            "assistantTurnCompletedObserved": False,
+                            "assistantTurnFailedObserved": False,
+                            "authOrBackendBlockerObserved": False,
+                            "modelOrRuntimeBlockerObserved": False,
+                            "progressCandidateCount": 0,
+                            "stopGeneratingCandidateCount": 0,
+                            "responseSurfaceCandidateCount": 0,
+                            "tokenLeafCandidateCount": 0,
+                            "promptEchoCandidateCount": 0,
+                            "promptSuffixEchoCandidateCount": 0,
+                            "exactTokenCandidateCount": 0,
+                            "responseLikeCandidateCount": 0,
+                            "subagentMarkerCandidateCount": 0,
+                            "customResponseExactTokenObserved": False,
+                            "customResponseBoundToRequest": False,
+                            "nativeCodexSubagentUsedAsDip": False,
+                            "nativeCodexSubagentAbsenceProven": False,
+                            "textValueCaptured": False,
+                        }
+                    }
+                },
+            }
+
+        monotonic_values = iter([0.0, 0.0, 0.2])
+        with (
+            mock.patch(
+                "wild_boar_proxy.native_window_probe.time.monotonic",
+                side_effect=lambda: next(monotonic_values),
+            ),
+            mock.patch("wild_boar_proxy.native_window_probe.time.sleep"),
+            mock.patch(
+                "wild_boar_proxy.native_window_probe._cdp_command",
+                side_effect=fake_cdp_command,
+            ),
+        ):
+            native_probe._cdp_observe_custom_response_token(
+                "ws://127.0.0.1:9223/devtools/page/1",
+                expected_text="WBP_NATIVE_RESPONSE_OK_native-submit-scoped-blocker",
+                request_id="native-submit-scoped-blocker",
+                timeout_seconds=0.1,
+            )
+
+        self.assertEqual(len(expressions), 1)
+        self.assertNotIn("document.body && document.body.innerText", expressions[0])
+        self.assertIn("requestPromptBottom", expressions[0])
+        self.assertIn("currentTurnRegion", expressions[0])
+        self.assertIn("unknown provider for model", expressions[0])
+
     def test_cdp_input_capable_accepts_later_app_page_target_with_visible_surface(self) -> None:
         response = mock.MagicMock()
         response.__enter__ = mock.Mock(return_value=response)

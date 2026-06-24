@@ -79,8 +79,8 @@ CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
 )
 CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
 CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
-CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 12.0
-CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS = 90.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 240.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS = 240.0
 CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
 CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS = 24
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
@@ -1557,9 +1557,12 @@ def _cdp_observe_custom_response_token(
     'quota',
     'model unavailable',
     'model overloaded',
+    'unknown provider for model',
+    'bad gateway',
     'runtime error',
     'try again',
     'please try again',
+    '502',
     'лимит',
     'модель недоступ',
     'ошибка выполнения',
@@ -1627,13 +1630,33 @@ def _cdp_observe_custom_response_token(
     visibleSelectorCount('[role="progressbar"]') +
     visibleSelectorCount('[data-testid*="spinner"]')
   );
-  const bodyText = normalize(document.body && document.body.innerText).toLowerCase();
-  const authOrBackendBlockerCandidateCount = authOrBackendMarkers.filter((marker) => (
-    marker && bodyText.includes(marker)
-  )).length;
-  const modelOrRuntimeBlockerCandidateCount = modelOrRuntimeMarkers.filter((marker) => (
-    marker && bodyText.includes(marker)
-  )).length;
+  const requestTokenLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text.includes(expectedText) || (!!requestId && text.includes(requestId));
+  }});
+  const requestPromptBottom = requestTokenLeafs.reduce((maxBottom, node) => {{
+    const rect = node.getBoundingClientRect();
+    return Math.max(maxBottom, Number(rect.bottom || 0));
+  }}, 0);
+  const currentTurnRegion = (node) => {{
+    if (requestPromptBottom <= 0) return true;
+    const rect = node.getBoundingClientRect();
+    return Number(rect.top || 0) >= requestPromptBottom - 4;
+  }};
+  const blockerCandidateCount = (markers) => (
+    textElements.filter((node) => {{
+      if (!currentTurnRegion(node)) return false;
+      const text = normalize(node.innerText || node.textContent);
+      if (!text) return false;
+      if (text.includes(expectedText) || (!!requestId && text.includes(requestId))) return false;
+      if (hasVisibleChildWith(node, expectedText) || (!!requestId && hasVisibleChildWith(node, requestId))) return false;
+      if (promptMarkers.some((marker) => marker && text.includes(marker))) return false;
+      const lower = text.toLowerCase();
+      return markers.some((marker) => marker && lower.includes(marker));
+    }}).length
+  );
+  const authOrBackendBlockerCandidateCount = blockerCandidateCount(authOrBackendMarkers);
+  const modelOrRuntimeBlockerCandidateCount = blockerCandidateCount(modelOrRuntimeMarkers);
   const responseSurfaceLeafs = textElements.filter((node) => {{
     const text = normalize(node.innerText || node.textContent);
     if (text.length < 20) return false;
