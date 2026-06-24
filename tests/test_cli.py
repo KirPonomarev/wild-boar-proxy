@@ -22033,6 +22033,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), f"sync-stable:{port}")
+        state = json.loads(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8")
+        )
+        registry = json.loads(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            state["stable_default_backend_id"], registry["stable_default_backend_id"]
+        )
         helper_text = self.sync_script.read_text(encoding="utf-8")
         self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
         self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))

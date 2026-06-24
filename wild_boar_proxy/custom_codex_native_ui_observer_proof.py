@@ -24,6 +24,7 @@ DEFAULT_AUTO_LAUNCH_MODEL = DEFAULT_CUSTOM_NATIVE_MODEL
 _AUTO_LAUNCH_MACHINE_ERROR_CODES = frozenset(
     {
         "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+        "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN",
         "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN",
     }
 )
@@ -95,6 +96,21 @@ def _auto_launch_summary_fields(
             launch.get("stable_runtime_generated_config_file_present") is True
         ),
         "native_auto_launch_stable_runtime_generated_config_file_path_recorded": False,
+        "native_auto_launch_stable_runtime_generated_config_default_present": (
+            launch.get("stable_runtime_generated_config_default_present") is True
+        ),
+        "native_auto_launch_observed_stable_config_fallback_used": (
+            launch.get("observed_stable_config_fallback_used") is True
+        ),
+        "native_auto_launch_observed_stable_config_file_present": (
+            launch.get("observed_stable_config_file_present") is True
+        ),
+        "native_auto_launch_token_config_file_present": (
+            launch.get("token_config_file_present") is True
+        ),
+        "native_auto_launch_token_config_source_kind": str(
+            launch.get("token_config_source_kind") or ""
+        ),
         "native_auto_launch_local_token_present": launch.get("local_token_present") is True,
         "native_auto_launch_local_token_value_recorded": False,
     }
@@ -102,10 +118,18 @@ def _auto_launch_summary_fields(
 
 def _launch_packet_allows_retry(launch_packet: dict[str, Any]) -> bool:
     return bool(
-        launch_packet.get("status") == "ok"
-        and (
-            launch_packet.get("native_app_usable") is True
-            or launch_packet.get("running_status") is True
+        (
+            launch_packet.get("status") == "ok"
+            and (
+                launch_packet.get("native_app_usable") is True
+                or launch_packet.get("running_status") is True
+            )
+        )
+        or (
+            launch_packet.get("machine_error_code")
+            == "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            and launch_packet.get("process_started") is True
+            and launch_packet.get("native_window_observed") is True
         )
     )
 

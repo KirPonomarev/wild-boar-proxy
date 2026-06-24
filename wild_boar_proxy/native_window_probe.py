@@ -32,6 +32,8 @@ from .native_filesystem_probe import (
     json_write,
     launch_native_candidate,
     materialize_probe_profile,
+    read_profile_remote_debugging_port,
+    remote_debugging_port_file,
     remove_tree_with_retry,
     terminate_custom_processes,
     utc_now,
@@ -533,6 +535,8 @@ def show_custom_native_window_packet(
         base_dir=persistent_profile_base_dir,
     )
     user_data_dir = str(paths["user_data_dir"])
+    profile_root = Path(str(paths["persistent_profile_root"])).expanduser()
+    cdp_port = read_profile_remote_debugging_port(profile_root)
     inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     root_pids = _custom_root_app_pids(inventory)
     profile_pids = _custom_profile_process_pids(inventory)
@@ -553,6 +557,8 @@ def show_custom_native_window_packet(
             "human_message": "No Custom Codex process using the WBP profile was found.",
             "persistent_profile_id": persistent_profile_id,
             "persistent_user_data_dir": user_data_dir,
+            "cdp_port": cdp_port,
+            "cdp_port_source": "persistent_profile_remote_debugging_port",
             "custom_process_observed": False,
             "custom_profile_process_pids": profile_pids,
             "custom_root_process_pids": root_pids,
@@ -598,17 +604,18 @@ def show_custom_native_window_packet(
     after_observed_pid = after.get("observed_pid")
     if not isinstance(after_observed_pid, int):
         after_observed_pid = focus_pid
-    usability_packet = _window_usability_from_observation(after)
+    usability_packet = _window_usability_from_observation(after, cdp_port=cdp_port)
     usability_packet = _apply_codex_desktop_auth_blocker(
         usability_packet,
-        profile_dir=Path(str(paths["persistent_profile_root"])),
+        profile_dir=profile_root,
     )
     usability_packet, renderer_recovery_packet, recovered_after = _recover_startup_loader_if_needed(
         usability_packet,
         observed_pid=after_observed_pid,
         allowed_cdp_owner_pids=after_candidate_pids,
-        profile_dir=Path(str(paths["persistent_profile_root"])),
+        profile_dir=profile_root,
         custom_user_data_dir=user_data_dir,
+        cdp_port=cdp_port,
     )
     if recovered_after is not None:
         after = recovered_after
@@ -637,6 +644,7 @@ def show_custom_native_window_packet(
     if native_app_usable:
         voice_packet = _cdp_voice_icon_observation(
             after_observed_pid,
+            port=cdp_port,
             allowed_owner_pids=after_candidate_pids,
         )
     else:
@@ -644,6 +652,7 @@ def show_custom_native_window_packet(
             machine_error_code="NATIVE_VOICE_ICON_NOT_TESTED_WINDOW_UNUSABLE",
             human_message="Native voice icon observation requires a visible, input-capable Custom Codex window.",
             observed_pid=after_observed_pid,
+            cdp_port=cdp_port,
             allowed_owner_pids=after_candidate_pids,
         )
     return {
@@ -678,6 +687,8 @@ def show_custom_native_window_packet(
         ),
         "persistent_profile_id": persistent_profile_id,
         "persistent_user_data_dir": user_data_dir,
+        "cdp_port": cdp_port,
+        "cdp_port_source": "persistent_profile_remote_debugging_port",
         "custom_process_observed": True,
         "custom_process_pid": observed_pid,
         "custom_profile_process_pids": after_profile_pids,
@@ -3519,6 +3530,7 @@ def submit_custom_native_window_prompt_packet(
         persistent_profile_base_dir=persistent_profile_base_dir,
     )
     observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
     if (
         show_packet.get("status") != "ok"
         or show_packet.get("native_app_usable") is not True
@@ -3534,6 +3546,7 @@ def submit_custom_native_window_prompt_packet(
             request_id=request_id,
             blocking_reasons=["native_window_not_input_capable"],
             observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
             cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
             allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
             if isinstance(show_packet.get("custom_window_candidate_pids"), list)
@@ -3550,6 +3563,7 @@ def submit_custom_native_window_prompt_packet(
         prompt,
         request_id=request_id,
         expected_text=expected_text,
+        port=cdp_port,
         allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
         if isinstance(show_packet.get("custom_window_candidate_pids"), list)
         else None,
@@ -3577,6 +3591,7 @@ def inspect_custom_native_paste_target_packet(
         persistent_profile_base_dir=persistent_profile_base_dir,
     )
     observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
     candidate_pids = (
         show_packet.get("custom_window_candidate_pids")
         if isinstance(show_packet.get("custom_window_candidate_pids"), list)
@@ -3599,6 +3614,7 @@ def inspect_custom_native_paste_target_packet(
             draft_sha256=draft_sha256,
             blocking_reasons=["native_window_not_input_capable"],
             observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
             cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
             allowed_owner_pids=candidate_pids,
         )
@@ -3622,6 +3638,7 @@ def inspect_custom_native_paste_target_packet(
         draft_length=draft_length,
         draft_sha256=draft_sha256,
         focus=False,
+        port=cdp_port,
         allowed_owner_pids=candidate_pids,
     )
     packet["show_window_packet"] = show_packet
@@ -3643,6 +3660,7 @@ def paste_custom_native_window_draft_packet(
         persistent_profile_base_dir=persistent_profile_base_dir,
     )
     observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
     candidate_pids = (
         show_packet.get("custom_window_candidate_pids")
         if isinstance(show_packet.get("custom_window_candidate_pids"), list)
@@ -3664,6 +3682,7 @@ def paste_custom_native_window_draft_packet(
             draft_text=draft_text,
             blocking_reasons=["native_window_not_input_capable"],
             observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
             cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
             allowed_owner_pids=candidate_pids,
         )
@@ -3685,6 +3704,7 @@ def paste_custom_native_window_draft_packet(
         int(observed_pid),
         draft_text,
         request_id=request_id,
+        port=cdp_port,
         allowed_owner_pids=candidate_pids,
     )
     packet["show_window_packet"] = show_packet
@@ -3830,11 +3850,13 @@ def _recover_startup_loader_if_needed(
     allowed_cdp_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
     profile_dir: Path,
     custom_user_data_dir: str,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
     if not _renderer_startup_loader_stuck(usability_packet):
         return usability_packet, _renderer_recovery_not_required_packet(), None
     recovery_packet = _cdp_reload_app_page_for_pid(
         observed_pid,
+        port=cdp_port,
         allowed_owner_pids=allowed_cdp_owner_pids,
     )
     if recovery_packet.get("status") != "ok":
@@ -3844,7 +3866,10 @@ def _recover_startup_loader_if_needed(
         custom_user_data_dir=custom_user_data_dir
     )
     recovered_observation = _window_observation_via_ax(recovered_inventory)
-    recovered_usability = _window_usability_from_observation(recovered_observation)
+    recovered_usability = _window_usability_from_observation(
+        recovered_observation,
+        cdp_port=cdp_port,
+    )
     recovered_usability = _apply_codex_desktop_auth_blocker(
         recovered_usability,
         profile_dir=profile_dir,
@@ -3908,6 +3933,8 @@ def _post_launch_usability_recheck_candidate(
             usability_packet.get("cdp_target_bound_to_custom_launch") is True
             or renderer_reason.startswith("cdp_renderer_")
             or blocked_reason.startswith("cdp_renderer_")
+            or renderer_reason == "cdp_port_owner_mismatch_or_absent"
+            or blocked_reason == "cdp_port_owner_mismatch_or_absent"
         )
     )
 
@@ -3917,6 +3944,7 @@ def _wait_for_post_launch_window_usability(
     initial_window_packet: dict[str, Any],
     profile_dir: Path,
     custom_user_data_dir: str,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
     timeout_seconds: float = POST_LAUNCH_USABILITY_RECHECK_SECONDS,
     poll_seconds: float = POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -3930,7 +3958,10 @@ def _wait_for_post_launch_window_usability(
             custom_user_data_dir=custom_user_data_dir
         )
         window_packet = _window_observation_via_ax(inventory)
-        usability_packet = _window_usability_from_observation(window_packet)
+        usability_packet = _window_usability_from_observation(
+            window_packet,
+            cdp_port=cdp_port,
+        )
         usability_packet = _apply_codex_desktop_auth_blocker(
             usability_packet,
             profile_dir=profile_dir,
@@ -4222,7 +4253,11 @@ def _custom_native_launch_blocked_human_message(
     return "Custom Codex native launch did not satisfy process/window proof."
 
 
-def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
+def _window_usability_from_observation(
+    window_observation: dict[str, Any],
+    *,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
     if not window_observed:
         return build_native_window_usability_packet(
@@ -4266,6 +4301,7 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
         allowed_owner_pids = []
     input_capable_cdp, result_cdp = _cdp_input_capable(
         observed_pid,
+        port=cdp_port,
         allowed_owner_pids=allowed_owner_pids,
     )
     if input_capable_cdp:
@@ -4308,6 +4344,32 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
                 "CDP localhost launched-renderer target observed, editable surface not proven"
             ),
             **cdp_blocked_surface,
+        })
+        return packet
+    if result_cdp.startswith("cdp_port_owner_mismatch_or_absent:"):
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=False,
+            blocked_reason_class="cdp_port_owner_mismatch_or_absent",
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": (
+                "CDP localhost launched-renderer port owner not yet pid-bound"
+            ),
+            "renderer_surface_blocked_reason_class": "cdp_port_owner_mismatch_or_absent",
+            "native_app_usability_source": "cdp_renderer_port_owner_not_bound",
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": False,
+            "cdp_editable_surface_observed": False,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
         })
         return packet
     input_capable_m2, result_m2 = _cg_input_capable(observed_pid)
@@ -4604,6 +4666,11 @@ def launch_custom_native_app_packet(
         ),
         "stable_runtime_generated_config_file_present": False,
         "stable_runtime_generated_config_file_path_recorded": False,
+        "stable_runtime_generated_config_default_present": False,
+        "observed_stable_config_fallback_used": False,
+        "observed_stable_config_file_present": False,
+        "token_config_file_present": False,
+        "token_config_source_kind": "",
         "local_token_source_kind": "",
         "local_token_present": False,
         "local_token_value_recorded": False,
@@ -4623,16 +4690,29 @@ def launch_custom_native_app_packet(
     cleanup_error = ""
     try:
         real_runtime_paths = RuntimePaths.from_env()
+        generated_config_path = getattr(
+            real_runtime_paths, "stable_runtime_generated_config_file", None
+        )
+        stable_config_path = getattr(real_runtime_paths, "stable_config", None)
         token_config_path = (
             stable_runtime_generated_config_file.expanduser()
             if stable_runtime_generated_config_file is not None
-            else getattr(real_runtime_paths, "stable_runtime_generated_config_file", None)
+            else generated_config_path
         )
-        local_token = (
-            emit_local_token_from_config_path(token_config_path)
-            if stable_runtime_generated_config_file is not None
-            else emit_local_token(real_runtime_paths)
-        )
+        observed_stable_config_fallback_used = False
+        token_config_source_kind = "stable_runtime_generated_config"
+        if stable_runtime_generated_config_file is not None:
+            token_config_source_kind = "stable_runtime_generated_config_override"
+            local_token = emit_local_token_from_config_path(token_config_path)
+        elif isinstance(generated_config_path, Path) and generated_config_path.is_file():
+            local_token = emit_local_token(real_runtime_paths)
+        elif isinstance(stable_config_path, Path) and stable_config_path.is_file():
+            token_config_path = stable_config_path
+            token_config_source_kind = "observed_stable_config_fallback"
+            observed_stable_config_fallback_used = True
+            local_token = emit_local_token_from_config_path(stable_config_path)
+        else:
+            local_token = emit_local_token(real_runtime_paths)
         paths = default_persistent_custom_profile_paths(
             profile_id=persistent_profile_id,
             base_dir=persistent_profile_base_dir,
@@ -4688,10 +4768,29 @@ def launch_custom_native_app_packet(
             ),
             "agent_runtime_context_path_redacted": True,
             "stable_runtime_generated_config_file_present": (
-                token_config_path.is_file() if isinstance(token_config_path, Path) else False
+                generated_config_path.is_file()
+                if isinstance(generated_config_path, Path)
+                else False
             ),
             "stable_runtime_generated_config_file_path_recorded": False,
-            "local_token_source_kind": "stable_runtime_generated_config",
+            "stable_runtime_generated_config_default_present": (
+                generated_config_path.is_file()
+                if isinstance(generated_config_path, Path)
+                else False
+            ),
+            "observed_stable_config_fallback_used": (
+                observed_stable_config_fallback_used
+            ),
+            "observed_stable_config_file_present": (
+                stable_config_path.is_file()
+                if isinstance(stable_config_path, Path)
+                else False
+            ),
+            "token_config_file_present": (
+                token_config_path.is_file() if isinstance(token_config_path, Path) else False
+            ),
+            "token_config_source_kind": token_config_source_kind,
+            "local_token_source_kind": token_config_source_kind,
             "local_token_present": bool(local_token),
             "local_token_value_recorded": False,
             "configured_model_validation_attempted": materialized_profile.get(
@@ -4840,6 +4939,18 @@ def launch_custom_native_app_packet(
                         if existing_window_usable
                         else "not_proven"
                     ),
+                    "remote_debugging_port": int(
+                        show_packet.get("cdp_port")
+                        or read_profile_remote_debugging_port(layout.profile_dir)
+                    ),
+                    "remote_debugging_port_source": str(
+                        show_packet.get("cdp_port_source")
+                        or "persistent_profile_remote_debugging_port"
+                    ),
+                    "remote_debugging_port_file_written": (
+                        remote_debugging_port_file(layout.profile_dir).is_file()
+                    ),
+                    "remote_debugging_port_file_path_recorded": False,
                     "native_app_usability_blocked_reason_class": str(
                         show_packet.get("native_app_usability_blocked_reason_class") or ""
                     ),
@@ -4932,6 +5043,10 @@ def launch_custom_native_app_packet(
             layout=layout,
             real_runtime_paths=real_runtime_paths,
         )
+        cdp_port = int(
+            launch_result.get("remote_debugging_port")
+            or read_profile_remote_debugging_port(layout.profile_dir)
+        )
         process_started = launch_result.get("custom_process_observed") is True
         launcher_exit_code_early = launch_result.get("launcher_exit_code_early")
         launcher_failed_before_process = (
@@ -4959,7 +5074,10 @@ def launch_custom_native_app_packet(
                     custom_user_data_dir=str(layout.custom_user_data_dir)
                 )
             )
-        usability_packet = _window_usability_from_observation(window_packet)
+        usability_packet = _window_usability_from_observation(
+            window_packet,
+            cdp_port=cdp_port,
+        )
         usability_packet = _apply_codex_desktop_auth_blocker(
             usability_packet,
             profile_dir=layout.profile_dir,
@@ -4985,6 +5103,7 @@ def launch_custom_native_app_packet(
                 else None,
                 profile_dir=layout.profile_dir,
                 custom_user_data_dir=str(layout.custom_user_data_dir),
+                cdp_port=cdp_port,
             )
             if recovered_window_packet is not None:
                 window_packet = recovered_window_packet
@@ -5014,6 +5133,7 @@ def launch_custom_native_app_packet(
                 initial_window_packet=window_packet,
                 profile_dir=layout.profile_dir,
                 custom_user_data_dir=str(layout.custom_user_data_dir),
+                cdp_port=cdp_port,
             )
             if post_launch_usability_recheck_packet.get("status") == "ok":
                 window_packet = rechecked_window_packet
@@ -5162,6 +5282,15 @@ def launch_custom_native_app_packet(
             "native_app_usable": native_app_usable,
             "native_app_usability_source": native_app_usability_source,
             "input_capable_ui_observed": input_capable_ui_observed,
+            "remote_debugging_port": cdp_port,
+            "remote_debugging_port_source": str(
+                launch_result.get("remote_debugging_port_source")
+                or "persistent_profile_remote_debugging_port"
+            ),
+            "remote_debugging_port_file_written": (
+                launch_result.get("remote_debugging_port_file_written") is True
+            ),
+            "remote_debugging_port_file_path_recorded": False,
             "cdp_localhost_only": usability_packet.get("cdp_localhost_only") is True,
             "cdp_endpoint_redacted": usability_packet.get("cdp_endpoint_redacted") is True,
             "cdp_target_bound_to_custom_launch": usability_packet.get("cdp_target_bound_to_custom_launch") is True,

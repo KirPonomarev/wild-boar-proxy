@@ -630,6 +630,9 @@ def cmd_sync(paths: RuntimePaths, args: argparse.Namespace) -> int:
     state.setdefault("schema_version", SCHEMA_VERSION)
     state.setdefault("version", SCHEMA_VERSION)
     state["effective_mode"] = "stable"
+    state["stable_default_backend_id"] = str(
+        registry.get("stable_default_backend_id", "")
+    )
     state["status"] = "unknown"
     state["last_error"] = ""
     state["current_proxy_url"] = ""

@@ -15,6 +15,7 @@ import os
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .runtime import (
+    CODEX_REMOTE_DEBUGGING_PORT,
     DETERMINISTIC_RUNTIME_PATH,
     RuntimePaths,
     build_repo_owned_default_launcher_script_text,
@@ -55,6 +57,7 @@ DEFAULT_CODEX_PROCESS_PATTERNS = (
     "Contents/Resources/codex app-server",
 )
 AGENT_RUNTIME_CONTEXT_FILENAME = "wbp-agent-runtime-context.json"
+REMOTE_DEBUGGING_PORT_FILENAME = "codex-remote-debugging-port.txt"
 DEFAULT_CUSTOM_NATIVE_MODEL = "gpt-5.5"
 STALE_CUSTOM_NATIVE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
 CUSTOM_NATIVE_MODEL_REPAIR_TARGETS = (
@@ -4311,6 +4314,28 @@ def create_persistent_custom_profile_layout(
     )
 
 
+def remote_debugging_port_file(profile_dir: Path) -> Path:
+    return profile_dir / REMOTE_DEBUGGING_PORT_FILENAME
+
+
+def read_profile_remote_debugging_port(profile_dir: Path) -> int:
+    default_port = int(CODEX_REMOTE_DEBUGGING_PORT)
+    try:
+        raw_value = remote_debugging_port_file(profile_dir).read_text(
+            encoding="utf-8"
+        ).strip()
+        port = int(raw_value)
+    except (OSError, TypeError, ValueError):
+        return default_port
+    return port if 1024 <= port <= 65535 else default_port
+
+
+def _allocate_loopback_remote_debugging_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
 def _toml_table_header_name(line: str) -> str:
     stripped = line.strip()
     if not stripped.startswith("[") or not stripped.endswith("]"):
@@ -4678,6 +4703,9 @@ def launch_native_candidate(
     startup_wait_seconds: float = DEFAULT_STARTUP_WAIT_SECONDS,
     post_observation_wait_seconds: float = 2.0,
 ) -> dict[str, Any]:
+    remote_debugging_port = _allocate_loopback_remote_debugging_port()
+    remote_debugging_port_path = remote_debugging_port_file(layout.profile_dir)
+    write_text_atomic(remote_debugging_port_path, f"{remote_debugging_port}\n")
     env = clean_env()
     env.update(
         {
@@ -4686,6 +4714,7 @@ def launch_native_candidate(
             "WBP_STABLE_CONFIG": str(real_runtime_paths.stable_config),
             "WBP_RUNTIME_TMPDIR": str(layout.tmp_root / "runtime-bind"),
             "WBP_PYTHON_BIN": sys.executable,
+            "WBP_CODEX_REMOTE_DEBUGGING_PORT": str(remote_debugging_port),
         }
     )
     stdout_handle = layout.launcher_stdout.open("w", encoding="utf-8")
@@ -4737,6 +4766,10 @@ def launch_native_candidate(
         "launcher_stderr_path": str(layout.launcher_stderr),
         "launcher_stdout_size": layout.launcher_stdout.stat().st_size if layout.launcher_stdout.exists() else 0,
         "launcher_stderr_size": layout.launcher_stderr.stat().st_size if layout.launcher_stderr.exists() else 0,
+        "remote_debugging_port": remote_debugging_port,
+        "remote_debugging_port_source": "allocated_loopback_launch_port",
+        "remote_debugging_port_file_written": remote_debugging_port_path.is_file(),
+        "remote_debugging_port_file_path_recorded": False,
     }
 
 
