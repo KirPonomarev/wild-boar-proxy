@@ -27,6 +27,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_DRY_RUN,
     WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT,
     WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
+    WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
     WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED,
     WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN,
     WBP_DIP_TOOL_LIVE_RESULT_UNSAFE,
@@ -34,7 +35,6 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_OK,
     WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING,
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
-    WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE,
     _attach_live_result_text_artifact,
     _build_live_result_prompt,
     _command_from_call,
@@ -108,6 +108,16 @@ def _live_result(**overrides: object) -> dict[str, object]:
         "live_result_text_limit": 2400,
         "live_result_output_token_limit": 768,
         "repo_bridge_max_steps": 8,
+        "active_project_root_required": False,
+        "active_project_root_available": False,
+        "active_project_root_source": "",
+        "active_project_root_status": "",
+        "active_project_root_path_recorded": False,
+        "active_project_root_sha256": "",
+        "active_project_root_is_wbp_repo": False,
+        "active_project_root_git_available": False,
+        "active_project_root_fallback_used": False,
+        "active_project_root_legacy_target_repo_alias_used": False,
         "target_repo_required": False,
         "target_repo_available": False,
         "target_repo_source": "",
@@ -252,35 +262,60 @@ class WbpDipToolTests(unittest.TestCase):
     def test_select_target_repo_candidate_precedence(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
+            active_target = root / "active"
             cli_target = root / "cli"
             env_target = root / "env"
             codex_cwd = root / "cwd"
-            for path in (cli_target, env_target, codex_cwd):
+            for path in (active_target, cli_target, env_target, codex_cwd):
                 path.mkdir()
 
             selected, source = _select_target_repo_candidate(
+                active_project_root_arg=str(active_target),
                 target_repo_arg=str(cli_target),
                 codex_cwd=codex_cwd,
-                env={"WBP_TARGET_REPO": str(env_target)},
+                env={
+                    "WBP_ACTIVE_PROJECT_ROOT": str(env_target),
+                    "WBP_TARGET_REPO": str(cli_target),
+                },
             )
-            self.assertEqual(selected, cli_target.resolve())
-            self.assertEqual(source, "cli_arg")
+            self.assertEqual(selected, active_target.resolve())
+            self.assertEqual(source, "active_project_root_cli_arg")
 
             selected, source = _select_target_repo_candidate(
+                active_project_root_arg=None,
+                target_repo_arg=str(cli_target),
+                codex_cwd=codex_cwd,
+                env={"WBP_ACTIVE_PROJECT_ROOT": str(env_target)},
+            )
+            self.assertEqual(selected, env_target.resolve())
+            self.assertEqual(source, "server_runtime_env")
+
+            selected, source = _select_target_repo_candidate(
+                active_project_root_arg=None,
+                target_repo_arg=str(cli_target),
+                codex_cwd=codex_cwd,
+                env={},
+            )
+            self.assertEqual(selected, cli_target.resolve())
+            self.assertEqual(source, "legacy_target_repo_cli_arg")
+
+            selected, source = _select_target_repo_candidate(
+                active_project_root_arg=None,
                 target_repo_arg=None,
                 codex_cwd=codex_cwd,
                 env={"WBP_TARGET_REPO": str(env_target)},
             )
             self.assertEqual(selected, env_target.resolve())
-            self.assertEqual(source, "env")
+            self.assertEqual(source, "legacy_target_repo_env")
 
             selected, source = _select_target_repo_candidate(
+                active_project_root_arg=None,
                 target_repo_arg=None,
                 codex_cwd=codex_cwd,
                 env={},
             )
-            self.assertEqual(selected, codex_cwd.resolve())
-            self.assertEqual(source, "codex_cwd")
+            self.assertIsNone(selected)
+            self.assertEqual(source, "missing")
 
     def test_live_result_prompt_keeps_standard_mode_bounded(self) -> None:
         prompt = _build_live_result_prompt(
@@ -425,9 +460,19 @@ class WbpDipToolTests(unittest.TestCase):
                     dip_repo_tool_bridge_required=True,
                     dip_repo_tool_bridge_available=True,
                     dip_repo_tool_bridge_used=True,
+                    active_project_root_required=True,
+                    active_project_root_available=True,
+                    active_project_root_source="active_project_root_cli_arg",
+                    active_project_root_status="ok",
+                    active_project_root_path_recorded=False,
+                    active_project_root_sha256="f" * 64,
+                    active_project_root_is_wbp_repo=False,
+                    active_project_root_git_available=True,
+                    active_project_root_fallback_used=False,
+                    active_project_root_legacy_target_repo_alias_used=False,
                     target_repo_required=True,
                     target_repo_available=True,
-                    target_repo_source="cli_arg",
+                    target_repo_source="active_project_root_cli_arg",
                     target_repo_status="ok",
                     target_repo_path_recorded=False,
                     target_repo_sha256="f" * 64,
@@ -481,9 +526,22 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(packet["dip_repo_tool_bridge_required"])
         self.assertTrue(packet["dip_repo_tool_bridge_available"])
         self.assertTrue(packet["dip_repo_tool_bridge_used"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(
+            packet["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertEqual(packet["active_project_root_status"], "ok")
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertEqual(packet["active_project_root_sha256"], "f" * 64)
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["active_project_root_git_available"])
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertTrue(packet["target_repo_required"])
         self.assertTrue(packet["target_repo_available"])
-        self.assertEqual(packet["target_repo_source"], "cli_arg")
+        self.assertEqual(packet["target_repo_source"], "active_project_root_cli_arg")
         self.assertEqual(packet["target_repo_status"], "ok")
         self.assertFalse(packet["target_repo_path_recorded"])
         self.assertEqual(packet["target_repo_sha256"], "f" * 64)
@@ -1176,7 +1234,7 @@ class WbpDipToolTests(unittest.TestCase):
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
-    def test_main_passes_explicit_target_repo_separate_from_codex_cwd(
+    def test_main_passes_explicit_active_project_root_separate_from_codex_cwd(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
@@ -1206,12 +1264,17 @@ class WbpDipToolTests(unittest.TestCase):
                     str(codex_cwd.resolve()),
                 )
                 self.assertEqual(
+                    kwargs["env"]["WBP_ACTIVE_PROJECT_ROOT"],
+                    str(target_repo.resolve()),
+                )
+                self.assertEqual(
                     kwargs["env"]["WBP_TARGET_REPO"],
                     str(target_repo.resolve()),
                 )
                 env_arg = next(
                     item for item in run_argv if item.startswith("mcp_servers.wbp.env=")
                 )
+                self.assertIn("WBP_ACTIVE_PROJECT_ROOT", env_arg)
                 self.assertIn("WBP_TARGET_REPO", env_arg)
                 self.assertIn(str(target_repo.resolve()), env_arg)
                 stdout.write(
@@ -1229,9 +1292,19 @@ class WbpDipToolTests(unittest.TestCase):
             subprocess_run_mock.side_effect = fake_run
             request_live_result_mock.return_value = _live_result(
                 result_text="DIP target repo output.",
+                active_project_root_required=True,
+                active_project_root_available=True,
+                active_project_root_source="active_project_root_cli_arg",
+                active_project_root_status="ok",
+                active_project_root_path_recorded=False,
+                active_project_root_sha256="9" * 64,
+                active_project_root_is_wbp_repo=False,
+                active_project_root_git_available=False,
+                active_project_root_fallback_used=False,
+                active_project_root_legacy_target_repo_alias_used=False,
                 target_repo_required=True,
                 target_repo_available=True,
-                target_repo_source="cli_arg",
+                target_repo_source="active_project_root_cli_arg",
                 target_repo_status="ok",
                 target_repo_path_recorded=False,
                 target_repo_sha256="9" * 64,
@@ -1254,7 +1327,7 @@ class WbpDipToolTests(unittest.TestCase):
                         "on",
                         "--cd",
                         str(codex_cwd),
-                        "--target-repo",
+                        "--active-project-root",
                         str(target_repo),
                         TASK,
                     ]
@@ -1264,11 +1337,20 @@ class WbpDipToolTests(unittest.TestCase):
         packet = json.loads(stdout.getvalue())
         live_kwargs = request_live_result_mock.call_args.kwargs
         self.assertEqual(live_kwargs["repo_root"], target_repo.resolve())
-        self.assertEqual(live_kwargs["target_repo_source"], "cli_arg")
+        self.assertEqual(live_kwargs["target_repo_source"], "active_project_root_cli_arg")
         self.assertEqual(live_kwargs["wbp_repo_root"], Path(__file__).resolve().parents[1])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(
+            packet["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertTrue(packet["target_repo_required"])
         self.assertTrue(packet["target_repo_available"])
-        self.assertEqual(packet["target_repo_source"], "cli_arg")
+        self.assertEqual(packet["target_repo_source"], "active_project_root_cli_arg")
         self.assertFalse(packet["target_repo_path_recorded"])
         self.assertFalse(packet["target_repo_fallback_used"])
         self.assertNotIn(str(target_repo), json.dumps(packet, ensure_ascii=False))
@@ -1572,7 +1654,7 @@ class WbpDipToolTests(unittest.TestCase):
                 expected_alias="DIP",
                 profile_dir=profile,
                 repo_root=target_repo,
-                target_repo_source="cli_arg",
+                target_repo_source="active_project_root_cli_arg",
                 wbp_repo_root=wbp_repo,
                 repo_bridge_mode="on",
                 timeout_seconds=0.01,
@@ -1584,9 +1666,20 @@ class WbpDipToolTests(unittest.TestCase):
         )
         result_text = json.dumps(result, ensure_ascii=False, sort_keys=True)
         self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["active_project_root_required"])
+        self.assertTrue(result["active_project_root_available"])
+        self.assertEqual(
+            result["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertEqual(result["active_project_root_status"], "ok")
+        self.assertFalse(result["active_project_root_path_recorded"])
+        self.assertFalse(result["active_project_root_is_wbp_repo"])
+        self.assertFalse(result["active_project_root_fallback_used"])
+        self.assertFalse(result["active_project_root_legacy_target_repo_alias_used"])
         self.assertTrue(result["target_repo_required"])
         self.assertTrue(result["target_repo_available"])
-        self.assertEqual(result["target_repo_source"], "cli_arg")
+        self.assertEqual(result["target_repo_source"], "active_project_root_cli_arg")
         self.assertEqual(result["target_repo_status"], "ok")
         self.assertFalse(result["target_repo_path_recorded"])
         self.assertFalse(result["target_repo_is_wbp_repo"])
@@ -1654,16 +1747,23 @@ class WbpDipToolTests(unittest.TestCase):
                 expected_alias="DIP",
                 profile_dir=profile,
                 repo_root=wbp_repo,
-                target_repo_source="cli_arg",
+                target_repo_source="active_project_root_cli_arg",
                 wbp_repo_root=wbp_repo,
                 repo_bridge_mode="on",
                 timeout_seconds=0.01,
             )
 
         self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["active_project_root_available"])
+        self.assertTrue(result["active_project_root_is_wbp_repo"])
+        self.assertEqual(
+            result["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertFalse(result["active_project_root_fallback_used"])
         self.assertTrue(result["target_repo_available"])
         self.assertTrue(result["target_repo_is_wbp_repo"])
-        self.assertEqual(result["target_repo_source"], "cli_arg")
+        self.assertEqual(result["target_repo_source"], "active_project_root_cli_arg")
         self.assertFalse(result["target_repo_fallback_used"])
         self.assertNotIn(str(wbp_repo), json.dumps(result, ensure_ascii=False))
 
@@ -1693,7 +1793,7 @@ class WbpDipToolTests(unittest.TestCase):
                 expected_alias="DIP",
                 profile_dir=profile,
                 repo_root=missing_target,
-                target_repo_source="cli_arg",
+                target_repo_source="active_project_root_cli_arg",
                 wbp_repo_root=root / "wbp",
                 repo_bridge_mode="on",
                 timeout_seconds=0.01,
@@ -1702,13 +1802,123 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(
             result["machine_error_code"],
-            WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE,
+            WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
         )
+        self.assertTrue(result["active_project_root_required"])
+        self.assertFalse(result["active_project_root_available"])
+        self.assertEqual(
+            result["active_project_root_status"],
+            "active_project_root_missing",
+        )
+        self.assertFalse(result["active_project_root_path_recorded"])
+        self.assertFalse(result["active_project_root_fallback_used"])
         self.assertTrue(result["target_repo_required"])
         self.assertFalse(result["target_repo_available"])
         self.assertEqual(result["target_repo_status"], "target_repo_missing")
         self.assertFalse(result["target_repo_path_recorded"])
         self.assertFalse(result["target_repo_fallback_used"])
+        self.assertFalse(result["provider_called"])
+        request_json_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_missing_active_project_root_fails_closed_without_provider(
+        self,
+        request_json_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            profile.mkdir()
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: изучи репо и дай отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=None,
+                target_repo_source="missing",
+                wbp_repo_root=root / "wbp",
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["machine_error_code"],
+            WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
+        )
+        self.assertTrue(result["active_project_root_required"])
+        self.assertFalse(result["active_project_root_available"])
+        self.assertEqual(result["active_project_root_source"], "missing")
+        self.assertEqual(
+            result["active_project_root_status"],
+            "active_project_root_missing",
+        )
+        self.assertFalse(result["active_project_root_path_recorded"])
+        self.assertEqual(result["active_project_root_sha256"], "")
+        self.assertFalse(result["active_project_root_fallback_used"])
+        self.assertTrue(result["target_repo_required"])
+        self.assertFalse(result["target_repo_available"])
+        self.assertEqual(result["target_repo_status"], "target_repo_missing")
+        self.assertFalse(result["provider_called"])
+        request_json_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_forbidden_active_project_root_fails_closed_without_provider(
+        self,
+        request_json_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            profile.mkdir()
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: изучи репо и дай отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=Path("/"),
+                target_repo_source="active_project_root_cli_arg",
+                wbp_repo_root=root / "wbp",
+                repo_bridge_mode="on",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["machine_error_code"],
+            WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
+        )
+        self.assertTrue(result["active_project_root_required"])
+        self.assertFalse(result["active_project_root_available"])
+        self.assertEqual(
+            result["active_project_root_status"],
+            "active_project_root_blocked_system_dir",
+        )
+        self.assertFalse(result["active_project_root_path_recorded"])
+        self.assertFalse(result["active_project_root_fallback_used"])
+        self.assertTrue(result["target_repo_required"])
+        self.assertFalse(result["target_repo_available"])
+        self.assertEqual(result["target_repo_status"], "target_repo_blocked_system_dir")
         self.assertFalse(result["provider_called"])
         request_json_mock.assert_not_called()
 
@@ -1787,7 +1997,7 @@ class WbpDipToolTests(unittest.TestCase):
                 expected_alias="DIP",
                 profile_dir=profile,
                 repo_root=target_repo,
-                target_repo_source="cli_arg",
+                target_repo_source="active_project_root_cli_arg",
                 wbp_repo_root=root / "wbp",
                 repo_bridge_mode="on",
                 timeout_seconds=0.01,

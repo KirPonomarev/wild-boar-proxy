@@ -99,6 +99,16 @@ def _acceptance_packet(**overrides: object) -> dict[str, object]:
         "does_not_prove_product_ready": True,
         "fallback_used": False,
         "local_imitation_used": False,
+        "active_project_root_required": True,
+        "active_project_root_available": True,
+        "active_project_root_source": "active_project_root_cli_arg",
+        "active_project_root_status": "ok",
+        "active_project_root_path_recorded": False,
+        "active_project_root_sha256": "9" * 64,
+        "active_project_root_is_wbp_repo": False,
+        "active_project_root_git_available": True,
+        "active_project_root_fallback_used": False,
+        "active_project_root_legacy_target_repo_alias_used": False,
         "target_repo_required": True,
         "target_repo_available": True,
         "target_repo_fallback_used": False,
@@ -175,6 +185,17 @@ class GptApiDipProductReadyGateTests(unittest.TestCase):
         self.assertTrue(packet["api_route_selected"])
         self.assertTrue(packet["chatgpt_lane_called"])
         self.assertTrue(packet["api_route_called"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(
+            packet["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertEqual(packet["active_project_root_status"], "ok")
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertEqual(packet["active_project_root_sha256"], "9" * 64)
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertTrue(packet["target_repo_required"])
         self.assertTrue(packet["target_repo_available"])
         self.assertFalse(packet["target_repo_fallback_used"])

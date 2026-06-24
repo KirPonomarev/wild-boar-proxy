@@ -51,6 +51,8 @@ _ACCEPTANCE_REQUIRED_TRUE_FIELDS = (
     "api_route_selected",
     "chatgpt_lane_called",
     "api_route_called",
+    "active_project_root_required",
+    "active_project_root_available",
 )
 
 _ACCEPTANCE_REQUIRED_FALSE_FIELDS = (
@@ -78,6 +80,9 @@ _ACCEPTANCE_REQUIRED_FALSE_FIELDS = (
     "wrapper_substitution_used",
     "wrapper_substitution_detected",
     "wrapper_substitution_allowed",
+    "active_project_root_path_recorded",
+    "active_project_root_fallback_used",
+    "active_project_root_legacy_target_repo_alias_used",
 )
 
 
@@ -186,6 +191,39 @@ def build_gpt_api_dip_product_ready_gate_packet(
             api_route_selected=acceptance_packet.get("api_route_selected") is True,
             chatgpt_lane_called=acceptance_packet.get("chatgpt_lane_called") is True,
             api_route_called=acceptance_packet.get("api_route_called") is True,
+            active_project_root_required=(
+                acceptance_packet.get("active_project_root_required") is True
+            ),
+            active_project_root_available=(
+                acceptance_packet.get("active_project_root_available") is True
+            ),
+            active_project_root_source=str(
+                acceptance_packet.get("active_project_root_source") or ""
+            ),
+            active_project_root_status=str(
+                acceptance_packet.get("active_project_root_status") or ""
+            ),
+            active_project_root_sha256=str(
+                acceptance_packet.get("active_project_root_sha256") or ""
+            ),
+            active_project_root_path_recorded=(
+                acceptance_packet.get("active_project_root_path_recorded") is True
+            ),
+            active_project_root_fallback_used=(
+                acceptance_packet.get("active_project_root_fallback_used") is True
+            ),
+            active_project_root_is_wbp_repo=(
+                acceptance_packet.get("active_project_root_is_wbp_repo") is True
+            ),
+            active_project_root_git_available=(
+                acceptance_packet.get("active_project_root_git_available") is True
+            ),
+            active_project_root_legacy_target_repo_alias_used=(
+                acceptance_packet.get(
+                    "active_project_root_legacy_target_repo_alias_used"
+                )
+                is True
+            ),
             target_repo_required=acceptance_packet.get("target_repo_required") is True,
             target_repo_available=acceptance_packet.get("target_repo_available") is True,
             target_repo_fallback_used=acceptance_packet.get("target_repo_fallback_used")

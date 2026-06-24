@@ -32,6 +32,16 @@ def dispatch_mode_truth_fields(
     api_route_selected: bool | None = None,
     chatgpt_lane_called: bool = False,
     api_route_called: bool = False,
+    active_project_root_required: bool = False,
+    active_project_root_available: bool = False,
+    active_project_root_source: str = "",
+    active_project_root_status: str = "",
+    active_project_root_sha256: str = "",
+    active_project_root_path_recorded: bool = False,
+    active_project_root_fallback_used: bool = False,
+    active_project_root_is_wbp_repo: bool = False,
+    active_project_root_git_available: bool = False,
+    active_project_root_legacy_target_repo_alias_used: bool = False,
     target_repo_required: bool = False,
     target_repo_available: bool = False,
     target_repo_fallback_used: bool = False,
@@ -69,6 +79,29 @@ def dispatch_mode_truth_fields(
         "api_mode_proven": api_mode_proven,
         "chatgpt_plus_api_mode_proven": gpt_api_mode_proven,
         "gpt_api_mode_proven": gpt_api_mode_proven,
+        "active_project_root_required": bool(active_project_root_required),
+        "active_project_root_available": bool(active_project_root_available),
+        "active_project_root_source": _safe_text(
+            active_project_root_source,
+            limit=80,
+        ),
+        "active_project_root_status": _safe_text(
+            active_project_root_status,
+            limit=120,
+        ),
+        "active_project_root_path_recorded": bool(active_project_root_path_recorded),
+        "active_project_root_sha256": _safe_text(
+            active_project_root_sha256,
+            limit=80,
+        ),
+        "active_project_root_is_wbp_repo": bool(active_project_root_is_wbp_repo),
+        "active_project_root_git_available": bool(active_project_root_git_available),
+        "active_project_root_fallback_used": bool(
+            active_project_root_fallback_used
+        ),
+        "active_project_root_legacy_target_repo_alias_used": bool(
+            active_project_root_legacy_target_repo_alias_used
+        ),
         "target_repo_required": bool(target_repo_required),
         "target_repo_available": bool(target_repo_available),
         "target_repo_fallback_used": bool(target_repo_fallback_used),

@@ -64,6 +64,16 @@ def _runtime_context(*, allowed_routes: list[str] | None = None) -> dict[str, ob
         "agent_id_to_model": {"codex": "gpt-5.4"},
         "allowed_api_route_ids": allowed_routes,
         "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+        "active_project_root_required": True,
+        "active_project_root_available": True,
+        "active_project_root_source": "server_runtime_env",
+        "active_project_root_status": "ok",
+        "active_project_root_path_recorded": False,
+        "active_project_root_sha256": "8" * 64,
+        "active_project_root_is_wbp_repo": False,
+        "active_project_root_git_available": True,
+        "active_project_root_fallback_used": False,
+        "active_project_root_legacy_target_repo_alias_used": False,
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
     }
@@ -131,6 +141,16 @@ class ControlledApiDispatchTests(unittest.TestCase):
         self.assertTrue(packet["api_route_selected"])
         self.assertFalse(packet["chatgpt_lane_called"])
         self.assertTrue(packet["api_route_called"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(packet["active_project_root_source"], "server_runtime_env")
+        self.assertEqual(packet["active_project_root_status"], "ok")
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertEqual(packet["active_project_root_sha256"], "8" * 64)
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["active_project_root_git_available"])
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertFalse(packet["wrapper_substitution_used"])
         self.assertFalse(packet["wrapper_substitution_detected"])
         self.assertFalse(packet["wrapper_substitution_allowed"])

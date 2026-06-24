@@ -213,6 +213,16 @@ def _dip_action_packet(**overrides: object) -> dict[str, object]:
         "dip_code_verified": True,
         "repo_bridge_mutation_allowed": True,
         "repo_bridge_mutation_controlled": True,
+        "active_project_root_required": True,
+        "active_project_root_available": True,
+        "active_project_root_source": "active_project_root_cli_arg",
+        "active_project_root_status": "ok",
+        "active_project_root_path_recorded": False,
+        "active_project_root_sha256": "9" * 64,
+        "active_project_root_is_wbp_repo": False,
+        "active_project_root_git_available": True,
+        "active_project_root_fallback_used": False,
+        "active_project_root_legacy_target_repo_alias_used": False,
         "target_repo_required": True,
         "target_repo_available": True,
         "target_repo_fallback_used": False,
@@ -299,6 +309,17 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
         self.assertTrue(packet["api_route_selected"])
         self.assertTrue(packet["chatgpt_lane_called"])
         self.assertTrue(packet["api_route_called"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(
+            packet["active_project_root_source"],
+            "active_project_root_cli_arg",
+        )
+        self.assertEqual(packet["active_project_root_status"], "ok")
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertEqual(packet["active_project_root_sha256"], "9" * 64)
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertTrue(packet["target_repo_required"])
         self.assertTrue(packet["target_repo_available"])
         self.assertFalse(packet["target_repo_fallback_used"])
@@ -402,8 +423,20 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
             "dip_action_dispatch_mode_truth_proven_not_true",
             packet["blocking_reasons"],
         )
+
+    def test_blocks_dip_action_without_active_project_root(self) -> None:
+        action = _dip_action_packet(
+            active_project_root_available=False,
+            active_project_root_status="active_project_root_missing",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(Path(temp_dir), action=action)
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], GPT_API_DIP_ACCEPTANCE_BLOCKED)
         self.assertIn(
-            "dip_action_gpt_api_mode_proven_not_true",
+            "dip_action_active_project_root_available_not_true",
             packet["blocking_reasons"],
         )
 

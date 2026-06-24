@@ -153,6 +153,18 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
                     matrix_id="matrix-2",
                     request_prefix="req",
                     variants=variants,
+                    active_project_root={
+                        "active_project_root_required": True,
+                        "active_project_root_available": True,
+                        "active_project_root_source": "server_runtime_env",
+                        "active_project_root_status": "ok",
+                        "active_project_root_path_recorded": False,
+                        "active_project_root_sha256": "7" * 64,
+                        "active_project_root_is_wbp_repo": False,
+                        "active_project_root_git_available": True,
+                        "active_project_root_fallback_used": False,
+                        "active_project_root_legacy_target_repo_alias_used": False,
+                    },
                 )
 
         self.assertEqual(packet["status"], "ok")
@@ -171,6 +183,16 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
         self.assertFalse(packet["api_route_selected"])
         self.assertTrue(packet["chatgpt_lane_called"])
         self.assertFalse(packet["api_route_called"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertEqual(packet["active_project_root_source"], "server_runtime_env")
+        self.assertEqual(packet["active_project_root_status"], "ok")
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertEqual(packet["active_project_root_sha256"], "7" * 64)
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["active_project_root_git_available"])
+        self.assertFalse(packet["active_project_root_fallback_used"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertFalse(packet["wrapper_substitution_used"])
         self.assertTrue(packet["native_response_matrix_proven"])
         self.assertEqual(packet["positive_case_count"], 1)

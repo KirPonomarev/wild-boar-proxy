@@ -328,6 +328,8 @@ def _dip_action_failures(packet: dict[str, Any]) -> list[str]:
         "dip_code_verified",
         "repo_bridge_mutation_allowed",
         "repo_bridge_mutation_controlled",
+        "active_project_root_required",
+        "active_project_root_available",
         "runtime_dispatch_mode_truth_recorded",
         "dispatch_mode_truth_proven",
         "chatgpt_plus_api_mode_proven",
@@ -379,6 +381,14 @@ def _dip_action_failures(packet: dict[str, Any]) -> list[str]:
     _check_false(packet, "dip_action_raw_command_recorded", failures, "dip_action")
     _check_false(packet, "repo_bridge_context_pack_recorded", failures, "dip_action")
     _check_false(packet, "repo_bridge_raw_tool_results_recorded", failures, "dip_action")
+    _check_false(packet, "active_project_root_path_recorded", failures, "dip_action")
+    _check_false(packet, "active_project_root_fallback_used", failures, "dip_action")
+    _check_false(
+        packet,
+        "active_project_root_legacy_target_repo_alias_used",
+        failures,
+        "dip_action",
+    )
     _check_common_no_overclaim(
         packet,
         failures,
@@ -443,6 +453,39 @@ def build_gpt_api_dip_acceptance_gate_packet(
             api_route_selected=dip_action_packet.get("api_route_selected") is True,
             chatgpt_lane_called=dip_action_packet.get("chatgpt_lane_called") is True,
             api_route_called=dip_action_packet.get("api_route_called") is True,
+            active_project_root_required=(
+                dip_action_packet.get("active_project_root_required") is True
+            ),
+            active_project_root_available=(
+                dip_action_packet.get("active_project_root_available") is True
+            ),
+            active_project_root_source=str(
+                dip_action_packet.get("active_project_root_source") or ""
+            ),
+            active_project_root_status=str(
+                dip_action_packet.get("active_project_root_status") or ""
+            ),
+            active_project_root_sha256=str(
+                dip_action_packet.get("active_project_root_sha256") or ""
+            ),
+            active_project_root_path_recorded=(
+                dip_action_packet.get("active_project_root_path_recorded") is True
+            ),
+            active_project_root_fallback_used=(
+                dip_action_packet.get("active_project_root_fallback_used") is True
+            ),
+            active_project_root_is_wbp_repo=(
+                dip_action_packet.get("active_project_root_is_wbp_repo") is True
+            ),
+            active_project_root_git_available=(
+                dip_action_packet.get("active_project_root_git_available") is True
+            ),
+            active_project_root_legacy_target_repo_alias_used=(
+                dip_action_packet.get(
+                    "active_project_root_legacy_target_repo_alias_used"
+                )
+                is True
+            ),
             target_repo_required=dip_action_packet.get("target_repo_required") is True,
             target_repo_available=dip_action_packet.get("target_repo_available") is True,
             target_repo_fallback_used=dip_action_packet.get("target_repo_fallback_used")

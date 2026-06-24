@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 import hashlib
 import re
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
+from .active_project_root import active_project_root_fields_from_mapping
 from .custom_codex_native_ui_observer_proof import run_native_ui_observer_proof_command
 from .native_window_probe import DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
 from .runtime import RuntimePaths, write_json_atomic
@@ -187,6 +188,7 @@ def run_native_response_matrix_command(
     persistent_profile_base_dir: str | None = None,
     observer_timeout_seconds: float | None = None,
     variants: Sequence[NativeResponsePromptVariant] | None = None,
+    active_project_root: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     proof_root = _proof_root(paths, proof_dir)
     proof_root.mkdir(parents=True, exist_ok=True)
@@ -240,6 +242,7 @@ def run_native_response_matrix_command(
         1 for case in case_summaries if case["native_ui_observer_packet_proven"]
     )
     machine_code = _matrix_machine_code(case_summaries)
+    active_root_fields = active_project_root_fields_from_mapping(active_project_root)
     packet = {
         "schema_version": 1,
         "packet_kind": "custom_codex_native_response_matrix",
@@ -256,6 +259,7 @@ def run_native_response_matrix_command(
             api_route_selected=False,
             chatgpt_lane_called=positive_case_count > 0,
             api_route_called=False,
+            **active_root_fields,
         ),
         "native_response_matrix_proven": positive_case_count > 0,
         "positive_case_count": positive_case_count,

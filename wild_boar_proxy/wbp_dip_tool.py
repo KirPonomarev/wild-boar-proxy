@@ -18,6 +18,15 @@ import sys
 import time
 from typing import Any
 
+from .active_project_root import (
+    ACTIVE_PROJECT_ROOT_ENV,
+    ACTIVE_PROJECT_ROOT_STATUS_MISSING,
+    ACTIVE_PROJECT_ROOT_STATUS_OK,
+    LEGACY_TARGET_REPO_ENV,
+    active_project_root_metadata,
+    select_active_project_root_candidate,
+    target_repo_fields_from_active_project_root,
+)
 from .core import packets
 from .external_models import errors, transforms
 from .external_models.http_client import request_json
@@ -62,7 +71,7 @@ DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS = 60.0
 DEFAULT_ACTION_PATCH_TEXT_LIMIT = 120000
 MIN_SUPPORTED_PYTHON = (3, 11)
 PYTHON_BIN_ENV = "WBP_PYTHON_BIN"
-TARGET_REPO_ENV = "WBP_TARGET_REPO"
+TARGET_REPO_ENV = LEGACY_TARGET_REPO_ENV
 
 WBP_DIP_TOOL_OK = "OK"
 WBP_DIP_TOOL_DRY_RUN = "WBP_DIP_TOOL_DRY_RUN"
@@ -78,6 +87,9 @@ WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT = "WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT"
 WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
 WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
 WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE = "WBP_DIP_TOOL_REPO_BRIDGE_UNAVAILABLE"
+WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE = (
+    "WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE"
+)
 WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE = "WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE"
 WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED = "WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED"
 WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING = (
@@ -905,40 +917,28 @@ def _target_repo_metadata(
     wbp_repo_root: Path | None,
     required: bool,
 ) -> tuple[Path | None, dict[str, Any]]:
-    candidate = Path(raw_path).expanduser().resolve(strict=False) if raw_path else None
-    status = _target_repo_block_reason(candidate)
-    available = status == ""
-    control_root = (
-        wbp_repo_root or default_control_repo_root()
-    ).expanduser().resolve(strict=False)
-    fields: dict[str, Any] = {
-        "target_repo_required": bool(required),
-        "target_repo_available": available,
-        "target_repo_source": _safe_text(source, limit=80),
-        "target_repo_status": "ok" if available else status,
-        "target_repo_path_recorded": False,
-        "target_repo_sha256": _sha256_text(str(candidate)) if candidate else "",
-        "target_repo_is_wbp_repo": bool(available and candidate == control_root),
-        "target_repo_git_available": bool(
-            available and candidate is not None and _target_repo_git_available(candidate)
-        ),
-        "target_repo_fallback_used": False,
-    }
-    return (candidate if available else None), fields
+    candidate, active_fields = active_project_root_metadata(
+        raw_path,
+        source=source,
+        wbp_repo_root=wbp_repo_root or default_control_repo_root(),
+        required=required,
+    )
+    return candidate, target_repo_fields_from_active_project_root(active_fields)
 
 
 def _select_target_repo_candidate(
     *,
+    active_project_root_arg: str | None = None,
     target_repo_arg: str | None,
-    codex_cwd: Path,
+    codex_cwd: Path | None = None,
     env: Mapping[str, str],
-) -> tuple[Path, str]:
-    if target_repo_arg:
-        return Path(target_repo_arg).expanduser().resolve(strict=False), "cli_arg"
-    env_target = _safe_text(env.get(TARGET_REPO_ENV), limit=4096)
-    if env_target:
-        return Path(env_target).expanduser().resolve(strict=False), "env"
-    return codex_cwd.expanduser().resolve(strict=False), "codex_cwd"
+) -> tuple[Path | None, str]:
+    del codex_cwd
+    return select_active_project_root_candidate(
+        active_project_root_arg=active_project_root_arg,
+        target_repo_arg=target_repo_arg,
+        env=env,
+    )
 
 
 def _repo_relative_path(repo_root: Path, raw_path: object) -> tuple[Path | None, str, str]:
@@ -2180,16 +2180,23 @@ def request_live_result(
         task=task,
         action_required=action_bridge_required,
     )
-    target_repo, target_repo_fields = _target_repo_metadata(
+    active_project_root, active_project_root_fields = active_project_root_metadata(
         repo_root,
         source=target_repo_source,
         wbp_repo_root=wbp_repo_root,
         required=repo_bridge_required,
     )
-    repo_bridge_available = bool(target_repo_fields["target_repo_available"])
+    target_repo_fields = target_repo_fields_from_active_project_root(
+        active_project_root_fields
+    )
+    repo_bridge_available = bool(
+        active_project_root_fields["active_project_root_available"]
+    )
     repo_context_pack = (
-        _build_repo_context_pack(target_repo)
-        if repo_bridge_required and repo_bridge_available and target_repo is not None
+        _build_repo_context_pack(active_project_root)
+        if repo_bridge_required
+        and repo_bridge_available
+        and active_project_root is not None
         else None
     )
     repo_tool_results: list[dict[str, Any]] = []
@@ -2226,6 +2233,7 @@ def request_live_result(
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": output_token_limit,
         "repo_bridge_max_steps": repo_bridge_max_steps,
+        **active_project_root_fields,
         **target_repo_fields,
         **repo_fields,
         **_provider_proof_fields(direct_provider_response_observed=False),
@@ -2235,7 +2243,7 @@ def request_live_result(
     if repo_bridge_required and not repo_bridge_available:
         return {
             **base,
-            "machine_error_code": WBP_DIP_TOOL_TARGET_REPO_UNAVAILABLE,
+            "machine_error_code": WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
             "operator_action": "retry",
         }
 
@@ -2257,7 +2265,7 @@ def request_live_result(
         )
 
     conversation_prompt = prompt
-    if repo_bridge_required and target_repo is not None:
+    if repo_bridge_required and active_project_root is not None:
         for bootstrap_call in _repo_bridge_bootstrap_calls(
             task=task,
             repo_bridge_required=repo_bridge_required,
@@ -2265,7 +2273,7 @@ def request_live_result(
         ):
             tool_result = _execute_repo_tool_call(
                 bootstrap_call,
-                repo_root=target_repo,
+                repo_root=active_project_root,
             )
             repo_tool_results.append(tool_result)
             conversation_prompt += _repo_tool_result_prompt(tool_result)
@@ -2294,7 +2302,7 @@ def request_live_result(
             }
         tool_call = (
             _extract_repo_tool_call(str(last_result.get("result_text") or ""))
-            if repo_bridge_required and target_repo is not None
+            if repo_bridge_required and active_project_root is not None
             else {}
         )
         if not tool_call:
@@ -2311,11 +2319,18 @@ def request_live_result(
                 conversation_prompt += gate_prompt
                 continue
             break
-        tool_result = _execute_repo_tool_call(tool_call, repo_root=target_repo)
+        tool_result = _execute_repo_tool_call(
+            tool_call,
+            repo_root=active_project_root,
+        )
         repo_tool_results.append(tool_result)
         conversation_prompt += _repo_tool_result_prompt(tool_result)
 
-    if repo_bridge_required and target_repo is not None and last_result.get("status") == "ok":
+    if (
+        repo_bridge_required
+        and active_project_root is not None
+        and last_result.get("status") == "ok"
+    ):
         pending_tool_call = _extract_repo_tool_call(
             str(last_result.get("result_text") or "")
         )
@@ -2486,6 +2501,21 @@ def build_wbp_dip_tool_packet(
 
     live_result_data = dict(live_result or {})
     target_repo_data = dict(target_repo or {})
+    active_project_root_data = dict(target_repo or {})
+    for key in (
+        "active_project_root_required",
+        "active_project_root_available",
+        "active_project_root_source",
+        "active_project_root_status",
+        "active_project_root_path_recorded",
+        "active_project_root_sha256",
+        "active_project_root_is_wbp_repo",
+        "active_project_root_git_available",
+        "active_project_root_fallback_used",
+        "active_project_root_legacy_target_repo_alias_used",
+    ):
+        if key in live_result_data:
+            active_project_root_data[key] = live_result_data[key]
     for key in (
         "target_repo_required",
         "target_repo_available",
@@ -2632,6 +2662,15 @@ def build_wbp_dip_tool_packet(
         machine_error_code = WBP_DIP_TOOL_DELEGATE_NOT_PROVEN
 
     ok = machine_error_code in {WBP_DIP_TOOL_OK, WBP_DIP_TOOL_DRY_RUN}
+    active_project_root_required = (
+        active_project_root_data.get("active_project_root_required") is True
+    )
+    active_project_root_available = (
+        active_project_root_data.get("active_project_root_available") is True
+    )
+    active_project_root_fallback_used = (
+        active_project_root_data.get("active_project_root_fallback_used") is True
+    )
     target_repo_required = target_repo_data.get("target_repo_required") is True
     target_repo_available = target_repo_data.get("target_repo_available") is True
     target_repo_fallback_used = target_repo_data.get("target_repo_fallback_used") is True
@@ -2674,6 +2713,33 @@ def build_wbp_dip_tool_packet(
             api_route_selected=delegate_packet.get("api_lane_called") is True,
             chatgpt_lane_called=bool(not dry_run and codex_executable and task),
             api_route_called=delegate_packet.get("api_lane_called") is True,
+            active_project_root_required=active_project_root_required,
+            active_project_root_available=active_project_root_available,
+            active_project_root_source=_safe_text(
+                active_project_root_data.get("active_project_root_source"),
+                limit=80,
+            ),
+            active_project_root_status=_safe_text(
+                active_project_root_data.get("active_project_root_status"),
+                limit=120,
+            ),
+            active_project_root_path_recorded=(
+                active_project_root_data.get("active_project_root_path_recorded")
+                is True
+            ),
+            active_project_root_sha256=_safe_text(
+                active_project_root_data.get("active_project_root_sha256"),
+                limit=80,
+            ),
+            active_project_root_is_wbp_repo=(
+                active_project_root_data.get("active_project_root_is_wbp_repo")
+                is True
+            ),
+            active_project_root_git_available=(
+                active_project_root_data.get("active_project_root_git_available")
+                is True
+            ),
+            active_project_root_fallback_used=active_project_root_fallback_used,
             target_repo_required=target_repo_required,
             target_repo_available=target_repo_available,
             target_repo_fallback_used=target_repo_fallback_used,
@@ -2711,6 +2777,34 @@ def build_wbp_dip_tool_packet(
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": live_result_output_token_limit,
         "repo_bridge_max_steps": repo_bridge_max_steps,
+        "active_project_root_required": active_project_root_required,
+        "active_project_root_available": active_project_root_available,
+        "active_project_root_source": _safe_text(
+            active_project_root_data.get("active_project_root_source"),
+            limit=80,
+        ),
+        "active_project_root_status": _safe_text(
+            active_project_root_data.get("active_project_root_status"),
+            limit=120,
+        ),
+        "active_project_root_path_recorded": False,
+        "active_project_root_sha256": _safe_text(
+            active_project_root_data.get("active_project_root_sha256"),
+            limit=80,
+        ),
+        "active_project_root_is_wbp_repo": (
+            active_project_root_data.get("active_project_root_is_wbp_repo") is True
+        ),
+        "active_project_root_git_available": (
+            active_project_root_data.get("active_project_root_git_available") is True
+        ),
+        "active_project_root_fallback_used": active_project_root_fallback_used,
+        "active_project_root_legacy_target_repo_alias_used": (
+            active_project_root_data.get(
+                "active_project_root_legacy_target_repo_alias_used"
+            )
+            is True
+        ),
         "target_repo_required": target_repo_required,
         "target_repo_available": target_repo_available,
         "target_repo_source": _safe_text(
@@ -3032,8 +3126,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--codex-bin")
     parser.add_argument("--cd", dest="codex_cwd", default=str(Path.cwd()))
     parser.add_argument(
+        "--active-project-root",
+        help="server-owned active project root for WBP-mediated repo/action tools",
+    )
+    parser.add_argument(
         "--target-repo",
-        help="local project repository for WBP-mediated DIP repo/action tools",
+        help="legacy alias for --active-project-root",
     )
     parser.add_argument(
         "--repo-bridge",
@@ -3087,17 +3185,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     control_repo_root = default_control_repo_root()
     codex_cwd = Path(args.codex_cwd).expanduser().resolve(strict=False)
-    target_repo_candidate, target_repo_source = _select_target_repo_candidate(
-        target_repo_arg=args.target_repo,
-        codex_cwd=codex_cwd,
-        env=os.environ,
+    active_project_root_candidate, active_project_root_source = (
+        _select_target_repo_candidate(
+            active_project_root_arg=args.active_project_root,
+            target_repo_arg=args.target_repo,
+            codex_cwd=codex_cwd,
+            env=os.environ,
+        )
     )
-    target_repo_required = _repo_bridge_requested(task=task, mode=args.repo_bridge)
-    _target_repo_path, target_repo_info = _target_repo_metadata(
-        target_repo_candidate,
-        source=target_repo_source,
+    active_project_root_required = _repo_bridge_requested(task=task, mode=args.repo_bridge)
+    _active_project_root_path, active_project_root_info = active_project_root_metadata(
+        active_project_root_candidate,
+        source=active_project_root_source,
         wbp_repo_root=control_repo_root,
-        required=target_repo_required,
+        required=active_project_root_required,
+    )
+    target_repo_info = target_repo_fields_from_active_project_root(
+        active_project_root_info
+    )
+    root_info = {**target_repo_info, **active_project_root_info}
+    mcp_root_env = (
+        {
+            ACTIVE_PROJECT_ROOT_ENV: str(active_project_root_candidate),
+            TARGET_REPO_ENV: str(active_project_root_candidate),
+        }
+        if active_project_root_candidate is not None
+        else {}
     )
     codex_bin = Path(args.codex_bin).expanduser() if args.codex_bin else default_codex_bin()
     python_bin = default_python_bin()
@@ -3116,7 +3229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_last_message=output_last_message,
         profile_dir=profile_dir,
         entry_evidence_file=entry_evidence_file,
-        extra_mcp_env={TARGET_REPO_ENV: str(target_repo_candidate)},
+        extra_mcp_env=mcp_root_env,
     )
     codex_executable = codex_bin.is_file() and os.access(codex_bin, os.X_OK)
     changed_files = [str(output_jsonl), str(output_last_message), str(entry_evidence_file)]
@@ -3134,7 +3247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             codex_executable=codex_executable,
             changed_files=[],
             secret_values=[task],
-            target_repo=target_repo_info,
+            target_repo=root_info,
             require_live_result=False,
             dip_work_mode=args.work_mode,
         )
@@ -3162,9 +3275,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "WBP_PROFILE_DIR": str(profile_dir),
             "WBP_MANAGED_DIR": str(profile_dir / "managed"),
             "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
-            TARGET_REPO_ENV: str(target_repo_candidate),
         }
     )
+    env.update(mcp_root_env)
     profile_repair_before = _repair_stale_profile_config_model(profile_dir, model=model)
     profile_repair_after: dict[str, Any] = {
         **profile_repair_before,
@@ -3195,8 +3308,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 task=task,
                 expected_alias=expected_alias,
                 profile_dir=profile_dir,
-                repo_root=target_repo_candidate,
-                target_repo_source=target_repo_source,
+                repo_root=active_project_root_candidate,
+                target_repo_source=active_project_root_source,
                 wbp_repo_root=control_repo_root,
                 repo_bridge_mode=args.repo_bridge,
                 dip_work_mode=args.work_mode,
@@ -3215,7 +3328,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         changed_files=[*existing_changed_files, str(proof_dir / "wbp-dip-tool.packet.json")],
         secret_values=[task],
         live_result=live_result,
-        target_repo=target_repo_info,
+        target_repo=root_info,
         require_live_result=not args.proof_only,
         dip_work_mode=args.work_mode,
     )

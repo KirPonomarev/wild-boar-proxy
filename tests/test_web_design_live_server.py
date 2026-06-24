@@ -5965,6 +5965,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             managed_dir = root / "managed"
+            active_root = root / "project"
+            active_root.mkdir()
             bindings = live_server.default_agent_bindings(
                 primary_model_id="gpt-5.5",
                 api_route_id="wbp-deepseek-chat",
@@ -6017,9 +6019,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     launch_model_id="gpt-5.5",
                     route_model_id="wbp-deepseek-chat",
                     bridge_endpoint="http://127.0.0.1:50555/v1",
+                    active_project_root=active_root,
                 )
 
         self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertTrue(context["active_project_root_required"])
+        self.assertTrue(context["active_project_root_available"])
+        self.assertEqual(
+            context["active_project_root_source"],
+            "server_runtime_context",
+        )
+        self.assertEqual(context["active_project_root_status"], "ok")
+        self.assertFalse(context["active_project_root_path_recorded"])
+        self.assertTrue(context["active_project_root_sha256"])
+        self.assertFalse(context["active_project_root_is_wbp_repo"])
+        self.assertFalse(context["active_project_root_fallback_used"])
+        self.assertNotIn(str(active_root), json.dumps(context, ensure_ascii=False))
         self.assertEqual(context["agent_binding_source"], "persisted_state")
         self.assertTrue(context["agent_binding_state_file_present"])
         self.assertEqual(context["alias_to_agent_id"]["Builder"], "dip")

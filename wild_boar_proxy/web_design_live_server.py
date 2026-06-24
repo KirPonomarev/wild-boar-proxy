@@ -32,6 +32,7 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+from wild_boar_proxy.active_project_root import active_project_root_metadata
 from wild_boar_proxy.core import packets as command_packets
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
@@ -11117,6 +11118,7 @@ def _custom_native_agent_runtime_context(
     route_model_id: str,
     bridge_endpoint: str = "",
     route_records: list[dict[str, Any]] | None = None,
+    active_project_root: Path | str | None = None,
 ) -> dict[str, Any]:
     packet = execution_packet if isinstance(execution_packet, dict) else {}
     execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
@@ -11311,6 +11313,12 @@ def _custom_native_agent_runtime_context(
         api_model_id,
         "--json",
     ] if api_model_id else []
+    _active_project_root_path, active_project_root_fields = active_project_root_metadata(
+        active_project_root or ROOT,
+        source="server_runtime_context",
+        wbp_repo_root=ROOT,
+        required=True,
+    )
     return {
         "schema_version": 1,
         "packet_kind": "codex_custom_native_agent_runtime_context",
@@ -11324,6 +11332,7 @@ def _custom_native_agent_runtime_context(
         "browser_can_supply_alias_authority": False,
         "browser_can_supply_route_authority": False,
         "native_free_text_activation_instruction_scope": "agent_runtime_context_only",
+        **active_project_root_fields,
         "primary_model_slot": packet.get("primary_model_slot", {}),
         "coding_agent_model_slot": packet.get("coding_agent_model_slot", {}),
         "agent_bindings_status": str(bindings_packet.get("status") or "unknown"),
@@ -11632,6 +11641,7 @@ def _launch_custom_native_codex_packet(
             launch_model_id=model_id,
             route_model_id=route_model_id,
             bridge_endpoint=bridge_endpoint,
+            active_project_root=ROOT,
         ),
     )
     legacy_selection = _codex_custom_selection_packet(
@@ -16681,6 +16691,7 @@ def build_handler(
             route_model_id=api_route_id,
             bridge_endpoint=bridge_endpoint,
             route_records=route_records,
+            active_project_root=codex_custom_safe_worktree_repo_root,
         )
         context["context_truth_source"] = "server_current_agent_bindings_state"
         context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"

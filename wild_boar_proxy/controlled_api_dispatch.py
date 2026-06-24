@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .active_project_root import active_project_root_fields_from_mapping
 from .command_effects import EFFECT_PROBE
 from .core import packets
 from .mcp_delegate import (
@@ -206,6 +207,7 @@ def build_controlled_api_dispatch_packet(
         if route_bound_dispatch_proven
         else "not_proven"
     )
+    active_root_fields = active_project_root_fields_from_mapping(runtime_context)
     extra = {
         "schema_version": 1,
         "packet_kind": CONTROLLED_API_DISPATCH_PACKET_KIND,
@@ -219,7 +221,11 @@ def build_controlled_api_dispatch_packet(
             api_route_selected=router_dispatch_admitted,
             chatgpt_lane_called=False,
             api_route_called=controlled_provider_called,
+            **active_root_fields,
         ),
+        "active_project_root_legacy_target_repo_alias_used": active_root_fields[
+            "active_project_root_legacy_target_repo_alias_used"
+        ],
         "hook_entry_packet_kind": hook_packet.get("packet_kind", ""),
         "hook_entry_status": hook_packet.get("status", ""),
         "hook_entry_machine_error_code": hook_packet.get("machine_error_code", ""),

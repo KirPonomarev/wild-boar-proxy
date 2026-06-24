@@ -77,14 +77,18 @@ repo/project/code/audit/report/fix/test prompts and can be controlled with
 filesystem or shell authority; it must request approved WBP tools through strict
 JSON tool-call text, and WBP executes those tools locally.
 
-The repository inspected or mutated by that bridge is the target repository, not
-implicitly the WBP checkout. Operators may pass `--target-repo <path>`; if it is
-omitted, WBP uses `WBP_TARGET_REPO` when present, otherwise the `--cd` directory.
-Missing, non-directory, system-root, or sensitive-name targets fail closed before
-any provider turn. Packets must expose target proof fields such as
-`target_repo_available`, `target_repo_source`, `target_repo_sha256`,
-`target_repo_is_wbp_repo`, and `target_repo_fallback_used=false`, while keeping
-`target_repo_path_recorded=false`.
+The repository inspected or mutated by that bridge is the server-owned active
+project root, not implicitly the WBP checkout and not the `--cd` execution
+directory. Operators may pass `--active-project-root <path>`; WBP may also
+provide `WBP_ACTIVE_PROJECT_ROOT` from the active runtime context. `--target-repo`
+and `WBP_TARGET_REPO` remain legacy compatibility aliases only. Missing,
+non-directory, system-root, or sensitive-name active roots fail closed before any
+provider turn. Packets must expose active-root proof fields such as
+`active_project_root_available`, `active_project_root_source`,
+`active_project_root_sha256`, `active_project_root_is_wbp_repo`, and
+`active_project_root_fallback_used=false`, while keeping
+`active_project_root_path_recorded=false`. Legacy `target_repo_*` fields may be
+emitted as aliases, but they are not the primary truth surface.
 
 `--work-mode full` raises the live-result budget for deep investigation and
 large reports. A successful live result must also write
