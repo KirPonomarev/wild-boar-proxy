@@ -10456,6 +10456,42 @@ if (selectedRouteSummary.provider !== "WBP deepseek-chat") {
 if (`${selectedRouteSummary.provider} ${selectedRouteSummary.model}`.includes("wbp-deepseek-chat")) {
   throw new Error(`selected route summary leaked raw route id: ${JSON.stringify(selectedRouteSummary)}`);
 }
+const selectedRouteOverridesFailedPrimary = sandbox.quickStartApiModel({
+  status: "ok",
+  source: "api_connections_readonly",
+  routes: [{
+    route_id: "wbp-web-primary-openrouter",
+    provider: "openrouter",
+    upstream_model: "openai/gpt-5",
+    enabled: true,
+    role_label: "main route",
+    secret_status_label: "available",
+    secret_visual_state: "green",
+    validation_label: "validate failed",
+    validation_visual_state: "red",
+    visual_state: "red"
+  }, {
+    route_id: "wbp-deepseek-v4-pro-max",
+    provider: "deepseek",
+    display_name: "DeepSeek V4 Pro · Максимум",
+    upstream_model: "deepseek-v4-pro",
+    enabled: true,
+    role_label: "Кандидат",
+    secret_status_label: "available",
+    secret_visual_state: "green",
+    validation_label: "ok",
+    validation_visual_state: "green"
+  }]
+}, "live", "wbp-deepseek-v4-pro-max");
+if (selectedRouteOverridesFailedPrimary.state !== "ok" || selectedRouteOverridesFailedPrimary.visual !== "green") {
+  throw new Error(`selected route did not override failed registry primary: ${JSON.stringify(selectedRouteOverridesFailedPrimary)}`);
+}
+if (selectedRouteOverridesFailedPrimary.title !== "Выбранный route подтверждён") {
+  throw new Error(`selected route title wrong: ${JSON.stringify(selectedRouteOverridesFailedPrimary)}`);
+}
+if (selectedRouteOverridesFailedPrimary.provider !== "WBP deepseek-v4-pro") {
+  throw new Error(`selected route provider label wrong: ${selectedRouteOverridesFailedPrimary.provider}`);
+}
 const selectedRouteWithoutProof = sandbox.quickStartApiModel({
   status: "ok",
   source: "api_connections_readonly",

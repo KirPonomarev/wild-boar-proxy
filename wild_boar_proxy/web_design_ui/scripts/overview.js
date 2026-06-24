@@ -15863,14 +15863,13 @@ function quickStartApiModel(snapshot, source, selectedRouteId = "") {
       confirmed: false
     };
   }
-  const primary = source === "live"
-    ? routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true)
-    : routes.find((route) => route.enabled === true) || routes[0];
   const selectedRoute = source === "live" && selectedRouteId
     ? routes.find((route) => route.route_id === selectedRouteId)
     : null;
-  const selectedRouteAdmitted = !primary && quickStartSelectedRouteHasBoundedProof(selectedRoute);
-  const routeForSummary = primary || (selectedRouteAdmitted ? selectedRoute : null);
+  const primary = source === "live"
+    ? routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true)
+    : routes.find((route) => route.enabled === true) || routes[0];
+  const routeForSummary = selectedRoute || primary;
   if (!routeForSummary) {
     return {
       state: "not_configured",
@@ -15890,12 +15889,15 @@ function quickStartApiModel(snapshot, source, selectedRouteId = "") {
   const missingSecret = routeForSummary.status_code === "missing_secret" || routeForSummary.secret_visual_state === "amber" || routeForSummary.secret_status_label === "missing";
   const failed = routeForSummary.visual_state === "red" || routeForSummary.validation_visual_state === "red";
   const stale = snapshot.status === "stale" || routeForSummary.status_code === "stale";
-  const visual = missingSecret || stale ? "amber" : (failed ? "red" : (routeForSummary.enabled === true ? "green" : "neutral"));
+  const selectedRouteChosen = selectedRoute && routeForSummary.route_id === selectedRoute.route_id;
+  const selectedRouteAdmitted = selectedRouteChosen && quickStartSelectedRouteHasBoundedProof(routeForSummary);
+  const selectedRouteNeedsCheck = selectedRouteChosen && !selectedRouteAdmitted && !missingSecret && !failed && !stale && routeForSummary.enabled === true;
+  const visual = missingSecret || stale || selectedRouteNeedsCheck ? "amber" : (failed ? "red" : (routeForSummary.enabled === true ? "green" : "neutral"));
   const title = missingSecret
     ? "Нужен secret_ref"
-    : (failed ? "Ошибка" : (stale ? "Устарело" : (routeForSummary.enabled === true ? (selectedRouteAdmitted ? "Выбранный route подтверждён" : "Работает") : "Deferred")));
+    : (failed ? "Ошибка" : (stale ? "Устарело" : (selectedRouteNeedsCheck ? "Проверить" : (routeForSummary.enabled === true ? (selectedRouteAdmitted ? "Выбранный route подтверждён" : "Работает") : "Deferred"))));
   return {
-    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (routeForSummary.enabled === true ? "ok" : "unsupported_provider"))),
+    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (selectedRouteNeedsCheck ? "needs_check" : (routeForSummary.enabled === true ? "ok" : "unsupported_provider")))),
     visual,
     title,
     provider: quickStartCompactApiLabel(routeForSummary),
@@ -15906,8 +15908,9 @@ function quickStartApiModel(snapshot, source, selectedRouteId = "") {
     validationState: routeForSummary.validation_label || routeForSummary.status_label || "not checked",
     lastCheck: routeForSummary.last_checked || "нет данных",
     routeCount: routes.length,
-    confirmed: selectedRouteAdmitted || source !== "live" || routeForSummary.role_label === "main route" || routeForSummary.role_label === "primary" || routeForSummary.is_primary === true || routeForSummary.primary === true,
-    selectedRoute: selectedRouteAdmitted,
+    confirmed: selectedRouteAdmitted || (!selectedRouteChosen && (source !== "live" || routeForSummary.role_label === "main route" || routeForSummary.role_label === "primary" || routeForSummary.is_primary === true || routeForSummary.primary === true)),
+    selectedRoute: Boolean(selectedRouteChosen),
+    selectedRouteAdmitted,
     routeEnabled: routeForSummary.enabled === true
   };
 }
@@ -15996,12 +15999,14 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
           : "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно.")
         : (apiModel.state === "stale"
           ? "Основной route показан из устаревшего bounded snapshot. Требуется обновление."
-          : "Основной route не подтверждён bounded snapshot."))
+          : (apiModel.state === "needs_check"
+            ? "Выбранный route ещё не подтверждён bounded packet. Запустите проверку маршрута."
+            : "Основной route не подтверждён bounded snapshot.")))
   );
 
   setQuickStartChecklistChip("quickStartApiProviderChip", apiModel.provider === "Не настроено" ? "neutral" : "green", apiModel.provider === "Не настроено" ? "unknown" : "OK");
   setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber" : (apiModel.secretState === "available" ? "green" : "neutral"), apiModel.state === "missing_secret_ref" ? "missing" : apiModel.secretState);
-  setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (apiModel.state === "missing_secret_ref" ? "amber" : "neutral"), apiModel.validationState);
+  setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (["missing_secret_ref", "needs_check", "stale"].includes(apiModel.state) ? "amber" : "neutral"), apiModel.validationState);
 
   const apiAction = document.getElementById("quickStartCheckApiAction");
   if (apiAction) {
