@@ -7255,6 +7255,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             return session
 
         with tempfile.TemporaryDirectory() as temp_dir:
+            active_project_root = Path(temp_dir) / "active-project"
+            active_project_root.mkdir()
             with (
                 mock.patch.object(
                     live_server,
@@ -7276,6 +7278,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         owner_authorization_phrase=(
                             "разрешаю тебе любые законные действия в рамках разработки проекта"
                         ),
+                        safe_worktree_repo_root=active_project_root,
                     ),
                 )
                 authorized_thread = threading.Thread(
@@ -7468,10 +7471,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(primary_prompt["status"], "ok")
         self.assertEqual(primary_prompt["current_execution_slot_id"], "primary_model_slot")
         self.assertEqual(primary_prompt["configured_provider"], "cliproxy")
+        self.assertTrue(primary_prompt["active_project_root_available"])
+        self.assertFalse(primary_prompt["active_project_root_path_recorded"])
+        self.assertFalse(primary_prompt["active_project_root_is_wbp_repo"])
         self.assertTrue(primary_prompt["live_prompt_full_success"])
         self.assertEqual(api_prompt["status"], "ok")
         self.assertEqual(api_prompt["current_execution_slot_id"], "coding_agent_model_slot")
         self.assertEqual(api_prompt["configured_provider"], "external_route")
+        self.assertTrue(api_prompt["active_project_root_available"])
+        self.assertFalse(api_prompt["active_project_root_path_recorded"])
+        self.assertFalse(api_prompt["active_project_root_is_wbp_repo"])
         self.assertTrue(api_prompt["live_prompt_full_success"])
         self.assertEqual(
             authorized_sessions[0].run_payloads,
@@ -28842,12 +28851,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         payloads[("accounts", "list", "--json")] = accounts_packet(
             accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
         )
-        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ):
+            project_root = Path(raw_project)
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
                     runner=MappingRunner(payloads),
                     owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
                 ),
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -28906,6 +28919,13 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(proof["runtime_slot_dispatch_proof_scope"], "wbp_session_manager_payload_plus_downstream_echo")
         self.assertTrue(proof["runtime_slot_dispatch_proven"])
         self.assertTrue(proof["slot_binding_runtime_dispatch_claimed"])
+        self.assertTrue(proof["active_project_root_available"])
+        self.assertEqual(
+            proof["active_project_root_source"],
+            "server_supplied_safe_worktree_repo_root",
+        )
+        self.assertFalse(proof["active_project_root_path_recorded"])
+        self.assertFalse(proof["active_project_root_is_wbp_repo"])
         self.assertFalse(proof["parallel_slot_execution_proven"])
         self.assertFalse(proof["fanout_execution_proven"])
         self.assertEqual(
@@ -28920,11 +28940,11 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             ],
         )
 
-    def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:
-        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+    def test_codex_custom_prompt_endpoint_blocks_without_active_project_root(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
 
-        def factory() -> DualLaneFakeOperatorSurfaceSession:
-            session = DualLaneFakeOperatorSurfaceSession()
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
             created_sessions.append(session)
             return session
 
@@ -28946,6 +28966,71 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 build_handler(
                     runner=MappingRunner(payloads),
                     owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"primary_model_id": "gpt-5.3-codex"},
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "Reply with exactly WBP_LIVE_OK."},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(created["status"], "ok")
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
+        self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertFalse(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertFalse(packet["provider_called"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
+    def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ):
+            project_root = Path(raw_project)
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
                 ),
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -28997,6 +29082,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(primary["account_selected_by_user"])
         self.assertFalse(primary["account_execution_proven"])
         self.assertEqual(primary["configured_provider"], "cliproxy")
+        self.assertTrue(primary["active_project_root_available"])
+        self.assertFalse(primary["active_project_root_path_recorded"])
+        self.assertFalse(primary["active_project_root_is_wbp_repo"])
         self.assertTrue(primary["live_prompt_full_success"])
         self.assertEqual(api_lane["status"], "ok")
         self.assertEqual(api_lane["session_id"], session_id)
@@ -29012,6 +29100,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(api_lane["selected_route_server_issued"])
         self.assertTrue(api_lane["route_provenance_required"])
         self.assertTrue(api_lane["route_provenance_proven"])
+        self.assertTrue(api_lane["active_project_root_available"])
+        self.assertFalse(api_lane["active_project_root_path_recorded"])
+        self.assertFalse(api_lane["active_project_root_is_wbp_repo"])
         self.assertTrue(api_lane["live_prompt_full_success"])
         self.assertEqual(
             detail["session"]["current_execution_slot_id"],
@@ -29088,15 +29179,19 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         payloads[("accounts", "list", "--json")] = accounts_packet(
             accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
         )
-        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory), mock.patch(
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ), mock.patch(
             "wild_boar_proxy.api_agent_direct_reply.request_live_result",
             side_effect=direct_runner,
         ):
+            project_root = Path(raw_project)
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
                     runner=MappingRunner(payloads),
                     owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
                 ),
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -29137,10 +29232,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(packet["dip_run_invoked"])
         self.assertTrue(packet["api_lane_called"])
         self.assertFalse(packet["chatgpt_lane_called"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_path_recorded"])
         self.assertEqual(created_sessions[0].run_payloads, [])
         self.assertEqual(len(direct_calls), 1)
         self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
         self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(direct_calls[0]["repo_root"], project_root.resolve(strict=False))
 
     def test_codex_custom_mixed_slot_dispatch_probe_endpoint_proves_two_slots(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
@@ -29162,12 +29263,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         payloads[("accounts", "list", "--json")] = accounts_packet(
             accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
         )
-        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ):
+            project_root = Path(raw_project)
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
                     runner=MappingRunner(payloads),
                     owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
                 ),
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -29532,12 +29637,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         payloads[("accounts", "list", "--json")] = accounts_packet(
             accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
         )
-        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ):
+            project_root = Path(raw_project)
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
                     runner=MappingRunner(payloads),
                     owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
                 ),
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -29583,6 +29692,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(proof["machine_error_code"], "OK")
         self.assertEqual(proof["selected_source_provenance"], "route_proven")
         self.assertEqual(proof["configured_provider"], "external_route")
+        self.assertTrue(proof["active_project_root_available"])
+        self.assertFalse(proof["active_project_root_path_recorded"])
+        self.assertFalse(proof["active_project_root_is_wbp_repo"])
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["current_codex_touched"])
         self.assertFalse(proof["requested_slot_explicit"])

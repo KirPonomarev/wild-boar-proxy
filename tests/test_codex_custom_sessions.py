@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy.codex_custom_sessions import (
     CodexCustomSessionManager,
@@ -2351,6 +2353,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 owner_authorized=True,
                 auto_route_live_result_runner=direct_runner,
                 profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
             )
 
             self.assertEqual(packet["status"], "ok")
@@ -2376,9 +2380,18 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["model_response_present"])
             self.assertTrue(packet["inference_proven"])
             self.assertTrue(packet["route_bound_dispatch_proven"])
+            self.assertTrue(packet["active_project_root_required"])
+            self.assertTrue(packet["active_project_root_available"])
+            self.assertEqual(
+                packet["active_project_root_source"],
+                "test_selected_active_project_root",
+            )
+            self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertFalse(packet["active_project_root_is_wbp_repo"])
             self.assertEqual(prompt_calls, [])
             self.assertEqual(len(direct_calls), 1)
             self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
+            self.assertEqual(direct_calls[0]["repo_root"], Path(temp_dir).resolve())
             self.assertEqual(direct_calls[0]["dip_work_mode"], "full")
             self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
 
@@ -2417,6 +2430,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 owner_authorized=True,
                 auto_route_live_result_runner=direct_runner,
                 profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
             )
 
             self.assertEqual(binding["status"], "ok")
@@ -2458,11 +2473,15 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 owner_authorized=True,
                 auto_route_live_result_runner=direct_runner,
                 profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
             )
 
             self.assertEqual(packet["status"], "ok")
             self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
             self.assertEqual(packet["auto_router_decision"], "gpt_lane")
+            self.assertTrue(packet["active_project_root_available"])
+            self.assertFalse(packet["active_project_root_path_recorded"])
             self.assertTrue(packet["gpt_lane_selected"])
             self.assertFalse(packet["direct_reply_selected"])
             self.assertTrue(packet["prompt_runner_called"])
@@ -2479,6 +2498,43 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     }
                 ],
             )
+            self.assertEqual(direct_calls, [])
+
+    def test_prompt_ingress_blocks_without_active_project_root_before_any_runner(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.dict(os.environ, {}, clear=True):
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "DIP: ответь."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
+            self.assertTrue(packet["active_project_root_required"])
+            self.assertFalse(packet["active_project_root_available"])
+            self.assertEqual(packet["active_project_root_source"], "missing")
+            self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertFalse(packet["api_lane_called"])
+            self.assertFalse(packet["model_response_present"])
+            self.assertEqual(prompt_calls, [])
             self.assertEqual(direct_calls, [])
 
     def test_prompt_ingress_unknown_alias_fails_closed_without_any_runner(self) -> None:
@@ -2504,6 +2560,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
                 or direct_live_result("MUST_NOT_RUN"),
                 profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
             )
 
             self.assertEqual(packet["status"], "error")
@@ -2549,6 +2607,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
                 or direct_live_result("MUST_NOT_RUN"),
                 profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
             )
 
             self.assertEqual(packet["status"], "ok")

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import shlex
@@ -19,6 +20,10 @@ from typing import Any, Callable
 
 from wild_boar_proxy.operator_surface import redact_text
 
+from wild_boar_proxy.active_project_root import (
+    active_project_root_metadata,
+    select_active_project_root_candidate,
+)
 from wild_boar_proxy.codex_account_selection import (
     ACCOUNT_CANDIDATE_PROVENANCE_STATUS,
     ROUTE_CANDIDATE_PROVENANCE_STATUS,
@@ -122,6 +127,7 @@ SESSION_CREATE_FORBIDDEN_FIELDS = {
     "account_id",
     "secret_ref",
 }
+WBP_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def utc_now() -> str:
@@ -2578,6 +2584,107 @@ class CodexCustomSessionManager:
         packet["session"] = self._public_session(session)
         return packet
 
+    def _active_project_root_for_prompt(
+        self,
+        *,
+        active_project_root: Path | None,
+        active_project_root_source: str,
+    ) -> tuple[Path | None, dict[str, Any]]:
+        if active_project_root is None:
+            selected_root, selected_source = select_active_project_root_candidate(
+                active_project_root_arg=None,
+                target_repo_arg=None,
+                env=os.environ,
+            )
+        else:
+            selected_root = active_project_root
+            selected_source = active_project_root_source or "server_supplied_active_project_root"
+        return active_project_root_metadata(
+            selected_root,
+            source=selected_source,
+            wbp_repo_root=WBP_REPO_ROOT,
+            required=True,
+        )
+
+    def _active_project_root_blocked_packet(
+        self,
+        *,
+        session: dict[str, Any],
+        prompt: str,
+        active_project_root_fields: dict[str, Any],
+    ) -> dict[str, Any]:
+        prompt_hash = _digest(prompt)
+        packet = {
+            **self._base_packet(
+                "blocked",
+                str(
+                    active_project_root_fields.get("active_project_root_status")
+                    or "active_project_root_missing"
+                ),
+            ),
+            "custom_codex_prompt_ingress_packet": True,
+            "mode_id": "codex_custom",
+            "session_id": str(session.get("session_id") or ""),
+            **active_project_root_fields,
+            "authorization_status": "authorized_by_owner_gate",
+            "owner_authorization_phrase_present": True,
+            "live_prompt_admitted": False,
+            "live_prompt_executed": False,
+            "prompt_runner_called": False,
+            "prompt_present": True,
+            "prompt_length": len(prompt),
+            "prompt_sha256": prompt_hash,
+            "prompt_preview_redacted": _safe_preview(prompt),
+            "model_response_present": False,
+            "inference_proven": False,
+            "auto_router_used": False,
+            "direct_reply_selected": False,
+            "api_lane_called": False,
+            "chatgpt_lane_called": False,
+            "fallback_attempted": False,
+            "session": self._public_session(session),
+            "role_slot_binding_packet": self._role_slot_binding_packet(session),
+            "next_action": "select_active_project_root",
+        }
+        self._append_ledger(
+            session,
+            "prompt_active_project_root_blocked",
+            {
+                "machine_error_code": packet["machine_error_code"],
+                "active_project_root_required": active_project_root_fields.get(
+                    "active_project_root_required"
+                )
+                is True,
+                "active_project_root_available": active_project_root_fields.get(
+                    "active_project_root_available"
+                )
+                is True,
+                "active_project_root_source": active_project_root_fields.get(
+                    "active_project_root_source"
+                ),
+                "active_project_root_status": active_project_root_fields.get(
+                    "active_project_root_status"
+                ),
+                "active_project_root_path_recorded": active_project_root_fields.get(
+                    "active_project_root_path_recorded"
+                )
+                is True,
+                "active_project_root_sha256": active_project_root_fields.get(
+                    "active_project_root_sha256"
+                ),
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": False,
+                "inference_proven": False,
+                "fallback_attempted": False,
+            },
+        )
+        session["updated_at_utc"] = utc_now()
+        self._write_session(session)
+        packet["session"] = self._public_session(session)
+        return packet
+
     def prompt_ingress_packet(
         self,
         session_id: str,
@@ -2593,18 +2700,6 @@ class CodexCustomSessionManager:
         work_mode: str = "full",
         timeout_seconds: float = 60.0,
     ) -> dict[str, Any]:
-        if payload.get("slot_id") is not None:
-            packet = self.prompt_packet(
-                session_id,
-                payload,
-                prompt_runner,
-                owner_authorized=owner_authorized,
-            )
-            packet["custom_codex_prompt_ingress_packet"] = True
-            packet["auto_router_used"] = False
-            packet["explicit_slot_preserved"] = True
-            return packet
-
         session = self._sessions.get(session_id)
         if not session:
             return self._unknown_session()
@@ -2636,6 +2731,32 @@ class CodexCustomSessionManager:
             packet["auto_router_used"] = False
             return packet
 
+        selected_active_project_root, active_project_root_fields = (
+            self._active_project_root_for_prompt(
+                active_project_root=active_project_root,
+                active_project_root_source=active_project_root_source,
+            )
+        )
+        if active_project_root_fields["active_project_root_available"] is not True:
+            return self._active_project_root_blocked_packet(
+                session=session,
+                prompt=prompt,
+                active_project_root_fields=active_project_root_fields,
+            )
+
+        if payload.get("slot_id") is not None:
+            packet = self.prompt_packet(
+                session_id,
+                payload,
+                prompt_runner,
+                owner_authorized=True,
+            )
+            packet.update(active_project_root_fields)
+            packet["custom_codex_prompt_ingress_packet"] = True
+            packet["auto_router_used"] = False
+            packet["explicit_slot_preserved"] = True
+            return packet
+
         session_status_failure = self._prompt_precondition_failure(
             session,
             PRIMARY_MODEL_SLOT,
@@ -2657,6 +2778,7 @@ class CodexCustomSessionManager:
                     "prompt_runner_called": False,
                     "model_response_present": False,
                     "fallback_attempted": False,
+                    **active_project_root_fields,
                     "next_action": "wait_for_current_prompt_completion",
                     "session": self._public_session(session),
                     "role_slot_binding_packet": self._role_slot_binding_packet(session),
@@ -2668,8 +2790,10 @@ class CodexCustomSessionManager:
                 runtime_context=runtime_context,
                 context_file_metadata=context_metadata,
                 profile_dir=(profile_dir or self.root),
-                active_project_root=active_project_root,
-                active_project_root_source=active_project_root_source,
+                active_project_root=selected_active_project_root,
+                active_project_root_source=str(
+                    active_project_root_fields["active_project_root_source"]
+                ),
                 repo_bridge_mode=repo_bridge_mode,
                 work_mode=work_mode,
                 timeout_seconds=timeout_seconds,
@@ -2702,6 +2826,7 @@ class CodexCustomSessionManager:
                 owner_authorized=True,
             )
             packet.update(self._auto_route_prompt_summary(auto_packet))
+            packet.update(active_project_root_fields)
             packet["custom_codex_prompt_ingress_packet"] = True
             packet["requested_slot_auto_routed"] = True
             packet["explicit_slot_preserved"] = False

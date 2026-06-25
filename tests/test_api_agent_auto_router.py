@@ -17,6 +17,10 @@ from wild_boar_proxy.core import packets
 ROUTE_ID = "wbp-deepseek-v4-pro-max"
 
 
+def _active_project_root_for_test() -> Path:
+    return Path(tempfile.gettempdir()).resolve(strict=False)
+
+
 def _runtime_context(
     *,
     custom_alias: str | None = None,
@@ -128,6 +132,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             work_mode="full",
             live_result_runner=runner,
         )
@@ -161,7 +167,37 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(calls[0]["expected_alias"], "DIP")
         self.assertEqual(calls[0]["dip_work_mode"], "full")
         self.assertEqual(calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(calls[0]["repo_root"], _active_project_root_for_test())
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertTrue(packet["target_repo_required"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_path_recorded"])
+        self.assertEqual(packet["target_repo_source"], "test_selected_active_project_root")
         self.assertEqual(packet["effect"], "probe")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_api_alias_blocks_without_active_project_root_before_provider_call(self) -> None:
+        runner = mock.Mock(return_value=_live_result("must not run"))
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text="DIP: ответь коротко.",
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
+        self.assertTrue(packet["auto_router_fail_closed"])
+        self.assertTrue(packet["direct_reply_selected"])
+        self.assertFalse(packet["direct_reply_proven"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["active_project_root_available"])
+        self.assertFalse(packet["target_repo_available"])
+        runner.assert_not_called()
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_custom_api_alias_from_runtime_context_uses_direct_reply(self) -> None:
@@ -176,6 +212,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(custom_alias="Кодер"),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -194,6 +232,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -222,6 +262,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             repo_bridge_mode="on",
             live_result_runner=runner,
         )
@@ -250,6 +292,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -273,6 +317,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             runtime_context=_runtime_context(allowed_routes=["wbp-other-route"]),
             context_file_metadata=_metadata(),
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -290,8 +336,10 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
             root = Path(raw_root)
             profile = root / "profile"
             managed = root / "managed"
+            project = root / "project"
             profile.mkdir()
             managed.mkdir()
+            project.mkdir()
             context_file = profile / "wbp-agent-runtime-context.json"
             context_file.write_text(
                 json.dumps(_runtime_context(), ensure_ascii=False),
@@ -300,7 +348,11 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
 
             with mock.patch.dict(
                 os.environ,
-                {"WBP_PROFILE_DIR": str(profile), "WBP_MANAGED_DIR": str(managed)},
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
                 clear=False,
             ), mock.patch(
                 "wild_boar_proxy.api_agent_direct_reply.request_live_result",
@@ -327,6 +379,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
         self.assertEqual(payload["direct_reply_text"], "cli auto answer")
         self.assertEqual(payload["repo_bridge_mode"], "off")
+        self.assertEqual(payload["active_project_root_source"], "server_runtime_env")
+        self.assertTrue(payload["target_repo_available"])
         self.assertEqual(payload["effect"], "probe")
         self.assertTrue(payload["direct_reply_proven"])
         self.assertFalse(payload["tools_wbp_dip_invoked"])

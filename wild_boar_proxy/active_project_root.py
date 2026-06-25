@@ -95,10 +95,13 @@ def active_project_root_path_is_sensitive(path_text: str) -> bool:
     parts = [part.casefold() for part in path.parts]
     if any(part in ACTIVE_PROJECT_ROOT_SENSITIVE_PART_NAMES for part in parts):
         return True
-    name = path.name.casefold()
-    if name.startswith(".env"):
+    if any(part.startswith(".env") for part in parts):
         return True
-    return any(marker in name for marker in ACTIVE_PROJECT_ROOT_SENSITIVE_NAME_MARKERS)
+    return any(
+        marker in part
+        for marker in ACTIVE_PROJECT_ROOT_SENSITIVE_NAME_MARKERS
+        for part in parts
+    )
 
 
 def active_project_root_block_reason(path: Path | None) -> str:
@@ -107,7 +110,7 @@ def active_project_root_block_reason(path: Path | None) -> str:
     resolved = path.expanduser().resolve(strict=False)
     if resolved in ACTIVE_PROJECT_ROOT_BLOCKED_EXACT_PATHS:
         return ACTIVE_PROJECT_ROOT_STATUS_BLOCKED_SYSTEM_DIR
-    if active_project_root_path_is_sensitive(resolved.name):
+    if active_project_root_path_is_sensitive(str(resolved)):
         return ACTIVE_PROJECT_ROOT_STATUS_BLOCKED_SENSITIVE_NAME
     if not resolved.exists():
         return ACTIVE_PROJECT_ROOT_STATUS_MISSING

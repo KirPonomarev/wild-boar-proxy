@@ -16,6 +16,10 @@ from wild_boar_proxy.runtime import RuntimePaths
 ROUTE_ID = "wbp-deepseek-v4-pro-max"
 
 
+def _active_project_root_for_test() -> Path:
+    return Path(tempfile.gettempdir()).resolve(strict=False)
+
+
 def _runtime_context(*, custom_alias: str | None = None) -> dict[str, object]:
     dip_aliases = ["DIP", "Agent 2", "2"]
     if custom_alias:
@@ -118,6 +122,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
                 "runtime_context_file_read": True,
             },
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             work_mode="full",
             live_result_runner=runner,
         )
@@ -147,8 +153,41 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(calls[0]["expected_alias"], "DIP")
         self.assertEqual(calls[0]["dip_work_mode"], "full")
         self.assertEqual(calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(calls[0]["repo_root"], _active_project_root_for_test())
+        self.assertEqual(calls[0]["target_repo_source"], "test_selected_active_project_root")
         self.assertEqual(calls[0]["runtime_context"], _runtime_context())
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["target_repo_required"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_path_recorded"])
         self.assertEqual(packet["effect"], "probe")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_blocks_without_active_project_root_before_provider_call(self) -> None:
+        runner = mock.Mock(return_value=_live_result("must not run"))
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text="DIP: ответь коротко.",
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
+        self.assertFalse(packet["api_agent_direct_reply_proven"])
+        self.assertFalse(packet["api_agent_provider_called"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertFalse(packet["active_project_root_available"])
+        self.assertFalse(packet["target_repo_available"])
+        runner.assert_not_called()
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_direct_reply_accepts_custom_api_alias_from_runtime_context(self) -> None:
@@ -166,6 +205,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
                 "runtime_context_file_read": True,
             },
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -187,6 +228,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
                 "runtime_context_file_read": True,
             },
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=runner,
         )
 
@@ -206,6 +249,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
                 "runtime_context_file_read": True,
             },
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             live_result_runner=lambda **_kwargs: _live_result(
                 '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}'
             ),
@@ -232,6 +277,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
                 "runtime_context_file_read": True,
             },
             profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
             repo_bridge_mode="on",
             live_result_runner=lambda **_kwargs: _live_result(
                 "fixed and verified",
@@ -257,13 +304,46 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertTrue(packet["dip_code_verified"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_absolute_mutated_file_path_is_blocked_and_not_recorded(self) -> None:
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text="DIP: почини баг.",
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            repo_bridge_mode="on",
+            live_result_runner=lambda **_kwargs: _live_result(
+                "fixed",
+                dip_action_mutation_applied=True,
+                dip_action_mutated_files=["/tmp/private/project/src/app.py"],
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], direct.API_AGENT_DIRECT_REPLY_UNSAFE)
+        self.assertIn(
+            direct.API_AGENT_DIRECT_REPLY_UNSAFE_CHANGED_FILE_PATH,
+            packet["blocking_reasons"],
+        )
+        self.assertEqual(packet["changed_files"], [])
+        self.assertEqual(packet["dip_action_mutated_files"], [])
+        encoded = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("/tmp/private/project/src/app.py", encoded)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_cli_direct_reply_uses_runtime_context_file_and_full_mode_default(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             profile = root / "profile"
             managed = root / "managed"
+            project = root / "project"
             profile.mkdir()
             managed.mkdir()
+            project.mkdir()
             context_file = profile / "wbp-agent-runtime-context.json"
             context_file.write_text(
                 json.dumps(_runtime_context(), ensure_ascii=False),
@@ -272,7 +352,11 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
 
             with mock.patch.dict(
                 os.environ,
-                {"WBP_PROFILE_DIR": str(profile), "WBP_MANAGED_DIR": str(managed)},
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
                 clear=False,
             ), mock.patch(
                 "wild_boar_proxy.api_agent_direct_reply.request_live_result",
@@ -298,6 +382,8 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(payload["packet_kind"], direct.API_AGENT_DIRECT_REPLY_PACKET_KIND)
         self.assertEqual(payload["direct_reply_text"], "cli direct answer")
         self.assertEqual(payload["dip_work_mode"], "full")
+        self.assertEqual(payload["active_project_root_source"], "server_runtime_env")
+        self.assertTrue(payload["active_project_root_available"])
         self.assertTrue(payload["api_agent_direct_reply_proven"])
         self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
 

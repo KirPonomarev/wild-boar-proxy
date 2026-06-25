@@ -10,7 +10,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .active_project_root import select_active_project_root_candidate
+from .active_project_root import (
+    active_project_root_metadata,
+    select_active_project_root_candidate,
+    target_repo_fields_from_active_project_root,
+)
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE
 from .controlled_api_dispatch import build_controlled_api_dispatch_packet
 from .core import packets
@@ -43,6 +47,7 @@ API_AGENT_DIRECT_REPLY_DISPATCH_NOT_PROVEN = (
 API_AGENT_DIRECT_REPLY_UNAVAILABLE = "WBP_API_AGENT_DIRECT_REPLY_UNAVAILABLE"
 API_AGENT_DIRECT_REPLY_FINAL_TOOL_CALL = "WBP_API_AGENT_DIRECT_REPLY_FINAL_TOOL_CALL"
 API_AGENT_DIRECT_REPLY_UNSAFE = "WBP_API_AGENT_DIRECT_REPLY_UNSAFE"
+API_AGENT_DIRECT_REPLY_UNSAFE_CHANGED_FILE_PATH = "unsafe_changed_file_path"
 
 DEFAULT_DIRECT_REPLY_WORK_MODE = "full"
 DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE = "off"
@@ -90,6 +95,23 @@ def _looks_like_final_repo_tool_call(text: str) -> bool:
 
 def _result_text(live_result: Mapping[str, Any]) -> str:
     return str(live_result.get("result_text") or "").strip()
+
+
+def _safe_mutated_file_paths(raw_paths: object) -> tuple[list[str], bool]:
+    if not isinstance(raw_paths, list):
+        return [], False
+    paths: list[str] = []
+    unsafe = False
+    for raw_path in raw_paths:
+        text = _safe_text(raw_path, limit=500)
+        if not text:
+            continue
+        path = Path(text)
+        if path.is_absolute() or ".." in path.parts:
+            unsafe = True
+            continue
+        paths.append(text)
+    return paths, unsafe
 
 
 def _base_blocking_reasons(
@@ -169,18 +191,25 @@ def build_api_agent_direct_reply_packet(
         and dispatch_packet.get("dispatch_proven") is True
         and dispatch_packet.get("selected_alias_lane") == "api_route"
     )
+    selected_active_project_root, active_root_fields = active_project_root_metadata(
+        active_project_root,
+        source=active_project_root_source,
+        wbp_repo_root=REPO_ROOT,
+        required=True,
+    )
+    active_root_available = active_root_fields["active_project_root_available"] is True
     selected_alias = _safe_text(dispatch_packet.get("selected_alias"), limit=80)
     selected_slot = _safe_text(dispatch_packet.get("selected_slot"), limit=80)
     selected_lane = _safe_text(dispatch_packet.get("selected_alias_lane"), limit=40)
 
     live_result: Mapping[str, Any] = {}
-    if dispatch_proven and selected_alias:
+    if dispatch_proven and selected_alias and active_root_available:
         runner = live_result_runner or request_live_result
         live_result = runner(
             task=prompt,
             expected_alias=selected_alias,
             profile_dir=profile_dir,
-            repo_root=active_project_root,
+            repo_root=selected_active_project_root,
             target_repo_source=active_project_root_source,
             wbp_repo_root=REPO_ROOT,
             repo_bridge_mode=safe_repo_bridge_mode,
@@ -190,11 +219,18 @@ def build_api_agent_direct_reply_packet(
         )
     reply_text = _result_text(live_result)
     final_tool_call = _looks_like_final_repo_tool_call(reply_text)
+    mutated_files, unsafe_mutated_file_path = _safe_mutated_file_paths(
+        live_result.get("dip_action_mutated_files")
+    )
     blocking_reasons = _base_blocking_reasons(
         dispatch_packet=dispatch_packet,
         live_result=live_result,
         final_tool_call=final_tool_call,
     )
+    if not active_root_available:
+        blocking_reasons.append(str(active_root_fields["active_project_root_status"]))
+    if unsafe_mutated_file_path:
+        blocking_reasons.append(API_AGENT_DIRECT_REPLY_UNSAFE_CHANGED_FILE_PATH)
     ok = not blocking_reasons
     if ok:
         machine_error_code = API_AGENT_DIRECT_REPLY_OK
@@ -205,6 +241,8 @@ def build_api_agent_direct_reply_packet(
             or dispatch_packet.get("machine_error_code")
             or API_AGENT_DIRECT_REPLY_DISPATCH_NOT_PROVEN
         )
+    elif not active_root_available:
+        machine_error_code = str(active_root_fields["active_project_root_status"])
     elif final_tool_call:
         machine_error_code = API_AGENT_DIRECT_REPLY_FINAL_TOOL_CALL
     elif any(
@@ -214,6 +252,7 @@ def build_api_agent_direct_reply_packet(
             "local_imitation_used",
             "raw_backend_details_exposed",
             "secret_value_exposed",
+            API_AGENT_DIRECT_REPLY_UNSAFE_CHANGED_FILE_PATH,
         }
         for reason in blocking_reasons
     ):
@@ -226,46 +265,8 @@ def build_api_agent_direct_reply_packet(
         if machine_error_code == WBP_DIP_TOOL_OK:
             machine_error_code = API_AGENT_DIRECT_REPLY_UNAVAILABLE
 
-    active_root_fields = {
-        key: live_result.get(key)
-        for key in (
-            "active_project_root_required",
-            "active_project_root_available",
-            "active_project_root_source",
-            "active_project_root_status",
-            "active_project_root_path_recorded",
-            "active_project_root_sha256",
-            "active_project_root_is_wbp_repo",
-            "active_project_root_git_available",
-            "active_project_root_fallback_used",
-            "active_project_root_legacy_target_repo_alias_used",
-        )
-        if key in live_result
-    }
-    target_repo_fields = {
-        key: live_result.get(key)
-        for key in (
-            "target_repo_required",
-            "target_repo_available",
-            "target_repo_source",
-            "target_repo_status",
-            "target_repo_path_recorded",
-            "target_repo_sha256",
-            "target_repo_is_wbp_repo",
-            "target_repo_git_available",
-            "target_repo_fallback_used",
-        )
-        if key in live_result
-    }
+    target_repo_fields = target_repo_fields_from_active_project_root(active_root_fields)
     reply_text_recorded = bool(reply_text and not final_tool_call)
-    mutated_files = [
-        _safe_text(path, limit=500)
-        for path in (
-            live_result.get("dip_action_mutated_files")
-            if isinstance(live_result.get("dip_action_mutated_files"), list)
-            else []
-        )
-    ]
     file_mutation_attempted = bool(
         live_result.get("dip_action_mutation_applied") is True
         or live_result.get("dip_code_written") is True

@@ -11314,7 +11314,7 @@ def _custom_native_agent_runtime_context(
         "--json",
     ] if api_model_id else []
     _active_project_root_path, active_project_root_fields = active_project_root_metadata(
-        active_project_root or ROOT,
+        active_project_root,
         source="server_runtime_context",
         wbp_repo_root=ROOT,
         required=True,
@@ -16217,6 +16217,12 @@ def build_handler(
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
     codex_custom_safe_worktree_repo_root = safe_worktree_repo_root or ROOT
+    codex_custom_active_project_root = safe_worktree_repo_root
+    codex_custom_active_project_root_source = (
+        "server_supplied_safe_worktree_repo_root"
+        if safe_worktree_repo_root is not None
+        else "missing"
+    )
     handler_web_token_state = web_token_state or create_in_memory_web_token()
     handler_post_rate_limiter = post_rate_limiter or WebPostRateLimiter(
         limit_per_second=post_rate_limit_per_second
@@ -16691,7 +16697,7 @@ def build_handler(
             route_model_id=api_route_id,
             bridge_endpoint=bridge_endpoint,
             route_records=route_records,
-            active_project_root=codex_custom_safe_worktree_repo_root,
+            active_project_root=codex_custom_active_project_root,
         )
         context["context_truth_source"] = "server_current_agent_bindings_state"
         context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"
@@ -19710,8 +19716,10 @@ def build_handler(
                             ),
                             owner_authorized=codex_custom_live_prompt_authorized,
                             profile_dir=RuntimePaths.from_env().profile_dir,
-                            active_project_root=ROOT,
-                            active_project_root_source="web_design_live_server_root",
+                            active_project_root=codex_custom_active_project_root,
+                            active_project_root_source=(
+                                codex_custom_active_project_root_source
+                            ),
                         )
                     )
                     return

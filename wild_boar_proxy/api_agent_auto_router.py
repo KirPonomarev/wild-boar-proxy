@@ -10,7 +10,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .active_project_root import select_active_project_root_candidate
+from .active_project_root import (
+    ACTIVE_PROJECT_ROOT_FIELD_NAMES,
+    active_project_root_metadata,
+    select_active_project_root_candidate,
+    target_repo_fields_from_active_project_root,
+)
 from .api_agent_direct_reply import (
     DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
     DEFAULT_DIRECT_REPLY_WORK_MODE,
@@ -34,7 +39,7 @@ from .router_hook_entry import (
     load_runtime_context_packet,
     runtime_context_path,
 )
-from .runtime import RuntimePaths
+from .runtime import REPO_ROOT, RuntimePaths
 from .runtime_dispatch_mode_truth import (
     DISPATCH_MODE_API_ONLY,
     DISPATCH_MODE_CHATGPT_ONLY,
@@ -196,6 +201,13 @@ def build_api_agent_auto_router_packet(
         source_surface=SOURCE_SURFACE_DECLARED_CUSTOM_CODEX_FLOW,
         secret_values=[prompt],
     )
+    selected_active_project_root, active_root_fields = active_project_root_metadata(
+        active_project_root,
+        source=active_project_root_source,
+        wbp_repo_root=REPO_ROOT,
+        required=True,
+    )
+    active_root_available = active_root_fields["active_project_root_available"] is True
     parser_code = _safe_text(parser_packet.get("machine_error_code"), limit=128)
     alias = _safe_text(parser_packet.get("alias_candidate"), limit=80)
     lane = _safe_text(parser_packet.get("lane_candidate"), limit=40)
@@ -219,7 +231,7 @@ def build_api_agent_auto_router_packet(
             runtime_context=runtime_context,
             context_file_metadata=context_file_metadata,
             profile_dir=profile_dir,
-            active_project_root=active_project_root,
+            active_project_root=selected_active_project_root,
             active_project_root_source=active_project_root_source,
             hook_surface_kind=hook_surface_kind,
             repo_bridge_mode=repo_bridge,
@@ -249,14 +261,32 @@ def build_api_agent_auto_router_packet(
         gpt_lane_selected = True
         passthrough_to_gpt = True
         decision = AUTO_ROUTER_DECISION_GPT_LANE
-        ok = True
-        machine_error_code = API_AGENT_AUTO_ROUTER_OK
+        ok = active_root_available
+        machine_error_code = (
+            API_AGENT_AUTO_ROUTER_OK
+            if ok
+            else _safe_text(
+                active_root_fields["active_project_root_status"],
+                limit=128,
+            )
+        )
+        if not ok:
+            blocking_reasons.append(machine_error_code)
     elif parser_code == NO_ALIAS_DETECTED and not leading_label:
         gpt_lane_selected = True
         passthrough_to_gpt = True
         decision = AUTO_ROUTER_DECISION_GPT_PASSTHROUGH
-        ok = True
-        machine_error_code = API_AGENT_AUTO_ROUTER_OK
+        ok = active_root_available
+        machine_error_code = (
+            API_AGENT_AUTO_ROUTER_OK
+            if ok
+            else _safe_text(
+                active_root_fields["active_project_root_status"],
+                limit=128,
+            )
+        )
+        if not ok:
+            blocking_reasons.append(machine_error_code)
     elif parser_code == INTENT_AMBIGUOUS_NO_DISPATCH:
         machine_error_code = API_AGENT_AUTO_ROUTER_AMBIGUOUS
         blocking_reasons.append("ambiguous_alias_intent")
@@ -283,6 +313,17 @@ def build_api_agent_auto_router_packet(
     orchestrator = ORCHESTRATOR_API_ROUTE if api_direct_selected else ORCHESTRATOR_CHATGPT
     executor = EXECUTOR_API_ROUTE if api_direct_selected else EXECUTOR_CHATGPT
     changed_files = list(direct_summary["changed_files"])
+
+    def _active_root_field(key: str) -> Any:
+        return direct_packet.get(key, active_root_fields.get(key))
+
+    target_repo_fields = target_repo_fields_from_active_project_root(
+        {
+            key: _active_root_field(key)
+            for key in ACTIVE_PROJECT_ROOT_FIELD_NAMES
+        }
+    )
+
     extra = {
         "schema_version": 1,
         "packet_kind": API_AGENT_AUTO_ROUTER_PACKET_KIND,
@@ -299,36 +340,37 @@ def build_api_agent_auto_router_packet(
                 api_direct_selected and direct_summary["api_agent_provider_called"]
             ),
             active_project_root_required=bool(
-                direct_packet.get("active_project_root_required") is True
+                _active_root_field("active_project_root_required") is True
             ),
             active_project_root_available=bool(
-                direct_packet.get("active_project_root_available") is True
+                _active_root_field("active_project_root_available") is True
             ),
             active_project_root_source=_safe_text(
-                direct_packet.get("active_project_root_source"),
+                _active_root_field("active_project_root_source"),
                 limit=80,
             ),
             active_project_root_status=_safe_text(
-                direct_packet.get("active_project_root_status"),
+                _active_root_field("active_project_root_status"),
                 limit=120,
             ),
             active_project_root_sha256=_safe_text(
-                direct_packet.get("active_project_root_sha256"),
+                _active_root_field("active_project_root_sha256"),
                 limit=80,
             ),
             active_project_root_path_recorded=bool(
-                direct_packet.get("active_project_root_path_recorded") is True
+                _active_root_field("active_project_root_path_recorded") is True
             ),
             active_project_root_fallback_used=bool(
-                direct_packet.get("active_project_root_fallback_used") is True
+                _active_root_field("active_project_root_fallback_used") is True
             ),
             active_project_root_is_wbp_repo=bool(
-                direct_packet.get("active_project_root_is_wbp_repo") is True
+                _active_root_field("active_project_root_is_wbp_repo") is True
             ),
             active_project_root_git_available=bool(
-                direct_packet.get("active_project_root_git_available") is True
+                _active_root_field("active_project_root_git_available") is True
             ),
         ),
+        **target_repo_fields,
         "auto_router_used": True,
         "auto_router_proven": ok,
         "auto_router_decision": decision,
