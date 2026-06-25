@@ -1707,6 +1707,8 @@ def _repo_bridge_fields(
         _safe_text(result.get("tool"), limit=80)
         for result in action_results
     ]
+    mutation_allowed = bool(action_required or code_mutation_required)
+    readonly = bool(required and not mutation_allowed)
     return {
         "dip_repo_direct_access": False,
         "dip_repo_tool_bridge_required": required,
@@ -1742,9 +1744,9 @@ def _repo_bridge_fields(
         ),
         "dip_action_raw_patch_recorded": False,
         "dip_action_raw_command_recorded": False,
-        "repo_bridge_readonly": False,
-        "repo_bridge_mutation_allowed": True,
-        "repo_bridge_mutation_controlled": True,
+        "repo_bridge_readonly": readonly,
+        "repo_bridge_mutation_allowed": mutation_allowed,
+        "repo_bridge_mutation_controlled": mutation_allowed,
         "repo_bridge_direct_shell_access": False,
         "repo_bridge_context_pack_used": context_pack is not None,
         "repo_bridge_bootstrap_used": bool(bootstrap_results),

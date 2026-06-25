@@ -1584,7 +1584,9 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["repo_bridge_successful_tool_call_count"], 2)
         self.assertEqual(len(result["repo_bridge_tool_result_sha256s"]), 2)
         self.assertFalse(result["repo_bridge_raw_tool_results_recorded"])
-        self.assertTrue(result["repo_bridge_mutation_allowed"])
+        self.assertTrue(result["repo_bridge_readonly"])
+        self.assertFalse(result["repo_bridge_mutation_allowed"])
+        self.assertFalse(result["repo_bridge_mutation_controlled"])
         self.assertEqual(request_json_mock.call_count, 2)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})

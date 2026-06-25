@@ -558,6 +558,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--dip-code-edit-tests-dummy-proof-file",
         required=True,
     )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--api-agent-direct-reply-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--api-agent-custom-alias-proof-file",
+        required=True,
+    )
     codex_runner_e2e_mode_matrix.add_argument("--proof-dir")
     codex_runner_e2e_mode_matrix.add_argument(
         "--json",
@@ -2501,6 +2509,12 @@ def main(argv: list[str] | None = None) -> int:
                     dip_repo_audit_wbp_proof_file=args.dip_repo_audit_wbp_proof_file,
                     dip_code_edit_tests_dummy_proof_file=(
                         args.dip_code_edit_tests_dummy_proof_file
+                    ),
+                    api_agent_direct_reply_proof_file=(
+                        args.api_agent_direct_reply_proof_file
+                    ),
+                    api_agent_custom_alias_proof_file=(
+                        args.api_agent_custom_alias_proof_file
                     ),
                     proof_dir=args.proof_dir,
                 )

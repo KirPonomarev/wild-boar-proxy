@@ -39,6 +39,8 @@ GPT_PACKET_KIND = "custom_codex_native_response_matrix"
 API_PACKET_KIND = "wbp_controlled_api_dispatch_proof"
 GPT_API_PACKET_KIND = "wbp_gpt_api_dip_acceptance_gate"
 DIP_PACKET_KIND = "wbp_dip_working_tool_run"
+API_AGENT_DIRECT_REPLY_PACKET_KIND = "wbp_api_agent_direct_reply"
+API_AGENT_AUTO_ROUTER_PACKET_KIND = "wbp_api_agent_auto_router"
 
 ROW_GPT = "gpt"
 ROW_API = "api"
@@ -47,6 +49,8 @@ ROW_DIP_PING = "dip_ping"
 ROW_DIP_REPO_AUDIT_DUMMY = "dip_repo_audit_dummy"
 ROW_DIP_REPO_AUDIT_WBP = "dip_repo_audit_wbp"
 ROW_DIP_CODE_EDIT_TESTS_DUMMY = "dip_code_edit_tests_dummy"
+ROW_API_AGENT_DIRECT_REPLY = "api_agent_direct_reply"
+ROW_API_AGENT_CUSTOM_ALIAS = "api_agent_custom_alias"
 
 REQUIRED_ROWS = (
     ROW_GPT,
@@ -56,6 +60,8 @@ REQUIRED_ROWS = (
     ROW_DIP_REPO_AUDIT_DUMMY,
     ROW_DIP_REPO_AUDIT_WBP,
     ROW_DIP_CODE_EDIT_TESTS_DUMMY,
+    ROW_API_AGENT_DIRECT_REPLY,
+    ROW_API_AGENT_CUSTOM_ALIAS,
 )
 
 
@@ -569,6 +575,160 @@ def _dip_code_edit_failures(packet: Mapping[str, Any]) -> list[str]:
     return failures
 
 
+def _check_api_agent_direct_common(
+    packet: Mapping[str, Any],
+    failures: list[str],
+    prefix: str,
+    *,
+    expected_kind: str,
+) -> None:
+    _check_common_packet(
+        packet,
+        failures,
+        prefix,
+        expected_kind=expected_kind,
+        expected_mode=DISPATCH_MODE_API_ONLY,
+        expected_orchestrator=ORCHESTRATOR_API_ROUTE,
+        expected_executor=EXECUTOR_API_ROUTE,
+        chatgpt_lane_called=False,
+        api_route_called=True,
+    )
+    _check_active_project_root(
+        packet,
+        failures,
+        prefix,
+        required=True,
+        available=True,
+    )
+    _check_target_repo(
+        packet,
+        failures,
+        prefix,
+        required=True,
+        available=True,
+    )
+    for field in (
+        "direct_api_reply_block",
+        "route_bound_dispatch_proven",
+        "api_agent_provider_called",
+        "direct_provider_response_observed",
+        "provider_auth_ok",
+        "positive_provider_proof_gate_satisfied",
+    ):
+        _check_true(packet, field, failures, prefix)
+    for field in (
+        "product_ready",
+        "fallback_used",
+        "local_imitation_used",
+        "raw_prompt_recorded",
+        "prompt_text_recorded",
+        "raw_backend_details_exposed",
+        "secret_value_exposed",
+        "active_project_root_path_recorded",
+        "active_project_root_fallback_used",
+        "active_project_root_legacy_target_repo_alias_used",
+        "target_repo_path_recorded",
+        "target_repo_fallback_used",
+        "selected_api_route_id_recorded",
+        "gpt_orchestrator_used",
+        "codex_exec_invoked",
+        "tools_wbp_dip_invoked",
+        "dip_run_invoked",
+        "wrapper_shopping_used",
+        "wrapper_substitution_used",
+        "wrapper_substitution_detected",
+        "wrapper_substitution_allowed",
+        "native_codex_subagent_used_as_dip",
+        "file_mutation_attempted",
+    ):
+        _check_false(packet, field, failures, prefix)
+    if packet.get("reply_block_kind") != "api_agent_direct_reply":
+        failures.append(f"{prefix}_reply_block_kind_not_expected")
+    if not _safe_text(packet.get("reply_text")):
+        failures.append(f"{prefix}_reply_text_missing")
+    if not _safe_text(packet.get("reply_author_alias")):
+        failures.append(f"{prefix}_reply_author_alias_missing")
+    proof = packet.get("reply_proof_summary")
+    if not isinstance(proof, Mapping):
+        failures.append(f"{prefix}_reply_proof_summary_missing")
+        return
+    for field in (
+        "route_bound_dispatch_proven",
+        "controlled_dispatch_proven",
+        "api_agent_provider_called",
+        "api_agent_response_observed",
+        "provider_response_proven",
+    ):
+        if proof.get(field) is not True:
+            failures.append(f"{prefix}_proof_{field}_not_true")
+    for field in (
+        "final_answer_was_repo_tool_call",
+        "fallback_used",
+        "local_imitation_used",
+        "tools_wbp_dip_invoked",
+        "dip_run_invoked",
+        "codex_exec_invoked",
+        "native_codex_subagent_used_as_dip",
+    ):
+        if proof.get(field) is not False:
+            failures.append(f"{prefix}_proof_{field}_not_false")
+
+
+def _api_agent_direct_reply_failures(packet: Mapping[str, Any]) -> list[str]:
+    failures: list[str] = []
+    prefix = ROW_API_AGENT_DIRECT_REPLY
+    _check_api_agent_direct_common(
+        packet,
+        failures,
+        prefix,
+        expected_kind=API_AGENT_DIRECT_REPLY_PACKET_KIND,
+    )
+    _check_true(packet, "api_agent_direct_reply_proven", failures, prefix)
+    _check_true(packet, "api_agent_direct_reply_text_recorded", failures, prefix)
+    _check_equals(packet, "selected_alias_lane", "api_route", failures, prefix)
+    _check_equals(packet, "reply_lane", "api_route", failures, prefix)
+    _check_equals(packet, "reply_author_alias", "DIP", failures, prefix)
+    _check_equals(packet, "selected_alias", "DIP", failures, prefix)
+    _check_false(packet, "final_answer_was_repo_tool_call", failures, prefix)
+    if packet.get("blocking_reasons") != []:
+        failures.append(f"{prefix}_blocking_reasons_not_empty")
+    return failures
+
+
+def _api_agent_custom_alias_failures(packet: Mapping[str, Any]) -> list[str]:
+    failures: list[str] = []
+    prefix = ROW_API_AGENT_CUSTOM_ALIAS
+    _check_api_agent_direct_common(
+        packet,
+        failures,
+        prefix,
+        expected_kind=API_AGENT_AUTO_ROUTER_PACKET_KIND,
+    )
+    for field in (
+        "auto_router_used",
+        "auto_router_proven",
+        "direct_reply_selected",
+        "direct_reply_proven",
+        "natural_alias_command_detected",
+    ):
+        _check_true(packet, field, failures, prefix)
+    _check_equals(packet, "auto_router_decision", "api_direct_reply", failures, prefix)
+    _check_equals(packet, "selected_alias_lane", "api_route", failures, prefix)
+    _check_equals(packet, "reply_lane", "api_route", failures, prefix)
+    _check_false(packet, "auto_router_fail_closed", failures, prefix)
+    _check_false(packet, "auto_router_unknown_alias_blocked", failures, prefix)
+    _check_false(packet, "auto_router_ambiguous_alias_blocked", failures, prefix)
+    alias = _safe_text(packet.get("selected_alias"))
+    reply_alias = _safe_text(packet.get("reply_author_alias"))
+    if not alias or alias != reply_alias:
+        failures.append(f"{prefix}_selected_alias_reply_alias_mismatch")
+    if alias in {"DIP", "Agent 2", "2"}:
+        failures.append(f"{prefix}_custom_alias_not_proven")
+    if packet.get("blocking_reasons") != []:
+        failures.append(f"{prefix}_blocking_reasons_not_empty")
+    return failures
+
+
 def _row_result(
     *,
     row: str,
@@ -623,6 +783,8 @@ def build_e2e_mode_matrix_packet(
     dip_repo_audit_dummy_packet: dict[str, Any],
     dip_repo_audit_wbp_packet: dict[str, Any],
     dip_code_edit_tests_dummy_packet: dict[str, Any],
+    api_agent_direct_reply_packet: dict[str, Any],
+    api_agent_custom_alias_packet: dict[str, Any],
     packet_sha256s: Mapping[str, str] | None = None,
     input_failures: Mapping[str, str] | None = None,
     evidence_written: bool = False,
@@ -638,6 +800,8 @@ def build_e2e_mode_matrix_packet(
         ROW_DIP_REPO_AUDIT_DUMMY: dip_repo_audit_dummy_packet,
         ROW_DIP_REPO_AUDIT_WBP: dip_repo_audit_wbp_packet,
         ROW_DIP_CODE_EDIT_TESTS_DUMMY: dip_code_edit_tests_dummy_packet,
+        ROW_API_AGENT_DIRECT_REPLY: api_agent_direct_reply_packet,
+        ROW_API_AGENT_CUSTOM_ALIAS: api_agent_custom_alias_packet,
     }
     row_failures: dict[str, list[str]] = {
         ROW_GPT: (
@@ -682,6 +846,16 @@ def build_e2e_mode_matrix_packet(
             _dip_code_edit_failures(dip_code_edit_tests_dummy_packet)
             if dip_code_edit_tests_dummy_packet
             else [f"{ROW_DIP_CODE_EDIT_TESTS_DUMMY}_packet_missing"]
+        ),
+        ROW_API_AGENT_DIRECT_REPLY: (
+            _api_agent_direct_reply_failures(api_agent_direct_reply_packet)
+            if api_agent_direct_reply_packet
+            else [f"{ROW_API_AGENT_DIRECT_REPLY}_packet_missing"]
+        ),
+        ROW_API_AGENT_CUSTOM_ALIAS: (
+            _api_agent_custom_alias_failures(api_agent_custom_alias_packet)
+            if api_agent_custom_alias_packet
+            else [f"{ROW_API_AGENT_CUSTOM_ALIAS}_packet_missing"]
         ),
     }
     rows = [
@@ -750,6 +924,12 @@ def build_e2e_mode_matrix_packet(
         "dip_code_edit_tests_dummy_ready": (
             row_status_by_name.get(ROW_DIP_CODE_EDIT_TESTS_DUMMY) == "ok"
         ),
+        "api_agent_direct_reply_ready": (
+            row_status_by_name.get(ROW_API_AGENT_DIRECT_REPLY) == "ok"
+        ),
+        "api_agent_custom_alias_ready": (
+            row_status_by_name.get(ROW_API_AGENT_CUSTOM_ALIAS) == "ok"
+        ),
         "dummy_active_project_root_sha256": dummy_root_sha,
         "wbp_active_project_root_sha256": wbp_root_sha,
         "dummy_and_wbp_roots_distinct": bool(
@@ -806,6 +986,8 @@ def run_e2e_mode_matrix_command(
     dip_repo_audit_dummy_proof_file: str,
     dip_repo_audit_wbp_proof_file: str,
     dip_code_edit_tests_dummy_proof_file: str,
+    api_agent_direct_reply_proof_file: str,
+    api_agent_custom_alias_proof_file: str,
     proof_dir: str | None = None,
 ) -> dict[str, Any]:
     del paths
@@ -817,6 +999,8 @@ def run_e2e_mode_matrix_command(
         ROW_DIP_REPO_AUDIT_DUMMY: dip_repo_audit_dummy_proof_file,
         ROW_DIP_REPO_AUDIT_WBP: dip_repo_audit_wbp_proof_file,
         ROW_DIP_CODE_EDIT_TESTS_DUMMY: dip_code_edit_tests_dummy_proof_file,
+        ROW_API_AGENT_DIRECT_REPLY: api_agent_direct_reply_proof_file,
+        ROW_API_AGENT_CUSTOM_ALIAS: api_agent_custom_alias_proof_file,
     }
     packets_by_row: dict[str, dict[str, Any]] = {}
     sha_by_row: dict[str, str] = {}
@@ -838,6 +1022,8 @@ def run_e2e_mode_matrix_command(
         dip_code_edit_tests_dummy_packet=packets_by_row[
             ROW_DIP_CODE_EDIT_TESTS_DUMMY
         ],
+        api_agent_direct_reply_packet=packets_by_row[ROW_API_AGENT_DIRECT_REPLY],
+        api_agent_custom_alias_packet=packets_by_row[ROW_API_AGENT_CUSTOM_ALIAS],
         packet_sha256s=sha_by_row,
         input_failures=failures_by_row,
         evidence_written=False,
@@ -857,6 +1043,8 @@ def run_e2e_mode_matrix_command(
             dip_code_edit_tests_dummy_packet=packets_by_row[
                 ROW_DIP_CODE_EDIT_TESTS_DUMMY
             ],
+            api_agent_direct_reply_packet=packets_by_row[ROW_API_AGENT_DIRECT_REPLY],
+            api_agent_custom_alias_packet=packets_by_row[ROW_API_AGENT_CUSTOM_ALIAS],
             packet_sha256s=sha_by_row,
             input_failures=failures_by_row,
             evidence_written=True,

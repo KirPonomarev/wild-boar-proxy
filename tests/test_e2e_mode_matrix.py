@@ -322,6 +322,105 @@ def _dip_packet(
     return packet
 
 
+def _direct_reply_proof(
+    *,
+    alias: str = "DIP",
+    text: str = "direct reply ok",
+    kind: str = "wbp_api_agent_direct_reply",
+    auto_router: bool = False,
+    **overrides: object,
+) -> dict[str, object]:
+    packet: dict[str, object] = {
+        "packet_kind": kind,
+        "status": "ok",
+        "machine_error_code": "OK",
+        "execution_mode": "api_only",
+        "selected_mode": "api_only",
+        "runtime_dispatch_mode_truth_recorded": True,
+        "dispatch_mode_truth_proven": True,
+        "orchestrator": "api_route",
+        "executor": "api_route",
+        "chatgpt_lane_selected": False,
+        "api_route_selected": True,
+        "chatgpt_lane_called": False,
+        "api_route_called": True,
+        "chatgpt_only_mode_proven": False,
+        "gpt_mode_proven": False,
+        "api_only_mode_proven": True,
+        "api_mode_proven": True,
+        "chatgpt_plus_api_mode_proven": False,
+        "gpt_api_mode_proven": False,
+        "selected_alias": alias,
+        "selected_slot": "dip",
+        "selected_alias_lane": "api_route",
+        "selected_api_route_id_recorded": False,
+        "selected_route_id_allowed": True,
+        "allowed_api_route_ids_enforced": True,
+        "route_bound_dispatch_proven": True,
+        "controlled_dispatch_proven": True,
+        "api_agent_direct_reply_proven": True,
+        "api_agent_direct_reply_text_recorded": True,
+        "api_agent_provider_called": True,
+        "direct_provider_response_observed": True,
+        "provider_auth_ok": True,
+        "positive_provider_proof_gate_satisfied": True,
+        "provider_response_proven": True,
+        "direct_api_reply_block": True,
+        "reply_block_kind": "api_agent_direct_reply",
+        "reply_author_alias": alias,
+        "reply_agent_id": "dip",
+        "reply_lane": "api_route",
+        "reply_provider_label": "deepseek",
+        "reply_text": text,
+        "direct_reply_text": text,
+        "final_answer_was_repo_tool_call": False,
+        "reply_proof_summary": {
+            "route_bound_dispatch_proven": True,
+            "controlled_dispatch_proven": True,
+            "api_agent_provider_called": True,
+            "api_agent_response_observed": True,
+            "provider_response_proven": True,
+            "final_answer_was_repo_tool_call": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "tools_wbp_dip_invoked": False,
+            "dip_run_invoked": False,
+            "codex_exec_invoked": False,
+            "native_codex_subagent_used_as_dip": False,
+        },
+        "gpt_orchestrator_used": False,
+        "codex_exec_invoked": False,
+        "tools_wbp_dip_invoked": False,
+        "dip_run_invoked": False,
+        "wrapper_shopping_used": False,
+        "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
+        "native_codex_subagent_used_as_dip": False,
+        "file_mutation_attempted": False,
+        "blocking_reasons": [],
+        **_base_safety(),
+        **_active_root_fields(required=True, available=True, sha="r" * 64),
+        **_target_repo_fields(required=True, available=True, sha="r" * 64),
+    }
+    if auto_router:
+        packet.update(
+            {
+                "auto_router_used": True,
+                "auto_router_proven": True,
+                "auto_router_decision": "api_direct_reply",
+                "auto_router_fail_closed": False,
+                "auto_router_unknown_alias_blocked": False,
+                "auto_router_ambiguous_alias_blocked": False,
+                "direct_reply_selected": True,
+                "direct_reply_proven": True,
+                "natural_alias_command_detected": True,
+            }
+        )
+    packet.update(overrides)
+    return packet
+
+
 def _write_packet(root: Path, name: str, packet: dict[str, object]) -> Path:
     path = root / name
     path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
@@ -340,6 +439,8 @@ class E2EModeMatrixTests(unittest.TestCase):
         dip_repo_audit_dummy: dict[str, object] | None = None,
         dip_repo_audit_wbp: dict[str, object] | None = None,
         dip_code_edit_tests_dummy: dict[str, object] | None = None,
+        api_agent_direct_reply: dict[str, object] | None = None,
+        api_agent_custom_alias: dict[str, object] | None = None,
         proof_dir: Path | None = None,
     ) -> dict[str, object]:
         files = {
@@ -395,6 +496,22 @@ class E2EModeMatrixTests(unittest.TestCase):
                     readonly=False,
                 ),
             ),
+            "api_agent_direct_reply": _write_packet(
+                root,
+                "api_agent_direct_reply.json",
+                api_agent_direct_reply or _direct_reply_proof(),
+            ),
+            "api_agent_custom_alias": _write_packet(
+                root,
+                "api_agent_custom_alias.json",
+                api_agent_custom_alias
+                or _direct_reply_proof(
+                    alias="Кодер",
+                    text="custom alias ok",
+                    kind="wbp_api_agent_auto_router",
+                    auto_router=True,
+                ),
+            ),
         }
         return run_e2e_mode_matrix_command(
             paths=_paths(root),
@@ -407,6 +524,8 @@ class E2EModeMatrixTests(unittest.TestCase):
             dip_code_edit_tests_dummy_proof_file=str(
                 files["dip_code_edit_tests_dummy"]
             ),
+            api_agent_direct_reply_proof_file=str(files["api_agent_direct_reply"]),
+            api_agent_custom_alias_proof_file=str(files["api_agent_custom_alias"]),
             proof_dir=str(proof_dir) if proof_dir else None,
         )
 
@@ -428,9 +547,11 @@ class E2EModeMatrixTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["gate_runs_live_dispatch"])
         self.assertFalse(packet["gate_reads_audit_history"])
-        self.assertEqual(packet["row_count"], 7)
+        self.assertEqual(packet["row_count"], 9)
         self.assertTrue(packet["all_required_rows_green"])
         self.assertEqual(set(packet["row_status_by_name"].values()), {"ok"})
+        self.assertTrue(packet["api_agent_direct_reply_ready"])
+        self.assertTrue(packet["api_agent_custom_alias_ready"])
         self.assertTrue(packet["dummy_and_wbp_roots_distinct"])
         self.assertFalse(packet["wbp_repo_mutation_allowed"])
         self.assertFalse(packet["wbp_repo_mutation_observed"])
@@ -452,6 +573,12 @@ class E2EModeMatrixTests(unittest.TestCase):
                 dip_repo_audit_dummy_proof_file=str(root / "dip_repo_audit_dummy.json"),
                 dip_repo_audit_wbp_proof_file=str(root / "dip_repo_audit_wbp.json"),
                 dip_code_edit_tests_dummy_proof_file=str(missing),
+                api_agent_direct_reply_proof_file=str(
+                    root / "api_agent_direct_reply.json"
+                ),
+                api_agent_custom_alias_proof_file=str(
+                    root / "api_agent_custom_alias.json"
+                ),
             )
 
         self.assertEqual(good["status"], "ok")
@@ -515,6 +642,52 @@ class E2EModeMatrixTests(unittest.TestCase):
         )
         self.assertIn(
             "dip_repo_audit_wbp_dip_code_written_not_false",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_missing_direct_api_reply_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            good = self._run(root)
+            missing = root / "missing-direct.json"
+            packet = run_e2e_mode_matrix_command(
+                paths=_paths(root),
+                gpt_proof_file=str(root / "gpt.json"),
+                api_proof_file=str(root / "api.json"),
+                gpt_api_proof_file=str(root / "gpt_api.json"),
+                dip_ping_proof_file=str(root / "dip_ping.json"),
+                dip_repo_audit_dummy_proof_file=str(root / "dip_repo_audit_dummy.json"),
+                dip_repo_audit_wbp_proof_file=str(root / "dip_repo_audit_wbp.json"),
+                dip_code_edit_tests_dummy_proof_file=str(
+                    root / "dip_code_edit_tests_dummy.json"
+                ),
+                api_agent_direct_reply_proof_file=str(missing),
+                api_agent_custom_alias_proof_file=str(
+                    root / "api_agent_custom_alias.json"
+                ),
+            )
+
+        self.assertEqual(good["status"], "ok")
+        self.assertEqual(packet["status"], "error")
+        self.assertIn(
+            "api_agent_direct_reply_file_missing",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_custom_alias_row_that_only_proves_default_dip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                api_agent_custom_alias=_direct_reply_proof(
+                    alias="DIP",
+                    kind="wbp_api_agent_auto_router",
+                    auto_router=True,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertIn(
+            "api_agent_custom_alias_custom_alias_not_proven",
             packet["blocking_reasons"],
         )
 
@@ -583,6 +756,10 @@ class E2EModeMatrixTests(unittest.TestCase):
                         "/tmp/dip-audit-wbp.json",
                         "--dip-code-edit-tests-dummy-proof-file",
                         "/tmp/dip-edit-dummy.json",
+                        "--api-agent-direct-reply-proof-file",
+                        "/tmp/direct-reply.json",
+                        "--api-agent-custom-alias-proof-file",
+                        "/tmp/custom-alias.json",
                         "--json",
                     ]
                 )
@@ -591,6 +768,14 @@ class E2EModeMatrixTests(unittest.TestCase):
         self.assertTrue(mocked.called)
         self.assertIsNone(mocked.call_args.kwargs["proof_dir"])
         self.assertEqual(mocked.call_args.kwargs["gpt_proof_file"], "/tmp/gpt.json")
+        self.assertEqual(
+            mocked.call_args.kwargs["api_agent_direct_reply_proof_file"],
+            "/tmp/direct-reply.json",
+        )
+        self.assertEqual(
+            mocked.call_args.kwargs["api_agent_custom_alias_proof_file"],
+            "/tmp/custom-alias.json",
+        )
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["status"], "ok")
 
@@ -614,6 +799,10 @@ class E2EModeMatrixTests(unittest.TestCase):
                 "/tmp/dip-audit-wbp.json",
                 "--dip-code-edit-tests-dummy-proof-file",
                 "/tmp/dip-edit-dummy.json",
+                "--api-agent-direct-reply-proof-file",
+                "/tmp/direct-reply.json",
+                "--api-agent-custom-alias-proof-file",
+                "/tmp/custom-alias.json",
                 "--json",
             ]
         )

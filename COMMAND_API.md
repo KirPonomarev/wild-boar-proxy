@@ -418,7 +418,7 @@ or lacks controlled DIP code-write verification, the gate must fail closed.
 
 ## E2E mode matrix gate
 
-`codex-runner e2e-mode-matrix --gpt-proof-file <packet> --api-proof-file <packet> --gpt-api-proof-file <packet> --dip-ping-proof-file <packet> --dip-repo-audit-dummy-proof-file <packet> --dip-repo-audit-wbp-proof-file <packet> --dip-code-edit-tests-dummy-proof-file <packet> --json`
+`codex-runner e2e-mode-matrix --gpt-proof-file <packet> --api-proof-file <packet> --gpt-api-proof-file <packet> --dip-ping-proof-file <packet> --dip-repo-audit-dummy-proof-file <packet> --dip-repo-audit-wbp-proof-file <packet> --dip-code-edit-tests-dummy-proof-file <packet> --api-agent-direct-reply-proof-file <packet> --api-agent-custom-alias-proof-file <packet> --json`
 is a read-only join gate over existing machine-readable proof packets. With
 `--proof-dir`, it may write only its own matrix packet.
 
@@ -434,6 +434,10 @@ row is proven by its owner packet:
 - `dip_repo_audit_wbp`: read-only repo bridge against the WBP repo;
 - `dip_code_edit_tests_dummy`: controlled code edit and verification against a
   non-WBP dummy repo only.
+- `api_agent_direct_reply`: canonical short API-agent direct reply for `DIP`,
+  without `codex exec`, `tools/wbp_dip`, or `dip run`;
+- `api_agent_custom_alias`: auto-router proof that an operator-defined API alias
+  routes to the same direct API-agent reply lane.
 
 On success the packet must include:
 
@@ -441,7 +445,7 @@ On success the packet must include:
 - `feature_ready=true`
 - `feature_ready_mode="e2e_mode_matrix"`
 - `all_required_rows_green=true`
-- `row_count=7`
+- `row_count=9`
 - `dummy_and_wbp_roots_distinct=true`
 - `wbp_repo_mutation_allowed=false`
 - `wbp_repo_mutation_observed=false`

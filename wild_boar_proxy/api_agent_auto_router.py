@@ -482,6 +482,8 @@ def build_api_agent_auto_router_packet(
         "dip_run_invoked": False,
         "wrapper_shopping_used": False,
         "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "native_codex_subagent_used": False,
         "native_codex_subagent_used_as_dip": False,
         "fallback_used": direct_summary["fallback_used"],

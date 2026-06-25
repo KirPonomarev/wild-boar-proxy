@@ -487,6 +487,8 @@ def build_api_agent_direct_reply_packet(
         "dip_run_invoked": False,
         "wrapper_shopping_used": False,
         "wrapper_substitution_used": False,
+        "wrapper_substitution_detected": False,
+        "wrapper_substitution_allowed": False,
         "native_codex_subagent_used": False,
         "native_codex_subagent_used_as_dip": False,
         "fallback_used": _as_bool(live_result.get("fallback_used")),
