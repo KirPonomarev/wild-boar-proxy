@@ -131,7 +131,7 @@ tools/wbp_dip "DIP: <bounded task>"
 Canonical Custom Codex DIP entry for repository work:
 
 ```sh
-tools/wbp_dip --json --work-mode full --repo-bridge on --target-repo "$PWD" "DIP: <bounded repository task>"
+tools/wbp_dip --json --work-mode full --repo-bridge on --active-project-root "$PWD" "DIP: <bounded repository task>"
 ```
 
 This is the only admitted Custom Codex operator path for `DIP` repository
@@ -333,6 +333,49 @@ On success the packet must include:
 If any input packet has the wrong `packet_kind`, misses a required positive
 claim, overclaims UI-session/product readiness, records raw sensitive material,
 or lacks controlled DIP code-write verification, the gate must fail closed.
+
+## E2E mode matrix gate
+
+`codex-runner e2e-mode-matrix --gpt-proof-file <packet> --api-proof-file <packet> --gpt-api-proof-file <packet> --dip-ping-proof-file <packet> --dip-repo-audit-dummy-proof-file <packet> --dip-repo-audit-wbp-proof-file <packet> --dip-code-edit-tests-dummy-proof-file <packet> --json`
+is a read-only join gate over existing machine-readable proof packets. With
+`--proof-dir`, it may write only its own matrix packet.
+
+It must not run live dispatch, invoke DIP, read audit history, infer from
+narrative, or claim product readiness. The gate passes only when every required
+row is proven by its owner packet:
+
+- `gpt`: Custom Codex native response matrix, `chatgpt_only`;
+- `api`: controlled API dispatch proof, `api_only`;
+- `gpt_api`: GPT+API+DIP acceptance gate, `chatgpt_plus_api`;
+- `dip_ping`: `tools/wbp_dip` exact-response path without repo authority;
+- `dip_repo_audit_dummy`: read-only repo bridge against a non-WBP dummy repo;
+- `dip_repo_audit_wbp`: read-only repo bridge against the WBP repo;
+- `dip_code_edit_tests_dummy`: controlled code edit and verification against a
+  non-WBP dummy repo only.
+
+On success the packet must include:
+
+- `e2e_mode_matrix_ready=true`
+- `feature_ready=true`
+- `feature_ready_mode="e2e_mode_matrix"`
+- `all_required_rows_green=true`
+- `row_count=7`
+- `dummy_and_wbp_roots_distinct=true`
+- `wbp_repo_mutation_allowed=false`
+- `wbp_repo_mutation_observed=false`
+- `gate_runs_live_dispatch=false`
+- `gate_reads_audit_history=false`
+- `input_file_paths_recorded=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `wrapper_substitution_used=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If any row is missing, has the wrong dispatch mode, records raw path/backend
+details, uses fallback/local imitation/wrapper substitution, mutates WBP, or
+claims a write where only read-only audit is admitted, the matrix must fail
+closed.
 
 ## GPT+API+DIP product readiness gate
 

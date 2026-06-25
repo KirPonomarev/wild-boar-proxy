@@ -45,6 +45,7 @@ from .gpt_api_dip_acceptance_gate import (
 from .gpt_api_dip_product_ready_gate import (
     run_gpt_api_dip_product_ready_gate_command,
 )
+from .e2e_mode_matrix import run_e2e_mode_matrix_command
 from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from .custom_codex_native_ui_observer_proof import (
@@ -526,6 +527,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_runner_gpt_api_dip_product_gate.add_argument("--proof-dir")
     codex_runner_gpt_api_dip_product_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix = codex_runner_subparsers.add_parser(
+        "e2e-mode-matrix"
+    )
+    codex_runner_e2e_mode_matrix.add_argument("--gpt-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--api-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--gpt-api-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--dip-ping-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-repo-audit-dummy-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-repo-audit-wbp-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-code-edit-tests-dummy-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument("--proof-dir")
+    codex_runner_e2e_mode_matrix.add_argument(
         "--json",
         action="store_true",
         required=True,
@@ -1947,6 +1973,7 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         command == "codex-runner"
         and getattr(args, "codex_runner_command", None)
         in {
+            "e2e-mode-matrix",
             "gpt-api-dip-acceptance-gate",
             "gpt-api-dip-product-ready-gate",
         }
@@ -2384,6 +2411,27 @@ def main(argv: list[str] | None = None) -> int:
                 run_gpt_api_dip_product_ready_gate_command(
                     paths=paths,
                     acceptance_gate_file=args.acceptance_gate_file,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "e2e-mode-matrix"
+        ):
+            return emit_json(
+                run_e2e_mode_matrix_command(
+                    paths=paths,
+                    gpt_proof_file=args.gpt_proof_file,
+                    api_proof_file=args.api_proof_file,
+                    gpt_api_proof_file=args.gpt_api_proof_file,
+                    dip_ping_proof_file=args.dip_ping_proof_file,
+                    dip_repo_audit_dummy_proof_file=(
+                        args.dip_repo_audit_dummy_proof_file
+                    ),
+                    dip_repo_audit_wbp_proof_file=args.dip_repo_audit_wbp_proof_file,
+                    dip_code_edit_tests_dummy_proof_file=(
+                        args.dip_code_edit_tests_dummy_proof_file
+                    ),
                     proof_dir=args.proof_dir,
                 )
             )
