@@ -17,6 +17,7 @@ import mimetypes
 import os
 from pathlib import Path
 from queue import Empty, Queue
+import re
 import shlex
 import signal
 import socket
@@ -2504,6 +2505,54 @@ def _catalog_packet_from_registry(registry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _custom_native_profile_root_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    for env_name in ("WBP_PROFILE_DIR", "CODEX_HOME"):
+        raw_value = str(os.environ.get(env_name) or "").strip()
+        if raw_value:
+            candidates.append(Path(raw_value).expanduser())
+    home = Path.home().expanduser()
+    if home.name == "home":
+        candidates.append(home.parent)
+    candidates.append(
+        Path(
+            "~/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main"
+        ).expanduser()
+    )
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate.resolve(strict=False))
+        if key not in seen:
+            deduped.append(candidate)
+            seen.add(key)
+    return deduped
+
+
+def _custom_native_profile_bearer_token() -> str:
+    for profile_root in _custom_native_profile_root_candidates():
+        config_path = profile_root / "config.toml"
+        try:
+            text = config_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        match = re.search(
+            r"^\s*experimental_bearer_token\s*=\s*[\"']([^\"']{8,})[\"']\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _custom_native_bridge_local_api_key() -> str:
+    profile_token = _custom_native_profile_bearer_token()
+    if profile_token:
+        return profile_token
+    return extract_local_api_key(default_runtime_config_path())
+
+
 def _normalize_openai_compat_endpoint(raw_endpoint: str) -> str:
     text = str(raw_endpoint or "").strip()
     if not text:
@@ -2541,7 +2590,7 @@ def _build_live_native_availability_lattice_packet(
     if not native_entries:
         return None
     try:
-        local_api_key = extract_local_api_key(default_runtime_config_path())
+        local_api_key = _custom_native_bridge_local_api_key()
     except (OSError, RuntimeError):
         return None
     current_packets: list[dict[str, Any]] = []
@@ -2635,7 +2684,7 @@ class _CustomNativeBridgeLease:
             self.close()
             return downstream_endpoint
         try:
-            expected_api_key = extract_local_api_key(default_runtime_config_path())
+            expected_api_key = _custom_native_bridge_local_api_key()
         except (OSError, RuntimeError):
             self.close()
             return downstream_endpoint
@@ -9216,7 +9265,7 @@ def _custom_native_stable_bridge_prewarm_packet(
         }
 
     try:
-        local_api_key = extract_local_api_key(default_runtime_config_path())
+        local_api_key = _custom_native_bridge_local_api_key()
     except (OSError, RuntimeError) as exc:
         return {
             "schema_version": 1,
@@ -9480,7 +9529,7 @@ def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
         )
 
     try:
-        local_api_key = extract_local_api_key(default_runtime_config_path())
+        local_api_key = _custom_native_bridge_local_api_key()
     except (OSError, RuntimeError) as exc:
         return with_dispatch_fields(
             {

@@ -1690,6 +1690,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{adapter.listen_endpoint}/responses",
                     data=json.dumps(
                         {
+                            "instructions": "You are Codex. Follow the repository instructions.",
                             "model": "gpt-5.5",
                             "input": "DIP: ответь ровно WBP_MANUAL_DIRECT_DIP_OK_20260626. Без правок файлов.",
                         }

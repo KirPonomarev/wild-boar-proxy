@@ -751,6 +751,16 @@ def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bo
     return prompt_hash, any(phrase in prompt_text for phrase in WINDOW_SMOKE_PHRASES)
 
 
+def _responses_payload_user_prompt_texts(payload: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for message in _responses_payload_to_messages(payload):
+        role = str(message.get("role") or "").strip().lower()
+        content = message.get("content")
+        if role == "user" and isinstance(content, str) and content.strip():
+            texts.append(content.strip())
+    return texts
+
+
 def _leading_address_alias(prompt_text: str) -> str:
     match = _LEADING_ADDRESS_RE.match(prompt_text or "")
     return str(match.group(1) or "").strip() if match else ""
@@ -2168,10 +2178,10 @@ class HybridOpenAICompatAdapter:
             return ""
         if self._dual_lane_route_model_id not in self._route_adapters:
             return ""
-        prompt_text = _responses_payload_prompt_text(request_payload)
-        alias = _leading_address_alias(prompt_text).casefold()
-        if alias and alias in self._api_route_aliases:
-            return self._dual_lane_route_model_id
+        for prompt_text in reversed(_responses_payload_user_prompt_texts(request_payload)):
+            alias = _leading_address_alias(prompt_text).casefold()
+            if alias and alias in self._api_route_aliases:
+                return self._dual_lane_route_model_id
         return ""
 
     def set_trace_context(self, context: dict[str, Any]) -> None:
