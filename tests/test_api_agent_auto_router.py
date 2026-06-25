@@ -70,6 +70,7 @@ def _runtime_context(
         "agent_id_to_route": {"dip": ROUTE_ID},
         "agent_id_to_model": {"codex": "gpt-5.5"},
         "allowed_api_route_ids": allowed,
+        "route_providers": {ROUTE_ID: "deepseek"},
         "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
         "secret_value_exposed": False,
         "raw_backend_details_exposed": False,
@@ -150,6 +151,18 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(packet["selected_alias"], "DIP")
         self.assertEqual(packet["selected_alias_lane"], "api_route")
         self.assertEqual(packet["direct_reply_text"], "DIP direct block")
+        self.assertTrue(packet["direct_api_reply_block"])
+        self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
+        self.assertEqual(packet["reply_author_alias"], "DIP")
+        self.assertEqual(packet["reply_agent_id"], "dip")
+        self.assertEqual(packet["reply_lane"], "api_route")
+        self.assertEqual(packet["reply_provider_label"], "deepseek")
+        self.assertEqual(packet["reply_text"], "DIP direct block")
+        self.assertFalse(packet["reply_proof_summary"]["tools_wbp_dip_invoked"])
+        self.assertFalse(packet["reply_proof_summary"]["dip_run_invoked"])
+        self.assertFalse(
+            packet["reply_proof_summary"]["final_answer_was_repo_tool_call"]
+        )
         self.assertTrue(packet["api_lane_called"])
         self.assertFalse(packet["chatgpt_lane_called"])
         self.assertFalse(packet["codex_exec_invoked"])
@@ -222,6 +235,9 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(packet["selected_alias"], "Кодер")
         self.assertEqual(packet["selected_slot"], "dip")
         self.assertEqual(packet["direct_reply_text"], "custom direct block")
+        self.assertEqual(packet["reply_author_alias"], "Кодер")
+        self.assertEqual(packet["reply_agent_id"], "dip")
+        self.assertEqual(packet["reply_text"], "custom direct block")
         self.assertEqual(seen_aliases, ["Кодер"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

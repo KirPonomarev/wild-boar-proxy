@@ -2365,6 +2365,23 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["direct_reply_proven"])
             self.assertEqual(packet["direct_reply_text"], "DIP_DIRECT_OK")
             self.assertEqual(packet["response_preview_bounded"], "DIP_DIRECT_OK")
+            self.assertTrue(packet["direct_api_reply_block"])
+            self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
+            self.assertEqual(packet["reply_author_alias"], "DIP")
+            self.assertEqual(packet["reply_agent_id"], "dip")
+            self.assertEqual(packet["reply_lane"], "api_route")
+            self.assertEqual(packet["reply_provider_label"], "deepseek")
+            self.assertEqual(packet["reply_text"], "DIP_DIRECT_OK")
+            self.assertEqual(
+                packet["reply_text_sha256"],
+                hashlib.sha256(b"DIP_DIRECT_OK").hexdigest(),
+            )
+            self.assertFalse(packet["reply_proof_summary"]["prompt_runner_called"])
+            self.assertFalse(packet["reply_proof_summary"]["tools_wbp_dip_invoked"])
+            self.assertFalse(packet["reply_proof_summary"]["dip_run_invoked"])
+            self.assertFalse(
+                packet["reply_proof_summary"]["final_answer_was_repo_tool_call"]
+            )
             self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
             self.assertEqual(packet["requested_slot_id"], "coding_agent_model_slot")
             self.assertTrue(packet["requested_slot_auto_routed"])
@@ -2488,6 +2505,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["selected_slot"], "dip")
             self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
             self.assertEqual(packet["direct_reply_text"], "CUSTOM_ALIAS_OK")
+            self.assertEqual(packet["reply_author_alias"], "Кодер")
+            self.assertEqual(packet["reply_agent_id"], "dip")
+            self.assertEqual(packet["reply_lane"], "api_route")
+            self.assertEqual(packet["reply_provider_label"], "deepseek")
+            self.assertEqual(packet["reply_text"], "CUSTOM_ALIAS_OK")
             self.assertEqual(direct_aliases, ["Кодер"])
 
     def test_prompt_ingress_keeps_codex_alias_on_gpt_runner_path(self) -> None:

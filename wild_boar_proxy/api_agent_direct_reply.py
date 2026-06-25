@@ -93,6 +93,25 @@ def _looks_like_final_repo_tool_call(text: str) -> bool:
     return isinstance(raw_call, Mapping)
 
 
+def _provider_label_for_selected_route(
+    runtime_context: Mapping[str, Any] | None,
+    selected_slot: str,
+) -> str:
+    if not isinstance(runtime_context, Mapping):
+        return ""
+    agent_id_to_route = runtime_context.get("agent_id_to_route")
+    route_providers = runtime_context.get("route_providers")
+    if not isinstance(agent_id_to_route, Mapping) or not isinstance(
+        route_providers,
+        Mapping,
+    ):
+        return ""
+    route_id = str(agent_id_to_route.get(selected_slot) or "")
+    if not route_id:
+        return ""
+    return _safe_text(route_providers.get(route_id), limit=80)
+
+
 def _result_text(live_result: Mapping[str, Any]) -> str:
     return str(live_result.get("result_text") or "").strip()
 
@@ -201,6 +220,10 @@ def build_api_agent_direct_reply_packet(
     selected_alias = _safe_text(dispatch_packet.get("selected_alias"), limit=80)
     selected_slot = _safe_text(dispatch_packet.get("selected_slot"), limit=80)
     selected_lane = _safe_text(dispatch_packet.get("selected_alias_lane"), limit=40)
+    reply_provider_label = _provider_label_for_selected_route(
+        runtime_context,
+        selected_slot,
+    )
 
     live_result: Mapping[str, Any] = {}
     if dispatch_proven and selected_alias and active_root_available:
@@ -272,6 +295,28 @@ def build_api_agent_direct_reply_packet(
         or live_result.get("dip_code_written") is True
         or mutated_files
     )
+    reply_proof_summary = {
+        "route_bound_dispatch_proven": _as_bool(
+            dispatch_packet.get("route_bound_dispatch_proven")
+        ),
+        "controlled_dispatch_proven": _as_bool(dispatch_packet.get("dispatch_proven")),
+        "api_agent_provider_called": _as_bool(live_result.get("provider_called")),
+        "api_agent_response_observed": bool(
+            live_result.get("provider_called") is True and reply_text_recorded
+        ),
+        "provider_response_proven": bool(
+            live_result.get("provider_called") is True
+            and live_result.get("result_available") is True
+            and reply_text_recorded
+        ),
+        "final_answer_was_repo_tool_call": final_tool_call,
+        "fallback_used": _as_bool(live_result.get("fallback_used")),
+        "local_imitation_used": _as_bool(live_result.get("local_imitation_used")),
+        "tools_wbp_dip_invoked": False,
+        "dip_run_invoked": False,
+        "codex_exec_invoked": False,
+        "native_codex_subagent_used_as_dip": False,
+    }
     extra = {
         "schema_version": 1,
         "packet_kind": API_AGENT_DIRECT_REPLY_PACKET_KIND,
@@ -297,6 +342,17 @@ def build_api_agent_direct_reply_packet(
         "direct_reply_text_sha256": _sha256_text(reply_text) if reply_text else "",
         "direct_reply_text_length": len(reply_text),
         "direct_reply_text_truncated": _as_bool(live_result.get("result_text_truncated")),
+        "direct_api_reply_block": True,
+        "reply_block_kind": "api_agent_direct_reply",
+        "reply_author_alias": selected_alias,
+        "reply_agent_id": selected_slot,
+        "reply_lane": selected_lane or "api_route",
+        "reply_provider_label": reply_provider_label,
+        "reply_text": reply_text if reply_text_recorded else "",
+        "reply_text_sha256": _sha256_text(reply_text) if reply_text else "",
+        "reply_text_length": len(reply_text) if reply_text_recorded else 0,
+        "reply_text_truncated": _as_bool(live_result.get("result_text_truncated")),
+        "reply_proof_summary": reply_proof_summary,
         "final_answer_was_repo_tool_call": final_tool_call,
         "final_tool_call_blocked": final_tool_call,
         "prompt_digest": _sha256_text(prompt) if prompt else "",

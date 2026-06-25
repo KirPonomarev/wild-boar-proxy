@@ -812,6 +812,132 @@ if (node("codexCustomSessionInference").textContent !== "response proof · sessi
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_codex_custom_session_render_shows_api_agent_direct_reply_block(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.dataset = {};
+    this.disabled = false;
+    this.hidden = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async () => ({ ok: true, json: async () => ({ status: "ok" }) })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderCodexCustomSessionPacket({
+  status: "ok",
+  machine_error_code: "OK",
+  direct_api_reply_block: true,
+  reply_block_kind: "api_agent_direct_reply",
+  reply_author_alias: "DIP",
+  reply_agent_id: "dip",
+  reply_lane: "api_route",
+  reply_provider_label: "deepseek",
+  reply_text: "WBP_DIRECT_UI_OK",
+  reply_text_sha256: "sha",
+  reply_proof_summary: {
+    prompt_runner_called: false,
+    tools_wbp_dip_invoked: false,
+    dip_run_invoked: false,
+    final_answer_was_repo_tool_call: false
+  },
+  direct_reply_proven: true,
+  auto_router_decision: "api_direct_reply",
+  session: {
+    session_id: "ccs-direct",
+    status: "prompt_completed_e2e",
+    model_id: "gpt-5.5",
+    current_execution_slot_id: "coding_agent_model_slot",
+    role_slot_binding_count: 2,
+    role_slots: {}
+  }
+});
+`, sandbox);
+
+const rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
+if (rendered.direct_api_reply_block !== true) {
+  throw new Error(`direct reply block flag missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (
+  rendered.reply_author_alias !== "DIP" ||
+  rendered.reply_agent_id !== "dip" ||
+  rendered.reply_lane !== "api_route" ||
+  rendered.reply_provider_label !== "deepseek" ||
+  rendered.reply_text !== "WBP_DIRECT_UI_OK"
+) {
+  throw new Error(`direct reply block fields missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (
+  rendered.reply_proof_summary.prompt_runner_called !== false ||
+  rendered.reply_proof_summary.tools_wbp_dip_invoked !== false ||
+  rendered.reply_proof_summary.dip_run_invoked !== false ||
+  rendered.reply_proof_summary.final_answer_was_repo_tool_call !== false
+) {
+  throw new Error(`direct reply proof missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_codex_custom_recovery_surface_is_bounded_and_readonly(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()

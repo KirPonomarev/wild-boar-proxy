@@ -370,6 +370,8 @@ def _bound_slot(
         "browser_selected_route": selection.get("browser_selected_route") is True,
         "route_candidate_source": str(selection.get("route_candidate_source") or "none"),
         "route_candidate_classified": selection.get("route_candidate_classified") is True,
+        "route_provider_label": str(selection.get("route_provider_label") or ""),
+        "route_display_name": str(selection.get("route_display_name") or ""),
         "route_static_readiness_classified": (
             selection.get("route_static_readiness_classified") is True
             or (
@@ -612,6 +614,7 @@ def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, An
     agent_id_to_model: dict[str, str] = {}
     agent_id_to_slot_id: dict[str, str] = {}
     allowed_api_route_ids: list[str] = []
+    route_providers: dict[str, str] = {}
     primary_aliases: list[str] = []
     coding_aliases: list[str] = []
 
@@ -643,9 +646,12 @@ def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, An
             coding_aliases = aliases
         if lane == "api_route":
             binding["route_id"] = model_id
+            provider_label = str(slot.get("route_provider_label") or "").strip()
             if model_id:
                 agent_id_to_route[agent_id] = model_id
                 allowed_api_route_ids.append(model_id)
+                if provider_label:
+                    route_providers[model_id] = provider_label
         else:
             binding["model_id"] = model_id
             if model_id:
@@ -670,6 +676,7 @@ def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, An
         "agent_id_to_model": agent_id_to_model,
         "agent_id_to_slot_id": agent_id_to_slot_id,
         "allowed_api_route_ids": _unique_nonempty(allowed_api_route_ids),
+        "route_providers": route_providers,
         "forbidden_stale_route_ids": [],
         "stale_route_guard_present": True,
         "stale_route_guard_source": "codex_custom_session_role_slots",
@@ -1009,6 +1016,10 @@ def _external_route_selection_packet(model_id: str, api_snapshot: dict[str, Any]
         }
     route_id = str(route.get("route_id") or "").strip()
     secret_ref = str(route.get("secret_ref") or "").strip()
+    route_provider_label = str(
+        route.get("provider_label") or route.get("provider") or ""
+    ).strip()
+    route_display_name = str(route.get("display_name") or "").strip()
     enabled = route.get("enabled") is True
     ready = enabled and bool(secret_ref)
     return {
@@ -1030,6 +1041,8 @@ def _external_route_selection_packet(model_id: str, api_snapshot: dict[str, Any]
         "browser_selected_route": False,
         "route_candidate_source": ROUTE_CANDIDATE_SOURCE if route_id else "none",
         "route_candidate_classified": bool(route_id),
+        "route_provider_label": route_provider_label,
+        "route_display_name": route_display_name,
         "route_static_readiness_classified": ready,
         "route_execution_proven": False,
         "provider_response_proven": False,
@@ -3001,15 +3014,72 @@ class CodexCustomSessionManager:
         prompt_hash = _digest(prompt)
         response_digest = _digest(response_text) if response_text else ""
         response_preview = _response_preview(response_text) if status_ok else ""
+        reply_author_alias = str(
+            auto_packet.get("reply_author_alias")
+            or auto_packet.get("selected_alias")
+            or ""
+        )
+        reply_agent_id = str(auto_packet.get("reply_agent_id") or selected_agent_id)
+        reply_lane = str(
+            auto_packet.get("reply_lane")
+            or auto_packet.get("selected_alias_lane")
+            or "api_route"
+        )
+        reply_provider_label = str(auto_packet.get("reply_provider_label") or "")
+        if not reply_provider_label:
+            route_providers = runtime_context.get("route_providers")
+            agent_id_to_route = runtime_context.get("agent_id_to_route")
+            if isinstance(route_providers, dict) and isinstance(
+                agent_id_to_route,
+                dict,
+            ):
+                route_id = str(agent_id_to_route.get(selected_agent_id) or "")
+                reply_provider_label = str(route_providers.get(route_id) or "")
         route_source = slot.get("selected_source_class") == "route_backed"
         source_provenance_status = "route_proven" if route_source and status_ok else str(
             slot.get("source_provenance_status") or "not_proven"
         )
+        reply_proof_summary = {
+            "auto_router_decision": str(auto_packet.get("auto_router_decision") or ""),
+            "direct_reply_proven": auto_packet.get("direct_reply_proven") is True,
+            "route_bound_dispatch_proven": auto_packet.get("route_bound_dispatch_proven")
+            is True,
+            "api_agent_provider_called": auto_packet.get("api_agent_provider_called") is True,
+            "api_agent_response_observed": auto_packet.get("api_agent_response_observed")
+            is True,
+            "provider_response_proven": status_ok,
+            "prompt_runner_called": False,
+            "codex_exec_invoked": False,
+            "tools_wbp_dip_invoked": False,
+            "dip_run_invoked": False,
+            "native_codex_subagent_used_as_dip": False,
+            "final_answer_was_repo_tool_call": auto_packet.get(
+                "final_answer_was_repo_tool_call"
+            )
+            is True,
+            "fallback_used": auto_packet.get("fallback_used") is True,
+            "local_imitation_used": auto_packet.get("local_imitation_used") is True,
+            "active_project_root_available": auto_packet.get(
+                "active_project_root_available"
+            )
+            is True,
+        }
         packet = dict(auto_packet)
         packet.update(
             {
                 "custom_codex_prompt_ingress_packet": True,
                 "direct_api_reply_block": True,
+                "reply_block_kind": "api_agent_direct_reply",
+                "reply_author_alias": reply_author_alias,
+                "reply_agent_id": reply_agent_id,
+                "reply_lane": reply_lane,
+                "reply_provider_label": reply_provider_label,
+                "reply_text": response_text if status_ok else "",
+                "reply_text_sha256": response_digest if status_ok else "",
+                "reply_text_length": len(response_text) if status_ok else 0,
+                "reply_text_truncated": auto_packet.get("direct_reply_text_truncated")
+                is True,
+                "reply_proof_summary": reply_proof_summary,
                 "mode_id": "codex_custom",
                 "session_id": str(session.get("session_id") or ""),
                 "session_schema_version": int(

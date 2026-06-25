@@ -85,6 +85,26 @@ def _command_effect(repo_bridge_mode: str) -> str:
     return EFFECT_PROBE if repo_bridge_mode == "off" else EFFECT_MUTATE
 
 
+def _safe_reply_proof_summary(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    allowed = {
+        "route_bound_dispatch_proven",
+        "controlled_dispatch_proven",
+        "api_agent_provider_called",
+        "api_agent_response_observed",
+        "provider_response_proven",
+        "final_answer_was_repo_tool_call",
+        "fallback_used",
+        "local_imitation_used",
+        "tools_wbp_dip_invoked",
+        "dip_run_invoked",
+        "codex_exec_invoked",
+        "native_codex_subagent_used_as_dip",
+    }
+    return {key: value.get(key) is True for key in sorted(allowed)}
+
+
 def _leading_address_label(prompt_text: object) -> str:
     match = _LEADING_ADDRESS_RE.match(str(prompt_text or ""))
     return _safe_text(match.group(1), limit=80) if match else ""
@@ -118,6 +138,19 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         "direct_reply_text_length": int(packet.get("direct_reply_text_length") or 0),
         "direct_reply_text_truncated": _as_bool(
             packet.get("direct_reply_text_truncated")
+        ),
+        "direct_api_reply_block": _as_bool(packet.get("direct_api_reply_block")),
+        "reply_block_kind": _safe_text(packet.get("reply_block_kind"), limit=80),
+        "reply_author_alias": _safe_text(packet.get("reply_author_alias"), limit=80),
+        "reply_agent_id": _safe_text(packet.get("reply_agent_id"), limit=80),
+        "reply_lane": _safe_text(packet.get("reply_lane"), limit=40),
+        "reply_provider_label": _safe_text(packet.get("reply_provider_label"), limit=80),
+        "reply_text": _safe_text(packet.get("reply_text"), limit=65536),
+        "reply_text_sha256": _safe_text(packet.get("reply_text_sha256"), limit=80),
+        "reply_text_length": int(packet.get("reply_text_length") or 0),
+        "reply_text_truncated": _as_bool(packet.get("reply_text_truncated")),
+        "reply_proof_summary": _safe_reply_proof_summary(
+            packet.get("reply_proof_summary")
         ),
         "final_answer_was_repo_tool_call": _as_bool(
             packet.get("final_answer_was_repo_tool_call")
