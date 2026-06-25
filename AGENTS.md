@@ -64,19 +64,27 @@ API route selection. Do not infer route ids from tests, docs, audit history,
 chat history, or old examples. If the context file is missing, answer
 `FAIL_ALIAS_CONTEXT_MISSING`.
 
-For operator requests that ask an API-lane alias such as `DIP`, `Agent 2`, or a
-custom WBP-defined API name to answer directly, use the canonical short direct
-reply entrypoint:
+For raw Custom Codex prompt text, use the canonical auto-router entrypoint
+first:
+
+`python3 -m wild_boar_proxy router-hook auto-route --prompt "<bounded operator prompt>" --json`
+
+This path must resolve the addressed name from runtime context and choose exactly
+one lane. API-lane aliases such as `DIP`, `Agent 2`, or a custom WBP-defined API
+name route to direct API-agent reply. ChatGPT/primary aliases and prompts with
+no addressed runtime alias pass back to the native GPT lane. Unknown or
+ambiguous addressed aliases fail closed.
+
+For already-routed API-lane alias text, the lower-level direct reply entrypoint
+is:
 
 `python3 -m wild_boar_proxy router-hook direct-reply --prompt "<bounded alias task>" --json`
 
-This path must resolve the alias from runtime context, call the allowed API
-route directly through WBP, and return a direct API-agent answer block. It must
-not invoke `codex exec`, `tools/wbp_dip`, `dip run`, ordinary Codex subagents,
-wrapper substitution, fallback chains, or local imitation. For plain answers the
-default is `--repo-bridge off`; if repository tools are explicitly enabled, the
-packet must honestly report potential mutation through the command effect and
-changed-file fields.
+Both short paths must not invoke `codex exec`, `tools/wbp_dip`, `dip run`,
+ordinary Codex subagents, wrapper substitution, fallback chains, or local
+imitation. For plain answers the default is `--repo-bridge off`; if repository
+tools are explicitly enabled, the packet must honestly report potential mutation
+through the command effect and changed-file fields.
 
 For operator requests that specifically need the Custom Codex MCP/delegate
 working-tool proof path, use:
