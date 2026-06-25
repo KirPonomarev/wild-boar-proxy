@@ -25,6 +25,12 @@ from wild_boar_proxy.codex_account_selection import (
     ROUTE_CANDIDATE_SOURCE,
     build_account_selection_packet,
 )
+from wild_boar_proxy.api_agent_auto_router import (
+    AUTO_ROUTER_DECISION_API_DIRECT_REPLY,
+    AUTO_ROUTER_DECISION_GPT_LANE,
+    AUTO_ROUTER_DECISION_GPT_PASSTHROUGH,
+    build_api_agent_auto_router_packet,
+)
 from wild_boar_proxy.codex_model_registry import (
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
@@ -529,6 +535,163 @@ def _agent_alias_binding_from_session(
         "browser_secret_intake": False,
         "native_free_text_alias_routing_proven": False,
         "does_not_prove_native_free_text_tool_bridge": True,
+    }
+
+
+def _unique_nonempty(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        key = _agent_alias_key(text)
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        unique.append(text)
+    return unique
+
+
+def _agent_id_for_slot(slot_id: str) -> str:
+    if slot_id == PRIMARY_MODEL_SLOT:
+        return "codex"
+    if slot_id == CODING_AGENT_MODEL_SLOT:
+        return "dip"
+    return slot_id.replace("_model_slot", "").replace("_agent_model_slot", "")
+
+
+def _display_name_for_slot(slot_id: str) -> str:
+    if slot_id == PRIMARY_MODEL_SLOT:
+        return "Codex"
+    if slot_id == CODING_AGENT_MODEL_SLOT:
+        return "DIP"
+    return slot_id
+
+
+def _role_for_slot(slot_id: str) -> str:
+    if slot_id == PRIMARY_MODEL_SLOT:
+        return "orchestrator"
+    if slot_id == CODING_AGENT_MODEL_SLOT:
+        return "coding_agent"
+    return "auxiliary_agent"
+
+
+def _agent_aliases_for_slot(alias_binding: dict[str, Any], slot_id: str) -> list[str]:
+    rows = alias_binding.get("alias_to_slot_map")
+    aliases: list[str] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if row.get("slot_id") != slot_id or row.get("slot_bound") is not True:
+                continue
+            aliases.append(str(row.get("alias") or ""))
+    return _unique_nonempty(aliases)
+
+
+def _slot_lane_for_auto_route(slot: dict[str, Any]) -> str:
+    if slot.get("selected_source_class") == "route_backed":
+        return "api_route"
+    return "primary_chatgpt"
+
+
+def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, Any]:
+    alias_binding = _agent_alias_binding_from_session(
+        session,
+        source="server_session_state",
+    )
+    role_slots = _canonical_role_slots(session.get("role_slots"))
+    agent_bindings: list[dict[str, Any]] = []
+    alias_to_agent_id: dict[str, str] = {}
+    agent_id_to_route: dict[str, str] = {}
+    agent_id_to_model: dict[str, str] = {}
+    agent_id_to_slot_id: dict[str, str] = {}
+    allowed_api_route_ids: list[str] = []
+    primary_aliases: list[str] = []
+    coding_aliases: list[str] = []
+
+    for slot_id, slot in role_slots.items():
+        if slot.get("binding_status") != "bound":
+            continue
+        aliases = _agent_aliases_for_slot(alias_binding, slot_id)
+        if not aliases:
+            continue
+        agent_id = _agent_id_for_slot(slot_id)
+        lane = _slot_lane_for_auto_route(slot)
+        model_id = str(slot.get("model_id") or "")
+        binding: dict[str, Any] = {
+            "agent_id": agent_id,
+            "display_name": _display_name_for_slot(slot_id),
+            "role": _role_for_slot(slot_id),
+            "aliases": aliases,
+            "lane": lane,
+            "enabled": True,
+            "slot_id": slot_id,
+            "allowed_actions": ["answer", "inspect", "audit", "code", "test"],
+        }
+        agent_id_to_slot_id[agent_id] = slot_id
+        for alias in aliases:
+            alias_to_agent_id[alias] = agent_id
+        if slot_id == PRIMARY_MODEL_SLOT:
+            primary_aliases = aliases
+        if slot_id == CODING_AGENT_MODEL_SLOT:
+            coding_aliases = aliases
+        if lane == "api_route":
+            binding["route_id"] = model_id
+            if model_id:
+                agent_id_to_route[agent_id] = model_id
+                allowed_api_route_ids.append(model_id)
+        else:
+            binding["model_id"] = model_id
+            if model_id:
+                agent_id_to_model[agent_id] = model_id
+        agent_bindings.append(binding)
+
+    return {
+        "schema_version": 1,
+        "packet_kind": "codex_custom_native_agent_runtime_context",
+        "context_truth_source": "codex_custom_session_state",
+        "mode_id": "codex_custom",
+        "alias_scope": "server_runtime_binding",
+        "agent_bindings_status": "ok"
+        if alias_binding.get("alias_collision_free") is True
+        else "blocked",
+        "agent_bindings_machine_error_code": "OK"
+        if alias_binding.get("alias_collision_free") is True
+        else str(alias_binding.get("machine_error_code") or "ALIAS_BINDING_BLOCKED"),
+        "agent_bindings": agent_bindings,
+        "alias_to_agent_id": alias_to_agent_id,
+        "agent_id_to_route": agent_id_to_route,
+        "agent_id_to_model": agent_id_to_model,
+        "agent_id_to_slot_id": agent_id_to_slot_id,
+        "allowed_api_route_ids": _unique_nonempty(allowed_api_route_ids),
+        "forbidden_stale_route_ids": [],
+        "stale_route_guard_present": True,
+        "stale_route_guard_source": "codex_custom_session_role_slots",
+        "primary_aliases": primary_aliases,
+        "coding_aliases": coding_aliases,
+        "alias_runtime_binding_present": alias_binding.get(
+            "alias_runtime_binding_present"
+        )
+        is True,
+        "alias_runtime_binding_proven": alias_binding.get(
+            "alias_runtime_binding_proven"
+        )
+        is True,
+        "browser_can_supply_alias_authority": False,
+        "browser_can_supply_route_authority": False,
+        "browser_backend_intake": False,
+        "browser_secret_intake": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+    }
+
+
+def _session_auto_route_context_metadata() -> dict[str, Any]:
+    return {
+        "runtime_context_file_present": True,
+        "runtime_context_file_read": True,
+        "runtime_context_file_path_recorded": False,
+        "runtime_context_source": "codex_custom_session_state",
     }
 
 
@@ -2413,6 +2576,455 @@ class CodexCustomSessionManager:
         )
         self._write_session(session)
         packet["session"] = self._public_session(session)
+        return packet
+
+    def prompt_ingress_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
+        auto_route_live_result_runner: Callable[..., dict[str, Any]] | None = None,
+        profile_dir: Path | None = None,
+        active_project_root: Path | None = None,
+        active_project_root_source: str = "missing",
+        repo_bridge_mode: str = "off",
+        work_mode: str = "full",
+        timeout_seconds: float = 60.0,
+    ) -> dict[str, Any]:
+        if payload.get("slot_id") is not None:
+            packet = self.prompt_packet(
+                session_id,
+                payload,
+                prompt_runner,
+                owner_authorized=owner_authorized,
+            )
+            packet["custom_codex_prompt_ingress_packet"] = True
+            packet["auto_router_used"] = False
+            packet["explicit_slot_preserved"] = True
+            return packet
+
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_prompt_run_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "custom_codex_prompt_ingress_packet": True,
+                "auto_router_used": False,
+                "model_response_present": False,
+                "fallback_attempted": False,
+            }
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return {
+                **self._base_packet("rejected", "PROMPT_MISSING"),
+                "session_id": session_id,
+                "custom_codex_prompt_ingress_packet": True,
+                "auto_router_used": False,
+                "prompt_present": False,
+                "model_response_present": False,
+                "fallback_attempted": False,
+                "next_action": "enter_prompt",
+            }
+        if not owner_authorized:
+            packet = self.prompt_not_admitted_packet(session_id, {"prompt": prompt})
+            packet["custom_codex_prompt_ingress_packet"] = True
+            packet["auto_router_used"] = False
+            return packet
+
+        session_status_failure = self._prompt_precondition_failure(
+            session,
+            PRIMARY_MODEL_SLOT,
+        )
+        if session_status_failure:
+            session_status_failure["custom_codex_prompt_ingress_packet"] = True
+            session_status_failure["auto_router_used"] = False
+            return session_status_failure
+
+        runtime_context = _session_auto_route_runtime_context(session)
+        context_metadata = _session_auto_route_context_metadata()
+        with self._active_prompt_lock:
+            if session_id in self._active_prompt_sessions:
+                return {
+                    **self._base_packet("blocked", "CONCURRENT_PROMPT_EXECUTION_NOT_ALLOWED"),
+                    "session_id": session_id,
+                    "custom_codex_prompt_ingress_packet": True,
+                    "auto_router_used": False,
+                    "prompt_runner_called": False,
+                    "model_response_present": False,
+                    "fallback_attempted": False,
+                    "next_action": "wait_for_current_prompt_completion",
+                    "session": self._public_session(session),
+                    "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                }
+            self._active_prompt_sessions.add(session_id)
+        try:
+            auto_packet = build_api_agent_auto_router_packet(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+                context_file_metadata=context_metadata,
+                profile_dir=(profile_dir or self.root),
+                active_project_root=active_project_root,
+                active_project_root_source=active_project_root_source,
+                repo_bridge_mode=repo_bridge_mode,
+                work_mode=work_mode,
+                timeout_seconds=timeout_seconds,
+                live_result_runner=auto_route_live_result_runner,
+            )
+        finally:
+            with self._active_prompt_lock:
+                self._active_prompt_sessions.discard(session_id)
+
+        decision = str(auto_packet.get("auto_router_decision") or "")
+        if (
+            auto_packet.get("status") == "ok"
+            and decision == AUTO_ROUTER_DECISION_API_DIRECT_REPLY
+            and auto_packet.get("direct_reply_selected") is True
+        ):
+            return self._api_direct_prompt_ingress_packet(
+                session=session,
+                prompt=prompt,
+                runtime_context=runtime_context,
+                auto_packet=auto_packet,
+            )
+        if auto_packet.get("status") == "ok" and decision in {
+            AUTO_ROUTER_DECISION_GPT_LANE,
+            AUTO_ROUTER_DECISION_GPT_PASSTHROUGH,
+        }:
+            packet = self.prompt_packet(
+                session_id,
+                payload,
+                prompt_runner,
+                owner_authorized=True,
+            )
+            packet.update(self._auto_route_prompt_summary(auto_packet))
+            packet["custom_codex_prompt_ingress_packet"] = True
+            packet["requested_slot_auto_routed"] = True
+            packet["explicit_slot_preserved"] = False
+            return packet
+        return self._auto_route_prompt_blocked_packet(
+            session=session,
+            prompt=prompt,
+            auto_packet=auto_packet,
+        )
+
+    def _auto_route_prompt_summary(self, auto_packet: dict[str, Any]) -> dict[str, Any]:
+        keys = (
+            "auto_router_used",
+            "auto_router_proven",
+            "auto_router_decision",
+            "auto_router_decision_source",
+            "auto_router_fail_closed",
+            "auto_router_unknown_alias_blocked",
+            "auto_router_ambiguous_alias_blocked",
+            "parser_status",
+            "parser_machine_error_code",
+            "parser_alias_match_count",
+            "runtime_context_source",
+            "runtime_context_present",
+            "runtime_context_kind_valid",
+            "alias_context_read",
+            "selected_alias",
+            "selected_slot",
+            "selected_alias_lane",
+            "natural_alias_command_detected",
+            "natural_api_alias_command_detected",
+            "direct_reply_selected",
+            "direct_reply_proven",
+            "gpt_lane_selected",
+            "gpt_passthrough_to_native_chat",
+            "route_bound_dispatch_proven",
+            "router_dispatch_admitted",
+            "router_owned_dispatch_decision_bound",
+            "dispatch_status",
+            "dispatch_attempted",
+            "dispatch_proven",
+            "api_lane_called",
+            "chatgpt_lane_called",
+            "codex_exec_invoked",
+            "tools_wbp_dip_invoked",
+            "dip_run_invoked",
+            "wrapper_shopping_used",
+            "wrapper_substitution_used",
+            "native_codex_subagent_used",
+            "native_codex_subagent_used_as_dip",
+            "fallback_used",
+            "local_imitation_used",
+            "raw_backend_details_exposed",
+            "secret_value_exposed",
+            "no_secret_exposed",
+            "selected_api_route_id_recorded",
+            "raw_prompt_recorded",
+        )
+        return {key: auto_packet.get(key) for key in keys if key in auto_packet}
+
+    def _auto_route_prompt_blocked_packet(
+        self,
+        *,
+        session: dict[str, Any],
+        prompt: str,
+        auto_packet: dict[str, Any],
+    ) -> dict[str, Any]:
+        prompt_hash = _digest(prompt)
+        packet = dict(auto_packet)
+        packet.update(
+            {
+                "custom_codex_prompt_ingress_packet": True,
+                "mode_id": "codex_custom",
+                "session_id": str(session.get("session_id") or ""),
+                "authorization_status": "authorized_by_owner_gate",
+                "owner_authorization_phrase_present": True,
+                "live_prompt_admitted": False,
+                "live_prompt_executed": False,
+                "prompt_runner_called": False,
+                "prompt_present": True,
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": False,
+                "inference_proven": False,
+                "requested_slot_auto_routed": False,
+                "explicit_slot_preserved": False,
+                "fallback_attempted": packet.get("fallback_used") is True,
+                "session": self._public_session(session),
+                "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                "next_action": "repair_agent_alias_or_address_codex",
+            }
+        )
+        self._append_ledger(
+            session,
+            "prompt_auto_route_blocked",
+            {
+                "machine_error_code": packet.get("machine_error_code"),
+                "auto_router_decision": packet.get("auto_router_decision"),
+                "auto_router_fail_closed": packet.get("auto_router_fail_closed") is True,
+                "selected_alias_lane": packet.get("selected_alias_lane"),
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": False,
+                "inference_proven": False,
+                "fallback_attempted": packet.get("fallback_used") is True,
+            },
+        )
+        session["updated_at_utc"] = utc_now()
+        self._write_session(session)
+        packet["session"] = self._public_session(session)
+        return packet
+
+    def _api_direct_prompt_ingress_packet(
+        self,
+        *,
+        session: dict[str, Any],
+        prompt: str,
+        runtime_context: dict[str, Any],
+        auto_packet: dict[str, Any],
+    ) -> dict[str, Any]:
+        agent_id_to_slot_id = runtime_context.get("agent_id_to_slot_id")
+        if not isinstance(agent_id_to_slot_id, dict):
+            agent_id_to_slot_id = {}
+        selected_agent_id = str(auto_packet.get("selected_slot") or "")
+        requested_slot_id = str(agent_id_to_slot_id.get(selected_agent_id) or "")
+        if requested_slot_id not in ROLE_SLOT_IDS:
+            blocked = dict(auto_packet)
+            blocked.update(
+                {
+                    "status": "blocked",
+                    "machine_error_code": "AUTO_ROUTE_SLOT_NOT_SERVER_ISSUED",
+                    "custom_codex_prompt_ingress_packet": True,
+                    "mode_id": "codex_custom",
+                    "session_id": str(session.get("session_id") or ""),
+                    "prompt_runner_called": False,
+                    "model_response_present": False,
+                    "inference_proven": False,
+                    "session": self._public_session(session),
+                    "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                    "next_action": "repair_agent_alias_runtime_binding",
+                }
+            )
+            return blocked
+
+        role_slots = _canonical_role_slots(session.get("role_slots"))
+        slot = dict(role_slots.get(requested_slot_id) or _unbound_slot(requested_slot_id))
+        model_id = str(slot.get("model_id") or "")
+        slot_dispatch_admission = _slot_dispatch_admission_packet(
+            session=session,
+            slot=slot,
+            requested_slot_id=requested_slot_id,
+        )
+        response_text = str(auto_packet.get("direct_reply_text") or "")
+        status_ok = bool(
+            auto_packet.get("status") == "ok"
+            and auto_packet.get("direct_reply_proven") is True
+            and response_text
+            and auto_packet.get("fallback_used") is not True
+            and auto_packet.get("local_imitation_used") is not True
+            and auto_packet.get("secret_value_exposed") is not True
+        )
+        prompt_hash = _digest(prompt)
+        response_digest = _digest(response_text) if response_text else ""
+        response_preview = _response_preview(response_text) if status_ok else ""
+        route_source = slot.get("selected_source_class") == "route_backed"
+        source_provenance_status = "route_proven" if route_source and status_ok else str(
+            slot.get("source_provenance_status") or "not_proven"
+        )
+        packet = dict(auto_packet)
+        packet.update(
+            {
+                "custom_codex_prompt_ingress_packet": True,
+                "direct_api_reply_block": True,
+                "mode_id": "codex_custom",
+                "session_id": str(session.get("session_id") or ""),
+                "session_schema_version": int(
+                    session.get("session_schema_version") or SESSION_SCHEMA_VERSION
+                ),
+                "current_execution_slot_id": requested_slot_id,
+                "requested_slot_id": requested_slot_id,
+                "requested_slot_explicit": False,
+                "requested_slot_defaulted_to_primary": False,
+                "requested_slot_auto_routed": True,
+                "explicit_slot_preserved": False,
+                **slot_dispatch_admission,
+                "wbp_runner_payload_slot_id": "",
+                "wbp_runner_payload_model_id": "",
+                "wbp_runner_payload_slot_matches_requested": False,
+                "wbp_runner_payload_model_matches_slot": False,
+                "wbp_session_manager_slot_dispatch_proven": False,
+                "runtime_slot_dispatch_proof_scope": "api_agent_auto_router_direct_reply",
+                "downstream_runner_slot_echo_present": False,
+                "downstream_runner_slot_echo": "",
+                "downstream_runner_slot_echo_matches_requested": False,
+                "executed_slot_id": requested_slot_id if status_ok else "",
+                "executed_slot_model_id": model_id if status_ok else "",
+                "runtime_slot_dispatch_proven": status_ok,
+                "slot_binding_runtime_dispatch_claimed": status_ok,
+                "parallel_slot_execution_proven": False,
+                "fanout_execution_proven": False,
+                "current_execution_path_source": "session_auto_route_direct_api_reply",
+                "model_id": model_id,
+                "model_server_issued": slot.get("server_issued") is True,
+                "model_catalog_entry_server_issued": slot.get(
+                    "model_catalog_entry_server_issued"
+                )
+                is True,
+                "model_lane": str(slot.get("model_lane") or "unknown_lane"),
+                "model_lane_classified": slot.get("model_lane_classified") is True,
+                "model_lane_classification_source": str(
+                    slot.get("model_lane_classification_source") or "none"
+                ),
+                "runtime_lane_proven": status_ok,
+                "role_slot_binding_proven": session.get("role_slot_binding_proven") is True,
+                "selected_source_class": slot.get("selected_source_class"),
+                "selected_route_server_issued": slot.get("selected_route_server_issued")
+                is True,
+                "route_provenance_required": slot.get("route_provenance_required") is True,
+                "route_provenance_proven": bool(route_source and status_ok),
+                "route_execution_proven": bool(route_source and status_ok),
+                "provider_response_proven": status_ok,
+                "source_provenance_status": source_provenance_status,
+                "source_candidate_classified": _slot_source_candidate_classified(slot, session),
+                "source_provenance_proven": status_ok,
+                "selected_source_provenance": source_provenance_status,
+                "authorization_status": "authorized_by_owner_gate",
+                "owner_authorization_phrase_present": True,
+                "live_prompt_admitted": True,
+                "live_prompt_executed": status_ok,
+                "prompt_runner_called": False,
+                "prompt_present": True,
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": status_ok,
+                "inference_proven": status_ok,
+                "runtime_execution_proven": status_ok,
+                "live_compatibility_proven": status_ok,
+                "live_prompt_full_success": status_ok,
+                "response_digest": response_digest,
+                "response_preview_bounded": response_preview,
+                "token_usage_present": False,
+                "token_usage": {},
+                "token_burn": None,
+                "latency_ms": None,
+                "configured_provider": "external_route" if route_source and status_ok else "",
+                "configured_wire_api": "responses" if status_ok else "",
+                "path_proof_status": "api_agent_auto_router_direct_reply_proven"
+                if status_ok
+                else "api_agent_auto_router_direct_reply_not_proven",
+                "path_proof_basis": "api_agent_auto_router_route_bound_provider_answer",
+                "fallback_attempted": packet.get("fallback_used") is True,
+                "auth_command_invoked": False,
+                "raw_backend_id_exposed": False,
+                "raw_backend_exposed": False,
+                "raw_auth_ref_exposed": False,
+                "secret_value_recorded": False,
+                "session": self._public_session(session),
+                "role_slot_binding_packet": self._role_slot_binding_packet(session),
+                "next_action": "inspect_transcript" if status_ok else "stop_and_diagnose",
+            }
+        )
+
+        event = "prompt_completed_e2e" if status_ok else "prompt_failed_e2e"
+        session["status"] = event
+        session["inference_proven"] = status_ok
+        session["model_response_present"] = status_ok
+        session["token_burn"] = None
+        session["current_execution_slot_id"] = requested_slot_id
+        session["current_execution_path_source"] = "session_auto_route_direct_api_reply"
+        session["runtime_lane_proven"] = status_ok
+        if requested_slot_id in role_slots:
+            role_slots[requested_slot_id]["runtime_lane_proven"] = status_ok
+            role_slots[requested_slot_id]["runtime_dispatch_state"] = (
+                "api_agent_auto_router_direct_reply_proven" if status_ok else "not_proven"
+            )
+            if route_source and status_ok:
+                role_slots[requested_slot_id]["route_provenance_proven"] = True
+                role_slots[requested_slot_id]["route_execution_proven"] = True
+                role_slots[requested_slot_id]["provider_response_proven"] = True
+                role_slots[requested_slot_id]["source_provenance_status"] = "route_proven"
+                role_slots[requested_slot_id]["live_compatibility_proven"] = True
+            session["role_slots"] = role_slots
+        if route_source and status_ok:
+            session["route_provenance_proven"] = True
+            session["route_execution_proven"] = True
+            session["provider_response_proven"] = True
+            session["source_provenance_status"] = "route_proven"
+            session["live_compatibility_proven"] = True
+        session["updated_at_utc"] = utc_now()
+        self._append_ledger(
+            session,
+            event,
+            {
+                "current_execution_slot_id": requested_slot_id,
+                "requested_slot_id": requested_slot_id,
+                "requested_slot_explicit": False,
+                "requested_slot_auto_routed": True,
+                "current_execution_path_source": "session_auto_route_direct_api_reply",
+                "auto_router_decision": packet.get("auto_router_decision"),
+                "selected_alias_lane": packet.get("selected_alias_lane"),
+                "direct_reply_proven": packet.get("direct_reply_proven") is True,
+                "route_bound_dispatch_proven": packet.get("route_bound_dispatch_proven")
+                is True,
+                "codex_exec_invoked": packet.get("codex_exec_invoked") is True,
+                "tools_wbp_dip_invoked": packet.get("tools_wbp_dip_invoked") is True,
+                "dip_run_invoked": packet.get("dip_run_invoked") is True,
+                "prompt_present": True,
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": status_ok,
+                "inference_proven": status_ok,
+                "response_digest": response_digest,
+                "response_preview_bounded": response_preview,
+                "fallback_attempted": packet.get("fallback_used") is True,
+            },
+        )
+        self._write_session(session)
+        packet["session"] = self._public_session(session)
+        packet["role_slot_binding_packet"] = self._role_slot_binding_packet(session)
         return packet
 
     def mixed_slot_dispatch_probe_packet(

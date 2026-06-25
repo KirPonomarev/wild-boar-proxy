@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -134,6 +135,75 @@ def deepseek_api_snapshot(route_id: str = "wbp-deepseek-v4-pro-max") -> dict[str
                 "api_parameter_sent": True,
             }
         ],
+    }
+
+
+def direct_live_result(text: str, **overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "provider_called": True,
+        "result_available": True,
+        "result_text": text,
+        "result_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "result_text_length": len(text),
+        "result_text_truncated": False,
+        "source": "external_models_direct",
+        "route_allowed": True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "runtime_context_bridge_used": False,
+        "runtime_context_file_bridge_used": False,
+        "bridge_or_file_bridge_used": False,
+        "direct_provider_auth_proven": True,
+        "direct_provider_response_observed": True,
+        "provider_auth_ok": True,
+        "positive_provider_proof_gate_satisfied": True,
+        "dip_work_mode": "full",
+        "dip_full_work_mode": True,
+        "live_result_text_limit": 64000,
+        "live_result_output_token_limit": 32768,
+        "repo_bridge_required": False,
+        "repo_bridge_available": False,
+        "repo_bridge_used": False,
+    }
+    result.update(overrides)
+    return result
+
+
+def proven_prompt_result(payload: dict[str, object], text: str = "CODEX_OK") -> dict[str, object]:
+    model_id = str(payload.get("model_id") or "")
+    route_backed = model_id.startswith("wbp-")
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "selected_model": model_id,
+        "runtime_model": model_id,
+        "slot_id": payload.get("slot_id"),
+        "final_message": text,
+        "secret_value_recorded": False,
+        "configured_provider": "external_route" if route_backed else "cliproxy",
+        "configured_wire_api": "responses",
+        "wbp_endpoint_configured": True,
+        "config_endpoint_matches": True,
+        "config_provider_matches": True,
+        "config_wire_api_matches": True,
+        "command_uses_stdin_dash": True,
+        "command_json_mode": True,
+        "env_codex_home_is_temp": True,
+        "env_home_is_temp": True,
+        "workdir_is_temp": True,
+        "command_workdir_is_temp": True,
+        "command_output_file_is_temp": True,
+        "current_codex_home_used": False,
+        "independent_wbp_trace_observed": True,
+        "trace_observer_packet": {
+            "path": "/v1/responses",
+            "upstream_status": 200,
+            "forwarded_to_wbp": True,
+        },
     }
 
 
@@ -2253,6 +2323,243 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["path_proof_status"], "independently_observed")
             self.assertTrue(packet["runtime_selected_model_recorded"])
             self.assertTrue(packet["runtime_selected_model_matches_bound_model"])
+
+    def test_prompt_ingress_routes_dip_alias_to_direct_api_without_codex_runner(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("DIP_DIRECT_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "DIP: ответь ровно DIP_DIRECT_OK."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+            self.assertTrue(packet["auto_router_used"])
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "DIP_DIRECT_OK")
+            self.assertEqual(packet["response_preview_bounded"], "DIP_DIRECT_OK")
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(packet["requested_slot_id"], "coding_agent_model_slot")
+            self.assertTrue(packet["requested_slot_auto_routed"])
+            self.assertFalse(packet["requested_slot_explicit"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertFalse(packet["codex_exec_invoked"])
+            self.assertFalse(packet["tools_wbp_dip_invoked"])
+            self.assertFalse(packet["dip_run_invoked"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertFalse(packet["chatgpt_lane_called"])
+            self.assertTrue(packet["model_response_present"])
+            self.assertTrue(packet["inference_proven"])
+            self.assertTrue(packet["route_bound_dispatch_proven"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+            self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
+            self.assertEqual(direct_calls[0]["dip_work_mode"], "full")
+            self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+
+    def test_prompt_ingress_routes_custom_api_alias_from_session_binding(self) -> None:
+        direct_aliases: list[str] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_aliases.append(str(kwargs.get("expected_alias") or ""))
+            return direct_live_result("CUSTOM_ALIAS_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            binding = manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "Кодер",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "Кодер: ответь."},
+                proven_prompt_result,
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(binding["status"], "ok")
+            self.assertTrue(binding["alias_runtime_binding_proven"])
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["selected_alias"], "Кодер")
+            self.assertEqual(packet["selected_slot"], "dip")
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(packet["direct_reply_text"], "CUSTOM_ALIAS_OK")
+            self.assertEqual(direct_aliases, ["Кодер"])
+
+    def test_prompt_ingress_keeps_codex_alias_on_gpt_runner_path(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def prompt_runner(payload: dict[str, object]) -> dict[str, object]:
+            prompt_calls.append(dict(payload))
+            return proven_prompt_result(payload, "CODEX_ALIAS_OK")
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("MUST_NOT_RUN")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "Codex: ответь сам."},
+                prompt_runner,
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+            self.assertEqual(packet["auto_router_decision"], "gpt_lane")
+            self.assertTrue(packet["gpt_lane_selected"])
+            self.assertFalse(packet["direct_reply_selected"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertFalse(packet["api_lane_called"])
+            self.assertEqual(packet["response_preview_bounded"], "CODEX_ALIAS_OK")
+            self.assertEqual(
+                prompt_calls,
+                [
+                    {
+                        "prompt": "Codex: ответь сам.",
+                        "model_id": "gpt-5.3-codex",
+                        "slot_id": "primary_model_slot",
+                        "slot_id_explicit": False,
+                    }
+                ],
+            )
+            self.assertEqual(direct_calls, [])
+
+    def test_prompt_ingress_unknown_alias_fails_closed_without_any_runner(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "Ghost: ответь."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS",
+            )
+            self.assertTrue(packet["auto_router_fail_closed"])
+            self.assertTrue(packet["auto_router_unknown_alias_blocked"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertFalse(packet["model_response_present"])
+            self.assertFalse(packet["inference_proven"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(direct_calls, [])
+
+    def test_prompt_ingress_preserves_explicit_slot_even_when_prompt_names_dip(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def prompt_runner(payload: dict[str, object]) -> dict[str, object]:
+            prompt_calls.append(dict(payload))
+            return proven_prompt_result(payload, "EXPLICIT_PRIMARY_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {
+                    "prompt": "DIP: это explicit primary compatibility check.",
+                    "slot_id": "primary_model_slot",
+                },
+                prompt_runner,
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertFalse(packet["auto_router_used"])
+            self.assertTrue(packet["explicit_slot_preserved"])
+            self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
+            self.assertTrue(packet["requested_slot_explicit"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertEqual(len(prompt_calls), 1)
+            self.assertEqual(prompt_calls[0]["slot_id"], "primary_model_slot")
+            self.assertEqual(direct_calls, [])
 
     def test_api_only_temp_write_probe_requires_owner_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

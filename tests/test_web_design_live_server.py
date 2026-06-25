@@ -29033,6 +29033,115 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             ],
         )
 
+    def test_codex_custom_prompt_endpoint_routes_dip_alias_to_direct_api_reply(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            text = "HTTP_DIP_DIRECT_OK"
+            direct_calls.append(dict(kwargs))
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "provider_called": True,
+                "result_available": True,
+                "result_text": text,
+                "result_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "result_text_length": len(text),
+                "result_text_truncated": False,
+                "source": "external_models_direct",
+                "route_allowed": True,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "raw_backend_details_exposed": False,
+                "secret_value_exposed": False,
+                "runtime_context_bridge_used": False,
+                "runtime_context_file_bridge_used": False,
+                "bridge_or_file_bridge_used": False,
+                "direct_provider_auth_proven": True,
+                "direct_provider_response_observed": True,
+                "provider_auth_ok": True,
+                "positive_provider_proof_gate_satisfied": True,
+                "dip_work_mode": "full",
+                "dip_full_work_mode": True,
+                "live_result_text_limit": 64000,
+                "live_result_output_token_limit": 32768,
+                "repo_bridge_required": False,
+                "repo_bridge_available": False,
+                "repo_bridge_used": False,
+            }
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory), mock.patch(
+            "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+            side_effect=direct_runner,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "DIP: ответь ровно HTTP_DIP_DIRECT_OK."},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+        self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+        self.assertTrue(packet["direct_reply_selected"])
+        self.assertTrue(packet["direct_reply_proven"])
+        self.assertEqual(packet["direct_reply_text"], "HTTP_DIP_DIRECT_OK")
+        self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertFalse(packet["codex_exec_invoked"])
+        self.assertFalse(packet["tools_wbp_dip_invoked"])
+        self.assertFalse(packet["dip_run_invoked"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertFalse(packet["chatgpt_lane_called"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertEqual(len(direct_calls), 1)
+        self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
+        self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+
     def test_codex_custom_mixed_slot_dispatch_probe_endpoint_proves_two_slots(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
 

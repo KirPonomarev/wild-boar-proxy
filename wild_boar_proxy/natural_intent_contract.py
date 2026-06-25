@@ -505,7 +505,9 @@ def _resolve_intent(
         runtime_context.get("forbidden_stale_route_ids")
     )
     allowed_api_route_ids_enforced = bool(allowed_api_route_ids)
-    stale_route_guard_present = bool(forbidden_stale_route_ids)
+    stale_route_guard_present = bool(forbidden_stale_route_ids) or (
+        runtime_context.get("stale_route_guard_present") is True
+    )
     agent_id = projection["alias_to_agent_id"].get(alias_candidate_key, "")
     lane = projection["agent_id_to_lane"].get(agent_id, "")
     route_id = projection["agent_id_to_route"].get(agent_id, "")

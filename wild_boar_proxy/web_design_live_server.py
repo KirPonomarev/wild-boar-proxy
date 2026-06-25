@@ -19701,7 +19701,7 @@ def build_handler(
             if action == "prompt":
                 if codex_custom_live_prompt_authorized:
                     self._send_json(
-                        codex_custom_sessions.prompt_packet(
+                        codex_custom_sessions.prompt_ingress_packet(
                             session_id,
                             self._read_json_body(),
                             lambda payload: operator_surface_session.run_prompt(
@@ -19709,6 +19709,9 @@ def build_handler(
                                 trace_wbp=True,
                             ),
                             owner_authorized=codex_custom_live_prompt_authorized,
+                            profile_dir=RuntimePaths.from_env().profile_dir,
+                            active_project_root=ROOT,
+                            active_project_root_source="web_design_live_server_root",
                         )
                     )
                     return
