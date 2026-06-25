@@ -205,9 +205,8 @@ def build_api_agent_auto_router_packet(
         active_project_root,
         source=active_project_root_source,
         wbp_repo_root=REPO_ROOT,
-        required=True,
+        required=False,
     )
-    active_root_available = active_root_fields["active_project_root_available"] is True
     parser_code = _safe_text(parser_packet.get("machine_error_code"), limit=128)
     alias = _safe_text(parser_packet.get("alias_candidate"), limit=80)
     lane = _safe_text(parser_packet.get("lane_candidate"), limit=40)
@@ -261,32 +260,14 @@ def build_api_agent_auto_router_packet(
         gpt_lane_selected = True
         passthrough_to_gpt = True
         decision = AUTO_ROUTER_DECISION_GPT_LANE
-        ok = active_root_available
-        machine_error_code = (
-            API_AGENT_AUTO_ROUTER_OK
-            if ok
-            else _safe_text(
-                active_root_fields["active_project_root_status"],
-                limit=128,
-            )
-        )
-        if not ok:
-            blocking_reasons.append(machine_error_code)
+        ok = True
+        machine_error_code = API_AGENT_AUTO_ROUTER_OK
     elif parser_code == NO_ALIAS_DETECTED and not leading_label:
         gpt_lane_selected = True
         passthrough_to_gpt = True
         decision = AUTO_ROUTER_DECISION_GPT_PASSTHROUGH
-        ok = active_root_available
-        machine_error_code = (
-            API_AGENT_AUTO_ROUTER_OK
-            if ok
-            else _safe_text(
-                active_root_fields["active_project_root_status"],
-                limit=128,
-            )
-        )
-        if not ok:
-            blocking_reasons.append(machine_error_code)
+        ok = True
+        machine_error_code = API_AGENT_AUTO_ROUTER_OK
     elif parser_code == INTENT_AMBIGUOUS_NO_DISPATCH:
         machine_error_code = API_AGENT_AUTO_ROUTER_AMBIGUOUS
         blocking_reasons.append("ambiguous_alias_intent")
@@ -368,6 +349,10 @@ def build_api_agent_auto_router_packet(
             ),
             active_project_root_git_available=bool(
                 _active_root_field("active_project_root_git_available") is True
+            ),
+            active_project_root_legacy_target_repo_alias_used=bool(
+                _active_root_field("active_project_root_legacy_target_repo_alias_used")
+                is True
             ),
         ),
         **target_repo_fields,

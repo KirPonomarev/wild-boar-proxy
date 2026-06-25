@@ -32,7 +32,12 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
-from wild_boar_proxy.active_project_root import active_project_root_metadata
+from wild_boar_proxy.active_project_root import (
+    ACTIVE_PROJECT_ROOT_ENV,
+    ACTIVE_PROJECT_ROOT_SOURCE_CLI_ARG,
+    ACTIVE_PROJECT_ROOT_SOURCE_SERVER_ENV,
+    active_project_root_metadata,
+)
 from wild_boar_proxy.core import packets as command_packets
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
@@ -22545,6 +22550,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch-copy-profile-dir", default=None)
     parser.add_argument("--launch-copy-data-dir", default=None)
     parser.add_argument("--launch-copy-port", type=int, default=None)
+    parser.add_argument(
+        "--active-project-root",
+        default=None,
+        help="server-owned project root for Custom Codex/API-agent prompt work",
+    )
     parser.add_argument("--owner-authorization-phrase", default=None)
     parser.add_argument(
         "--post-rate-limit-per-second",
@@ -22565,6 +22575,27 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.post_rate_limit_per_second <= 0:
         parser.error("--post-rate-limit-per-second must be a positive integer.")
+    active_project_root_raw = str(
+        args.active_project_root or os.environ.get(ACTIVE_PROJECT_ROOT_ENV) or ""
+    ).strip()
+    active_project_root_source = (
+        ACTIVE_PROJECT_ROOT_SOURCE_CLI_ARG
+        if args.active_project_root
+        else ACTIVE_PROJECT_ROOT_SOURCE_SERVER_ENV
+    )
+    safe_worktree_repo_root = None
+    if active_project_root_raw:
+        safe_worktree_repo_root, active_project_root_fields = active_project_root_metadata(
+            Path(active_project_root_raw),
+            source=active_project_root_source,
+            wbp_repo_root=ROOT,
+            required=True,
+        )
+        if active_project_root_fields["active_project_root_available"] is not True:
+            parser.error(
+                "--active-project-root rejected: "
+                f"{active_project_root_fields['active_project_root_status']}"
+            )
     launch_copy_contract = LaunchCopyContract(
         client_path=args.launch_client_path,
         profile_dir=args.launch_copy_profile_dir,
@@ -22584,6 +22615,7 @@ def main(argv: list[str] | None = None) -> int:
                 launch_copy_contract=launch_copy_contract,
                 action_phase=args.action_phase,
                 owner_authorization_phrase=args.owner_authorization_phrase,
+                safe_worktree_repo_root=safe_worktree_repo_root,
                 web_token_state=web_token_state,
                 post_rate_limit_per_second=args.post_rate_limit_per_second,
             ),

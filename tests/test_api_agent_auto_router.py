@@ -160,6 +160,7 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(packet["local_imitation_used"])
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["selected_api_route_id_recorded"])
+        self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         encoded = json.dumps(packet, ensure_ascii=False, sort_keys=True)
         self.assertNotIn(prompt, encoded)
         self.assertNotIn(ROUTE_ID, encoded)
@@ -251,6 +252,35 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(packet["dispatch_proven"])
         self.assertFalse(packet["api_lane_called"])
         self.assertFalse(packet["chatgpt_lane_called"])
+        runner.assert_not_called()
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_codex_alias_passthrough_does_not_require_active_project_root(self) -> None:
+        runner = mock.Mock(return_value=_live_result("must not run"))
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text="Codex: ответь сам.",
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["auto_router_decision"],
+            auto.AUTO_ROUTER_DECISION_GPT_LANE,
+        )
+        self.assertTrue(packet["gpt_lane_selected"])
+        self.assertTrue(packet["gpt_passthrough_to_native_chat"])
+        self.assertFalse(packet["direct_reply_selected"])
+        self.assertFalse(packet["active_project_root_required"])
+        self.assertFalse(packet["active_project_root_available"])
+        self.assertEqual(packet["active_project_root_status"], "active_project_root_missing")
+        self.assertFalse(packet["target_repo_required"])
+        self.assertFalse(packet["target_repo_available"])
+        self.assertFalse(packet["api_lane_called"])
         runner.assert_not_called()
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

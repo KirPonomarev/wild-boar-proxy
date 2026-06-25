@@ -6495,6 +6495,57 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(server_closed, [True, True])
             self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
 
+    def test_web_design_main_passes_active_project_root_to_handler(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = root / "managed"
+            project_root = root / "project"
+            project_root.mkdir()
+            observed_handler_kwargs: list[dict[str, object]] = []
+
+            class OneShotServer:
+                def __init__(self, address: tuple[str, int], handler: object) -> None:
+                    self.server_address = address
+                    self.RequestHandlerClass = handler
+
+                def serve_forever(self) -> None:
+                    return None
+
+                def server_close(self) -> None:
+                    return None
+
+            def fake_build_handler(**kwargs: object) -> object:
+                observed_handler_kwargs.append(dict(kwargs))
+                return object()
+
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env_updates, clear=False),
+                mock.patch.object(live_server, "ThreadingHTTPServer", OneShotServer),
+                mock.patch.object(live_server, "build_handler", side_effect=fake_build_handler),
+            ):
+                result = live_server.main(
+                    [
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "0",
+                        "--active-project-root",
+                        str(project_root),
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                observed_handler_kwargs[0]["safe_worktree_repo_root"],
+                project_root.resolve(strict=False),
+            )
+            self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
+
     def test_onboard_adapter_spec_uses_exact_argv_template(self) -> None:
         onboard = ALLOWLIST["accounts_onboard"]
         onboard_auth_ref = ALLOWLIST["accounts_onboard_auth_ref"]
@@ -28941,10 +28992,10 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         )
 
     def test_codex_custom_prompt_endpoint_blocks_without_active_project_root(self) -> None:
-        created_sessions: list[FakeOperatorSurfaceSession] = []
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
 
-        def factory() -> FakeOperatorSurfaceSession:
-            session = FakeOperatorSurfaceSession()
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
             created_sessions.append(session)
             return session
 
@@ -28975,14 +29026,17 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-v3",
+                        },
                     )
                 )
                 session_id = created["session"]["session_id"]
                 packet = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions/{session_id}/prompt",
-                        {"prompt": "Reply with exactly WBP_LIVE_OK."},
+                        {"prompt": "DIP: reply with exactly WBP_LIVE_OK."},
                     )
                 )
             finally:
@@ -28991,14 +29045,19 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 server.server_close()
 
         self.assertEqual(created["status"], "ok")
-        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
         self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
         self.assertTrue(packet["active_project_root_required"])
         self.assertFalse(packet["active_project_root_available"])
         self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertTrue(packet["auto_router_used"])
+        self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+        self.assertTrue(packet["direct_reply_selected"])
+        self.assertFalse(packet["direct_reply_proven"])
         self.assertFalse(packet["prompt_runner_called"])
-        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["api_agent_provider_called"])
         self.assertEqual(created_sessions[0].run_payloads, [])
 
     def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:

@@ -2589,6 +2589,7 @@ class CodexCustomSessionManager:
         *,
         active_project_root: Path | None,
         active_project_root_source: str,
+        required: bool = True,
     ) -> tuple[Path | None, dict[str, Any]]:
         if active_project_root is None:
             selected_root, selected_source = select_active_project_root_candidate(
@@ -2603,7 +2604,7 @@ class CodexCustomSessionManager:
             selected_root,
             source=selected_source,
             wbp_repo_root=WBP_REPO_ROOT,
-            required=True,
+            required=required,
         )
 
     def _active_project_root_blocked_packet(
@@ -2735,16 +2736,22 @@ class CodexCustomSessionManager:
             self._active_project_root_for_prompt(
                 active_project_root=active_project_root,
                 active_project_root_source=active_project_root_source,
+                required=False,
             )
         )
-        if active_project_root_fields["active_project_root_available"] is not True:
-            return self._active_project_root_blocked_packet(
-                session=session,
-                prompt=prompt,
-                active_project_root_fields=active_project_root_fields,
-            )
 
         if payload.get("slot_id") is not None:
+            if active_project_root_fields["active_project_root_available"] is not True:
+                _, required_active_project_root_fields = self._active_project_root_for_prompt(
+                    active_project_root=active_project_root,
+                    active_project_root_source=active_project_root_source,
+                    required=True,
+                )
+                return self._active_project_root_blocked_packet(
+                    session=session,
+                    prompt=prompt,
+                    active_project_root_fields=required_active_project_root_fields,
+                )
             packet = self.prompt_packet(
                 session_id,
                 payload,
@@ -2756,15 +2763,6 @@ class CodexCustomSessionManager:
             packet["auto_router_used"] = False
             packet["explicit_slot_preserved"] = True
             return packet
-
-        session_status_failure = self._prompt_precondition_failure(
-            session,
-            PRIMARY_MODEL_SLOT,
-        )
-        if session_status_failure:
-            session_status_failure["custom_codex_prompt_ingress_packet"] = True
-            session_status_failure["auto_router_used"] = False
-            return session_status_failure
 
         runtime_context = _session_auto_route_runtime_context(session)
         context_metadata = _session_auto_route_context_metadata()
@@ -2819,6 +2817,16 @@ class CodexCustomSessionManager:
             AUTO_ROUTER_DECISION_GPT_LANE,
             AUTO_ROUTER_DECISION_GPT_PASSTHROUGH,
         }:
+            session_status_failure = self._prompt_precondition_failure(
+                session,
+                PRIMARY_MODEL_SLOT,
+            )
+            if session_status_failure:
+                session_status_failure["custom_codex_prompt_ingress_packet"] = True
+                session_status_failure["auto_router_used"] = True
+                session_status_failure.update(self._auto_route_prompt_summary(auto_packet))
+                session_status_failure.update(active_project_root_fields)
+                return session_status_failure
             packet = self.prompt_packet(
                 session_id,
                 payload,

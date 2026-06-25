@@ -2395,6 +2395,53 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(direct_calls[0]["dip_work_mode"], "full")
             self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
 
+    def test_prompt_ingress_dip_alias_bypasses_primary_slot_precondition(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("DIP_PRIMARY_BROKEN_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.3-codex",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            manager._sessions[session_id]["role_slots"]["primary_model_slot"][
+                "server_issued"
+            ] = False
+
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "DIP: ответь ровно DIP_PRIMARY_BROKEN_OK."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "DIP_PRIMARY_BROKEN_OK")
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertFalse(packet["chatgpt_lane_called"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+
     def test_prompt_ingress_routes_custom_api_alias_from_session_binding(self) -> None:
         direct_aliases: list[str] = []
 
@@ -2500,7 +2547,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
             self.assertEqual(direct_calls, [])
 
-    def test_prompt_ingress_blocks_without_active_project_root_before_any_runner(self) -> None:
+    def test_prompt_ingress_dip_alias_blocks_without_active_project_root_before_provider(self) -> None:
         prompt_calls: list[dict[str, object]] = []
         direct_calls: list[dict[str, object]] = []
 
@@ -2525,12 +2572,16 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 profile_dir=Path(temp_dir),
             )
 
-            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["status"], "error")
             self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
             self.assertTrue(packet["active_project_root_required"])
             self.assertFalse(packet["active_project_root_available"])
             self.assertEqual(packet["active_project_root_source"], "missing")
             self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertTrue(packet["auto_router_used"])
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertFalse(packet["direct_reply_proven"])
             self.assertFalse(packet["prompt_runner_called"])
             self.assertFalse(packet["api_lane_called"])
             self.assertFalse(packet["model_response_present"])
