@@ -58,6 +58,7 @@ _ACCEPTANCE_REQUIRED_TRUE_FIELDS = (
 _ACCEPTANCE_REQUIRED_FALSE_FIELDS = (
     "gate_runs_live_dispatch",
     "gate_reads_audit_history",
+    "input_file_paths_recorded",
     "api_key_only_counts_as_ui_session",
     "logged_in_ui_session_proven",
     "custom_codex_ui_session_ready",

@@ -95,6 +95,7 @@ def _acceptance_packet(**overrides: object) -> dict[str, object]:
         "custom_codex_ui_session_ready": False,
         "gate_runs_live_dispatch": False,
         "gate_reads_audit_history": False,
+        "input_file_paths_recorded": False,
         "product_ready": False,
         "does_not_prove_product_ready": True,
         "fallback_used": False,
@@ -250,6 +251,25 @@ class GptApiDipProductReadyGateTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
         self.assertIn(
             "acceptance_dip_code_verified_not_true",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_acceptance_input_file_path_recording(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                acceptance=_acceptance_packet(input_file_paths_recorded=True),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            GPT_API_DIP_PRODUCT_READY_BLOCKED,
+        )
+        self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["input_file_paths_recorded"])
+        self.assertIn(
+            "acceptance_input_file_paths_recorded_not_false",
             packet["blocking_reasons"],
         )
 
