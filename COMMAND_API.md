@@ -63,7 +63,56 @@ All operator commands must support `--json`.
 
 ## Auxiliary working-tool surfaces
 
+- `router-hook direct-reply --prompt <text> --json`
 - `tools/wbp_dip --json <task>`
+
+`router-hook direct-reply --prompt <text> --json` is the canonical short
+alias-driven API-agent reply surface. It loads
+`wbp-agent-runtime-context.json`, resolves the addressed alias from server-issued
+runtime truth, admits only API-lane aliases through the route allowlist and stale
+route guard, performs one WBP-owned live-result turn through the selected API
+route, and returns the final API-agent answer in the packet.
+
+This command is for direct API-agent replies such as `DIP: answer ...`,
+`Agent 2: inspect ...`, or any operator-defined API alias projected into the
+runtime context. It must not invoke `codex exec`, `tools/wbp_dip`, `dip run`,
+ordinary Codex subagents, wrapper substitution, fallback chains, or local
+imitation. It must fail closed if the alias is missing, resolves to the
+ChatGPT/primary lane, uses a route outside `allowed_api_route_ids`, or returns a
+repo-tool JSON call as the final answer.
+
+By default, `direct-reply` runs with `--work-mode full` and `--repo-bridge off`.
+That keeps normal direct answers short-path and no-write while still giving the
+API route the larger full-answer budget. If an operator explicitly enables
+`--repo-bridge auto|on`, the command is classified as potentially mutating and
+the packet must expose any controlled code mutation through `effect=mutate`,
+`file_mutation_attempted`, `changed_files`, and `dip_action_mutated_files`.
+
+Required success fields include:
+
+- `api_agent_direct_reply_proven=true`
+- `selected_alias_lane="api_route"`
+- `route_bound_dispatch_proven=true`
+- `api_agent_provider_called=true`
+- `direct_reply_text` present
+- `final_answer_was_repo_tool_call=false`
+- `gpt_orchestrator_used=false`
+- `codex_exec_invoked=false`
+- `tools_wbp_dip_invoked=false`
+- `dip_run_invoked=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `raw_prompt_recorded=false`
+- `selected_api_route_id_recorded=false`
+- `product_ready=false`
+
+Canonical direct reply:
+
+```sh
+python3 -m wild_boar_proxy router-hook direct-reply \
+  --prompt "DIP: ответь коротко." \
+  --json
+```
 
 `tools/wbp_dip --json <task>` is a bounded Custom Codex working-tool launcher.
 It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
@@ -135,9 +184,12 @@ tools/wbp_dip --json --work-mode full --repo-bridge on --active-project-root "$P
 ```
 
 This is the only admitted Custom Codex operator path for `DIP` repository
-analysis, coding, testing, and audit tasks. `dip run` is a lower-level operator
+analysis, coding, testing, and audit tasks when the requested proof is the
+Custom Codex MCP/delegate working-tool path. For direct API-agent reply blocks,
+use `router-hook direct-reply` instead. `dip run` is a lower-level operator
 wrapper for readiness/work/chain-join proof and must not be used as a substitute
-for Custom Codex free-chat DIP delegation. If the canonical entrypoint returns a
+for either direct API-agent replies or Custom Codex free-chat DIP delegation. If
+the canonical entrypoint returns a
 provider/network/auth failure, callers must surface the packet
 `machine_error_code` and stop; they must not silently switch to another wrapper,
 ordinary Codex subagent, direct provider request, or local imitation.

@@ -68,6 +68,13 @@ from .interactive_codex_working_flow_delivery import (
 from .live_manual_gate_proof import run_live_manual_gate_proof_command
 from .external_models import run_external_models_command
 from .controlled_api_dispatch import run_controlled_api_dispatch_command
+from .api_agent_direct_reply import (
+    DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    DEFAULT_DIRECT_REPLY_WORK_MODE,
+    DIRECT_REPLY_REPO_BRIDGE_MODES,
+    DIRECT_REPLY_WORK_MODES,
+    run_api_agent_direct_reply_command,
+)
 from .controlled_dispatch_handoff_proof import (
     run_controlled_dispatch_handoff_proof_command,
 )
@@ -910,6 +917,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
     )
     router_hook_dispatch.add_argument("--json", action="store_true", required=True)
+    router_hook_direct_reply = router_hook_subparsers.add_parser("direct-reply")
+    router_hook_direct_reply.add_argument("--prompt", required=True)
+    router_hook_direct_reply.add_argument("--runtime-context-file")
+    router_hook_direct_reply.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_direct_reply.add_argument("--active-project-root")
+    router_hook_direct_reply.add_argument("--target-repo")
+    router_hook_direct_reply.add_argument(
+        "--repo-bridge",
+        choices=sorted(DIRECT_REPLY_REPO_BRIDGE_MODES),
+        default=DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    )
+    router_hook_direct_reply.add_argument(
+        "--work-mode",
+        choices=sorted(DIRECT_REPLY_WORK_MODES),
+        default=DEFAULT_DIRECT_REPLY_WORK_MODE,
+    )
+    router_hook_direct_reply.add_argument("--timeout-seconds", type=float, default=60.0)
+    router_hook_direct_reply.add_argument("--json", action="store_true", required=True)
     router_hook_handoff = router_hook_subparsers.add_parser("handoff")
     router_hook_handoff.add_argument("--prompt", required=True)
     router_hook_handoff.add_argument("--runtime-context-file")
@@ -1998,6 +2027,15 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         "live-manual-gate-proof",
     }:
         return EFFECT_MUTATE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "direct-reply"
+    ):
+        return (
+            EFFECT_PROBE
+            if getattr(args, "repo_bridge", None) == "off"
+            else EFFECT_MUTATE
+        )
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
         "entry",
         "dispatch",
@@ -2671,6 +2709,23 @@ def main(argv: list[str] | None = None) -> int:
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
                     hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "direct-reply"
+        ):
+            return emit_json(
+                run_api_agent_direct_reply_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    active_project_root_arg=args.active_project_root,
+                    target_repo_arg=args.target_repo,
+                    repo_bridge_mode=args.repo_bridge,
+                    work_mode=args.work_mode,
+                    timeout_seconds=args.timeout_seconds,
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "handoff":

@@ -64,18 +64,30 @@ API route selection. Do not infer route ids from tests, docs, audit history,
 chat history, or old examples. If the context file is missing, answer
 `FAIL_ALIAS_CONTEXT_MISSING`.
 
-For operator requests that ask `DIP` to answer, inspect, audit, code, test, or
-work on a repository, use the canonical WBP working-tool entrypoint only:
+For operator requests that ask an API-lane alias such as `DIP`, `Agent 2`, or a
+custom WBP-defined API name to answer directly, use the canonical short direct
+reply entrypoint:
+
+`python3 -m wild_boar_proxy router-hook direct-reply --prompt "<bounded alias task>" --json`
+
+This path must resolve the alias from runtime context, call the allowed API
+route directly through WBP, and return a direct API-agent answer block. It must
+not invoke `codex exec`, `tools/wbp_dip`, `dip run`, ordinary Codex subagents,
+wrapper substitution, fallback chains, or local imitation. For plain answers the
+default is `--repo-bridge off`; if repository tools are explicitly enabled, the
+packet must honestly report potential mutation through the command effect and
+changed-file fields.
+
+For operator requests that specifically need the Custom Codex MCP/delegate
+working-tool proof path, use:
 
 `tools/wbp_dip --json --work-mode full --repo-bridge on "<bounded DIP task>"`
 
-For a quick non-repository DIP ping, use the same entrypoint with
-`--repo-bridge off`. Do not use `dip run`, ambient `python3`, ad hoc `mktemp`
-shell flows, ordinary Codex subagents, direct provider calls, or wrapper
-shopping as substitutes for the Custom Codex DIP path. If the canonical
-entrypoint fails, report its `machine_error_code` and proof facts; do not retry
-through a different wrapper unless the user explicitly asks for diagnostics of
-the wrapper itself.
+Do not use `dip run`, ambient ad hoc `mktemp` shell flows, ordinary Codex
+subagents, direct provider calls, or wrapper shopping as substitutes for either
+canonical path. If the canonical entrypoint fails, report its
+`machine_error_code` and proof facts; do not retry through a different wrapper
+unless the user explicitly asks for diagnostics of the wrapper itself.
 
 If `deepseek_live_format_check_bridge` is present and enabled, use that local
 WBP bridge before direct external network calls. Try `url_candidates` in order,

@@ -2163,13 +2163,18 @@ def request_live_result(
     repo_bridge_mode: str = DEFAULT_REPO_BRIDGE_MODE,
     dip_work_mode: str = DEFAULT_DIP_WORK_MODE,
     timeout_seconds: float = DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+    runtime_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     work_settings = _dip_work_mode_settings(dip_work_mode)
     effective_work_mode = str(work_settings["dip_work_mode"])
     live_result_text_limit = int(work_settings["live_result_text_limit"])
     output_token_limit = int(work_settings["output_token_limit"])
     repo_bridge_max_steps = int(work_settings["repo_bridge_max_steps"])
-    context = _load_runtime_context(profile_dir)
+    context = (
+        dict(runtime_context)
+        if isinstance(runtime_context, Mapping)
+        else _load_runtime_context(profile_dir)
+    )
     route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
     repo_bridge_required = _repo_bridge_requested(task=task, mode=repo_bridge_mode)
     action_bridge_required = _action_bridge_requested(
