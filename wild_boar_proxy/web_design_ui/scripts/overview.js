@@ -8278,6 +8278,150 @@ function codexCustomSessionsSetChip(visual, label) {
   }
 }
 
+function codexCustomProofObject(packet) {
+  const proof = packet?.reply_proof_summary;
+  return proof && typeof proof === "object" && !Array.isArray(proof) ? proof : {};
+}
+
+function codexCustomProofValue(packet, proof, key, fallback) {
+  if (Object.prototype.hasOwnProperty.call(proof, key)) {
+    return proof[key];
+  }
+  return fallback;
+}
+
+function codexCustomProofStatus(value, expected) {
+  if (value === expected) {
+    return "ok";
+  }
+  if (value === true || value === false) {
+    return "fail";
+  }
+  return "missing";
+}
+
+function codexCustomProofLabel(value, expected) {
+  const status = codexCustomProofStatus(value, expected);
+  if (status === "ok" && expected === false) {
+    return "off";
+  }
+  return status;
+}
+
+function renderCodexCustomAgentReplyBlock(packet) {
+  const block = document.getElementById("codexCustomAgentReplyBlock");
+  if (!block) {
+    return;
+  }
+  const directReply = packet?.direct_api_reply_block === true
+    || packet?.reply_block_kind === "api_agent_direct_reply";
+  if (!directReply) {
+    block.hidden = true;
+    return;
+  }
+
+  const proof = codexCustomProofObject(packet);
+  const alias = packet?.reply_author_alias || packet?.selected_alias || "API agent";
+  const provider = packet?.reply_provider_label || packet?.selected_provider_label || "API";
+  const replyText = packet?.reply_text || packet?.direct_reply_text || "";
+  const proofPairs = [
+    [
+      "direct_reply",
+      codexCustomProofLabel(
+        codexCustomProofValue(
+          packet,
+          proof,
+          "direct_reply_proven",
+          packet?.direct_reply_proven === true || packet?.api_agent_direct_reply_proven === true
+        ),
+        true
+      )
+    ],
+    [
+      "provider",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "api_agent_provider_called", packet?.api_agent_provider_called === true),
+        true
+      )
+    ],
+    [
+      "prompt_runner",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
+        false
+      )
+    ],
+    [
+      "codex_exec",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "codex_exec_invoked", packet?.codex_exec_invoked),
+        false
+      )
+    ],
+    [
+      "tools_wbp_dip",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "tools_wbp_dip_invoked", packet?.tools_wbp_dip_invoked),
+        false
+      )
+    ],
+    [
+      "dip_run",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "dip_run_invoked", packet?.dip_run_invoked),
+        false
+      )
+    ],
+    [
+      "fallback",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
+        false
+      )
+    ],
+    [
+      "local_imitation",
+      codexCustomProofLabel(
+        codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
+        false
+      )
+    ],
+    [
+      "final_tool_call",
+      codexCustomProofLabel(
+        codexCustomProofValue(
+          packet,
+          proof,
+          "final_answer_was_repo_tool_call",
+          packet?.final_answer_was_repo_tool_call
+        ),
+        false
+      )
+    ]
+  ];
+  const proofOk = proofPairs.every(([, status]) => status === "ok" || status === "off");
+  const title = document.getElementById("codexCustomAgentReplyTitle");
+  if (title) {
+    title.textContent = `${alias} / ${provider}`;
+  }
+  const chip = document.getElementById("codexCustomAgentReplyChip");
+  if (chip) {
+    chip.className = `chip ${proofOk ? "green" : "amber"}`;
+    if (chip.lastElementChild) {
+      chip.lastElementChild.textContent = proofOk ? "direct proof" : "proof incomplete";
+    }
+  }
+  const text = document.getElementById("codexCustomAgentReplyText");
+  if (text) {
+    text.textContent = replyText || "No direct reply text.";
+  }
+  const proofNode = document.getElementById("codexCustomAgentReplyProof");
+  if (proofNode) {
+    proofNode.textContent = `proof: ${proofPairs.map(([key, status]) => `${key}=${status}`).join(" · ")}`;
+  }
+  block.hidden = false;
+}
+
 function currentCodexCustomSessionUrl(action = "") {
   if (!codexCustomSelectedSessionId) {
     return "";
@@ -8466,6 +8610,7 @@ function renderCodexCustomSessionPacket(packet) {
       next_action: packet?.next_action || "",
     }, null, 2);
   }
+  renderCodexCustomAgentReplyBlock(packet);
 }
 
 function renderCodexCustomSessionList(packet) {

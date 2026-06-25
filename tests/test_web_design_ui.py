@@ -876,6 +876,7 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+node("codexCustomAgentReplyBlock").hidden = true;
 vm.runInContext(`
 renderCodexCustomSessionPacket({
   status: "ok",
@@ -889,9 +890,14 @@ renderCodexCustomSessionPacket({
   reply_text: "WBP_DIRECT_UI_OK",
   reply_text_sha256: "sha",
   reply_proof_summary: {
+    direct_reply_proven: true,
+    api_agent_provider_called: true,
     prompt_runner_called: false,
+    codex_exec_invoked: false,
     tools_wbp_dip_invoked: false,
     dip_run_invoked: false,
+    fallback_used: false,
+    local_imitation_used: false,
     final_answer_was_repo_tool_call: false
   },
   direct_reply_proven: true,
@@ -921,12 +927,89 @@ if (
   throw new Error(`direct reply block fields missing: ${node("codexCustomSessionResponse").textContent}`);
 }
 if (
+  rendered.reply_proof_summary.direct_reply_proven !== true ||
+  rendered.reply_proof_summary.api_agent_provider_called !== true ||
   rendered.reply_proof_summary.prompt_runner_called !== false ||
+  rendered.reply_proof_summary.codex_exec_invoked !== false ||
   rendered.reply_proof_summary.tools_wbp_dip_invoked !== false ||
   rendered.reply_proof_summary.dip_run_invoked !== false ||
+  rendered.reply_proof_summary.fallback_used !== false ||
+  rendered.reply_proof_summary.local_imitation_used !== false ||
   rendered.reply_proof_summary.final_answer_was_repo_tool_call !== false
 ) {
   throw new Error(`direct reply proof missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (node("codexCustomAgentReplyBlock").hidden !== false) {
+  throw new Error("direct reply UI block stayed hidden");
+}
+if (node("codexCustomAgentReplyTitle").textContent !== "DIP / deepseek") {
+  throw new Error(`direct reply title mismatch: ${node("codexCustomAgentReplyTitle").textContent}`);
+}
+if (node("codexCustomAgentReplyText").textContent !== "WBP_DIRECT_UI_OK") {
+  throw new Error(`direct reply text mismatch: ${node("codexCustomAgentReplyText").textContent}`);
+}
+if (
+  !node("codexCustomAgentReplyChip").className.includes("green") ||
+  node("codexCustomAgentReplyChip").lastElementChild.textContent !== "direct proof"
+) {
+  throw new Error(`direct reply chip mismatch: ${node("codexCustomAgentReplyChip").className} / ${node("codexCustomAgentReplyChip").lastElementChild.textContent}`);
+}
+const proofText = node("codexCustomAgentReplyProof").textContent;
+for (const fragment of [
+  "direct_reply=ok",
+  "provider=ok",
+  "prompt_runner=off",
+  "codex_exec=off",
+  "tools_wbp_dip=off",
+  "dip_run=off",
+  "fallback=off",
+  "local_imitation=off",
+  "final_tool_call=off"
+]) {
+  if (!proofText.includes(fragment)) {
+    throw new Error(`direct reply proof UI missing ${fragment}: ${proofText}`);
+  }
+}
+
+vm.runInContext(`
+renderCodexCustomSessionPacket({
+  status: "ok",
+  machine_error_code: "OK",
+  direct_api_reply_block: true,
+  reply_block_kind: "api_agent_direct_reply",
+  reply_author_alias: "Builder",
+  reply_agent_id: "agent-2",
+  reply_lane: "api_route",
+  reply_provider_label: "OpenRouter",
+  reply_text: "CUSTOM_ALIAS_DIRECT_OK",
+  reply_proof_summary: {
+    direct_reply_proven: true,
+    api_agent_provider_called: true,
+    prompt_runner_called: false,
+    codex_exec_invoked: false,
+    tools_wbp_dip_invoked: false,
+    dip_run_invoked: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    final_answer_was_repo_tool_call: false
+  },
+  direct_reply_proven: true,
+  session: {
+    session_id: "ccs-custom-alias",
+    status: "prompt_completed_e2e",
+    model_id: "gpt-5.5",
+    current_execution_slot_id: "agent_2_display",
+    role_slot_binding_count: 2,
+    role_slots: {}
+  }
+});
+`, sandbox);
+
+if (node("codexCustomAgentReplyTitle").textContent !== "Builder / OpenRouter") {
+  throw new Error(`custom alias title mismatch: ${node("codexCustomAgentReplyTitle").textContent}`);
+}
+if (node("codexCustomAgentReplyText").textContent !== "CUSTOM_ALIAS_DIRECT_OK") {
+  throw new Error(`custom alias text mismatch: ${node("codexCustomAgentReplyText").textContent}`);
 }
 """
         result = subprocess.run(

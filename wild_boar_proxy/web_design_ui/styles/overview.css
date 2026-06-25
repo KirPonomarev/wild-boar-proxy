@@ -1766,6 +1766,57 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.agent-reply-block[hidden] {
+  display: none;
+}
+
+.agent-reply-block {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 12px 0 4px;
+}
+
+.agent-reply-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.agent-reply-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-reply-text {
+  background: #fffdf9;
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  color: var(--text);
+  line-height: 20px;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-reply-proof {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
 .last-error.ok {
   color: var(--secondary);
   font-weight: 500;
