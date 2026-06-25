@@ -400,6 +400,12 @@ def build_api_agent_direct_reply_packet(
         "allowed_api_route_ids_enforced": _as_bool(
             dispatch_packet.get("allowed_api_route_ids_enforced")
         ),
+        "forbidden_stale_route_ids_count": int(
+            dispatch_packet.get("forbidden_stale_route_ids_count") or 0
+        ),
+        "forbidden_stale_route_ids_enforced": bool(
+            int(dispatch_packet.get("forbidden_stale_route_ids_count") or 0) > 0
+        ),
         "route_bound_dispatch_attempted": _as_bool(
             dispatch_packet.get("route_bound_dispatch_attempted")
         ),

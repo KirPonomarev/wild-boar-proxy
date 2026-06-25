@@ -43,6 +43,7 @@ from wild_boar_proxy.codex_model_registry import (
     build_dual_lane_model_selection_ui_packet,
     model_lane_classification_from_registry,
 )
+from wild_boar_proxy.custom_agent_bindings import FORBIDDEN_STALE_ROUTE_IDS
 
 PRIMARY_MODEL_SLOT = "primary_model_slot"
 CODING_AGENT_MODEL_SLOT = "coding_agent_model_slot"
@@ -677,7 +678,7 @@ def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, An
         "agent_id_to_slot_id": agent_id_to_slot_id,
         "allowed_api_route_ids": _unique_nonempty(allowed_api_route_ids),
         "route_providers": route_providers,
-        "forbidden_stale_route_ids": [],
+        "forbidden_stale_route_ids": sorted(FORBIDDEN_STALE_ROUTE_IDS),
         "stale_route_guard_present": True,
         "stale_route_guard_source": "codex_custom_session_role_slots",
         "primary_aliases": primary_aliases,

@@ -10013,6 +10013,97 @@ if (
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_session_dual_lane_render_does_not_green_owner_auth_blocker(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartChatSlotState: makeChip(),
+  quickStartApiSlotState: makeChip(),
+  quickStartOwnerAuthState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartBridgeState: makeChip(),
+  quickStartWindowState: makeChip(),
+  quickStartConfigState: makeChip(),
+  quickStartHistoryState: makeChip(),
+  quickStartNextActionState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  window: { location: { search: "" }, history: { replaceState() {} } },
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartSessionDualLaneExecution({
+  status: "blocked",
+  machine_error_code: "OWNER_AUTHORIZATION_REQUIRED",
+  final_status: "STOP_AND_DIAGNOSE_CHATGPT_PLUS_API_SLOT_DISPATCH_NOT_PROVEN",
+  primary_model_id: "gpt-5.5",
+  coding_agent_model_id: "wbp-deepseek-v4-pro-max",
+  same_session_dispatch_proven: false,
+  primary_dispatch_proven: false,
+  coding_dispatch_proven: false,
+  fallback_used: false,
+  manual_activation_proven: false,
+  next_action: "provide_exact_owner_authorization_phrase"
+});
+`, sandbox);
+
+if (nodes.quickStartOwnerAuthState.className.includes("green")) {
+  throw new Error(`owner auth blocker must not render green: ${nodes.quickStartOwnerAuthState.className}`);
+}
+if (nodes.quickStartOwnerAuthState.lastElementChild.textContent !== "owner auth") {
+  throw new Error(`owner auth blocker label missing: ${nodes.quickStartOwnerAuthState.lastElementChild.textContent}`);
+}
+if (nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`blocked session launch must not render green: ${nodes.quickStartLaunchState.className}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (rendered.machine_error_code !== "OWNER_AUTHORIZATION_REQUIRED" || rendered.same_session_dispatch_proven !== false) {
+  throw new Error(`blocked truth not rendered: ${nodes.quickStartRouteResponse.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_custom_launch_render_does_not_green_reused_window_without_launch_packet_truth(self) -> None:
         script = r"""
 const fs = require("fs");

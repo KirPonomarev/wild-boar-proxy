@@ -5656,7 +5656,13 @@ function renderQuickStartSessionDualLaneExecution(packet) {
     packet?.coding_dispatch_proven === true ? "green" : "amber",
     packet?.coding_dispatch_proven === true ? "proven" : "not proven"
   );
-  setQuickStartChip("quickStartOwnerAuthState", "green", "confirmed");
+  const ownerAuthConfirmed = packet?.status === "ok" && packet?.machine_error_code === "OK" && proven;
+  const ownerAuthBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    ownerAuthConfirmed ? "green" : "amber",
+    ownerAuthConfirmed ? "confirmed" : (ownerAuthBlocked ? "owner auth" : "not confirmed")
+  );
   setQuickStartChip("quickStartLaunchState", proven ? "green" : "amber", proven ? "session ok" : "blocked");
   setQuickStartChip("quickStartBridgeState", "neutral", "not needed");
   setQuickStartChip("quickStartWindowState", "neutral", "not launched");

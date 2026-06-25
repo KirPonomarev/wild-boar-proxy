@@ -158,6 +158,10 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         "route_bound_dispatch_proven": _as_bool(
             packet.get("route_bound_dispatch_proven")
         ),
+        "selected_route_id_allowed": _as_bool(packet.get("selected_route_id_allowed")),
+        "allowed_api_route_ids_enforced": _as_bool(
+            packet.get("allowed_api_route_ids_enforced")
+        ),
         "api_agent_provider_called": _as_bool(packet.get("api_agent_provider_called")),
         "api_agent_response_observed": _as_bool(
             packet.get("api_agent_response_observed")
@@ -441,6 +445,16 @@ def build_api_agent_auto_router_packet(
             limit=80,
         ),
         "selected_api_route_id_recorded": False,
+        "selected_route_id_allowed": direct_summary["selected_route_id_allowed"],
+        "allowed_api_route_ids_enforced": direct_summary[
+            "allowed_api_route_ids_enforced"
+        ],
+        "forbidden_stale_route_ids_enforced": _as_bool(
+            parser_packet.get("forbidden_stale_route_ids_enforced")
+        ),
+        "forbidden_stale_route_ids_count": int(
+            parser_packet.get("forbidden_stale_route_ids_count") or 0
+        ),
         "natural_alias_command_detected": _as_bool(
             parser_packet.get("natural_alias_command_detected")
         ),

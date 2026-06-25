@@ -609,6 +609,12 @@ def _check_api_agent_direct_common(
     )
     for field in (
         "direct_api_reply_block",
+        "alias_context_read",
+        "runtime_context_file_present",
+        "runtime_context_file_read",
+        "selected_route_id_allowed",
+        "allowed_api_route_ids_enforced",
+        "forbidden_stale_route_ids_enforced",
         "route_bound_dispatch_proven",
         "api_agent_provider_called",
         "direct_provider_response_observed",
@@ -648,6 +654,7 @@ def _check_api_agent_direct_common(
         failures.append(f"{prefix}_reply_text_missing")
     if not _safe_text(packet.get("reply_author_alias")):
         failures.append(f"{prefix}_reply_author_alias_missing")
+    _check_positive_int(packet, "forbidden_stale_route_ids_count", failures, prefix)
     proof = packet.get("reply_proof_summary")
     if not isinstance(proof, Mapping):
         failures.append(f"{prefix}_reply_proof_summary_missing")

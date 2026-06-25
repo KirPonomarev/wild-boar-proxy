@@ -353,9 +353,14 @@ def _direct_reply_proof(
         "selected_alias": alias,
         "selected_slot": "dip",
         "selected_alias_lane": "api_route",
+        "runtime_context_file_present": True,
+        "runtime_context_file_read": True,
+        "alias_context_read": True,
         "selected_api_route_id_recorded": False,
         "selected_route_id_allowed": True,
         "allowed_api_route_ids_enforced": True,
+        "forbidden_stale_route_ids_enforced": True,
+        "forbidden_stale_route_ids_count": 1,
         "route_bound_dispatch_proven": True,
         "controlled_dispatch_proven": True,
         "api_agent_direct_reply_proven": True,
@@ -688,6 +693,89 @@ class E2EModeMatrixTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertIn(
             "api_agent_custom_alias_custom_alias_not_proven",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_direct_api_reply_without_runtime_context_route_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                api_agent_direct_reply=_direct_reply_proof(
+                    alias_context_read=False,
+                    runtime_context_file_read=False,
+                    selected_route_id_allowed=False,
+                    allowed_api_route_ids_enforced=False,
+                    forbidden_stale_route_ids_enforced=False,
+                    forbidden_stale_route_ids_count=0,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertIn(
+            "api_agent_direct_reply_alias_context_read_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_direct_reply_runtime_context_file_read_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_direct_reply_selected_route_id_allowed_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_direct_reply_allowed_api_route_ids_enforced_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_direct_reply_forbidden_stale_route_ids_enforced_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_direct_reply_forbidden_stale_route_ids_count_not_positive",
+            packet["blocking_reasons"],
+        )
+
+    def test_blocks_custom_alias_without_runtime_context_route_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                api_agent_custom_alias=_direct_reply_proof(
+                    alias="Кодер",
+                    kind="wbp_api_agent_auto_router",
+                    auto_router=True,
+                    alias_context_read=False,
+                    runtime_context_file_present=False,
+                    selected_route_id_allowed=False,
+                    allowed_api_route_ids_enforced=False,
+                    forbidden_stale_route_ids_enforced=False,
+                    forbidden_stale_route_ids_count=0,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertIn(
+            "api_agent_custom_alias_alias_context_read_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_custom_alias_runtime_context_file_present_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_custom_alias_selected_route_id_allowed_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_custom_alias_allowed_api_route_ids_enforced_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_custom_alias_forbidden_stale_route_ids_enforced_not_true",
+            packet["blocking_reasons"],
+        )
+        self.assertIn(
+            "api_agent_custom_alias_forbidden_stale_route_ids_count_not_positive",
             packet["blocking_reasons"],
         )
 

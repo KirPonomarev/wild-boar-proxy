@@ -29000,6 +29000,15 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             return session
 
         payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(
+            "wbp-deepseek-chat"
+        )
+        payloads[("external-models", "models", "--json")]["data"]["models"][0][
+            "route_id"
+        ] = "wbp-deepseek-chat"
+        payloads[("external-models", "models", "--json")]["data"]["models"][0][
+            "display_name"
+        ] = "DeepSeek Chat"
         payloads[("status", "--json")] = status_packet(
             claim_gate={"status": "ok"},
             pool_summary={"selected_backend_ids": ["acct-active"]},
@@ -29028,7 +29037,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/sessions",
                         {
                             "primary_model_id": "gpt-5.3-codex",
-                            "coding_agent_model_id": "wbp-deepseek-v3",
+                            "coding_agent_model_id": "wbp-deepseek-chat",
                         },
                     )
                 )
@@ -29227,6 +29236,114 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             }
 
         payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(
+            "wbp-deepseek-chat"
+        )
+        payloads[("external-models", "models", "--json")]["data"]["models"][0][
+            "route_id"
+        ] = "wbp-deepseek-chat"
+        payloads[("external-models", "models", "--json")]["data"]["models"][0][
+            "display_name"
+        ] = "DeepSeek Chat"
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with tempfile.TemporaryDirectory() as raw_project, mock.patch.object(
+            live_server, "OperatorSurfaceSession", side_effect=factory
+        ), mock.patch(
+            "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+            side_effect=direct_runner,
+        ):
+            project_root = Path(raw_project)
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                    safe_worktree_repo_root=project_root,
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "primary_model_id": "gpt-5.3-codex",
+                            "coding_agent_model_id": "wbp-deepseek-chat",
+                        },
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "DIP: ответь ровно HTTP_DIP_DIRECT_OK."},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+        self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+        self.assertTrue(packet["direct_reply_selected"])
+        self.assertTrue(packet["direct_reply_proven"])
+        self.assertEqual(packet["direct_reply_text"], "HTTP_DIP_DIRECT_OK")
+        self.assertTrue(packet["direct_api_reply_block"])
+        self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
+        self.assertEqual(packet["reply_author_alias"], "DIP")
+        self.assertEqual(packet["reply_agent_id"], "dip")
+        self.assertEqual(packet["reply_lane"], "api_route")
+        self.assertEqual(packet["reply_provider_label"], "openrouter")
+        self.assertEqual(packet["reply_text"], "HTTP_DIP_DIRECT_OK")
+        self.assertTrue(packet["selected_route_id_allowed"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertGreater(packet["forbidden_stale_route_ids_count"], 0)
+        self.assertFalse(packet["reply_proof_summary"]["prompt_runner_called"])
+        self.assertFalse(packet["reply_proof_summary"]["tools_wbp_dip_invoked"])
+        self.assertFalse(packet["reply_proof_summary"]["dip_run_invoked"])
+        self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertFalse(packet["codex_exec_invoked"])
+        self.assertFalse(packet["tools_wbp_dip_invoked"])
+        self.assertFalse(packet["dip_run_invoked"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertFalse(packet["chatgpt_lane_called"])
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        self.assertFalse(packet["active_project_root_is_wbp_repo"])
+        self.assertTrue(packet["target_repo_available"])
+        self.assertFalse(packet["target_repo_path_recorded"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertEqual(len(direct_calls), 1)
+        self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
+        self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(direct_calls[0]["repo_root"], project_root.resolve(strict=False))
+
+    def test_codex_custom_prompt_endpoint_blocks_stale_dip_route_before_provider_call(self) -> None:
+        created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
+        direct_runner = mock.Mock()
+
+        def factory() -> DualLaneFakeOperatorSurfaceSession:
+            session = DualLaneFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
         payloads[("status", "--json")] = status_packet(
             claim_gate={"status": "ok"},
             pool_summary={"selected_backend_ids": ["acct-active"]},
@@ -29278,39 +29395,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 thread.join(timeout=2)
                 server.server_close()
 
-        self.assertEqual(packet["status"], "ok")
-        self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
-        self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
-        self.assertTrue(packet["direct_reply_selected"])
-        self.assertTrue(packet["direct_reply_proven"])
-        self.assertEqual(packet["direct_reply_text"], "HTTP_DIP_DIRECT_OK")
-        self.assertTrue(packet["direct_api_reply_block"])
-        self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
-        self.assertEqual(packet["reply_author_alias"], "DIP")
-        self.assertEqual(packet["reply_agent_id"], "dip")
-        self.assertEqual(packet["reply_lane"], "api_route")
-        self.assertEqual(packet["reply_provider_label"], "openrouter")
-        self.assertEqual(packet["reply_text"], "HTTP_DIP_DIRECT_OK")
-        self.assertFalse(packet["reply_proof_summary"]["prompt_runner_called"])
-        self.assertFalse(packet["reply_proof_summary"]["tools_wbp_dip_invoked"])
-        self.assertFalse(packet["reply_proof_summary"]["dip_run_invoked"])
-        self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
-        self.assertFalse(packet["prompt_runner_called"])
-        self.assertFalse(packet["codex_exec_invoked"])
-        self.assertFalse(packet["tools_wbp_dip_invoked"])
-        self.assertFalse(packet["dip_run_invoked"])
-        self.assertTrue(packet["api_lane_called"])
-        self.assertFalse(packet["chatgpt_lane_called"])
-        self.assertTrue(packet["active_project_root_available"])
-        self.assertFalse(packet["active_project_root_path_recorded"])
-        self.assertFalse(packet["active_project_root_is_wbp_repo"])
-        self.assertTrue(packet["target_repo_available"])
-        self.assertFalse(packet["target_repo_path_recorded"])
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], "FAIL_ROUTE_NOT_ALLOWED")
+        self.assertTrue(packet["auto_router_fail_closed"])
+        self.assertFalse(packet["direct_reply_selected"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertGreater(packet["forbidden_stale_route_ids_count"], 0)
+        self.assertFalse(packet["selected_route_id_allowed"])
+        direct_runner.assert_not_called()
         self.assertEqual(created_sessions[0].run_payloads, [])
-        self.assertEqual(len(direct_calls), 1)
-        self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
-        self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
-        self.assertEqual(direct_calls[0]["repo_root"], project_root.resolve(strict=False))
 
     def test_codex_custom_mixed_slot_dispatch_probe_endpoint_proves_two_slots(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
