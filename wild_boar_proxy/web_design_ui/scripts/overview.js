@@ -4292,11 +4292,22 @@ function quickStartProofRankVisual(status) {
   return "neutral";
 }
 
+function quickStartPacketWithLimits(packet) {
+  const statuses = [
+    packet?.final_status,
+    packet?.legacy_quick_start_final_status
+  ];
+  return statuses.some((value) => String(value || "").includes("WITH_LIMITS"));
+}
+
 function quickStartProofRowVisual(row) {
   if (row?.counts_as_full_success === true) {
     return "green";
   }
   if (row?.counts_as_partial_api_success === true || row?.status === "partial") {
+    return "amber";
+  }
+  if (row?.proof_axis === "execution_mode" && row?.status === "ok") {
     return "amber";
   }
   if (row?.status === "ok") {
@@ -5708,10 +5719,13 @@ function renderQuickStartGptApiAliasCommandLoopProof(packet) {
     && packet?.local_imitation_used !== true
     && packet?.secret_value_exposed !== true
   );
+  const provenWithLimits = proven && quickStartPacketWithLimits(packet);
   setQuickStartChip(
     "quickStartRouteChip",
-    proven ? "green" : "amber",
-    proven ? "mixed ok" : (packet?.machine_error_code || "loop blocked")
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "bounded proof only" : "mixed ok")
+      : (packet?.machine_error_code || "loop blocked")
   );
   setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
   setQuickStartChip(
@@ -5731,8 +5745,8 @@ function renderQuickStartGptApiAliasCommandLoopProof(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    proven ? "green" : "amber",
-    proven ? "loop ok" : "blocked"
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven ? (provenWithLimits ? "bounded proof only" : "loop ok") : "blocked"
   );
   setQuickStartChip(
     "quickStartBridgeState",
@@ -5747,7 +5761,9 @@ function renderQuickStartGptApiAliasCommandLoopProof(packet) {
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven && !provenWithLimits && (!packet?.next_action || packet?.next_action === "none")
+      ? "green"
+      : "amber",
     proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
@@ -5825,10 +5841,13 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
     && packet?.raw_backend_details_exposed !== true
     && packet?.secret_value_exposed !== true
   );
+  const provenWithLimits = proven && quickStartPacketWithLimits(packet);
   setQuickStartChip(
     "quickStartRouteChip",
-    proven ? "green" : "amber",
-    proven ? "natural DIP ok" : blockedLabel
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "server-owned proof only" : "natural DIP ok")
+      : blockedLabel
   );
   setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
   setQuickStartChip(
@@ -5848,8 +5867,10 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    proven ? "green" : "amber",
-    proven ? "natural DIP ok" : blockedLabel
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "server-owned proof only" : "natural DIP ok")
+      : blockedLabel
   );
   setQuickStartChip(
     "quickStartBridgeState",
@@ -5870,7 +5891,9 @@ function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
   );
   setQuickStartChip(
     "quickStartNextActionState",
-    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven && !provenWithLimits && (!packet?.next_action || packet?.next_action === "none")
+      ? "green"
+      : "amber",
     proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
@@ -7197,10 +7220,11 @@ function renderQuickStartLaunchPreflight(packet) {
 function renderQuickStartDeepSeekCoderCheck(packet) {
   const ok = packet?.final_status === "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS"
     || packet?.legacy_quick_start_final_status === "QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS";
+  const provenWithLimits = ok && quickStartPacketWithLimits(packet);
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "DeepSeek ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? (provenWithLimits ? "amber" : "green") : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? (provenWithLimits ? "bounded proof only" : "DeepSeek ok") : (packet?.machine_error_code || packet?.status || "ошибка")
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
@@ -7209,8 +7233,8 @@ function renderQuickStartDeepSeekCoderCheck(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    ok ? "green" : "amber",
-    ok ? "tool-loop ok" : "не доказан"
+    ok ? (provenWithLimits ? "amber" : "green") : "amber",
+    ok ? (provenWithLimits ? "bounded proof only" : "tool-loop ok") : "не доказан"
   );
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
@@ -7271,12 +7295,13 @@ function renderQuickStartDeepSeekCoderCheck(packet) {
 
 function renderQuickStartDeepSeekCodeEditProof(packet) {
   const ok = packet?.final_status === "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS";
+  const provenWithLimits = ok && quickStartPacketWithLimits(packet);
   const windowLaunchUsable = packet?.window_launch_proven_with_limits === true
     && packet?.native_app_usable === true;
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "правка ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? (provenWithLimits ? "amber" : "green") : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? (provenWithLimits ? "bounded proof only" : "правка ok") : (packet?.machine_error_code || packet?.status || "ошибка")
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
@@ -7285,8 +7310,10 @@ function renderQuickStartDeepSeekCodeEditProof(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    windowLaunchUsable ? "green" : "amber",
-    windowLaunchUsable ? "окно usable" : "окно не доказано"
+    windowLaunchUsable ? (provenWithLimits ? "amber" : "green") : "amber",
+    windowLaunchUsable
+      ? (provenWithLimits ? "usable with limits" : "окно usable")
+      : "окно не доказано"
   );
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {

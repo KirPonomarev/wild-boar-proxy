@@ -5195,7 +5195,16 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   ) {
     throw new Error(`command-loop truth missing: ${node("quickStartRouteResponse").textContent}`);
   }
-  if (node("quickStartLaunchState").lastElementChild.textContent !== "loop ok") {
+  if (node("quickStartRouteChip").className.includes("green")) {
+    throw new Error(`with-limits command-loop route must stay amber: ${node("quickStartRouteChip").className}`);
+  }
+  if (node("quickStartRouteChip").lastElementChild.textContent !== "bounded proof only") {
+    throw new Error(`command-loop route label mismatch: ${node("quickStartRouteChip").lastElementChild.textContent}`);
+  }
+  if (node("quickStartLaunchState").className.includes("green")) {
+    throw new Error(`with-limits command-loop launch must stay amber: ${node("quickStartLaunchState").className}`);
+  }
+  if (node("quickStartLaunchState").lastElementChild.textContent !== "bounded proof only") {
     throw new Error(`command-loop launch state not rendered: ${node("quickStartLaunchState").lastElementChild.textContent}`);
   }
   if (node("quickStartWindowState").lastElementChild.textContent !== "not launched") {
@@ -6555,7 +6564,10 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
   if (packets[0].agent_bindings[0].display_name !== "Planner" || packets[0].agent_bindings[1].display_name !== "Builder") {
     throw new Error(`agent binding payload did not carry aliases: ${JSON.stringify(packets[0])}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "loop ok") {
+  if (nodes.quickStartLaunchState.className.includes("green")) {
+    throw new Error(`mixed command-loop launch must stay amber: ${nodes.quickStartLaunchState.className}`);
+  }
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "bounded proof only") {
     throw new Error(`mixed command-loop label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartBridgeState.lastElementChild.textContent !== "жив") {
@@ -6856,10 +6868,16 @@ sandbox.runQuickStartNativeFreeTextCommandLoopProof().then(() => {
   if (Object.prototype.hasOwnProperty.call(packets[1], "prompt")) {
     throw new Error(`native free-text body leaked browser prompt: ${JSON.stringify(packets[1])}`);
   }
-  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "natural DIP ok") {
+  if (nodes.quickStartRouteChip.className.includes("green")) {
+    throw new Error(`server-owned DIP route must stay amber: ${nodes.quickStartRouteChip.className}`);
+  }
+  if (nodes.quickStartRouteChip.lastElementChild.textContent !== "server-owned proof only") {
     throw new Error(`native route label missing: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
   }
-  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "natural DIP ok") {
+  if (nodes.quickStartLaunchState.className.includes("green")) {
+    throw new Error(`server-owned DIP launch must stay amber: ${nodes.quickStartLaunchState.className}`);
+  }
+  if (nodes.quickStartLaunchState.lastElementChild.textContent !== "server-owned proof only") {
     throw new Error(`native launch label missing: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
   }
   if (nodes.quickStartWindowState.lastElementChild.textContent !== "input ok") {
@@ -7690,6 +7708,20 @@ if (!rendered.proof_reasoning_rows.every((row) => row.counts_as_provider_level_p
 if (!rendered.proof_reasoning_rows.every((row) => row.counts_as_independent_quality_benchmark === false)) {
   throw new Error(`benchmark non-claim flags missing: ${node("quickStartRouteResponse").textContent}`);
 }
+vm.runInContext(`
+const selectionVisual = quickStartProofRowVisual({
+  proof_axis: "execution_mode",
+  execution_mode: "chatgpt_only",
+  display_name: "ChatGPT",
+  status: "ok",
+  proof_level: "MODEL_LISTED_ONLY",
+  counts_as_full_success: false,
+  counts_as_partial_api_success: false
+});
+if (selectionVisual !== "amber") {
+  throw new Error("selection-only mode row must stay amber: " + selectionVisual);
+}
+`, sandbox);
 vm.runInContext(`
 renderQuickStartModelReasoningAvailabilityMatrix({
   status: "ok",
@@ -17470,6 +17502,96 @@ if (rendered.status !== "blocked" || rendered.native_window_observed !== true ||
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_deepseek_coder_check_success_stays_bounded(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return nodes[id] || null; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartDeepSeekCoderCheck({
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS",
+  legacy_quick_start_final_status: "QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS",
+  deepseek_live_executor_packet_proven_with_limits: true,
+  execution_mode: "api_only",
+  api_model_id: "wbp-deepseek-v4-pro-max",
+  server_issued_catalog_used: true
+});
+`, sandbox);
+
+if (nodes.quickStartRouteChip.className.includes("green")) {
+  throw new Error(`DeepSeek with-limits route must stay amber: ${nodes.quickStartRouteChip.className}`);
+}
+if (nodes.quickStartRouteChip.lastElementChild.textContent !== "bounded proof only") {
+  throw new Error(`unexpected DeepSeek route label: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+}
+if (nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`DeepSeek with-limits launch must stay amber: ${nodes.quickStartLaunchState.className}`);
+}
+if (nodes.quickStartLaunchState.lastElementChild.textContent !== "bounded proof only") {
+  throw new Error(`unexpected DeepSeek launch label: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (
+  rendered.final_status !== "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS" ||
+  rendered.deepseek_live_executor_packet_proven_with_limits !== true
+) {
+  throw new Error(`DeepSeek proof packet lost with-limits truth: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_deepseek_code_edit_proof_does_not_green_window_without_usability(self) -> None:
         script = r"""
 const fs = require("fs");
@@ -17543,6 +17665,97 @@ if (nodes.quickStartLaunchState.lastElementChild.textContent !== "окно не 
 const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
 if (rendered.window_launch_proven_with_limits !== true || rendered.native_app_usable !== false) {
   throw new Error(`rendered packet lost the split truth: ${JSON.stringify(rendered)}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_deepseek_code_edit_proof_success_stays_bounded(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function Node() {
+  this.textContent = "";
+  this.className = "";
+  this.hidden = false;
+  this.dataset = {};
+  this.children = [];
+  this.lastElementChild = null;
+}
+
+function makeChip() {
+  const chip = new Node();
+  chip.lastElementChild = new Node();
+  chip.children = [chip.lastElementChild];
+  return chip;
+}
+
+const nodes = {
+  quickStartRouteChip: makeChip(),
+  quickStartExecutionModeState: makeChip(),
+  quickStartLaunchState: makeChip(),
+  quickStartRouteResponse: new Node()
+};
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return nodes[id] || null; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+renderQuickStartDeepSeekCodeEditProof({
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-v4-pro-max",
+  api_model_id: "wbp-deepseek-v4-pro-max",
+  native_app_usable: true,
+  window_launch_proven_with_limits: true
+});
+`, sandbox);
+
+if (nodes.quickStartRouteChip.className.includes("green")) {
+  throw new Error(`DeepSeek code-edit with-limits route must stay amber: ${nodes.quickStartRouteChip.className}`);
+}
+if (nodes.quickStartRouteChip.lastElementChild.textContent !== "bounded proof only") {
+  throw new Error(`unexpected code-edit route label: ${nodes.quickStartRouteChip.lastElementChild.textContent}`);
+}
+if (nodes.quickStartLaunchState.className.includes("green")) {
+  throw new Error(`DeepSeek code-edit with-limits launch must stay amber: ${nodes.quickStartLaunchState.className}`);
+}
+if (nodes.quickStartLaunchState.lastElementChild.textContent !== "usable with limits") {
+  throw new Error(`unexpected code-edit launch label: ${nodes.quickStartLaunchState.lastElementChild.textContent}`);
+}
+const rendered = JSON.parse(nodes.quickStartRouteResponse.textContent);
+if (
+  rendered.final_status !== "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS" ||
+  rendered.window_launch_proven_with_limits !== true ||
+  rendered.native_app_usable !== true
+) {
+  throw new Error(`code-edit proof packet lost with-limits truth: ${JSON.stringify(rendered)}`);
 }
 """
         result = subprocess.run(
