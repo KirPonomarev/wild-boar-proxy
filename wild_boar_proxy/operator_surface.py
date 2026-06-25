@@ -64,6 +64,8 @@ WINDOW_SMOKE_PHRASES = (
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
+DEFAULT_API_ROUTE_ADDRESS_ALIASES = ("DIP", "Agent 2", "2")
+_LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s+", re.UNICODE)
 
 
 def default_runtime_config_path() -> Path:
@@ -727,7 +729,7 @@ def _safe_route_digest(route: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bool]:
+def _responses_payload_prompt_text(payload: dict[str, Any]) -> str:
     parts: list[str] = []
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
@@ -736,13 +738,22 @@ def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bo
         content = message.get("content")
         if isinstance(content, str) and content.strip():
             parts.append(content.strip())
-    prompt_text = "\n".join(parts)
+    return "\n".join(parts)
+
+
+def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bool]:
+    prompt_text = _responses_payload_prompt_text(payload)
     prompt_hash = (
         hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         if prompt_text
         else ""
     )
     return prompt_hash, any(phrase in prompt_text for phrase in WINDOW_SMOKE_PHRASES)
+
+
+def _leading_address_alias(prompt_text: str) -> str:
+    match = _LEADING_ADDRESS_RE.match(prompt_text or "")
+    return str(match.group(1) or "").strip() if match else ""
 
 
 def _response_payload_text_fragments(value: Any) -> list[str]:
@@ -2083,6 +2094,7 @@ class HybridOpenAICompatAdapter:
         hidden_downstream_model_ids: list[str] | None = None,
         forced_route_model_id: str = "",
         dual_lane_route_model_id: str = "",
+        api_route_aliases: list[str] | tuple[str, ...] | None = None,
         listen_port: int | None = None,
         timeout_seconds: float = 120.0,
         allow_missing_auth_from_loopback: bool = False,
@@ -2107,6 +2119,11 @@ class HybridOpenAICompatAdapter:
         }
         self._forced_route_model_id = str(forced_route_model_id or "").strip()
         self._dual_lane_route_model_id = str(dual_lane_route_model_id or "").strip()
+        self._api_route_aliases = {
+            str(alias).strip().casefold()
+            for alias in (api_route_aliases or DEFAULT_API_ROUTE_ADDRESS_ALIASES)
+            if str(alias).strip()
+        }
         for route in routes:
             if not isinstance(route, dict):
                 continue
@@ -2145,6 +2162,17 @@ class HybridOpenAICompatAdapter:
     @property
     def dual_lane_route_model_id(self) -> str:
         return self._dual_lane_route_model_id
+
+    def _api_alias_direct_route_model_id(self, request_payload: dict[str, Any]) -> str:
+        if not self._dual_lane_route_model_id:
+            return ""
+        if self._dual_lane_route_model_id not in self._route_adapters:
+            return ""
+        prompt_text = _responses_payload_prompt_text(request_payload)
+        alias = _leading_address_alias(prompt_text).casefold()
+        if alias and alias in self._api_route_aliases:
+            return self._dual_lane_route_model_id
+        return ""
 
     def set_trace_context(self, context: dict[str, Any]) -> None:
         safe_context = {
@@ -2363,6 +2391,19 @@ class HybridOpenAICompatAdapter:
             route_adapter = self._route_adapters.get(requested_model)
             original_requested_model = requested_model
             forced_route_used = False
+            api_alias_direct_route_model_id = (
+                self._api_alias_direct_route_model_id(request_payload)
+                if route_adapter is None
+                else ""
+            )
+            api_alias_direct_route_used = False
+            if api_alias_direct_route_model_id:
+                route_adapter = self._route_adapters.get(api_alias_direct_route_model_id)
+                if route_adapter is not None:
+                    api_alias_direct_route_used = True
+                    request_payload = dict(request_payload)
+                    request_payload["model"] = api_alias_direct_route_model_id
+                    body = json.dumps(request_payload, ensure_ascii=True).encode("utf-8")
             if route_adapter is None and self._forced_route_model_id:
                 route_adapter = self._route_adapters.get(self._forced_route_model_id)
                 if route_adapter is not None:
@@ -2371,7 +2412,11 @@ class HybridOpenAICompatAdapter:
                     request_payload["model"] = self._forced_route_model_id
                     body = json.dumps(request_payload, ensure_ascii=True).encode("utf-8")
             if route_adapter is not None:
-                effective_model = self._forced_route_model_id if forced_route_used else requested_model
+                effective_model = (
+                    api_alias_direct_route_model_id
+                    if api_alias_direct_route_used
+                    else (self._forced_route_model_id if forced_route_used else requested_model)
+                )
                 route_record = self._route_records.get(effective_model, {})
                 status, response_headers, response_body = route_adapter.handle(
                     method=method,
@@ -2390,6 +2435,13 @@ class HybridOpenAICompatAdapter:
                     smoke_match=smoke_match,
                     stream_requested=wants_stream,
                     response_body=response_body,
+                    extra_fields={
+                        "api_alias_direct_route": True,
+                        "dual_lane_api_alias_direct_route": True,
+                        "dual_lane_primary_requested_model": original_requested_model,
+                    }
+                    if api_alias_direct_route_used
+                    else None,
                 )
                 return status, response_headers, response_body
             dual_lane_route_adapter = (
@@ -2532,6 +2584,7 @@ class HybridOpenAICompatAdapter:
                 and route_digest == str(self._trace_context.get("launch_route_digest") or "")
             ),
             "provider_called": True,
+            "downstream_called": False,
             "provider_id": str(route.get("provider") or ""),
             "upstream_model": str(route.get("upstream_model") or ""),
             "api_reasoning_option_id": str(

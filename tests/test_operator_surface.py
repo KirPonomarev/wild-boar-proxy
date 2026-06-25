@@ -1626,6 +1626,111 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(primary_record["raw_prompt_recorded"])
         self.assertFalse(coder_record["secret_value_recorded"])
 
+    def test_hybrid_openai_compat_adapter_routes_api_alias_before_downstream_auth(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            downstream_called = False
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                type(self).downstream_called = True
+                response_body = json.dumps(
+                    {"error": {"message": "auth_unavailable", "type": "auth_error"}}
+                ).encode("utf-8")
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                mock.patch.object(
+                    ExternalRouteResponsesAdapter,
+                    "handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps({"output_text": "DIP_OK"}).encode("utf-8"),
+                    ),
+                ) as route_handle,
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                    dual_lane_route_model_id="wbp-deepseek-v4-pro-max",
+                ) as adapter,
+            ):
+                adapter.set_trace_context(
+                    {
+                        "launch_id": "launch-alias",
+                        "trace_id": "trace-alias",
+                        "selected_model": "gpt-5.5",
+                        "api_reasoning_option_id": "provider_declared_max",
+                    }
+                )
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/responses",
+                    data=json.dumps(
+                        {
+                            "model": "gpt-5.5",
+                            "input": "DIP: ответь ровно WBP_MANUAL_DIRECT_DIP_OK_20260626. Без правок файлов.",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Authorization": _auth_header("sk-local-test"),
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                trace = adapter.trace_snapshot()
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(payload["output_text"], "DIP_OK")
+        self.assertFalse(DownstreamHandler.downstream_called)
+        route_handle.assert_called_once()
+        captured = json.loads(route_handle.call_args.kwargs["body"].decode("utf-8"))
+        self.assertEqual(captured["model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(trace["request_count"], 1)
+        record = trace["last_record"]
+        self.assertEqual(record["requested_model"], "gpt-5.5")
+        self.assertEqual(record["effective_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(record["provider_called"])
+        self.assertFalse(record["downstream_called"])
+        self.assertFalse(record["chatgpt_route_used"])
+        self.assertFalse(record["forced_route_used"])
+        self.assertTrue(record["api_alias_direct_route"])
+        self.assertTrue(record["dual_lane_api_alias_direct_route"])
+        self.assertEqual(record["dual_lane_primary_requested_model"], "gpt-5.5")
+        self.assertFalse(record["raw_prompt_recorded"])
+        self.assertFalse(record["auth_header_recorded"])
+        self.assertFalse(record["secret_value_recorded"])
+
     def test_hybrid_openai_compat_adapter_classifies_stale_responses_port(self) -> None:
         adapter = HybridOpenAICompatAdapter(
             downstream_endpoint="http://127.0.0.1:1/v1",

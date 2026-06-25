@@ -221,6 +221,7 @@ from wild_boar_proxy.web_token import (
 )
 from wild_boar_proxy.operator_surface import (
     DEFAULT_ENDPOINT,
+    DEFAULT_API_ROUTE_ADDRESS_ALIASES,
     DEFAULT_CODEX_BIN,
     HybridOpenAICompatAdapter,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
@@ -2627,6 +2628,7 @@ class _CustomNativeBridgeLease:
         hidden_native_model_ids: list[str] | None = None,
         forced_route_model_id: str = "",
         dual_lane_route_model_id: str = "",
+        api_route_aliases: list[str] | tuple[str, ...] | None = None,
     ) -> str:
         route_records = _enabled_external_route_records(routes_packet)
         if not route_records:
@@ -2667,6 +2669,11 @@ class _CustomNativeBridgeLease:
             ),
             "forced_route_model_id": str(forced_route_model_id or "").strip(),
             "dual_lane_route_model_id": str(dual_lane_route_model_id or "").strip(),
+            "api_route_aliases": sorted(
+                str(alias).strip()
+                for alias in (api_route_aliases or DEFAULT_API_ROUTE_ADDRESS_ALIASES)
+                if str(alias).strip()
+            ),
         }
         signature = hashlib.sha256(
             json.dumps(signature_source, ensure_ascii=True, sort_keys=True).encode("utf-8")
@@ -2681,6 +2688,7 @@ class _CustomNativeBridgeLease:
             hidden_downstream_model_ids=hidden_native_model_ids,
             forced_route_model_id=str(forced_route_model_id or "").strip(),
             dual_lane_route_model_id=str(dual_lane_route_model_id or "").strip(),
+            api_route_aliases=api_route_aliases,
             listen_port=self.bridge_port,
             allow_missing_auth_from_loopback=True,
         )
@@ -11030,6 +11038,55 @@ def _binding_aliases(binding: dict[str, Any], fallback: list[str]) -> list[str]:
     return aliases or list(fallback)
 
 
+def _custom_native_api_route_aliases_for_bridge(
+    *,
+    api_route_id: str,
+    route_records: list[dict[str, Any]],
+    primary_model_id: str = "gpt-5.5",
+) -> list[str]:
+    api_route_id = str(api_route_id or "").strip()
+    aliases: list[str] = list(DEFAULT_API_ROUTE_ADDRESS_ALIASES)
+    if not api_route_id:
+        return aliases
+    try:
+        bindings_packet = read_agent_bindings_packet(
+            agent_bindings_state_path(RuntimePaths.from_env().managed_dir),
+            default_bindings=default_agent_bindings(
+                primary_model_id=str(primary_model_id or "gpt-5.5").strip(),
+                api_route_id=api_route_id,
+            ),
+            primary_model_ids=[str(primary_model_id or "").strip()]
+            if str(primary_model_id or "").strip()
+            else [],
+            route_records=route_records,
+            require_api_route_binding=True,
+        )
+    except (OSError, RuntimeError, ValueError):
+        bindings_packet = {}
+    if bindings_packet.get("status") == "ok":
+        agent_bindings = [
+            dict(binding)
+            for binding in bindings_packet.get("agent_bindings", [])
+            if isinstance(binding, dict)
+        ]
+        api_binding = _first_agent_binding(
+            agent_bindings,
+            agent_id="dip",
+            lane=API_ROUTE_LANE,
+            route_id=api_route_id,
+        )
+        aliases.extend(_binding_aliases(api_binding, []))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for alias in aliases:
+        normalized = str(alias).strip()
+        key = normalized.casefold()
+        if normalized and key not in seen:
+            deduped.append(normalized)
+            seen.add(key)
+    return deduped
+
+
 def _custom_native_api_only_runtime_agent_bindings(
     agent_bindings: list[dict[str, Any]],
     *,
@@ -11560,6 +11617,12 @@ def _launch_custom_native_codex_packet(
     )
     forced_route_model_id = "" if dual_lane_route_model_id else route_model_id
     route_record = _external_route_record_for_model(external_routes_packet, route_model_id)
+    route_records = _enabled_external_route_records(external_routes_packet)
+    api_route_aliases = _custom_native_api_route_aliases_for_bridge(
+        api_route_id=route_model_id,
+        route_records=route_records,
+        primary_model_id=model_id,
+    )
     try:
         bridge_endpoint = (
             native_bridge_lease.ensure(
@@ -11568,6 +11631,7 @@ def _launch_custom_native_codex_packet(
                 hidden_native_model_ids=hidden_native_model_ids,
                 forced_route_model_id=forced_route_model_id,
                 dual_lane_route_model_id=dual_lane_route_model_id,
+                api_route_aliases=api_route_aliases,
             )
             if native_bridge_lease is not None and route_record
             else endpoint
@@ -16601,12 +16665,18 @@ def build_handler(
         )
         downstream_endpoint = str(registry.get("endpoint") or DEFAULT_ENDPOINT)
         hidden_native_model_ids = _custom_native_hidden_native_model_ids(registry)
+        api_route_aliases = _custom_native_api_route_aliases_for_bridge(
+            api_route_id=api_route_id,
+            route_records=route_records,
+            primary_model_id=str(registry.get("selected_model") or "gpt-5.5"),
+        )
         try:
             bridge_endpoint = custom_native_bridge_lease.ensure(
                 downstream_endpoint=downstream_endpoint,
                 routes_packet=external_routes_packet,
                 hidden_native_model_ids=hidden_native_model_ids,
                 dual_lane_route_model_id=api_route_id,
+                api_route_aliases=api_route_aliases,
             )
         except OSError:
             return custom_native_bridge_lease.stable_endpoint
