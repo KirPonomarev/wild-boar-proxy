@@ -271,6 +271,7 @@ def run_native_response_matrix_command(
         "raw_dom_exposed": False,
         "text_value_captured": False,
         "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
         "raw_provider_response_recorded": False,
         "provider_response_text_recorded": False,
         "provider_response_preview_recorded": False,

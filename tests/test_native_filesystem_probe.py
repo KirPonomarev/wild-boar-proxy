@@ -292,8 +292,45 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             )
 
         self.assertEqual(inventory["line_count"], 4)
+        self.assertEqual(inventory["custom_process_count"], 2)
+        self.assertEqual(inventory["default_process_count"], 0)
+        self.assertTrue(
+            any("--user-data-dir=" in line for line in inventory["custom_process_lines"])
+        )
+        self.assertTrue(
+            any(
+                "Codex WBP Clean.app/Contents/MacOS/Codex" in line
+                for line in inventory["custom_process_lines"]
+            )
+        )
+
+    def test_codex_process_inventory_accepts_installed_custom_app_user_data_alias(self) -> None:
+        profile_user_data_dir = (
+            "/Users/k/Library/Application Support/WildBoarProxy/"
+            "CodexProfiles/wbp-custom-main/electron-user-data"
+        )
+        installed_user_data_dir = native_fs_probe.DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                f" 101 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir={installed_user_data_dir}\n"
+                " 102 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/Codex\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=profile_user_data_dir,
+                default_user_data_dir="/Users/k/Library/Application Support/Codex",
+            )
+
         self.assertEqual(inventory["custom_process_count"], 1)
-        self.assertIn("--user-data-dir=", inventory["custom_process_lines"][0])
+        self.assertEqual(inventory["default_process_count"], 1)
+        self.assertIn("Codex WBP Clean", inventory["custom_process_lines"][0])
 
     def test_remove_tree_with_retry_unlinks_runtime_tmp_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -106,8 +106,6 @@ def _persist_proof_packet(
     persisted.update(
         {
             "changed_files": changed_files,
-            "effect": EFFECT_MUTATE,
-            "file_mutation_attempted": True,
             "state_written": False,
             "evidence_written": True,
             "proof_file_written": True,
@@ -233,6 +231,10 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "direct_provider_response_observed": _as_bool(
             packet.get("direct_provider_response_observed")
+        ),
+        "provider_auth_ok": _as_bool(packet.get("provider_auth_ok")),
+        "positive_provider_proof_gate_satisfied": _as_bool(
+            packet.get("positive_provider_proof_gate_satisfied")
         ),
         "runtime_context_bridge_used": _as_bool(
             packet.get("runtime_context_bridge_used")
@@ -634,6 +636,7 @@ def build_api_agent_auto_router_packet(
             api_direct_selected and direct_summary["api_agent_provider_called"]
         ),
         "chatgpt_lane_called": False,
+        "gpt_orchestrator_used": False,
         "codex_exec_invoked": False,
         "tools_wbp_dip_invoked": False,
         "dip_run_invoked": False,

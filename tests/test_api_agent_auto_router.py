@@ -178,6 +178,9 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         )
         self.assertTrue(packet["api_lane_called"])
         self.assertFalse(packet["chatgpt_lane_called"])
+        self.assertFalse(packet["gpt_orchestrator_used"])
+        self.assertTrue(packet["provider_auth_ok"])
+        self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
         self.assertFalse(packet["codex_exec_invoked"])
         self.assertFalse(packet["tools_wbp_dip_invoked"])
         self.assertFalse(packet["dip_run_invoked"])
@@ -203,6 +206,7 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(packet["target_repo_path_recorded"])
         self.assertEqual(packet["target_repo_source"], "test_selected_active_project_root")
         self.assertEqual(packet["effect"], "probe")
+        self.assertFalse(packet["file_mutation_attempted"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_api_alias_allows_missing_active_project_root_for_plain_reply(self) -> None:
@@ -739,8 +743,8 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
         self.assertEqual(payload["direct_reply_text"], "proof auto answer")
-        self.assertEqual(payload["effect"], "mutate")
-        self.assertTrue(payload["file_mutation_attempted"])
+        self.assertEqual(payload["effect"], "probe")
+        self.assertFalse(payload["file_mutation_attempted"])
         self.assertTrue(payload["evidence_written"])
         self.assertFalse(payload["state_written"])
         self.assertTrue(payload["proof_file_written"])

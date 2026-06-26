@@ -198,6 +198,7 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
         self.assertEqual(packet["positive_case_count"], 1)
         self.assertEqual(packet["exit_code"], 0)
         self.assertFalse(packet["product_ready"])
+        self.assertFalse(packet["secret_value_exposed"])
 
     def test_candidate_map_and_completed_turn_do_not_greenwash_matrix(self) -> None:
         variants = [

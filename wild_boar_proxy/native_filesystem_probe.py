@@ -45,6 +45,9 @@ DEFAULT_IDLE_WINDOW_SECONDS = 3.0
 DEFAULT_DEFAULT_USER_DATA_DIR = str(
     Path.home() / "Library" / "Application Support" / "Codex"
 )
+DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR = str(
+    Path.home() / "Library" / "Application Support" / "Codex WBP Clean"
+)
 PROTECTED_SURFACE_PATHS = {
     "codex_dir": Path.home() / ".codex",
     "default_app_support_codex": Path.home() / "Library" / "Application Support" / "Codex",
@@ -1793,19 +1796,56 @@ def _line_has_user_data_dir(line: str, user_data_dir: str) -> bool:
     return bool(user_data) and f"--user-data-dir={user_data}" in line
 
 
+def _custom_user_data_dir_aliases(custom_user_data_dir: str) -> list[str]:
+    user_data = str(custom_user_data_dir or "").strip()
+    aliases = [user_data] if user_data else []
+    if user_data and user_data.endswith(
+        "/CodexProfiles/wbp-custom-main/electron-user-data"
+    ):
+        aliases.append(DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR)
+    deduped: list[str] = []
+    for alias in aliases:
+        if alias and alias not in deduped:
+            deduped.append(alias)
+    return deduped
+
+
+def _line_has_any_user_data_dir(line: str, user_data_dirs: list[str]) -> bool:
+    return any(
+        _line_has_user_data_dir(line, user_data_dir)
+        for user_data_dir in user_data_dirs
+    )
+
+
+def _line_is_custom_app_copy_root(line: str) -> bool:
+    return (
+        "Codex WBP Clean.app/Contents/MacOS/Codex" in line
+        and "/Contents/Frameworks/" not in line
+        and "Codex Helper" not in line
+    )
+
+
 def collect_codex_process_inventory(
     *,
     custom_user_data_dir: str,
     default_user_data_dir: str = DEFAULT_DEFAULT_USER_DATA_DIR,
 ) -> dict[str, Any]:
+    custom_user_data_dirs = _custom_user_data_dir_aliases(custom_user_data_dir)
     lines = _collect_codex_process_lines(
-        extra_patterns=[custom_user_data_dir, default_user_data_dir]
+        extra_patterns=[*custom_user_data_dirs, default_user_data_dir]
     )
     custom_lines = [
-        line for line in lines if _line_has_user_data_dir(line, custom_user_data_dir)
+        line
+        for line in lines
+        if _line_has_any_user_data_dir(line, custom_user_data_dirs)
+        or _line_is_custom_app_copy_root(line)
     ]
     default_lines = [
-        line for line in lines if _line_has_user_data_dir(line, default_user_data_dir)
+        line
+        for line in lines
+        if _line_has_user_data_dir(line, default_user_data_dir)
+        and not _line_has_any_user_data_dir(line, custom_user_data_dirs)
+        and not _line_is_custom_app_copy_root(line)
     ]
     root_lines = [
         line

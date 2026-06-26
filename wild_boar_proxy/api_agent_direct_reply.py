@@ -94,8 +94,6 @@ def _persist_proof_packet(
     persisted.update(
         {
             "changed_files": changed_files,
-            "effect": EFFECT_MUTATE,
-            "file_mutation_attempted": True,
             "state_written": False,
             "evidence_written": True,
             "proof_file_written": True,
