@@ -701,6 +701,55 @@ def write_text_atomic(path: Path, value: str, *, mode: int | None = None) -> Non
     state_store.write_text(path, value + "\n", mode=mode)
 
 
+def _fsync_parent_best_effort(parent: Path) -> None:
+    try:
+        parent_fd = os.open(parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            os.fsync(parent_fd)
+        except OSError:
+            return
+    finally:
+        os.close(parent_fd)
+
+
+def write_bytes_atomic(path: Path, value: bytes, *, mode: int | None = None) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = ""
+    fd = -1
+    try:
+        fd, temp_path = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=".wbp-tmp-",
+            suffix=f".{target.name}",
+        )
+        with os.fdopen(fd, "wb") as file_obj:
+            fd = -1
+            file_obj.write(value)
+            file_obj.flush()
+            if mode is not None:
+                os.fchmod(file_obj.fileno(), mode)
+            os.fsync(file_obj.fileno())
+        os.replace(temp_path, target)
+        temp_path = ""
+        _fsync_parent_best_effort(target.parent)
+    except OSError:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if temp_path:
+            try:
+                Path(temp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+
 def write_executable_text_atomic(path: Path, value: str) -> None:
     write_text_atomic(path, value, mode=0o755)
 
@@ -13432,16 +13481,28 @@ def materialize_rollout_stage_advance_stable_auth(
             operator_action="user_action",
         )
     stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
-    stable_auth_dir.mkdir(parents=True, exist_ok=True)
-    target_path = stable_auth_dir / auth_basename
-    materialized_bytes, materialization = build_runtime_consumer_auth_materialization(
-        auth_ref
-    )
-    current_bytes = target_path.read_bytes() if target_path.exists() else None
-    if current_bytes != materialized_bytes:
-        target_path.write_bytes(materialized_bytes)
-        target_path.chmod(auth_ref.stat().st_mode & 0o777)
-    if target_path.read_bytes() != materialized_bytes:
+    try:
+        stable_auth_dir.mkdir(parents=True, exist_ok=True)
+        target_path = stable_auth_dir / auth_basename
+        materialized_bytes, materialization = build_runtime_consumer_auth_materialization(
+            auth_ref
+        )
+        current_bytes = target_path.read_bytes() if target_path.exists() else None
+        if current_bytes != materialized_bytes:
+            write_bytes_atomic(
+                target_path,
+                materialized_bytes,
+                mode=auth_ref.stat().st_mode & 0o777,
+            )
+        materialized_ok = target_path.read_bytes() == materialized_bytes
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            "Rollout stage advance stable inventory write failed.",
+            machine_error_code="STAGE_ADVANCE_STABLE_INVENTORY_VERIFY_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+    if not materialized_ok:
         raise RuntimeErrorInfo(
             "Rollout stage advance stable inventory verification failed after copying the promoted auth.",
             machine_error_code="STAGE_ADVANCE_STABLE_INVENTORY_VERIFY_FAILED",

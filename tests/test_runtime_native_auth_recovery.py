@@ -329,6 +329,108 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             self.assertTrue(result["runtime_consumer_auth_normalized"])
             self.assertEqual(result["runtime_consumer_auth_type"], "codex")
 
+    def test_stage_advance_materialization_write_failure_is_packetizable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = _runtime_paths(root)
+            paths.profile_dir.mkdir(parents=True, exist_ok=True)
+            paths.managed_dir.mkdir(parents=True, exist_ok=True)
+            paths.stable_config.parent.mkdir(parents=True, exist_ok=True)
+            stable_auth_dir = root / "stable-auth"
+            paths.stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{stable_auth_dir}"\n',
+                encoding="utf-8",
+            )
+            source_auth = root / "sources" / "codex-auth.json"
+            source_auth.parent.mkdir(parents=True, exist_ok=True)
+            source_auth.write_text(
+                json.dumps(
+                    {
+                        "type": "chatgpt",
+                        "email": "kir@example.com",
+                        "account_id": "acct-1",
+                        "access_token": "access-1",
+                        "refresh_token": "refresh-1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            target_path = stable_auth_dir / source_auth.name
+
+            def fail_target_write(
+                path: Path, _value: bytes, *, mode: int | None = None
+            ) -> None:
+                self.assertEqual(path, target_path)
+                self.assertEqual(mode, source_auth.stat().st_mode & 0o777)
+                raise OSError("stable auth write failed")
+
+            with unittest.mock.patch(
+                "wild_boar_proxy.runtime.write_bytes_atomic",
+                side_effect=fail_target_write,
+            ):
+                with self.assertRaises(runtime.RuntimeErrorInfo) as raised:
+                    runtime.materialize_rollout_stage_advance_stable_auth(
+                        paths,
+                        {"auth_ref": str(source_auth)},
+                    )
+            target_exists = target_path.exists()
+
+        self.assertEqual(
+            raised.exception.machine_error_code,
+            "STAGE_ADVANCE_STABLE_INVENTORY_VERIFY_FAILED",
+        )
+        self.assertEqual(raised.exception.operator_action, "retry")
+        self.assertFalse(target_exists)
+
+    def test_stage_advance_materialization_skips_write_when_current(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = _runtime_paths(root)
+            paths.profile_dir.mkdir(parents=True, exist_ok=True)
+            paths.managed_dir.mkdir(parents=True, exist_ok=True)
+            paths.stable_config.parent.mkdir(parents=True, exist_ok=True)
+            stable_auth_dir = root / "stable-auth"
+            paths.stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{stable_auth_dir}"\n',
+                encoding="utf-8",
+            )
+            source_auth = root / "sources" / "codex-auth.json"
+            source_auth.parent.mkdir(parents=True, exist_ok=True)
+            source_auth.write_text(
+                json.dumps(
+                    {
+                        "type": "chatgpt",
+                        "email": "kir@example.com",
+                        "account_id": "acct-1",
+                        "access_token": "access-1",
+                        "refresh_token": "refresh-1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            first_result = runtime.materialize_rollout_stage_advance_stable_auth(
+                paths,
+                {"auth_ref": str(source_auth)},
+            )
+
+            with unittest.mock.patch(
+                "wild_boar_proxy.runtime.write_bytes_atomic",
+                side_effect=AssertionError("unexpected rewrite"),
+            ):
+                second_result = runtime.materialize_rollout_stage_advance_stable_auth(
+                    paths,
+                    {"auth_ref": str(source_auth)},
+                )
+
+            materialized = json.loads((stable_auth_dir / source_auth.name).read_text())
+
+        self.assertEqual(materialized["type"], "codex")
+        self.assertTrue(first_result["runtime_consumer_auth_normalized"])
+        self.assertTrue(second_result["runtime_consumer_auth_normalized"])
+        self.assertEqual(second_result["runtime_consumer_auth_type"], "codex")
+
     def test_owner_login_inventory_scope_allows_stable_config_parent(self) -> None:
         paths = runtime.RuntimePaths(
             profile_dir=Path("/tmp/wbp-profile"),
