@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -35,6 +36,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_OK,
     WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING,
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
+    _codex_exec_forbidden_event_reasons,
     _attach_live_result_text_artifact,
     _build_live_result_prompt,
     _command_from_call,
@@ -180,6 +182,23 @@ def _live_result(**overrides: object) -> dict[str, object]:
 
 
 class WbpDipToolTests(unittest.TestCase):
+    def test_codex_exec_forbidden_event_reasons_allows_delegate_to_dip_tool_field(
+        self,
+    ) -> None:
+        events = [
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "mcp_tool_call",
+                    "server": "wbp",
+                    "tool": "delegate_to_dip",
+                    "result": {"structuredContent": _delegate_packet()},
+                },
+            }
+        ]
+
+        self.assertEqual(_codex_exec_forbidden_event_reasons(events), [])
+
     def test_full_work_mode_gives_code_action_bridge_recovery_budget(self) -> None:
         settings = _dip_work_mode_settings("full")
 
@@ -1231,6 +1250,160 @@ class WbpDipToolTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout.getvalue(), "DIP plain output is useful.\n")
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
+    def test_main_loads_openai_api_key_from_local_token_when_env_missing(
+        self,
+        subprocess_run_mock: mock.Mock,
+        request_live_result_mock: mock.Mock,
+    ) -> None:
+        sentinel = "local-runtime-token-123456"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            codex_bin = root / "codex"
+            codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex_bin.chmod(0o755)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            profile_dir.mkdir()
+            managed_dir.mkdir()
+            (profile_dir / "config.toml").write_text(
+                "\n".join(
+                    [
+                        'model = "gpt-5.5"',
+                        'model_provider = "cliproxy"',
+                        "",
+                        "[model_providers.cliproxy]",
+                        'base_url = "http://127.0.0.1:8318/v1"',
+                        'env_key = "OPENAI_API_KEY"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (managed_dir / "stable-runtime-config.generated.yaml").write_text(
+                'secret-key: ""\napi-keys:\n  - "local-runtime-token-123456"\n',
+                encoding="utf-8",
+            )
+
+            def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
+                stdout = kwargs["stdout"]
+                env = kwargs["env"]
+                self.assertEqual(env.get("OPENAI_API_KEY"), sentinel)
+                stdout.write(
+                    json.dumps(
+                        {
+                            "type": "mcp_tool_result",
+                            "result": {"structuredContent": _delegate_packet()},
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+                return SimpleNamespace(returncode=0)
+
+            subprocess_run_mock.side_effect = fake_run
+            request_live_result_mock.return_value = _live_result(
+                result_text="DIP env propagation is working."
+            )
+            stdout = StringIO()
+            with mock.patch.dict("os.environ", {}, clear=False):
+                os.environ.pop("OPENAI_API_KEY", None)
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "--json",
+                            "--codex-bin",
+                            str(codex_bin),
+                            "--profile-dir",
+                            str(profile_dir),
+                            "--proof-dir",
+                            str(root / "proof"),
+                            TASK,
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        packet = json.loads(stdout.getvalue())
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertFalse(packet_contains_text(packet, sentinel))
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
+    def test_main_does_not_inject_local_token_for_non_loopback_provider(
+        self,
+        subprocess_run_mock: mock.Mock,
+        request_live_result_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            codex_bin = root / "codex"
+            codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex_bin.chmod(0o755)
+            profile_dir = root / "profile"
+            managed_dir = profile_dir / "managed"
+            profile_dir.mkdir()
+            managed_dir.mkdir()
+            (profile_dir / "config.toml").write_text(
+                "\n".join(
+                    [
+                        'model = "gpt-5.5"',
+                        'model_provider = "cliproxy"',
+                        "",
+                        "[model_providers.cliproxy]",
+                        'base_url = "https://example.invalid/v1"',
+                        'env_key = "OPENAI_API_KEY"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (managed_dir / "stable-runtime-config.generated.yaml").write_text(
+                'secret-key: ""\napi-keys:\n  - "local-runtime-token-should-not-be-used"\n',
+                encoding="utf-8",
+            )
+
+            def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
+                stdout = kwargs["stdout"]
+                env = kwargs["env"]
+                self.assertNotIn("OPENAI_API_KEY", env)
+                stdout.write(
+                    json.dumps(
+                        {
+                            "type": "mcp_tool_result",
+                            "result": {"structuredContent": _delegate_packet()},
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+                return SimpleNamespace(returncode=0)
+
+            subprocess_run_mock.side_effect = fake_run
+            request_live_result_mock.return_value = _live_result(
+                result_text="DIP remote provider path is unchanged."
+            )
+            stdout = StringIO()
+            with mock.patch.dict("os.environ", {}, clear=False):
+                os.environ.pop("OPENAI_API_KEY", None)
+                with redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "--json",
+                            "--codex-bin",
+                            str(codex_bin),
+                            "--profile-dir",
+                            str(profile_dir),
+                            "--proof-dir",
+                            str(root / "proof"),
+                            TASK,
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        packet = json.loads(stdout.getvalue())
+        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")

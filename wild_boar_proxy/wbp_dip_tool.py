@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,9 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
 from typing import Any
+from urllib.parse import urlparse
 
 from .active_project_root import (
     ACTIVE_PROJECT_ROOT_ENV,
@@ -33,13 +36,14 @@ from .external_models.http_client import request_json
 from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
 from .external_models.validate import _completion_url, _provider_headers
-from .runtime import RuntimeErrorInfo, write_json_atomic, write_text_atomic
+from .runtime import RuntimeErrorInfo, RuntimePaths, write_json_atomic, write_text_atomic
 from .runtime_dispatch_mode_truth import (
     DISPATCH_MODE_CHATGPT_API,
     EXECUTOR_DIP_API_ROUTE,
     ORCHESTRATOR_CHATGPT,
     dispatch_mode_truth_fields,
 )
+from .token_command import emit_local_token
 
 
 WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
@@ -432,6 +436,50 @@ def default_profile_dir(env: Mapping[str, str] | None = None) -> Path:
     return Path(raw).expanduser()
 
 
+def _hostname_is_loopback(hostname: str | None) -> bool:
+    normalized = (hostname or "").strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _runner_config_accepts_local_listener_token(profile_dir: Path) -> bool:
+    config_path = profile_dir / "config.toml"
+    try:
+        parsed = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    if not isinstance(parsed, Mapping):
+        return False
+    provider_id = parsed.get("model_provider")
+    if not isinstance(provider_id, str) or not provider_id:
+        return False
+    providers = parsed.get("model_providers")
+    if not isinstance(providers, Mapping):
+        return False
+    provider = providers.get(provider_id)
+    if not isinstance(provider, Mapping):
+        return False
+    if provider.get("env_key") != "OPENAI_API_KEY":
+        return False
+    base_url = provider.get("base_url")
+    if not isinstance(base_url, str):
+        return False
+    return _hostname_is_loopback(urlparse(base_url).hostname)
+
+
+def _codex_exec_openai_api_key(profile_dir: Path) -> str:
+    if not _runner_config_accepts_local_listener_token(profile_dir):
+        return ""
+    try:
+        return emit_local_token(RuntimePaths.from_roots(profile_dir=profile_dir))
+    except Exception:
+        return ""
+
+
 def _codex_app_candidates(source: Mapping[str, str]) -> list[Path]:
     app_candidates: list[Path] = []
     if source.get("WBP_CODEX_APP_COPY_PATH"):
@@ -699,6 +747,7 @@ def _codex_exec_forbidden_event_reasons(
                 continue
             fields = (
                 mapping.get("name"),
+                mapping.get("tool"),
                 mapping.get("tool_name"),
                 mapping.get("server"),
                 mapping.get("recipient"),
@@ -3284,6 +3333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
         }
     )
+    if not env.get("OPENAI_API_KEY"):
+        codex_exec_openai_api_key = _codex_exec_openai_api_key(profile_dir)
+        if codex_exec_openai_api_key:
+            env["OPENAI_API_KEY"] = codex_exec_openai_api_key
     env.update(mcp_root_env)
     profile_repair_before = _repair_stale_profile_config_model(profile_dir, model=model)
     profile_repair_after: dict[str, Any] = {
