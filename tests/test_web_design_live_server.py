@@ -9252,6 +9252,250 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_write_server_owned_api_route_spec_uses_atomic_text_write_without_fixed_tmp_residue(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = (
+                Path(tmpdir)
+                / "managed"
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-deepseek.json"
+            )
+            route_spec = {
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY", "type": "bearer"},
+                "base_url": "https://api.deepseek.com",
+                "display_name": "DeepSeek primary",
+                "endpoint_path": "/chat/completions",
+                "provider": "deepseek",
+                "route_id": "wbp-web-primary-deepseek",
+                "schema_version": 1,
+                "upstream_model": "deepseek-chat",
+            }
+            temp_names: list[str] = []
+            real_mkstemp = live_server.state_store.tempfile.mkstemp
+
+            def recording_mkstemp(*args: object, **kwargs: object) -> tuple[int, str]:
+                fd, name = real_mkstemp(*args, **kwargs)
+                temp_names.append(Path(name).name)
+                return fd, name
+
+            with mock.patch.object(
+                live_server.state_store.tempfile, "mkstemp", recording_mkstemp
+            ):
+                live_server._write_server_owned_api_route_spec(target, route_spec)
+
+            self.assertEqual(
+                target.read_text(encoding="utf-8"),
+                json.dumps(route_spec, ensure_ascii=False, sort_keys=True) + "\n",
+            )
+            self.assertEqual(len(temp_names), 1)
+            self.assertTrue(temp_names[0].startswith(".wbp-tmp-"))
+            self.assertTrue(temp_names[0].endswith(f".{target.name}"))
+            self.assertNotIn(f".{target.name}.tmp", temp_names)
+            self.assertFalse(target.with_name(f".{target.name}.tmp").exists())
+            self.assertEqual(list(target.parent.glob(".wbp-tmp-*")), [])
+
+    def test_write_server_owned_api_route_spec_failed_publish_cleans_temp_and_keeps_original(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = (
+                Path(tmpdir)
+                / "managed"
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-deepseek.json"
+            )
+            original_spec = {
+                "route_id": "wbp-web-primary-deepseek-old",
+                "schema_version": 1,
+            }
+            updated_spec = {
+                "route_id": "wbp-web-primary-deepseek-new",
+                "schema_version": 1,
+            }
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps(original_spec, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            created_temp: list[Path] = []
+            real_mkstemp = live_server.state_store.tempfile.mkstemp
+
+            def recording_mkstemp(*args: object, **kwargs: object) -> tuple[int, str]:
+                fd, name = real_mkstemp(*args, **kwargs)
+                created_temp.append(Path(name))
+                return fd, name
+
+            def failing_replace(src: object, dst: object) -> None:
+                raise OSError("replace failed")
+
+            with (
+                mock.patch.object(
+                    live_server.state_store.tempfile, "mkstemp", recording_mkstemp
+                ),
+                mock.patch.object(
+                    live_server.state_store.os, "replace", failing_replace
+                ),
+            ):
+                with self.assertRaises(OSError) as raised:
+                    live_server._write_server_owned_api_route_spec(target, updated_spec)
+
+            self.assertEqual(str(raised.exception), "Failed to write server-owned route spec")
+            self.assertEqual(
+                target.read_text(encoding="utf-8"),
+                json.dumps(original_spec, ensure_ascii=False, sort_keys=True) + "\n",
+            )
+            self.assertTrue(created_temp)
+            self.assertTrue(all(not path.exists() for path in created_temp))
+            self.assertFalse(target.with_name(f".{target.name}.tmp").exists())
+            self.assertEqual(list(target.parent.glob(".wbp-tmp-*")), [])
+
+    def test_api_route_connect_primary_create_write_failure_hides_route_spec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_path = (
+                data_dir
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-openrouter.json"
+            )
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            write_error = live_server.state_store.StateStoreError(
+                f"Failed to write state file: {route_spec_path}",
+                machine_error_code=live_server.state_store.STATE_WRITE_FAILED,
+            )
+            with mock.patch.object(
+                live_server.state_store, "write_text", side_effect=write_error
+            ):
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "api_route_connect"},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+
+            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(result["result"]["status"], "integration_failure")
+            self.assertEqual(
+                result["result"]["machine_error_code"],
+                "UI_API_ROUTE_CONNECT_SPEC_WRITE_FAILED",
+            )
+            self.assertEqual(
+                result["result"]["human_message"],
+                "Failed to write server-owned route spec",
+            )
+            self.assertEqual(result["result"]["changed_files"], [])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            serialized = json.dumps(result)
+            self.assertNotIn(str(route_spec_path), serialized)
+            self.assertFalse(route_spec_path.exists())
+
+    def test_api_route_connect_primary_add_failure_reports_artifact_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_path = (
+                data_dir
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-openrouter.json"
+            )
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(route_spec_path),
+                    "--json",
+                )
+            ] = command_packet(
+                status="error",
+                exit_code=1,
+                human_message="External-models route add failed.",
+                machine_error_code="EXTERNAL_MODELS_ROUTE_ADD_FAILED",
+                next_action="retry",
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(
+                result["result"]["machine_error_code"],
+                "EXTERNAL_MODELS_ROUTE_ADD_FAILED",
+            )
+            self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            self.assertTrue(route_spec_path.exists())
+            self.assertIn(
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(route_spec_path),
+                    "--json",
+                ),
+                runner.calls,
+            )
+
     def test_api_route_connect_can_create_direct_deepseek_server_owned_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -9358,6 +9602,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
             self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
             self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+            self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
             serialized = json.dumps(result)
             self.assertNotIn(str(route_spec_path), serialized)
             self.assertNotIn(str(data_dir), serialized)
@@ -9374,6 +9619,201 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             self.assertNotIn(
                 ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                runner.calls,
+            )
+
+    def test_api_route_connect_reasoning_set_write_failure_hides_route_spec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_root = data_dir / "external-models" / "server-owned-route-specs"
+            fast_spec_path = route_spec_root / "wbp-deepseek-v4-pro-fast.json"
+            payloads = live_payloads()
+            max_route = {
+                "schema_version": 1,
+                "route_id": "wbp-deepseek-v4-pro-max",
+                "display_name": "DeepSeek V4 Pro Max",
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-v4-pro",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+                "synthetic_adapter_state": "stopped",
+                "profile_ready": False,
+                "transform_profile": "openai_chat_developer_to_system",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            }
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 1, "routes": [max_route]},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 1,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [max_route],
+                },
+            )
+            payloads[
+                ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+            ] = credential_status_packet(
+                present=True,
+                provider="deepseek",
+                credential_ref="DEEPSEEK_API_KEY",
+                expected_refs=["DEEPSEEK_API_KEY"],
+                provider_dashboard_url="https://platform.deepseek.com/api_keys",
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            write_error = live_server.state_store.StateStoreError(
+                f"Failed to write state file: {fast_spec_path}",
+                machine_error_code=live_server.state_store.STATE_WRITE_FAILED,
+            )
+            with mock.patch.object(
+                live_server.state_store, "write_text", side_effect=write_error
+            ):
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "api_route_connect"},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+
+            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(result["result"]["status"], "integration_failure")
+            self.assertEqual(
+                result["result"]["machine_error_code"],
+                "UI_DEEPSEEK_REASONING_ROUTE_SET_SPEC_WRITE_FAILED",
+            )
+            self.assertEqual(
+                result["result"]["human_message"],
+                "Failed to write server-owned route spec",
+            )
+            self.assertEqual(result["result"]["changed_files"], [])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            serialized = json.dumps(result)
+            self.assertNotIn(str(fast_spec_path), serialized)
+            self.assertFalse(fast_spec_path.exists())
+
+    def test_api_route_connect_reasoning_set_add_failure_reports_artifact_changed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_root = data_dir / "external-models" / "server-owned-route-specs"
+            fast_spec_path = route_spec_root / "wbp-deepseek-v4-pro-fast.json"
+            high_spec_path = route_spec_root / "wbp-deepseek-v4-pro-high.json"
+            payloads = live_payloads()
+            max_route = {
+                "schema_version": 1,
+                "route_id": "wbp-deepseek-v4-pro-max",
+                "display_name": "DeepSeek V4 Pro Max",
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-v4-pro",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+                "synthetic_adapter_state": "stopped",
+                "profile_ready": False,
+                "transform_profile": "openai_chat_developer_to_system",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+            }
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 1, "routes": [max_route]},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 1,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [max_route],
+                },
+            )
+            payloads[
+                ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+            ] = credential_status_packet(
+                present=True,
+                provider="deepseek",
+                credential_ref="DEEPSEEK_API_KEY",
+                expected_refs=["DEEPSEEK_API_KEY"],
+                provider_dashboard_url="https://platform.deepseek.com/api_keys",
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(fast_spec_path),
+                    "--json",
+                )
+            ] = command_packet(
+                status="error",
+                exit_code=1,
+                human_message="External-models route add failed.",
+                machine_error_code="EXTERNAL_MODELS_ROUTE_ADD_FAILED",
+                next_action="retry",
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(
+                result["result"]["machine_error_code"],
+                "EXTERNAL_MODELS_ROUTE_ADD_FAILED",
+            )
+            self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            self.assertTrue(fast_spec_path.exists())
+            self.assertFalse(high_spec_path.exists())
+            self.assertIn(
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(fast_spec_path),
+                    "--json",
+                ),
                 runner.calls,
             )
 
@@ -9513,6 +9953,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 result["result"]["data"]["reasoning_supported_operator_levels"],
                 ["fast", "high", "max"],
             )
+            self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
             self.assertFalse(result["result"]["data"]["browser_secret_intake"])
             self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])

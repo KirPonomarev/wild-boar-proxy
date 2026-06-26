@@ -39,6 +39,7 @@ from wild_boar_proxy.active_project_root import (
     ACTIVE_PROJECT_ROOT_SOURCE_SERVER_ENV,
     active_project_root_metadata,
 )
+from wild_boar_proxy import state_store
 from wild_boar_proxy.core import packets as command_packets
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
@@ -7127,10 +7128,13 @@ def _server_owned_api_route_spec_path(
 
 
 def _write_server_owned_api_route_spec(path: Path, route: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(json.dumps(route, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        state_store.write_text(
+            path,
+            json.dumps(route, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, state_store.StateStoreError) as exc:
+        raise OSError("Failed to write server-owned route spec") from exc
 
 
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
@@ -21457,13 +21461,18 @@ def _api_route_connect_result(
     credential_phase: str,
     add_result: dict[str, Any] | None,
     validate_result: dict[str, Any] | None,
+    route_spec_artifact_written: bool = False,
 ) -> dict[str, Any]:
     return {
         "status": status,
         "machine_error_code": machine_error_code,
         "human_message": human_message,
         "next_action": next_action,
-        "changed_files": ["api_route_connect_artifact"] if status == "ok" else [],
+        "changed_files": (
+            ["api_route_connect_artifact"]
+            if status == "ok" or route_spec_artifact_written
+            else []
+        ),
         "data": _api_route_credential_bridge_data(
             route_id=route_id,
             connect_phase=connect_phase,
@@ -21574,6 +21583,7 @@ def _run_deepseek_v4_pro_reasoning_route_set_connect(
     validate_results: dict[str, dict[str, Any]] = {}
     last_add_result: dict[str, Any] | None = None
     last_validate_result: dict[str, Any] | None = None
+    route_spec_artifact_written = False
 
     for spec in missing_specs:
         route_id = str(spec["route_id"])
@@ -21613,6 +21623,8 @@ def _run_deepseek_v4_pro_reasoning_route_set_connect(
             )
             return _ui_action_response_from_result("api_route_connect", result)
 
+        route_spec_artifact_written = True
+
         add_result = execute_command(
             runner,
             "external_models_routes_add_server_owned",
@@ -21638,6 +21650,7 @@ def _run_deepseek_v4_pro_reasoning_route_set_connect(
                 credential_phase=credential_phase,
                 add_result=add_result,
                 validate_result=None,
+                route_spec_artifact_written=route_spec_artifact_written,
             )
             result["data"].update(
                 {
@@ -21677,6 +21690,7 @@ def _run_deepseek_v4_pro_reasoning_route_set_connect(
                 credential_phase=credential_phase,
                 add_result=last_add_result,
                 validate_result=validate_result,
+                route_spec_artifact_written=route_spec_artifact_written,
             )
             result["data"].update(
                 {
@@ -21884,6 +21898,7 @@ def _run_api_route_connect_action(
         launch_copy_contract,
         route_id,
     )
+    route_spec_artifact_written = False
     try:
         _write_server_owned_api_route_spec(route_spec_path, route_spec)
     except OSError as exc:
@@ -21905,6 +21920,7 @@ def _run_api_route_connect_action(
             validate_result=None,
         )
         return _ui_action_response_from_result("api_route_connect", result)
+    route_spec_artifact_written = True
 
     add_result = execute_command(
         runner,
@@ -21929,6 +21945,7 @@ def _run_api_route_connect_action(
             credential_phase=credential_phase,
             add_result=add_result,
             validate_result=None,
+            route_spec_artifact_written=route_spec_artifact_written,
         )
         return _ui_action_response_from_result("api_route_connect", result)
 
@@ -21954,6 +21971,7 @@ def _run_api_route_connect_action(
         credential_phase=credential_phase,
         add_result=add_result,
         validate_result=validate_result,
+        route_spec_artifact_written=route_spec_artifact_written,
     )
     return _ui_action_response_from_result("api_route_connect", result)
 
