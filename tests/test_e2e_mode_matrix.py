@@ -328,6 +328,10 @@ def _direct_reply_proof(
     text: str = "direct reply ok",
     kind: str = "wbp_api_agent_direct_reply",
     auto_router: bool = False,
+    repo_bridge_mode: str = "off",
+    repo_bridge_required: bool = False,
+    repo_bridge_available: bool = False,
+    repo_bridge_used: bool = False,
     **overrides: object,
 ) -> dict[str, object]:
     packet: dict[str, object] = {
@@ -370,6 +374,10 @@ def _direct_reply_proof(
         "provider_auth_ok": True,
         "positive_provider_proof_gate_satisfied": True,
         "provider_response_proven": True,
+        "repo_bridge_mode": repo_bridge_mode,
+        "repo_bridge_required": repo_bridge_required,
+        "repo_bridge_available": repo_bridge_available,
+        "repo_bridge_used": repo_bridge_used,
         "direct_api_reply_block": True,
         "reply_block_kind": "api_agent_direct_reply",
         "reply_author_alias": alias,
@@ -405,8 +413,16 @@ def _direct_reply_proof(
         "file_mutation_attempted": False,
         "blocking_reasons": [],
         **_base_safety(),
-        **_active_root_fields(required=True, available=True, sha="r" * 64),
-        **_target_repo_fields(required=True, available=True, sha="r" * 64),
+        **_active_root_fields(
+            required=repo_bridge_required,
+            available=repo_bridge_available,
+            sha="r" * 64 if repo_bridge_available else "",
+        ),
+        **_target_repo_fields(
+            required=repo_bridge_required,
+            available=repo_bridge_available,
+            sha="r" * 64 if repo_bridge_available else "",
+        ),
     }
     if auto_router:
         packet.update(
@@ -735,6 +751,47 @@ class E2EModeMatrixTests(unittest.TestCase):
             "api_agent_direct_reply_forbidden_stale_route_ids_count_not_positive",
             packet["blocking_reasons"],
         )
+
+    def test_accepts_plain_direct_api_reply_without_active_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                api_agent_direct_reply=_direct_reply_proof(),
+                api_agent_custom_alias=_direct_reply_proof(
+                    alias="Кодер",
+                    kind="wbp_api_agent_auto_router",
+                    auto_router=True,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["api_agent_direct_reply_ready"])
+        self.assertTrue(packet["api_agent_custom_alias_ready"])
+        self.assertEqual(packet["blocking_reasons"], [])
+
+    def test_accepts_repo_bridge_direct_api_reply_with_active_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                api_agent_direct_reply=_direct_reply_proof(
+                    repo_bridge_mode="on",
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                ),
+                api_agent_custom_alias=_direct_reply_proof(
+                    alias="Кодер",
+                    kind="wbp_api_agent_auto_router",
+                    auto_router=True,
+                    repo_bridge_mode="on",
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["blocking_reasons"], [])
 
     def test_blocks_custom_alias_without_runtime_context_route_truth(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

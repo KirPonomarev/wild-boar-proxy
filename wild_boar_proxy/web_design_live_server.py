@@ -1823,6 +1823,67 @@ def _current_runtime_target_paths() -> tuple[Path, Path]:
     return profile_dir, data_dir
 
 
+def _config_declares_custom_wbp_bridge(config_toml: Path) -> bool:
+    try:
+        text = config_toml.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    lowered = text.casefold()
+    return (
+        'model_provider = "wbp"' in lowered
+        or "[model_providers.wbp]" in lowered
+        or "experimental_bearer_token" in lowered
+    )
+
+
+def _owner_runtime_paths_for_live_server(
+    custom_profile_paths: RuntimePaths,
+) -> RuntimePaths:
+    owner_profile_override = str(os.environ.get("WBP_OWNER_PROFILE_DIR") or "").strip()
+    owner_managed_override = str(os.environ.get("WBP_OWNER_MANAGED_DIR") or "").strip()
+    if owner_profile_override or owner_managed_override:
+        owner_profile_dir = (
+            Path(owner_profile_override).expanduser()
+            if owner_profile_override
+            else custom_profile_paths.profile_dir
+        )
+        owner_managed_dir = (
+            Path(owner_managed_override).expanduser()
+            if owner_managed_override
+            else owner_profile_dir / "managed"
+        )
+        return RuntimePaths.from_roots(
+            profile_dir=owner_profile_dir,
+            managed_dir=owner_managed_dir,
+            stable_config=custom_profile_paths.stable_config,
+        )
+    if not _config_declares_custom_wbp_bridge(custom_profile_paths.config_toml):
+        return custom_profile_paths
+    legacy_owner_paths = RuntimePaths.from_roots(
+        profile_dir=(Path.home() / (".codex" "-custom-cli")).expanduser(),
+        stable_config=custom_profile_paths.stable_config,
+    )
+    if (
+        legacy_owner_paths.config_toml.is_file()
+        and legacy_owner_paths.registry_file.is_file()
+        and legacy_owner_paths.state_file.is_file()
+    ):
+        return legacy_owner_paths
+    return custom_profile_paths
+
+
+def _runtime_context_profile_targets_for_live_server(
+    *,
+    custom_profile_paths: RuntimePaths,
+    owner_paths: RuntimePaths,
+) -> tuple[Path, list[Path]]:
+    required_target = owner_paths.profile_dir
+    optional_targets: list[Path] = []
+    if custom_profile_paths.profile_dir != required_target:
+        optional_targets.append(custom_profile_paths.profile_dir)
+    return required_target, optional_targets
+
+
 def _legacy_import_discovery_source_dir() -> Path:
     return Path("~/" + ".co" + "dex-custom-cli").expanduser()
 
@@ -11230,6 +11291,7 @@ def _custom_native_agent_runtime_context(
     bridge_endpoint: str = "",
     route_records: list[dict[str, Any]] | None = None,
     active_project_root: Path | str | None = None,
+    managed_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     packet = execution_packet if isinstance(execution_packet, dict) else {}
     execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
@@ -11295,7 +11357,12 @@ def _custom_native_agent_runtime_context(
         for route in effective_route_records
     ):
         effective_route_records.append(selected_route_record)
-    bindings_state_path = agent_bindings_state_path(RuntimePaths.from_env().managed_dir)
+    resolved_managed_dir = (
+        Path(managed_dir).expanduser()
+        if managed_dir is not None
+        else RuntimePaths.from_env().managed_dir
+    )
+    bindings_state_path = agent_bindings_state_path(resolved_managed_dir)
     if api_only_primary_executor:
         bindings_packet = read_agent_bindings_packet(
             bindings_state_path,
@@ -16319,7 +16386,8 @@ def build_handler(
     post_rate_limiter: WebPostRateLimiter | None = None,
     post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
 ) -> type[BaseHTTPRequestHandler]:
-    owner_paths = RuntimePaths.from_env()
+    custom_profile_paths = RuntimePaths.from_env()
+    owner_paths = _owner_runtime_paths_for_live_server(custom_profile_paths)
     command_runner = runner or (
         JsonCommandRunner(
             cwd=str(owner_paths.profile_dir),
@@ -16345,6 +16413,13 @@ def build_handler(
     handler_post_rate_limiter = post_rate_limiter or WebPostRateLimiter(
         limit_per_second=post_rate_limit_per_second
     )
+    runtime_context_required_profile_dir, runtime_context_optional_profile_dirs = (
+        _runtime_context_profile_targets_for_live_server(
+            custom_profile_paths=custom_profile_paths,
+            owner_paths=owner_paths,
+        )
+    )
+    runtime_context_source_paths = owner_paths
     legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = (
@@ -16652,6 +16727,31 @@ def build_handler(
             source_context=context,
         )
 
+    def _binding_projection_from_runtime_context(
+        *,
+        context: dict[str, Any],
+        route_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if context.get("agent_bindings_status") != "ok":
+            return {}
+        raw_bindings = context.get("agent_bindings")
+        if not isinstance(raw_bindings, list):
+            return {}
+        runtime_agent_bindings = [
+            dict(binding)
+            for binding in raw_bindings
+            if isinstance(binding, dict) and binding.get("enabled") is True
+        ]
+        if not runtime_agent_bindings:
+            return {}
+        return {
+            "agent_bindings": runtime_agent_bindings,
+            "projection": project_agent_bindings_for_runtime_context(
+                runtime_agent_bindings,
+                route_records=route_records,
+            ),
+        }
+
     def _execution_packet_from_browser_selection(
         *,
         payload: dict[str, Any] | None,
@@ -16774,17 +16874,33 @@ def build_handler(
             context=existing_context,
             route_records=route_records,
         )
+        existing_bindings_projection = _binding_projection_from_runtime_context(
+            context=existing_context,
+            route_records=route_records,
+        )
         browser_execution_packet = _execution_packet_from_browser_selection(
             payload=payload,
             operator_status=operator_status,
             api_snapshot=api_snapshot,
         )
-        execution_packet = (
-            launch_execution_packet
-            or browser_execution_packet
-            or bindings_execution_packet
-            or existing_execution_packet
+        prefer_existing_execution_packet = (
+            runtime_context_source_paths.profile_dir == custom_profile_paths.profile_dir
+            and bool(existing_execution_packet)
         )
+        if prefer_existing_execution_packet:
+            execution_packet = (
+                launch_execution_packet
+                or browser_execution_packet
+                or existing_execution_packet
+                or bindings_execution_packet
+            )
+        else:
+            execution_packet = (
+                launch_execution_packet
+                or browser_execution_packet
+                or bindings_execution_packet
+                or existing_execution_packet
+            )
         if execution_packet:
             api_route_id = str(execution_packet.get("api_model_id") or "").strip()
             chatgpt_model_id = str(
@@ -16822,23 +16938,56 @@ def build_handler(
             bridge_endpoint=bridge_endpoint,
             route_records=route_records,
             active_project_root=codex_custom_active_project_root,
+            managed_dir=runtime_context_source_paths.managed_dir,
         )
+        if (
+            runtime_context_source_paths.profile_dir == custom_profile_paths.profile_dir
+            and existing_bindings_projection
+        ):
+            fallback_projection = existing_bindings_projection.get("projection", {})
+            context["agent_binding_truth_source"] = fallback_projection.get(
+                "agent_binding_truth_source"
+            )
+            context["agent_bindings"] = existing_bindings_projection.get(
+                "agent_bindings",
+                [],
+            )
+            context["alias_to_agent_id"] = fallback_projection.get("alias_to_agent_id", {})
+            context["agent_id_to_route"] = fallback_projection.get("agent_id_to_route", {})
+            context["agent_id_to_model"] = fallback_projection.get("agent_id_to_model", {})
+            context["agent_binding_source"] = "runtime_context_fallback"
+            context["agent_binding_state_file_present"] = False
+            context["primary_aliases"] = fallback_projection.get("primary_aliases", [])
+            context["coding_aliases"] = fallback_projection.get("coding_aliases", [])
+            context["allowed_api_route_ids"] = fallback_projection.get(
+                "allowed_api_route_ids",
+                [],
+            )
+            context["forbidden_stale_route_ids"] = fallback_projection.get(
+                "forbidden_stale_route_ids",
+                [],
+            )
+            context["alias_runtime_binding_present"] = bool(
+                context["primary_aliases"] or context["coding_aliases"]
+            )
+            context["alias_runtime_binding_proven"] = bool(
+                context["primary_aliases"]
+                and context["coding_aliases"]
+                and context["allowed_api_route_ids"]
+            )
         context["context_truth_source"] = "server_current_agent_bindings_state"
         context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"
+        context_text = json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)
+        required_context_path = (
+            runtime_context_required_profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+        )
+        optional_context_paths = [
+            profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+            for profile_dir in runtime_context_optional_profile_dirs
+        ]
+        optional_written_count = 0
         try:
-            default_paths = default_persistent_custom_profile_paths(
-                profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
-            )
-            profile_root_text = str(
-                default_paths.get("persistent_profile_root") or ""
-            ).strip()
-            if not profile_root_text:
-                raise OSError("persistent profile root missing")
-            profile_root = Path(profile_root_text).expanduser()
-            write_text_atomic(
-                profile_root / AGENT_RUNTIME_CONTEXT_FILENAME,
-                json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True),
-            )
+            write_text_atomic(required_context_path, context_text)
         except OSError:
             return {}, {
                 "status": "blocked",
@@ -16853,9 +17002,28 @@ def build_handler(
                 "context_read_source": "none",
                 "context_path_redacted": True,
             }
-        return _load_custom_native_agent_runtime_context(
-            custom_native_launch_state["last_packet"]
-        )
+        for optional_context_path in optional_context_paths:
+            try:
+                write_text_atomic(optional_context_path, context_text)
+            except OSError:
+                continue
+            optional_written_count += 1
+        return context, {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "context_candidate_count": 1 + len(optional_context_paths),
+            "context_candidate_attempt_count": 1 + len(optional_context_paths),
+            "context_file_present": True,
+            "context_file_sha256_present": True,
+            "context_sha256": hashlib.sha256(
+                context_text.encode("utf-8")
+            ).hexdigest(),
+            "native_alias_context_read": True,
+            "context_read_source": "profile_context_file",
+            "context_path_redacted": True,
+            "context_required_profile_owner_path": True,
+            "context_optional_profile_write_count": optional_written_count,
+        }
 
     def build_rollback_point_create_admission_packet() -> dict[str, Any]:
         original_status = build_original_status_packet()
@@ -17209,6 +17377,15 @@ def build_handler(
             },
         )
 
+    if runtime_context_required_profile_dir != custom_profile_paths.profile_dir:
+        try:
+            _refresh_custom_agent_runtime_context_for_command_loop(
+                operator_status={},
+                api_snapshot={},
+            )
+        except Exception:
+            pass
+
     class Handler(BaseHTTPRequestHandler):
         GET_ROUTE_DISPATCH_TABLE: dict[str, str] = {}
         POST_ROUTE_DISPATCH_TABLE: dict[str, str] = {}
@@ -17509,7 +17686,7 @@ def build_handler(
 
         def _handle_get_api_codex_custom_native_feature_parity(self, request_path: str) -> None:
             parsed = urlparse(request_path)
-            self._send_json(build_native_feature_parity_packet(owner_paths))
+            self._send_json(build_native_feature_parity_packet(custom_profile_paths))
             return
 
         def _handle_get_api_codex_custom_sessions(self, request_path: str) -> None:
@@ -19839,7 +20016,7 @@ def build_handler(
                                 trace_wbp=True,
                             ),
                             owner_authorized=codex_custom_live_prompt_authorized,
-                            profile_dir=RuntimePaths.from_env().profile_dir,
+                            profile_dir=custom_profile_paths.profile_dir,
                             active_project_root=codex_custom_active_project_root,
                             active_project_root_source=(
                                 codex_custom_active_project_root_source
@@ -22715,6 +22892,9 @@ def main(argv: list[str] | None = None) -> int:
                 "--active-project-root rejected: "
                 f"{active_project_root_fields['active_project_root_status']}"
             )
+        os.environ[ACTIVE_PROJECT_ROOT_ENV] = str(
+            safe_worktree_repo_root.resolve(strict=False)
+        )
     launch_copy_contract = LaunchCopyContract(
         client_path=args.launch_client_path,
         profile_dir=args.launch_copy_profile_dir,

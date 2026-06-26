@@ -223,7 +223,7 @@ def _check_active_project_root(
     prefix: str,
     *,
     required: bool,
-    available: bool,
+    available: bool | None,
     is_wbp_repo: bool | None = None,
 ) -> None:
     _check_equals(
@@ -233,13 +233,14 @@ def _check_active_project_root(
         failures,
         prefix,
     )
-    _check_equals(
-        packet,
-        "active_project_root_available",
-        available,
-        failures,
-        prefix,
-    )
+    if available is not None:
+        _check_equals(
+            packet,
+            "active_project_root_available",
+            available,
+            failures,
+            prefix,
+        )
     _check_false(packet, "active_project_root_path_recorded", failures, prefix)
     _check_false(packet, "active_project_root_fallback_used", failures, prefix)
     _check_false(
@@ -268,11 +269,12 @@ def _check_target_repo(
     prefix: str,
     *,
     required: bool,
-    available: bool,
+    available: bool | None,
     is_wbp_repo: bool | None = None,
 ) -> None:
     _check_equals(packet, "target_repo_required", required, failures, prefix)
-    _check_equals(packet, "target_repo_available", available, failures, prefix)
+    if available is not None:
+        _check_equals(packet, "target_repo_available", available, failures, prefix)
     _check_false(packet, "target_repo_path_recorded", failures, prefix)
     _check_false(packet, "target_repo_fallback_used", failures, prefix)
     if required:
@@ -582,6 +584,8 @@ def _check_api_agent_direct_common(
     *,
     expected_kind: str,
 ) -> None:
+    repo_bridge_required = packet.get("repo_bridge_required") is True
+    repo_bridge_used = packet.get("repo_bridge_used") is True
     _check_common_packet(
         packet,
         failures,
@@ -597,16 +601,20 @@ def _check_api_agent_direct_common(
         packet,
         failures,
         prefix,
-        required=True,
-        available=True,
+        required=repo_bridge_required or repo_bridge_used,
+        available=True if (repo_bridge_required or repo_bridge_used) else None,
     )
     _check_target_repo(
         packet,
         failures,
         prefix,
-        required=True,
-        available=True,
+        required=repo_bridge_required or repo_bridge_used,
+        available=True if (repo_bridge_required or repo_bridge_used) else None,
     )
+    if repo_bridge_used and not repo_bridge_required:
+        failures.append(f"{prefix}_repo_bridge_used_without_requirement")
+    if repo_bridge_required and packet.get("repo_bridge_mode") == "off":
+        failures.append(f"{prefix}_repo_bridge_required_with_off_mode")
     for field in (
         "direct_api_reply_block",
         "alias_context_read",
