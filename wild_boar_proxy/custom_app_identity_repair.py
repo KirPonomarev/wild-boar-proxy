@@ -144,6 +144,14 @@ def _write_plist_atomic(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _restore_plist_atomic(path: Path, original_bytes: bytes) -> bool:
+    try:
+        _atomic_write_bytes(path, original_bytes)
+    except OSError:
+        return False
+    return True
+
+
 def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -309,10 +317,10 @@ def build_custom_app_identity_repair_packet(
         mutation_attempted = True
         original_bytes = custom_plist_path.read_bytes()
         backup_root.mkdir(parents=True, exist_ok=True)
-        backup_path.write_bytes(original_bytes)
-        backup_written = True
-        changed_files.append(str(backup_path))
         try:
+            _atomic_write_bytes(backup_path, original_bytes)
+            backup_written = True
+            changed_files.append(str(backup_path))
             if any(identity_changes_needed.values()):
                 _write_plist_atomic(custom_plist_path, desired_plist)
                 plist_written = True
@@ -324,13 +332,22 @@ def build_custom_app_identity_repair_packet(
             codesign_output_digest = _sha256_bytes(codesign_output.encode("utf-8"))
             changed_files.append(str(custom_app))
             if not codesign_ok:
-                custom_plist_path.write_bytes(original_bytes)
-                plist_rollback_restored = True
+                plist_rollback_restored = _restore_plist_atomic(
+                    custom_plist_path, original_bytes
+                )
+                if not plist_rollback_restored:
+                    admission_failures.append("plist_restore_failed")
                 admission_failures.append("codesign_failed")
         except OSError:
-            custom_plist_path.write_bytes(original_bytes)
-            plist_rollback_restored = True
-            admission_failures.append("plist_write_failed")
+            if backup_written:
+                plist_rollback_restored = _restore_plist_atomic(
+                    custom_plist_path, original_bytes
+                )
+                if not plist_rollback_restored:
+                    admission_failures.append("plist_restore_failed")
+            admission_failures.append(
+                "backup_write_failed" if not backup_written else "plist_write_failed"
+            )
 
     post_custom_plist, post_read_error = _read_plist(custom_plist_path)
     post_identity = _identity_values(post_custom_plist)
