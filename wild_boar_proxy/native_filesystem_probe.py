@@ -68,6 +68,8 @@ CUSTOM_NATIVE_MODEL_REPAIR_TARGETS = (
     "gpt-5.3-codex-spark",
 )
 CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0
+AUTH_COMMAND_WRAPPER_NAME = "wbp-codex-auth-command"
+DEFAULT_AUTH_COMMAND_PYTHON = "/opt/homebrew/opt/python@3.14/bin/python3.14"
 
 
 def utc_now() -> str:
@@ -4234,22 +4236,6 @@ def build_provider_config(
 ) -> str:
     if sandbox_mode not in NATIVE_CUSTOM_ADMITTED_SANDBOX_MODES:
         raise ValueError(f"unsupported native custom sandbox mode: {sandbox_mode}")
-    explicit_token = str(local_token or "").strip()
-    cli_key = _cli_proxy_api_key()
-    bearer_token = explicit_token or cli_key
-    if bearer_token:
-        return (
-            f'model = "{model}"\n'
-            'model_provider = "wbp"\n'
-            'approval_policy = "never"\n'
-            f'sandbox_mode = "{sandbox_mode}"\n\n'
-            "[model_providers.wbp]\n"
-            'name = "Wild Boar Proxy"\n'
-            f'base_url = "{endpoint}"\n'
-            'wire_api = "responses"\n'
-            "requires_openai_auth = false\n"
-            f'experimental_bearer_token = "{bearer_token}"\n'
-        )
     auth_command = str(auth_command_path.resolve())
     return (
         f'model = "{model}"\n'
@@ -4263,6 +4249,36 @@ def build_provider_config(
         "requires_openai_auth = false\n\n"
         "[model_providers.wbp.auth]\n"
         f'command = "{auth_command}"\n'
+    )
+
+
+def build_auth_command_wrapper_script(
+    *,
+    profile_dir: Path,
+    auth_command_path: Path,
+    python_bin: str = DEFAULT_AUTH_COMMAND_PYTHON,
+) -> str:
+    return (
+        "#!/bin/sh\n"
+        f"export WBP_PROFILE_DIR={shlex.quote(str(profile_dir))}\n"
+        f"export WBP_MANAGED_DIR={shlex.quote(str(profile_dir / 'managed'))}\n"
+        f"exec {shlex.quote(python_bin)} {shlex.quote(str(auth_command_path.resolve()))}\n"
+    )
+
+
+def build_stable_runtime_token_config(*, endpoint: str, local_token: str) -> str:
+    parsed = urllib.parse.urlparse(endpoint)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return (
+        f"host: {json.dumps(host)}\n"
+        f"port: {int(port)}\n\n"
+        "remote-management:\n"
+        "  allow-remote: false\n"
+        "  secret-key: \"\"\n"
+        "  disable-control-panel: true\n\n"
+        "api-keys:\n"
+        f"  - {json.dumps(str(local_token).strip())}\n"
     )
 
 
@@ -4629,6 +4645,10 @@ def materialize_probe_profile(
         }
     layout.tmp_root.mkdir(parents=True, exist_ok=True)
     layout.profile_dir.mkdir(parents=True, exist_ok=True)
+    profile_managed_dir = layout.profile_dir / "managed"
+    profile_managed_bin_dir = profile_managed_dir / "bin"
+    profile_managed_dir.mkdir(parents=True, exist_ok=True)
+    profile_managed_bin_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_user_data_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_home_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_codex_home.mkdir(parents=True, exist_ok=True)
@@ -4641,11 +4661,23 @@ def materialize_probe_profile(
         except OSError:
             existing_config_text = ""
     preserved_hooks_sections = preserved_hooks_toml_sections(existing_config_text)
+    auth_command_wrapper_path = profile_managed_bin_dir / AUTH_COMMAND_WRAPPER_NAME
+    write_text_atomic(
+        profile_managed_dir / "stable-runtime-config.generated.yaml",
+        build_stable_runtime_token_config(endpoint=endpoint, local_token=local_token),
+    )
+    write_text_atomic(
+        auth_command_wrapper_path,
+        build_auth_command_wrapper_script(
+            profile_dir=layout.profile_dir,
+            auth_command_path=auth_command_path,
+        ),
+    )
+    auth_command_wrapper_path.chmod(0o755)
     provider_config = build_provider_config(
         endpoint=endpoint,
         model=effective_model,
-        auth_command_path=auth_command_path,
-        local_token=local_token,
+        auth_command_path=auth_command_wrapper_path,
     )
     if preserved_hooks_sections:
         provider_config = provider_config.rstrip() + "\n\n" + preserved_hooks_sections + "\n"
@@ -4697,6 +4729,10 @@ def materialize_probe_profile(
         "context_file_present": agent_runtime_context_written,
         "context_file_sha256_present": bool(agent_runtime_context_sha256),
         "model_config_written": True,
+        "auth_command_wrapper_written": True,
+        "stable_runtime_token_config_written": True,
+        "config_uses_auth_command": True,
+        "config_uses_experimental_bearer_token": False,
     }
 
 

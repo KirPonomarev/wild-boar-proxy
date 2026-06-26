@@ -327,7 +327,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn("requires_openai_auth = false", config)
         self.assertNotIn("experimental_bearer_token", config)
 
-    def test_provider_config_bearer_branch_is_explicit_auth_surface(self) -> None:
+    def test_provider_config_prefers_auth_command_when_cli_proxy_key_exists(self) -> None:
         with mock.patch(
             "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
             return_value="fixture-token",
@@ -338,12 +338,14 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
             )
 
-        self.assertIn('experimental_bearer_token = "fixture-token"', config)
-        self.assertNotIn("[model_providers.wbp.auth]", config)
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertNotIn("experimental_bearer_token", config)
+        self.assertNotIn("fixture-token", config)
         self.assertIn('wire_api = "responses"', config)
         self.assertIn('sandbox_mode = "workspace-write"', config)
 
-    def test_provider_config_prefers_explicit_local_token_over_cli_proxy_key(self) -> None:
+    def test_provider_config_never_embeds_explicit_local_token(self) -> None:
         with mock.patch(
             "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
             return_value="stale-cli-token",
@@ -355,9 +357,11 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 local_token="fresh-local-token",
             )
 
-        self.assertIn('experimental_bearer_token = "fresh-local-token"', config)
-        self.assertNotIn('experimental_bearer_token = "stale-cli-token"', config)
-        self.assertNotIn("[model_providers.wbp.auth]", config)
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertNotIn("experimental_bearer_token", config)
+        self.assertNotIn("fresh-local-token", config)
+        self.assertNotIn("stale-cli-token", config)
 
     def test_provider_config_rejects_unadmitted_sandbox_mode(self) -> None:
         with self.assertRaises(ValueError):
@@ -4701,8 +4705,22 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             config_text = (layout.profile_dir / "config.toml").read_text(
                 encoding="utf-8"
             )
+            auth_wrapper = (
+                layout.profile_dir / "managed" / "bin" / "wbp-codex-auth-command"
+            )
+            stable_config = (
+                layout.profile_dir / "managed" / "stable-runtime-config.generated.yaml"
+            )
+            auth_wrapper_is_file = auth_wrapper.is_file()
+            auth_wrapper_is_executable = os.access(auth_wrapper, os.X_OK)
+            stable_config_is_file = stable_config.is_file()
+            stable_config_text = stable_config.read_text(encoding="utf-8")
 
         self.assertTrue(packet["hooks_config_sections_preserved"])
+        self.assertTrue(packet["auth_command_wrapper_written"])
+        self.assertTrue(packet["stable_runtime_token_config_written"])
+        self.assertTrue(packet["config_uses_auth_command"])
+        self.assertFalse(packet["config_uses_experimental_bearer_token"])
         self.assertEqual(
             packet["hooks_config_preservation_scope"],
             "top_level_hooks_toml_tables_only",
@@ -4711,8 +4729,16 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn("[hooks.state.", config_text)
         self.assertIn('trusted_hash = "sha256:' + ("1" * 64) + '"', config_text)
         self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertIn("[model_providers.wbp.auth]", config_text)
+        self.assertIn(str(auth_wrapper), config_text)
+        self.assertTrue(auth_wrapper_is_file)
+        self.assertTrue(auth_wrapper_is_executable)
+        self.assertTrue(stable_config_is_file)
+        self.assertIn("local-token", stable_config_text)
         self.assertNotIn("old-model", config_text)
         self.assertNotIn("must-not-survive", config_text)
+        self.assertNotIn("local-token", config_text)
+        self.assertNotIn("experimental_bearer_token", config_text)
 
     def test_materialize_probe_profile_validates_model_before_writing_config(self) -> None:
         response = mock.MagicMock()
@@ -4749,7 +4775,11 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["configured_model_validation_attempted"])
         self.assertTrue(packet["configured_model_available"])
         self.assertTrue(packet["model_config_written"])
+        self.assertTrue(packet["auth_command_wrapper_written"])
+        self.assertTrue(packet["stable_runtime_token_config_written"])
         self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertIn("[model_providers.wbp.auth]", config_text)
+        self.assertNotIn("experimental_bearer_token", config_text)
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 3.0)
         self.assertTrue(launcher_recognized)
 
