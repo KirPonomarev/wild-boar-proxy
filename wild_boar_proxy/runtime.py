@@ -32,6 +32,7 @@ from . import process_runner as _process_runner
 from . import (
     accounts_lifecycle,
     mutation_ledger,
+    state_store,
     state_lock,
     state_startup_contract,
     state_startup_lock,
@@ -696,16 +697,12 @@ def read_stable_proxy_url(paths: RuntimePaths) -> str:
     return read_yaml_value(paths.stable_config, "proxy-url")
 
 
-def write_text_atomic(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(value + "\n", encoding="utf-8")
-    tmp_path.replace(path)
+def write_text_atomic(path: Path, value: str, *, mode: int | None = None) -> None:
+    state_store.write_text(path, value + "\n", mode=mode)
 
 
 def write_executable_text_atomic(path: Path, value: str) -> None:
-    write_text_atomic(path, value)
-    path.chmod(0o755)
+    write_text_atomic(path, value, mode=0o755)
 
 
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -3463,13 +3460,12 @@ def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
     if state == "dir":
         path.mkdir(parents=True, exist_ok=True)
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(str(snapshot.get("text", "")), encoding="utf-8")
-    tmp_path.replace(path)
     mode = snapshot.get("mode")
-    if isinstance(mode, int):
-        path.chmod(mode)
+    state_store.write_text(
+        path,
+        str(snapshot.get("text", "")),
+        mode=mode if isinstance(mode, int) else None,
+    )
 
 
 def restore_rollout_stage_advance_inventory_dir_state(

@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from wild_boar_proxy import state_store
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors
@@ -43,13 +44,26 @@ def _read_json(path: Path) -> Any:
 
 
 def atomic_write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text(
+    atomic_write_text(
+        path,
         json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
-    temp_path.replace(path)
+
+
+def atomic_write_text(path: Path, text: str, *, mode: int | None = None) -> None:
+    try:
+        state_store.write_text(path, text, mode=mode)
+    except state_store.StateStoreError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to write external-models state file: {path}",
+            machine_error_code=errors.STATE_WRITE_FAILED,
+            operator_action="retry",
+            exit_code=1,
+        ) from exc
+
+
+def write_secrets_file_text(path: Path, text: str) -> None:
+    atomic_write_text(path, text, mode=0o600)
 
 
 @contextmanager

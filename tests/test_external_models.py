@@ -12,7 +12,13 @@ from pathlib import Path
 
 from wild_boar_proxy import external_models as external_models_mod
 from wild_boar_proxy.core import packets
-from wild_boar_proxy.external_models import contracts, errors, routes, run_external_models_command
+from wild_boar_proxy.external_models import (
+    contracts,
+    errors,
+    routes,
+    run_external_models_command,
+    state as state_mod,
+)
 from wild_boar_proxy.external_models import lifecycle
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models import validate as validate_mod
@@ -280,6 +286,126 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertFalse(state["local_auth"]["token_present"])
             self.assertEqual(paths.secrets_file.read_text(encoding="utf-8"), "")
             self.assertEqual(paths.secrets_file.stat().st_mode & 0o777, 0o600)
+
+    def test_atomic_write_json_uses_unique_state_store_temp_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "state.json"
+            temp_names: list[str] = []
+            real_mkstemp = state_mod.state_store.tempfile.mkstemp
+
+            def recording_mkstemp(*args: object, **kwargs: object) -> tuple[int, str]:
+                fd, name = real_mkstemp(*args, **kwargs)
+                temp_names.append(Path(name).name)
+                return fd, name
+
+            with mock.patch.object(
+                state_mod.state_store.tempfile, "mkstemp", recording_mkstemp
+            ):
+                state_mod.atomic_write_json(target, {"schema_version": 2, "value": "a"})
+                state_mod.atomic_write_json(target, {"schema_version": 2, "value": "b"})
+
+            self.assertEqual(
+                json.loads(target.read_text(encoding="utf-8"))["value"], "b"
+            )
+            self.assertEqual(len(temp_names), 2)
+            self.assertEqual(len(set(temp_names)), 2)
+            self.assertTrue(all(name.startswith(".wbp-tmp-") for name in temp_names))
+            self.assertTrue(all(name.endswith(".state.json") for name in temp_names))
+            self.assertNotIn(".state.json.tmp", temp_names)
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_atomic_write_json_fsyncs_file_and_parent_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "routes.json"
+            real_open = state_mod.state_store.os.open
+            real_fsync = state_mod.state_store.os.fsync
+            fsync_paths: list[str] = []
+            fsync_kinds: list[str] = []
+
+            def recording_open(
+                path: object, flags: int, *args: object, **kwargs: object
+            ) -> int:
+                fd = real_open(path, flags, *args, **kwargs)
+                if Path(path) == root:
+                    fsync_paths.append(str(path))
+                return fd
+
+            def recording_fsync(fd: int) -> None:
+                mode = os.fstat(fd).st_mode & 0o170000
+                fsync_kinds.append("directory" if mode == 0o040000 else "file")
+                real_fsync(fd)
+
+            with (
+                mock.patch.object(state_mod.state_store.os, "open", recording_open),
+                mock.patch.object(state_mod.state_store.os, "fsync", recording_fsync),
+            ):
+                state_mod.atomic_write_json(target, {"schema_version": 1, "routes": []})
+
+            self.assertIn(str(root), fsync_paths)
+            self.assertIn("file", fsync_kinds)
+            self.assertIn("directory", fsync_kinds)
+
+    def test_secret_write_sets_mode_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "secrets.env"
+            real_replace = state_mod.state_store.os.replace
+            published_modes: list[int] = []
+
+            def recording_replace(src: object, dst: object) -> None:
+                published_modes.append(Path(src).stat().st_mode & 0o777)
+                real_replace(src, dst)
+
+            with mock.patch.object(
+                state_mod.state_store.os, "replace", recording_replace
+            ):
+                state_mod.write_secrets_file_text(
+                    target, "OPENROUTER_API_KEY=test-key\n"
+                )
+
+            self.assertEqual(published_modes, [0o600])
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(
+                target.read_text(encoding="utf-8"), "OPENROUTER_API_KEY=test-key\n"
+            )
+
+    def test_failed_secret_write_cleans_temp_and_keeps_original(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "secrets.env"
+            target.write_text("OPENROUTER_API_KEY=old\n", encoding="utf-8")
+            os.chmod(target, 0o600)
+            created_temp: list[Path] = []
+            real_mkstemp = state_mod.state_store.tempfile.mkstemp
+
+            def recording_mkstemp(*args: object, **kwargs: object) -> tuple[int, str]:
+                fd, name = real_mkstemp(*args, **kwargs)
+                created_temp.append(Path(name))
+                return fd, name
+
+            def failing_replace(src: object, dst: object) -> None:
+                raise OSError("replace failed")
+
+            with (
+                mock.patch.object(
+                    state_mod.state_store.tempfile, "mkstemp", recording_mkstemp
+                ),
+                mock.patch.object(state_mod.state_store.os, "replace", failing_replace),
+            ):
+                with self.assertRaises(RuntimeErrorInfo) as ctx:
+                    state_mod.write_secrets_file_text(
+                        target, "OPENROUTER_API_KEY=new\n"
+                    )
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.STATE_WRITE_FAILED)
+            self.assertEqual(
+                target.read_text(encoding="utf-8"), "OPENROUTER_API_KEY=old\n"
+            )
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertTrue(created_temp)
+            self.assertTrue(all(not path.exists() for path in created_temp))
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
 
     def test_build_external_models_payload_keeps_domain_next_action_generic_operator(
         self,

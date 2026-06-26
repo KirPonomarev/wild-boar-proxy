@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import os
 import secrets
 import socket
 from pathlib import Path
@@ -17,6 +16,7 @@ from .state import (
     dual_lock,
     ensure_secrets_permissions,
     load_state_file,
+    write_secrets_file_text,
     write_state_file,
 )
 
@@ -38,13 +38,8 @@ def _parse_secrets_file(path: Path) -> dict[str, str]:
 
 
 def _write_secrets_file(path: Path, values: dict[str, str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{key}={values[key]}" for key in sorted(values)]
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    os.chmod(temp_path, 0o600)
-    temp_path.replace(path)
-    os.chmod(path, 0o600)
+    write_secrets_file_text(path, "\n".join(lines) + ("\n" if lines else ""))
 
 
 def _credential_present_from_secrets(paths: ExternalModelsPaths) -> bool:

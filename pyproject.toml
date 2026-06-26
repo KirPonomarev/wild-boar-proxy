@@ -19,7 +19,6 @@ include = ["wild_boar_proxy*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-  "unit: fast isolated tests",
   "contract: command/API contract tests",
   "smoke: local smoke tests",
   "integration: external/system integration tests",

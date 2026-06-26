@@ -3679,6 +3679,110 @@ class CliTests(unittest.TestCase):
         thread.start()
         return server, thread
 
+    def write_test_stable_runtime_cli_proxy(self, path: Path) -> None:
+        path.write_text(
+            "#!/bin/sh\n"
+            f"exec {shlex.quote(sys.executable)} - \"$@\" <<'PY'\n"
+            "import json\n"
+            "import re\n"
+            "import sys\n"
+            "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
+            "from pathlib import Path\n"
+            "\n"
+            "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
+            "text = config.read_text(encoding='utf-8')\n"
+            "host = '127.0.0.1'\n"
+            "port = 8318\n"
+            "host_match = re.search(r'^host:\\s*[\"\\']?([^\"\\'\\n]+)[\"\\']?\\s*$', text, re.M)\n"
+            "port_match = re.search(r'^port:\\s*[\"\\']?(\\d+)[\"\\']?\\s*$', text, re.M)\n"
+            "if host_match:\n"
+            "    host = host_match.group(1).strip()\n"
+            "if port_match:\n"
+            "    port = int(port_match.group(1))\n"
+            "\n"
+            "class Handler(BaseHTTPRequestHandler):\n"
+            "    def do_GET(self):\n"
+            "        if self.path == '/v1/models':\n"
+            "            body = json.dumps({'data': [{'id': 'gpt-5.4'}]}).encode('utf-8')\n"
+            "            self.send_response(200)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "\n"
+            "    def do_POST(self):\n"
+            "        if self.path == '/v1/responses':\n"
+            "            length = int(self.headers.get('Content-Length', '0'))\n"
+            "            self.rfile.read(length)\n"
+            "            body = json.dumps({'output_text': 'OK'}).encode('utf-8')\n"
+            "            self.send_response(200)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "\n"
+            "    def log_message(self, fmt, *args):\n"
+            "        return\n"
+            "\n"
+            "class ReusableThreadingHTTPServer(ThreadingHTTPServer):\n"
+            "    allow_reuse_address = True\n"
+            "\n"
+            "ReusableThreadingHTTPServer((host, port), Handler).serve_forever()\n"
+            "PY\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+
+    def start_owned_stable_runtime_process(self, port: int) -> Path:
+        fake_cli = self.bin_dir / "fake-stable-cli-proxy-api"
+        self.write_test_stable_runtime_cli_proxy(fake_cli)
+        process = subprocess.Popen(
+            [str(fake_cli), "-config", str(self.stable_dir / "config.yaml")],
+            cwd=ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        threading.Thread(target=process.wait, daemon=True).start()
+        self.addCleanup(self.terminate_process, process)
+        self.addCleanup(self.terminate_owned_stable_runtime_processes)
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if process.poll() is not None:
+                self.fail(f"fake stable runtime exited early: {process.returncode}")
+            if runtime_mod.socket_is_listening("127.0.0.1", port):
+                return fake_cli
+            time.sleep(0.05)
+        self.fail("fake stable runtime did not start listening")
+        return fake_cli
+
+    def terminate_process(self, process: subprocess.Popen[str]) -> None:
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+
+    def terminate_owned_stable_runtime_processes(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            self.env(include_launcher_override=False),
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            for pid in runtime_mod.discover_stable_runtime_pids(paths):
+                if runtime_mod.pid_command_line_contains_path(
+                    str(pid), paths.stable_config
+                ):
+                    runtime_mod.terminate_pid(pid, grace_seconds=1.0)
+
     def write_test_accounts_bin(self, path: Path) -> None:
         path.write_text(
             "#!/bin/sh\n"
@@ -23575,22 +23679,14 @@ class CliTests(unittest.TestCase):
             f"host: 127.0.0.1\nport: {stable_port}\n",
             encoding="utf-8",
         )
-        stable_server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
-        stable_thread = threading.Thread(
-            target=stable_server.serve_forever, daemon=True
+        fake_cli = self.start_owned_stable_runtime_process(stable_port)
+        launch_result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
         )
-        stable_thread.start()
-        try:
-            launch_result = self.run_cli(
-                "launch",
-                "smoke",
-                "--json",
-                include_launcher_override=False,
-            )
-        finally:
-            stable_server.shutdown()
-            stable_thread.join()
-            stable_server.server_close()
 
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["effective_mode"] = "managed"
@@ -23618,7 +23714,8 @@ class CliTests(unittest.TestCase):
         )
         managed_thread.start()
         try:
-            status_result = self.run_cli(
+            status_result = self.run_cli_with_env(
+                {"WBP_CLIPROXY_BIN": str(fake_cli)},
                 "status",
                 "--json",
                 include_launcher_override=False,
@@ -23665,25 +23762,20 @@ class CliTests(unittest.TestCase):
             f"host: 127.0.0.1\nport: {stable_port}\n",
             encoding="utf-8",
         )
-        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            result = self.run_cli(
-                "launch",
-                "smoke",
-                "--json",
-                include_launcher_override=False,
-            )
-            status_result = self.run_cli(
-                "status",
-                "--json",
-                include_launcher_override=False,
-            )
-        finally:
-            server.shutdown()
-            thread.join()
-            server.server_close()
+        fake_cli = self.start_owned_stable_runtime_process(stable_port)
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
+        )
+        status_result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "status",
+            "--json",
+            include_launcher_override=False,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(status_result.returncode, 0, status_result.stderr)
         payload = json.loads(result.stdout)
@@ -24080,20 +24172,14 @@ class CliTests(unittest.TestCase):
             f"host: 127.0.0.1\nport: {stable_port}\n",
             encoding="utf-8",
         )
-        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            result = self.run_cli(
-                "launch",
-                "smoke",
-                "--json",
-                include_launcher_override=False,
-            )
-        finally:
-            server.shutdown()
-            thread.join()
-            server.server_close()
+        fake_cli = self.start_owned_stable_runtime_process(stable_port)
+        result = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
@@ -24779,50 +24865,49 @@ class CliTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertFalse(self.default_launcher_script.exists())
-        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            for _ in range(5):
-                launch_result = self.run_cli_with_env(
-                    {"PATH": "/definitely/missing"},
-                    "launch",
-                    "smoke",
-                    "--json",
-                    include_launcher_override=False,
-                )
-                self.assertEqual(launch_result.returncode, 0, launch_result.stderr)
-                launch_payload = json.loads(launch_result.stdout)
-                self.assertEqual(launch_payload["status"], "ok")
-                self.assertEqual(launch_payload["machine_error_code"], "OK")
-                self.assertEqual(launch_payload["desired_mode"], "managed")
-                self.assertEqual(launch_payload["effective_mode"], "stable")
-                self.assertEqual(
-                    launch_payload["attestation_summary"]["status"], "ok"
-                )
+        fake_cli = self.start_owned_stable_runtime_process(stable_port)
+        for _ in range(5):
+            launch_result = self.run_cli_with_env(
+                {
+                    "PATH": "/definitely/missing",
+                    "WBP_CLIPROXY_BIN": str(fake_cli),
+                },
+                "launch",
+                "smoke",
+                "--json",
+                include_launcher_override=False,
+            )
+            self.assertEqual(launch_result.returncode, 0, launch_result.stderr)
+            launch_payload = json.loads(launch_result.stdout)
+            self.assertEqual(launch_payload["status"], "ok")
+            self.assertEqual(launch_payload["machine_error_code"], "OK")
+            self.assertEqual(launch_payload["desired_mode"], "managed")
+            self.assertEqual(launch_payload["effective_mode"], "stable")
+            self.assertEqual(
+                launch_payload["attestation_summary"]["status"], "ok"
+            )
 
-                status_result = self.run_cli_with_env(
-                    {"PATH": "/definitely/missing"},
-                    "status",
-                    "--json",
-                    include_launcher_override=False,
-                )
-                self.assertEqual(status_result.returncode, 0, status_result.stderr)
-                status_payload = json.loads(status_result.stdout)
-                self.assertEqual(status_payload["status"], "ok")
-                self.assertEqual(status_payload["machine_error_code"], "OK")
-                self.assertEqual(status_payload["effect"], "read")
-                self.assertEqual(status_payload["changed_files"], [])
-                self.assertEqual(status_payload["desired_mode"], "managed")
-                self.assertEqual(status_payload["effective_mode"], "stable")
-                self.assertEqual(
-                    status_payload["attestation_summary"]["status"],
-                    "not_run",
-                )
-        finally:
-            server.shutdown()
-            thread.join()
-            server.server_close()
+            status_result = self.run_cli_with_env(
+                {
+                    "PATH": "/definitely/missing",
+                    "WBP_CLIPROXY_BIN": str(fake_cli),
+                },
+                "status",
+                "--json",
+                include_launcher_override=False,
+            )
+            self.assertEqual(status_result.returncode, 0, status_result.stderr)
+            status_payload = json.loads(status_result.stdout)
+            self.assertEqual(status_payload["status"], "ok")
+            self.assertEqual(status_payload["machine_error_code"], "OK")
+            self.assertEqual(status_payload["effect"], "read")
+            self.assertEqual(status_payload["changed_files"], [])
+            self.assertEqual(status_payload["desired_mode"], "managed")
+            self.assertEqual(status_payload["effective_mode"], "stable")
+            self.assertEqual(
+                status_payload["attestation_summary"]["status"],
+                "not_run",
+            )
 
 
 if __name__ == "__main__":

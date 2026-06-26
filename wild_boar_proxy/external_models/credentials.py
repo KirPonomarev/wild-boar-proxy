@@ -11,7 +11,7 @@ from wild_boar_proxy.runtime import REPO_ROOT, RuntimeErrorInfo
 
 from . import errors
 from .paths import ExternalModelsPaths
-from .state import ensure_secrets_permissions
+from .state import ensure_secrets_permissions, write_secrets_file_text
 
 
 @dataclass(frozen=True)
@@ -259,13 +259,8 @@ def _parse_secrets_file(path: Path) -> dict[str, str]:
 
 
 def _write_secrets_file(path: Path, values: dict[str, str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{key}={values[key]}" for key in sorted(values)]
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    os.chmod(temp_path, 0o600)
-    temp_path.replace(path)
-    os.chmod(path, 0o600)
+    write_secrets_file_text(path, "\n".join(lines) + ("\n" if lines else ""))
 
 
 def _ensure_sandbox_admission_target(paths: ExternalModelsPaths) -> None:

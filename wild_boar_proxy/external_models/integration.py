@@ -10,7 +10,12 @@ from typing import Any
 from . import contracts
 from .paths import ExternalModelsPaths
 from .routes import load_routes_file, write_routes_file
-from .state import atomic_write_json, load_state_file, write_state_file
+from .state import (
+    atomic_write_json,
+    load_state_file,
+    write_secrets_file_text,
+    write_state_file,
+)
 
 
 LEGACY_EXTERNAL_MODELS_DIRNAME = "external-models"
@@ -29,12 +34,7 @@ def installer_managed_paths(paths: ExternalModelsPaths) -> list[Path]:
 
 
 def _write_secrets_file(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text(text, encoding="utf-8")
-    os.chmod(temp_path, 0o600)
-    temp_path.replace(path)
-    os.chmod(path, 0o600)
+    write_secrets_file_text(path, text)
 
 
 def ensure_installed_layout(paths: ExternalModelsPaths) -> None:
