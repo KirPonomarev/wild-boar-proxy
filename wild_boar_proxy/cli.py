@@ -947,6 +947,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DIRECT_REPLY_WORK_MODE,
     )
     router_hook_auto_route.add_argument("--timeout-seconds", type=float, default=60.0)
+    router_hook_auto_route.add_argument("--proof-dir")
     router_hook_auto_route.add_argument("--json", action="store_true", required=True)
     router_hook_direct_reply = router_hook_subparsers.add_parser("direct-reply")
     router_hook_direct_reply.add_argument("--prompt", required=True)
@@ -969,6 +970,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DIRECT_REPLY_WORK_MODE,
     )
     router_hook_direct_reply.add_argument("--timeout-seconds", type=float, default=60.0)
+    router_hook_direct_reply.add_argument("--proof-dir")
     router_hook_direct_reply.add_argument("--json", action="store_true", required=True)
     router_hook_handoff = router_hook_subparsers.add_parser("handoff")
     router_hook_handoff.add_argument("--prompt", required=True)
@@ -2062,6 +2064,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         command == "router-hook"
         and getattr(args, "router_hook_command", None) == "direct-reply"
     ):
+        if getattr(args, "proof_dir", None):
+            return EFFECT_MUTATE
         return (
             EFFECT_PROBE
             if getattr(args, "repo_bridge", None) == "off"
@@ -2071,6 +2075,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
         command == "router-hook"
         and getattr(args, "router_hook_command", None) == "auto-route"
     ):
+        if getattr(args, "proof_dir", None):
+            return EFFECT_MUTATE
         return (
             EFFECT_PROBE
             if getattr(args, "repo_bridge", None) == "off"
@@ -2769,6 +2775,7 @@ def main(argv: list[str] | None = None) -> int:
                     repo_bridge_mode=args.repo_bridge,
                     work_mode=args.work_mode,
                     timeout_seconds=args.timeout_seconds,
+                    proof_dir=args.proof_dir,
                 )
             )
         if (
@@ -2786,6 +2793,7 @@ def main(argv: list[str] | None = None) -> int:
                     repo_bridge_mode=args.repo_bridge,
                     work_mode=args.work_mode,
                     timeout_seconds=args.timeout_seconds,
+                    proof_dir=args.proof_dir,
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "handoff":

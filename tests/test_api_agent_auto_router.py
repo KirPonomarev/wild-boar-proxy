@@ -681,6 +681,134 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(payload["direct_reply_text"], "agent 2 auto answer")
         self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
 
+    def test_cli_auto_route_proof_dir_writes_auto_router_packet_only(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            proof_dir = root / "proof"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **_kwargs: _live_result("proof auto answer"),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            "DIP: ответь.",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--proof-dir",
+                            str(proof_dir),
+                            "--json",
+                        ]
+                    )
+                output = stdout.getvalue()
+                proof_file = proof_dir / auto.API_AGENT_AUTO_ROUTER_FILE_NAME
+                persisted = json.loads(proof_file.read_text(encoding="utf-8"))
+                direct_reply_file_written = (
+                    proof_dir / direct.API_AGENT_DIRECT_REPLY_FILE_NAME
+                ).exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(output.splitlines()), 1)
+        payload = json.loads(output)
+        self.assertEqual(payload, persisted)
+        self.assertFalse(direct_reply_file_written)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
+        self.assertEqual(payload["direct_reply_text"], "proof auto answer")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertTrue(payload["file_mutation_attempted"])
+        self.assertTrue(payload["evidence_written"])
+        self.assertFalse(payload["state_written"])
+        self.assertTrue(payload["proof_file_written"])
+        self.assertEqual(
+            payload["changed_files"],
+            [auto.API_AGENT_AUTO_ROUTER_FILE_NAME],
+        )
+        self.assertFalse(payload["proof_file_path_recorded"])
+        self.assertFalse(payload["proof_dir_path_recorded"])
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_auto_route_proof_dir_write_failure_returns_json_error(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            proof_file_path = root / "proof-file"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            proof_file_path.write_text("not a directory", encoding="utf-8")
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **_kwargs: _live_result("proof auto answer"),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            "DIP: ответь.",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--proof-dir",
+                            str(proof_file_path),
+                            "--json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 1)
+        output = stdout.getvalue()
+        self.assertEqual(len(output.splitlines()), 1)
+        payload = json.loads(output)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            "WBP_API_AGENT_AUTO_ROUTER_PROOF_WRITE_FAILED",
+        )
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertEqual(payload["changed_files"], [])
+
     def test_command_effect_is_probe_without_repo_bridge_and_mutate_with_repo_bridge(self) -> None:
         parser = cli.build_parser()
         probe_args = parser.parse_args(
@@ -706,6 +834,18 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
 
         self.assertEqual(cli.command_effect_from_args(probe_args), "probe")
         self.assertEqual(cli.command_effect_from_args(mutate_args), "mutate")
+        proof_args = parser.parse_args(
+            [
+                "router-hook",
+                "auto-route",
+                "--prompt",
+                "DIP: ответь.",
+                "--proof-dir",
+                "/tmp/wbp-proof",
+                "--json",
+            ]
+        )
+        self.assertEqual(cli.command_effect_from_args(proof_args), "mutate")
 
 
 if __name__ == "__main__":

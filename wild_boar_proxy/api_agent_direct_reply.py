@@ -23,7 +23,8 @@ from .router_hook_entry import (
     load_runtime_context_packet,
     runtime_context_path,
 )
-from .runtime import REPO_ROOT, RuntimePaths
+from .runtime import REPO_ROOT, RuntimePaths, write_json_atomic
+from .runtime_errors import RuntimeErrorInfo
 from .runtime_dispatch_mode_truth import (
     DISPATCH_MODE_API_ONLY,
     EXECUTOR_API_ROUTE,
@@ -41,6 +42,7 @@ from .wbp_dip_tool import (
 
 
 API_AGENT_DIRECT_REPLY_PACKET_KIND = "wbp_api_agent_direct_reply"
+API_AGENT_DIRECT_REPLY_FILE_NAME = "api-agent-direct-reply.packet.json"
 API_AGENT_DIRECT_REPLY_OK = "OK"
 API_AGENT_DIRECT_REPLY_DISPATCH_NOT_PROVEN = (
     "WBP_API_AGENT_DIRECT_REPLY_DISPATCH_NOT_PROVEN"
@@ -68,6 +70,50 @@ def _sha256_text(value: str) -> str:
 
 def _as_bool(value: object) -> bool:
     return value is True
+
+
+def _persist_proof_packet(
+    packet: Mapping[str, Any],
+    *,
+    proof_dir: str | Path | None,
+    file_name: str = API_AGENT_DIRECT_REPLY_FILE_NAME,
+) -> dict[str, Any]:
+    if proof_dir is None or not str(proof_dir).strip():
+        return dict(packet)
+    output_dir = Path(proof_dir).expanduser()
+    output_file = output_dir / file_name
+    changed_files = [
+        str(item)
+        for item in (
+            packet.get("changed_files") if isinstance(packet.get("changed_files"), list) else []
+        )
+    ]
+    if file_name not in changed_files:
+        changed_files.append(file_name)
+    persisted = dict(packet)
+    persisted.update(
+        {
+            "changed_files": changed_files,
+            "effect": EFFECT_MUTATE,
+            "file_mutation_attempted": True,
+            "state_written": False,
+            "evidence_written": True,
+            "proof_file_written": True,
+            "proof_file_name": file_name,
+            "proof_file_path_recorded": False,
+            "proof_dir_path_recorded": False,
+        }
+    )
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(output_file, persisted)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            "Failed to write direct-reply proof packet.",
+            machine_error_code="WBP_API_AGENT_DIRECT_REPLY_PROOF_WRITE_FAILED",
+            operator_action="retry",
+        ) from exc
+    return persisted
 
 
 def _live_result_bool(live_result: Mapping[str, Any], *field_names: str) -> bool:
@@ -641,6 +687,7 @@ def run_api_agent_direct_reply_command(
     repo_bridge_mode: str = DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
     work_mode: str = DEFAULT_DIRECT_REPLY_WORK_MODE,
     timeout_seconds: float = DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+    proof_dir: str | Path | None = None,
     live_result_runner: LiveResultRunner | None = None,
 ) -> dict[str, Any]:
     context_path = runtime_context_path(
@@ -653,7 +700,7 @@ def run_api_agent_direct_reply_command(
         target_repo_arg=target_repo_arg,
         env=os.environ,
     )
-    return build_api_agent_direct_reply_packet(
+    packet = build_api_agent_direct_reply_packet(
         prompt_text=prompt_text,
         runtime_context=context,
         context_file_metadata=metadata,
@@ -666,3 +713,4 @@ def run_api_agent_direct_reply_command(
         timeout_seconds=timeout_seconds,
         live_result_runner=live_result_runner,
     )
+    return _persist_proof_packet(packet, proof_dir=proof_dir)

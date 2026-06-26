@@ -86,6 +86,15 @@ fallback chains, or local imitation. Required success fields include
 `gpt_lane_selected`, `tools_wbp_dip_invoked=false`, `dip_run_invoked=false`, and
 `codex_exec_invoked=false`.
 
+With `--proof-dir <path>`, `auto-route` may write only its own
+`api-agent-auto-router.packet.json` packet. Stdout remains exactly one JSON
+object. The packet must set `evidence_written=true`, keep
+`proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
+only the proof packet filename in `changed_files` for no-repo-write paths, with
+`file_mutation_attempted=true`. It must not write a nested direct-reply packet.
+Proof write failure must fail closed as JSON with
+`machine_error_code=WBP_API_AGENT_AUTO_ROUTER_PROOF_WRITE_FAILED`.
+
 Callers must not manually pre-read or summarize
 `wbp-agent-runtime-context.json` before normal `auto-route` handling. The
 router owns that read; manual context inspection is only for diagnostics of the
@@ -126,6 +135,14 @@ implementation work. If an operator explicitly enables
 `--repo-bridge auto|on`, the command is classified as potentially mutating and
 the packet must expose any controlled code mutation through `effect=mutate`,
 `file_mutation_attempted`, `changed_files`, and `dip_action_mutated_files`.
+
+With `--proof-dir <path>`, `direct-reply` may write only its own
+`api-agent-direct-reply.packet.json` packet. Stdout remains exactly one JSON
+object. The packet must set `evidence_written=true`, keep
+`proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
+only the proof packet filename in `changed_files` for no-repo-write paths, with
+`file_mutation_attempted=true`. Proof write failure must fail closed as JSON with
+`machine_error_code=WBP_API_AGENT_DIRECT_REPLY_PROOF_WRITE_FAILED`.
 
 Required success fields include:
 
