@@ -5,9 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import os
 from pathlib import Path
 import plistlib
 import subprocess
+import tempfile
 from typing import Any
 
 from .command_effects import EFFECT_PROBE, EFFECT_REPAIR
@@ -82,11 +84,64 @@ def _read_plist(path: Path) -> tuple[dict[str, Any], str]:
     return parsed, ""
 
 
+def _fsync_parent_best_effort(parent: Path) -> None:
+    try:
+        parent_fd = os.open(parent, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            os.fsync(parent_fd)
+        except OSError:
+            return
+    finally:
+        os.close(parent_fd)
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    target = Path(path)
+    temp_path = ""
+    fd = -1
+    mode: int | None = None
+    try:
+        try:
+            mode = target.stat().st_mode & 0o777
+        except OSError:
+            mode = None
+        fd, temp_path = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=".wbp-tmp-",
+            suffix=f".{target.name}",
+        )
+        with os.fdopen(fd, "wb") as handle:
+            fd = -1
+            handle.write(data)
+            handle.flush()
+            if mode is not None:
+                os.fchmod(handle.fileno(), mode)
+            os.fsync(handle.fileno())
+        os.replace(temp_path, target)
+        temp_path = ""
+        _fsync_parent_best_effort(target.parent)
+    except Exception:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if temp_path:
+            try:
+                Path(temp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+
 def _write_plist_atomic(path: Path, payload: dict[str, Any]) -> None:
-    tmp = path.with_name(f".{path.name}.wbp-tmp")
-    with tmp.open("wb") as handle:
-        plistlib.dump(payload, handle, sort_keys=False)
-    tmp.replace(path)
+    _atomic_write_bytes(
+        path,
+        plistlib.dumps(payload, sort_keys=False),
+    )
 
 
 def _utc_stamp() -> str:

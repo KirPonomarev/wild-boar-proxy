@@ -169,6 +169,39 @@ class CustomAppIdentityRepairTests(unittest.TestCase):
         self.assertTrue(any("Info.plist" in item for item in packet["changed_files"]))
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_apply_repair_does_not_use_legacy_fixed_temp_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            paths, stock, custom = _fixture(Path(tmp_dir))
+            legacy_tmp = custom / "Contents" / ".Info.plist.wbp-tmp"
+            legacy_tmp.mkdir()
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_verify",
+                    side_effect=[(False, 1, "invalid"), (True, 0, "valid")],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_ad_hoc",
+                    return_value=(True, 0, "signed"),
+                ),
+            ):
+                packet = repair.build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=True,
+                    stock_app_path=str(stock),
+                    custom_app_path=str(custom),
+                )
+            custom_after = _read_plist(custom)
+            legacy_tmp_still_dir = legacy_tmp.is_dir()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], repair.CUSTOM_APP_IDENTITY_OK)
+        self.assertTrue(legacy_tmp_still_dir)
+        self.assertEqual(
+            custom_after["CFBundleIdentifier"],
+            repair.DESIRED_CUSTOM_BUNDLE_ID,
+        )
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_backup_dir_outside_profile_blocks_apply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             paths, stock, custom = _fixture(Path(tmp_dir))
@@ -291,6 +324,92 @@ class CustomAppIdentityRepairTests(unittest.TestCase):
         self.assertEqual(original, restored)
         self.assertFalse(packet["codesign_output_recorded"])
         self.assertIn("codesign_failed", packet["blocking_reasons"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_plist_write_failure_cleans_temp_files_and_preserves_original(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            paths, stock, custom = _fixture(Path(tmp_dir))
+            custom_plist_path = custom / "Contents" / "Info.plist"
+            original = custom_plist_path.read_bytes()
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_verify",
+                    side_effect=[(False, 1, "invalid"), (False, 1, "invalid")],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair.os.replace",
+                    side_effect=OSError("publish failed"),
+                ),
+            ):
+                packet = repair.build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=True,
+                    stock_app_path=str(stock),
+                    custom_app_path=str(custom),
+                )
+            restored = custom_plist_path.read_bytes()
+            residue = sorted(
+                path.name
+                for path in custom_plist_path.parent.glob(".wbp-tmp-*.Info.plist")
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            repair.CUSTOM_APP_IDENTITY_NOT_ADMITTED,
+        )
+        self.assertTrue(packet["mutation_attempted"])
+        self.assertFalse(packet["plist_written"])
+        self.assertFalse(packet["codesign_attempted"])
+        self.assertTrue(packet["plist_rollback_restored"])
+        self.assertTrue(packet["rollback_restored"])
+        self.assertEqual(original, restored)
+        self.assertEqual(residue, [])
+        self.assertIn("plist_write_failed", packet["blocking_reasons"])
+        self.assertNotIn(str(custom_plist_path), packet["changed_files"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_plist_fsync_failure_cleans_temp_files_and_preserves_original(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            paths, stock, custom = _fixture(Path(tmp_dir))
+            custom_plist_path = custom / "Contents" / "Info.plist"
+            original = custom_plist_path.read_bytes()
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_verify",
+                    side_effect=[(False, 1, "invalid"), (False, 1, "invalid")],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair.os.fsync",
+                    side_effect=OSError("flush failed"),
+                ),
+            ):
+                packet = repair.build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=True,
+                    stock_app_path=str(stock),
+                    custom_app_path=str(custom),
+                )
+            restored = custom_plist_path.read_bytes()
+            residue = sorted(
+                path.name
+                for path in custom_plist_path.parent.glob(".wbp-tmp-*.Info.plist")
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            repair.CUSTOM_APP_IDENTITY_NOT_ADMITTED,
+        )
+        self.assertTrue(packet["mutation_attempted"])
+        self.assertFalse(packet["plist_written"])
+        self.assertFalse(packet["codesign_attempted"])
+        self.assertTrue(packet["plist_rollback_restored"])
+        self.assertTrue(packet["rollback_restored"])
+        self.assertEqual(original, restored)
+        self.assertEqual(residue, [])
+        self.assertIn("plist_write_failed", packet["blocking_reasons"])
+        self.assertNotIn(str(custom_plist_path), packet["changed_files"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_codesign_failure_side_effects_do_not_claim_full_rollback(self) -> None:
