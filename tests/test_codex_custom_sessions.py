@@ -2160,6 +2160,20 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["configured_wire_api"], "responses")
             self.assertFalse(packet["fallback_attempted"])
             self.assertEqual(packet["response_preview_bounded"], "SESSION_REAL_OK")
+            self.assertTrue(packet["agent_reply_block"])
+            self.assertEqual(packet["reply_block_kind"], "session_agent_reply")
+            self.assertEqual(packet["reply_author_alias"], "Codex")
+            self.assertEqual(packet["reply_agent_id"], "codex")
+            self.assertEqual(packet["reply_lane"], "primary_chatgpt")
+            self.assertEqual(packet["reply_provider_label"], "ChatGPT")
+            self.assertEqual(packet["reply_preview_bounded"], "SESSION_REAL_OK")
+            self.assertEqual(packet["reply_text"], "")
+            self.assertTrue(packet["reply_proof_summary"]["reply_visible"])
+            self.assertTrue(packet["reply_proof_summary"]["inference_proven"])
+            self.assertFalse(packet["reply_proof_summary"]["runtime_lane_proven"])
+            self.assertTrue(packet["reply_proof_summary"]["prompt_runner_called"])
+            self.assertFalse(packet["reply_proof_summary"]["fallback_used"])
+            self.assertFalse(packet["reply_proof_summary"]["local_imitation_used"])
             self.assertEqual(len(packet["response_digest"]), 64)
             self.assertFalse(packet["token_usage_present"])
             self.assertIsNone(packet["token_burn"])
@@ -2190,6 +2204,20 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(detail["session"]["inference_proven"])
             self.assertTrue(transcript["model_response_present"])
             self.assertFalse(transcript["inference_proven"])
+            self.assertTrue(transcript["agent_reply_entries_present"])
+            self.assertEqual(transcript["agent_reply_entry_count"], 1)
+            self.assertEqual(transcript["agent_reply_authors"], ["Codex"])
+            self.assertEqual(transcript["entries"][-1]["entry_kind"], "agent_reply")
+            self.assertEqual(transcript["entries"][-1]["reply_block_kind"], "session_agent_reply")
+            self.assertEqual(transcript["entries"][-1]["reply_author_alias"], "Codex")
+            self.assertEqual(transcript["entries"][-1]["reply_agent_id"], "codex")
+            self.assertEqual(transcript["entries"][-1]["reply_lane"], "primary_chatgpt")
+            self.assertEqual(transcript["entries"][-1]["reply_provider_label"], "ChatGPT")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_preview_bounded"],
+                "SESSION_REAL_OK",
+            )
+            self.assertFalse(transcript["entries"][-1]["reply_text_recorded_in_transcript"])
             self.assertNotIn("Reply real OK.", json.dumps(transcript))
 
     def test_prompt_run_defaults_to_owner_authorization_block(self) -> None:
@@ -2356,6 +2384,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 active_project_root=Path(temp_dir),
                 active_project_root_source="test_selected_active_project_root",
             )
+            transcript = manager.transcript_packet(session_id)
 
             self.assertEqual(packet["status"], "ok")
             self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
@@ -2371,6 +2400,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["reply_agent_id"], "dip")
             self.assertEqual(packet["reply_lane"], "api_route")
             self.assertEqual(packet["reply_provider_label"], "deepseek")
+            self.assertEqual(packet["reply_preview_bounded"], "DIP_DIRECT_OK")
             self.assertEqual(packet["reply_text"], "DIP_DIRECT_OK")
             self.assertEqual(
                 packet["reply_text_sha256"],
@@ -2397,7 +2427,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["model_response_present"])
             self.assertTrue(packet["inference_proven"])
             self.assertTrue(packet["route_bound_dispatch_proven"])
-            self.assertTrue(packet["active_project_root_required"])
+            self.assertFalse(packet["active_project_root_required"])
             self.assertTrue(packet["active_project_root_available"])
             self.assertEqual(
                 packet["active_project_root_source"],
@@ -2411,6 +2441,23 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(direct_calls[0]["repo_root"], Path(temp_dir).resolve())
             self.assertEqual(direct_calls[0]["dip_work_mode"], "full")
             self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+            self.assertTrue(transcript["agent_reply_entries_present"])
+            self.assertEqual(transcript["agent_reply_entry_count"], 1)
+            self.assertEqual(transcript["agent_reply_authors"], ["DIP"])
+            self.assertEqual(transcript["entries"][-1]["entry_kind"], "agent_reply")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_block_kind"],
+                "api_agent_direct_reply",
+            )
+            self.assertEqual(transcript["entries"][-1]["reply_author_alias"], "DIP")
+            self.assertEqual(transcript["entries"][-1]["reply_agent_id"], "dip")
+            self.assertEqual(transcript["entries"][-1]["reply_lane"], "api_route")
+            self.assertEqual(transcript["entries"][-1]["reply_provider_label"], "deepseek")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_preview_bounded"],
+                "DIP_DIRECT_OK",
+            )
+            self.assertFalse(transcript["entries"][-1]["reply_text_recorded_in_transcript"])
 
     def test_prompt_ingress_dip_alias_bypasses_primary_slot_precondition(self) -> None:
         prompt_calls: list[dict[str, object]] = []
@@ -2569,7 +2616,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
             self.assertEqual(direct_calls, [])
 
-    def test_prompt_ingress_dip_alias_blocks_without_active_project_root_before_provider(self) -> None:
+    def test_prompt_ingress_dip_alias_allows_plain_reply_without_active_project_root(self) -> None:
         prompt_calls: list[dict[str, object]] = []
         direct_calls: list[dict[str, object]] = []
 
@@ -2594,21 +2641,23 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 profile_dir=Path(temp_dir),
             )
 
-            self.assertEqual(packet["status"], "error")
-            self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
-            self.assertTrue(packet["active_project_root_required"])
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertFalse(packet["active_project_root_required"])
             self.assertFalse(packet["active_project_root_available"])
             self.assertEqual(packet["active_project_root_source"], "missing")
             self.assertFalse(packet["active_project_root_path_recorded"])
             self.assertTrue(packet["auto_router_used"])
             self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
             self.assertTrue(packet["direct_reply_selected"])
-            self.assertFalse(packet["direct_reply_proven"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "MUST_NOT_RUN")
             self.assertFalse(packet["prompt_runner_called"])
-            self.assertFalse(packet["api_lane_called"])
-            self.assertFalse(packet["model_response_present"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertTrue(packet["model_response_present"])
             self.assertEqual(prompt_calls, [])
-            self.assertEqual(direct_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+            self.assertIsNone(direct_calls[0]["repo_root"])
 
     def test_prompt_ingress_unknown_alias_fails_closed_without_any_runner(self) -> None:
         prompt_calls: list[dict[str, object]] = []

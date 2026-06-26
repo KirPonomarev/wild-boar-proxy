@@ -1582,6 +1582,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             runner = MappingRunner(live_payloads_with_reasoning_variants())
             with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "HOME": temp_dir,
+                        "WBP_PROFILE_DIR": temp_dir,
+                        "WBP_MANAGED_DIR": str(Path(temp_dir) / "managed"),
+                    },
+                    clear=False,
+                ),
                 mock.patch.object(
                     live_server,
                     "OperatorSurfaceSession",
@@ -6516,7 +6525,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     return None
 
             def fake_build_handler(**kwargs: object) -> object:
-                observed_handler_kwargs.append(dict(kwargs))
+                observed_handler_kwargs.append(
+                    {
+                        **dict(kwargs),
+                        "env_active_project_root": os.environ.get(
+                            live_server.ACTIVE_PROJECT_ROOT_ENV
+                        ),
+                    }
+                )
                 return object()
 
             env_updates = {
@@ -6543,6 +6559,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(
                 observed_handler_kwargs[0]["safe_worktree_repo_root"],
                 project_root.resolve(strict=False),
+            )
+            self.assertEqual(
+                observed_handler_kwargs[0]["env_active_project_root"],
+                str(project_root.resolve(strict=False)),
             )
             self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
 
@@ -28991,7 +29011,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             ],
         )
 
-    def test_codex_custom_prompt_endpoint_blocks_without_active_project_root(self) -> None:
+    def test_codex_custom_prompt_endpoint_allows_plain_dip_reply_without_active_project_root(self) -> None:
         created_sessions: list[DualLaneFakeOperatorSurfaceSession] = []
 
         def factory() -> DualLaneFakeOperatorSurfaceSession:
@@ -29054,19 +29074,20 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 server.server_close()
 
         self.assertEqual(created["status"], "ok")
-        self.assertEqual(packet["status"], "error")
-        self.assertEqual(packet["machine_error_code"], "active_project_root_missing")
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
         self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
-        self.assertTrue(packet["active_project_root_required"])
+        self.assertFalse(packet["active_project_root_required"])
         self.assertFalse(packet["active_project_root_available"])
         self.assertFalse(packet["active_project_root_path_recorded"])
         self.assertTrue(packet["auto_router_used"])
         self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
         self.assertTrue(packet["direct_reply_selected"])
-        self.assertFalse(packet["direct_reply_proven"])
+        self.assertTrue(packet["direct_reply_proven"])
+        self.assertEqual(packet["direct_reply_text"], "WBP_LIVE_OK")
         self.assertFalse(packet["prompt_runner_called"])
-        self.assertFalse(packet["api_lane_called"])
-        self.assertFalse(packet["api_agent_provider_called"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["api_agent_provider_called"])
         self.assertEqual(created_sessions[0].run_payloads, [])
 
     def test_codex_custom_same_session_prompt_can_exercise_chatgpt_and_api_lanes(self) -> None:
@@ -29291,6 +29312,15 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         {"prompt": "DIP: ответь ровно HTTP_DIP_DIRECT_OK."},
                     )
                 )
+                with NO_PROXY_OPENER.open(
+                    urllib.request.Request(
+                        f"{base}/api/codex/custom/sessions/{session_id}/transcript",
+                        headers=_web_post_headers(f"{base}/api/codex/custom/sessions/{session_id}/transcript"),
+                        method="GET",
+                    ),
+                    timeout=10,
+                ) as response:
+                    transcript = json.loads(response.read().decode("utf-8"))
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -29302,12 +29332,14 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(packet["direct_reply_selected"])
         self.assertTrue(packet["direct_reply_proven"])
         self.assertEqual(packet["direct_reply_text"], "HTTP_DIP_DIRECT_OK")
+        self.assertTrue(packet["agent_reply_block"])
         self.assertTrue(packet["direct_api_reply_block"])
         self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
         self.assertEqual(packet["reply_author_alias"], "DIP")
         self.assertEqual(packet["reply_agent_id"], "dip")
         self.assertEqual(packet["reply_lane"], "api_route")
         self.assertEqual(packet["reply_provider_label"], "openrouter")
+        self.assertEqual(packet["reply_preview_bounded"], "HTTP_DIP_DIRECT_OK")
         self.assertEqual(packet["reply_text"], "HTTP_DIP_DIRECT_OK")
         self.assertTrue(packet["selected_route_id_allowed"])
         self.assertTrue(packet["allowed_api_route_ids_enforced"])
@@ -29328,6 +29360,20 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(packet["active_project_root_is_wbp_repo"])
         self.assertTrue(packet["target_repo_available"])
         self.assertFalse(packet["target_repo_path_recorded"])
+        self.assertTrue(transcript["agent_reply_entries_present"])
+        self.assertEqual(transcript["agent_reply_entry_count"], 1)
+        self.assertEqual(transcript["agent_reply_authors"], ["DIP"])
+        self.assertEqual(transcript["entries"][-1]["entry_kind"], "agent_reply")
+        self.assertEqual(
+            transcript["entries"][-1]["reply_block_kind"],
+            "api_agent_direct_reply",
+        )
+        self.assertEqual(transcript["entries"][-1]["reply_author_alias"], "DIP")
+        self.assertEqual(transcript["entries"][-1]["reply_provider_label"], "openrouter")
+        self.assertEqual(
+            transcript["entries"][-1]["reply_preview_bounded"],
+            "HTTP_DIP_DIRECT_OK",
+        )
         self.assertEqual(created_sessions[0].run_payloads, [])
         self.assertEqual(len(direct_calls), 1)
         self.assertEqual(direct_calls[0]["expected_alias"], "DIP")

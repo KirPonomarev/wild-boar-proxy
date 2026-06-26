@@ -34,6 +34,7 @@ from .runtime import (
     build_repo_owned_default_launcher_script_text,
     write_text_atomic,
 )
+from .active_project_root import ACTIVE_PROJECT_ROOT_ENV
 from .token_command import emit_local_token
 
 
@@ -4228,12 +4229,15 @@ def build_provider_config(
     endpoint: str,
     model: str,
     auth_command_path: Path,
+    local_token: str = "",
     sandbox_mode: str = NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
 ) -> str:
     if sandbox_mode not in NATIVE_CUSTOM_ADMITTED_SANDBOX_MODES:
         raise ValueError(f"unsupported native custom sandbox mode: {sandbox_mode}")
+    explicit_token = str(local_token or "").strip()
     cli_key = _cli_proxy_api_key()
-    if cli_key:
+    bearer_token = explicit_token or cli_key
+    if bearer_token:
         return (
             f'model = "{model}"\n'
             'model_provider = "wbp"\n'
@@ -4244,7 +4248,7 @@ def build_provider_config(
             f'base_url = "{endpoint}"\n'
             'wire_api = "responses"\n'
             "requires_openai_auth = false\n"
-            f'experimental_bearer_token = "{cli_key}"\n'
+            f'experimental_bearer_token = "{bearer_token}"\n'
         )
     auth_command = str(auth_command_path.resolve())
     return (
@@ -4641,6 +4645,7 @@ def materialize_probe_profile(
         endpoint=endpoint,
         model=effective_model,
         auth_command_path=auth_command_path,
+        local_token=local_token,
     )
     if preserved_hooks_sections:
         provider_config = provider_config.rstrip() + "\n\n" + preserved_hooks_sections + "\n"
@@ -4715,6 +4720,7 @@ def launch_native_candidate(
             "WBP_RUNTIME_TMPDIR": str(layout.tmp_root / "runtime-bind"),
             "WBP_PYTHON_BIN": sys.executable,
             "WBP_CODEX_REMOTE_DEBUGGING_PORT": str(remote_debugging_port),
+            ACTIVE_PROJECT_ROOT_ENV: str(repo_root.resolve(strict=False)),
         }
     )
     stdout_handle = layout.launcher_stdout.open("w", encoding="utf-8")

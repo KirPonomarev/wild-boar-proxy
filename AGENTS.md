@@ -55,7 +55,11 @@ It does not override the product/runtime canon above.
 
 When running inside a Wild Boar Proxy Custom Codex profile and `WBP_PROFILE_DIR`
 is present, requests that address `Codex`, `DIP`, `Agent 1`, or `Agent 2` must
-first read:
+use the canonical auto-router entrypoint first:
+
+`${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route --prompt "<bounded operator prompt>" --json`
+
+The auto-router reads:
 
 `$WBP_PROFILE_DIR/wbp-agent-runtime-context.json`
 
@@ -64,10 +68,13 @@ API route selection. Do not infer route ids from tests, docs, audit history,
 chat history, or old examples. If the context file is missing, answer
 `FAIL_ALIAS_CONTEXT_MISSING`.
 
-For raw Custom Codex prompt text, use the canonical auto-router entrypoint
-first:
+Do not manually pre-read, print, or summarize the runtime context before calling
+`auto-route` for normal prompt handling. Manual runtime-context reads are only
+for diagnostics of the router itself.
 
-`python3 -m wild_boar_proxy router-hook auto-route --prompt "<bounded operator prompt>" --json`
+For direct exact-answer prompts such as `DIP: ответь ровно ...`, do not narrate
+the routing step. Run `auto-route`, then return only packet `output_text` when
+`status=ok`, `auto_router_proven=true`, and `exact_plain_reply_matched=true`.
 
 This path must resolve the addressed name from runtime context and choose exactly
 one lane. API-lane aliases such as `DIP`, `Agent 2`, or a custom WBP-defined API
@@ -78,7 +85,7 @@ ambiguous addressed aliases fail closed.
 For already-routed API-lane alias text, the lower-level direct reply entrypoint
 is:
 
-`python3 -m wild_boar_proxy router-hook direct-reply --prompt "<bounded alias task>" --json`
+`${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook direct-reply --prompt "<bounded alias task>" --json`
 
 Both short paths must not invoke `codex exec`, `tools/wbp_dip`, `dip run`,
 ordinary Codex subagents, wrapper substitution, fallback chains, or local

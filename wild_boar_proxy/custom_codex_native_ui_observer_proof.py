@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any
 
 from .native_window_probe import (
@@ -20,6 +21,8 @@ NATIVE_UI_OBSERVER_PACKET_FILE_NAME = "native-ui-observer.packet.json"
 NATIVE_UI_AUTO_LAUNCH_PACKET_FILE_NAME = "native-ui-auto-launch.packet.json"
 DEFAULT_AUTO_LAUNCH_ENDPOINT = "http://127.0.0.1:8318/v1"
 DEFAULT_AUTO_LAUNCH_MODEL = DEFAULT_CUSTOM_NATIVE_MODEL
+
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,256}$")
 
 _AUTO_LAUNCH_MACHINE_ERROR_CODES = frozenset(
     {
@@ -37,19 +40,94 @@ def _proof_root(paths: RuntimePaths, raw_proof_dir: str | None) -> Path:
     return paths.managed_dir / "codex-runner" / "native-ui-observer-proof" / stamp
 
 
-def _native_ui_observer_packet_proven(packet: dict[str, Any]) -> bool:
-    return (
+def _valid_request_id(value: str) -> bool:
+    return bool(_REQUEST_ID_RE.fullmatch(str(value or "")))
+
+
+def _native_ui_observer_proof_fields(
+    packet: dict[str, Any],
+    *,
+    request_id: str,
+    expected_text: str,
+) -> dict[str, Any]:
+    request_id = str(request_id or "")
+    expected_text = str(expected_text or "")
+    request_id_valid = _valid_request_id(request_id)
+    packet_request_id_matches_input = (
+        request_id_valid and packet.get("request_id") == request_id
+    )
+    expected_text_contains_request_id = bool(
+        request_id_valid and request_id in expected_text
+    )
+    base_submit_ready = (
         packet.get("status") == "ok"
         and packet.get("prompt_submitted") is True
         and packet.get("native_prompt_turn_accepted") is True
-        and packet.get("assistant_turn_machine_error_code") == "OK"
-        and packet.get("native_free_text_observer_machine_error_code") == "OK"
-        and packet.get("custom_response_exact_token_observed") is True
-        and packet.get("custom_response_bound_to_request") is True
         and packet.get("native_codex_subagent_used_as_dip") is not True
         and packet.get("fallback_used") is not True
         and packet.get("local_imitation_used") is not True
     )
+    exact_token_observed = (
+        packet.get("custom_codex_response_text_read_proven") is True
+        and packet.get("custom_response_exact_token_observed") is True
+    )
+    strict_request_bound = (
+        base_submit_ready
+        and request_id_valid
+        and packet_request_id_matches_input
+        and expected_text_contains_request_id
+        and packet.get("assistant_turn_machine_error_code") == "OK"
+        and packet.get("native_free_text_observer_machine_error_code") == "OK"
+        and packet.get("custom_response_bound_to_request") is True
+    )
+    smoke_only = exact_token_observed and not strict_request_bound
+    proof_strength = (
+        "strict_request_bound"
+        if strict_request_bound
+        else "exact_token_smoke_only"
+        if smoke_only
+        else "not_proven"
+    )
+    proof_machine_error_code = "OK"
+    if not strict_request_bound:
+        if not base_submit_ready:
+            proof_machine_error_code = "CUSTOM_NATIVE_UI_OBSERVER_SUBMIT_NOT_PROVEN"
+        elif not request_id_valid:
+            proof_machine_error_code = "CUSTOM_NATIVE_UI_REQUEST_ID_INVALID"
+        elif not packet_request_id_matches_input:
+            proof_machine_error_code = (
+                "CUSTOM_NATIVE_UI_OBSERVER_REQUEST_ID_MISMATCH"
+            )
+        elif smoke_only and not expected_text_contains_request_id:
+            proof_machine_error_code = (
+                "CUSTOM_NATIVE_UI_OBSERVER_EXPECTED_TEXT_NOT_REQUEST_BOUND"
+            )
+        elif smoke_only:
+            proof_machine_error_code = "CUSTOM_NATIVE_UI_OBSERVER_EXACT_TOKEN_SMOKE_ONLY"
+        elif packet.get("assistant_turn_machine_error_code") != "OK":
+            proof_machine_error_code = (
+                "CUSTOM_NATIVE_UI_OBSERVER_ASSISTANT_TURN_NOT_PROVEN"
+            )
+        elif packet.get("native_free_text_observer_machine_error_code") != "OK":
+            proof_machine_error_code = (
+                "CUSTOM_NATIVE_UI_OBSERVER_REQUEST_BOUND_RESPONSE_NOT_PROVEN"
+            )
+        else:
+            proof_machine_error_code = "CUSTOM_NATIVE_UI_OBSERVER_NOT_PROVEN"
+    return {
+        "native_ui_request_id_valid": request_id_valid,
+        "native_ui_observer_packet_request_id_matches_input": (
+            packet_request_id_matches_input
+        ),
+        "native_ui_expected_text_contains_request_id": (
+            expected_text_contains_request_id
+        ),
+        "native_ui_exact_token_smoke_observed": exact_token_observed,
+        "native_ui_strict_request_bound_observed": strict_request_bound,
+        "native_ui_observer_proof_strength": proof_strength,
+        "native_ui_observer_proof_machine_error_code": proof_machine_error_code,
+        "native_ui_observer_packet_proven": strict_request_bound,
+    }
 
 
 def _should_auto_launch_after_submit(packet: dict[str, Any]) -> bool:
@@ -130,6 +208,15 @@ def _launch_packet_allows_retry(launch_packet: dict[str, Any]) -> bool:
             == "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
             and launch_packet.get("process_started") is True
             and launch_packet.get("native_window_observed") is True
+        )
+        or (
+            launch_packet.get("machine_error_code")
+            == "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
+            and launch_packet.get("process_started") is True
+            and (
+                launch_packet.get("running_status") is True
+                or launch_packet.get("cleanup_deferred_while_running") is True
+            )
         )
     )
 
@@ -218,7 +305,13 @@ def run_native_ui_observer_proof_command(
     )
     packet["native_ui_observer_packet_file_written"] = True
     packet["native_ui_observer_packet_file_path_recorded"] = False
-    packet["native_ui_observer_packet_proven"] = _native_ui_observer_packet_proven(packet)
+    packet.update(
+        _native_ui_observer_proof_fields(
+            packet,
+            request_id=request_id,
+            expected_text=expected_text,
+        )
+    )
     packet["exit_code"] = 0 if packet["native_ui_observer_packet_proven"] else 1
     write_json_atomic(proof_root / NATIVE_UI_OBSERVER_PACKET_FILE_NAME, packet)
     return packet

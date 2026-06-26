@@ -26,7 +26,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from . import process_runner as _process_runner
 from . import (
@@ -49,6 +49,7 @@ from .command_effects import (
 )
 from .core import packets as command_packets
 from .process_runner import (
+    BoundedProcessResult,
     PROCESS_FAILED,
     PROCESS_NOT_FOUND,
     PROCESS_OK,
@@ -74,6 +75,12 @@ LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     "cbfaf79d88e56d29de1f890fc1a378db8abf43e81588d25ccb98706f392f0023",
     # Repo-owned v1 launcher before custom app identity/codesign gating.
     "7acc33edbb42e950c2e3a43123a6da09939afd65ee3cfa0073f7aadff2616e4d",
+    # Repo-owned v1 launcher observed in owner profiles before legacy recognition was widened.
+    "62f1bc2fc00a243bfddbcaf49d882f14b91f9997ea099c9fc9686dee4b5b38f7",
+    # Repo-owned v1 launcher before cliproxy chatgpt profile API-key preservation.
+    "f30fbb5e071527715f0fbe6e78525ed9734d7513f1be9f71ac351c6aed65cf00",
+    # Repo-owned v1 launcher before desktop PATH/WBP_PYTHON_BIN propagation.
+    "a2ec4b618158012acf3ba1aba293afb2672a788a8814cd226f87be289d115dd3",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
@@ -290,6 +297,49 @@ class RuntimePaths:
     stable_runtime_generated_config_file: Path
 
     @classmethod
+    def from_roots(
+        cls,
+        *,
+        profile_dir: Path | str,
+        managed_dir: Path | str | None = None,
+        stable_config: Path | str | None = None,
+    ) -> "RuntimePaths":
+        profile_dir_path = Path(profile_dir).expanduser()
+        managed_dir_path = (
+            Path(managed_dir).expanduser()
+            if managed_dir is not None
+            else profile_dir_path / "managed"
+        )
+        stable_config_path = (
+            Path(stable_config).expanduser()
+            if stable_config is not None
+            else Path("~/.cli-proxy-api/config.yaml").expanduser()
+        )
+        return cls(
+            profile_dir=profile_dir_path,
+            managed_dir=managed_dir_path,
+            stable_config=stable_config_path,
+            auth_file=profile_dir_path / "auth.json",
+            config_toml=profile_dir_path / "config.toml",
+            runtime_mode_file=profile_dir_path / "runtime-mode.txt",
+            runtime_effective_mode_file=profile_dir_path / "runtime-effective-mode.txt",
+            registry_file=managed_dir_path / "backend-registry.json",
+            state_file=managed_dir_path / "supervisor-state.json",
+            managed_config_file=managed_dir_path / "managed-config.yaml",
+            launcher_script=profile_dir_path / DEFAULT_LAUNCHER_SCRIPT_NAME,
+            sync_script=managed_dir_path / "supervisor-sync.sh",
+            accounts_bin=managed_dir_path / "bin" / "codex-accounts",
+            onboard_bin=managed_dir_path / "bin" / "codex-account-onboard",
+            lock_file=managed_dir_path / "wild-boar-proxy.lock",
+            launcher_lock_file=managed_dir_path / "stable-runtime-launch.lock",
+            repair_target_inventory_dir=managed_dir_path / "stable-repair-target",
+            repair_target_reference_file=managed_dir_path / "approved-repair-target.json",
+            target_switch_transaction_file=managed_dir_path / "target-switch-transaction.json",
+            stable_runtime_generated_config_file=managed_dir_path
+            / "stable-runtime-config.generated.yaml",
+        )
+
+    @classmethod
     def from_env(cls) -> "RuntimePaths":
         profile_dir = Path(
             os.environ.get("WBP_PROFILE_DIR", "~/.codex-custom-cli")
@@ -469,6 +519,9 @@ def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env["WBP_LOCK_FILE"] = str(paths.lock_file)
     env["WBP_LAUNCHER_LOCK_FILE"] = str(paths.launcher_lock_file)
     env.setdefault("WBP_EXTERNAL_MODELS_DIR", str(paths.managed_dir / "external-models"))
+    active_project_root = str(os.environ.get("WBP_ACTIVE_PROJECT_ROOT") or "").strip()
+    if active_project_root:
+        env["WBP_ACTIVE_PROJECT_ROOT"] = active_project_root
     return env
 
 
@@ -1064,6 +1117,7 @@ def repo_managed_default_launcher_marker_present(path: Path) -> bool:
 
 
 def build_repo_owned_default_launcher_script_payload() -> str:
+    python_bin = get_repo_owned_python_bin()
     return "\n".join(
         [
             "set -eu",
@@ -1099,6 +1153,8 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             f'CODEX_RENDERER_ACCESSIBILITY_FLAG="{CODEX_RENDERER_ACCESSIBILITY_FLAG}"',
             f'CODEX_REMOTE_DEBUGGING_ADDRESS="{CODEX_REMOTE_DEBUGGING_ADDRESS}"',
             f'CODEX_REMOTE_DEBUGGING_PORT="${{WBP_CODEX_REMOTE_DEBUGGING_PORT:-{CODEX_REMOTE_DEBUGGING_PORT}}}"',
+            f'APP_PYTHON_BIN="${{WBP_PYTHON_BIN:-{python_bin}}}"',
+            'APP_PYTHON_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$APP_PYTHON_BIN")" && pwd -P)"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
             '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
@@ -1157,6 +1213,8 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
             '  export TMPDIR="$APP_RUNTIME_TMPDIR"',
             '  export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"',
+            '  export WBP_PYTHON_BIN="$APP_PYTHON_BIN"',
+            '  export PATH="$APP_PYTHON_BIN_DIR${PATH:+:$PATH}"',
             '  if [ -f "$CONFIG_TOML" ]; then',
             '    "${WBP_PYTHON_BIN:-/usr/bin/python3}" - "$CONFIG_TOML" <<\'PY\'',
             "import sys",
@@ -1188,12 +1246,46 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "print(data.get(\"OPENAI_API_KEY\", \"\"))",
             "PY",
             ')"',
-            '  if [ "$AUTH_MODE" = "chatgpt" ]; then',
-            '    unset OPENAI_API_KEY',
-            '  elif [ -n "$OPENAI_API_KEY_FROM_AUTH" ]; then',
+            '  CONFIG_OPENAI_API_KEY_REQUIRED="$(${WBP_PYTHON_BIN:-/usr/bin/python3} - "$CONFIG_TOML" <<\'PY\'',
+            "import re",
+            "import sys",
+            "from pathlib import Path",
+            "path = Path(sys.argv[1]).expanduser()",
+            "try:",
+            "    text = path.read_text(encoding=\"utf-8\")",
+            "except OSError:",
+            "    print(\"\")",
+            "    raise SystemExit(0)",
+            "model_provider = \"\"",
+            "cliproxy_env_key = \"\"",
+            "in_cliproxy = False",
+            "for raw_line in text.splitlines():",
+            "    line = raw_line.strip()",
+            "    if not line or line.startswith(\"#\"):",
+            "        continue",
+            "    if line.startswith(\"[\") and line.endswith(\"]\"):",
+            "        in_cliproxy = line == \"[model_providers.cliproxy]\"",
+            "        continue",
+            "    match = re.match(r\"model_provider\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]\", line)",
+            "    if match:",
+            "        model_provider = match.group(1).strip()",
+            "    if in_cliproxy:",
+            "        match = re.match(r\"env_key\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]\", line)",
+            "        if match:",
+            "            cliproxy_env_key = match.group(1).strip()",
+            "print(\"1\" if model_provider == \"cliproxy\" and cliproxy_env_key == \"OPENAI_API_KEY\" else \"\")",
+            "PY",
+            ')"',
+            '  if [ -n "$OPENAI_API_KEY_FROM_AUTH" ] && [ "$CONFIG_OPENAI_API_KEY_REQUIRED" = "1" ]; then',
             '    export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"',
             "  else",
-            '    unset OPENAI_API_KEY',
+            '    if [ "$AUTH_MODE" = "chatgpt" ]; then',
+            '      unset OPENAI_API_KEY',
+            '    elif [ -n "$OPENAI_API_KEY_FROM_AUTH" ]; then',
+            '      export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"',
+            "    else",
+            '      unset OPENAI_API_KEY',
+            "    fi",
             "  fi",
             '  cd "$CODEX_APP_RESOURCES"',
             "  launchctl_setenv() {",
@@ -1202,7 +1294,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "  launchctl_unsetenv() {",
             '    /bin/launchctl unsetenv "$1" 2>> "$APP_STDERR_LOG" || true',
             "  }",
-            "  LAUNCH_ENV_KEYS=\"CODEX_HOME WBP_PROFILE_DIR WBP_MANAGED_DIR WBP_EXTERNAL_MODELS_DIR HOME XDG_CONFIG_HOME XDG_CACHE_HOME TMPDIR CODEX_ELECTRON_USER_DATA_PATH OPENAI_API_KEY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\"",
+            "  LAUNCH_ENV_KEYS=\"CODEX_HOME WBP_PROFILE_DIR WBP_MANAGED_DIR WBP_EXTERNAL_MODELS_DIR WBP_ACTIVE_PROJECT_ROOT HOME XDG_CONFIG_HOME XDG_CACHE_HOME TMPDIR CODEX_ELECTRON_USER_DATA_PATH WBP_PYTHON_BIN PATH OPENAI_API_KEY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\"",
             '  LAUNCH_ENV_BACKUP_DIR="$APP_TMP_DIR/launcher-env.$$"',
             "  save_launch_env() {",
             '    rm -rf "$LAUNCH_ENV_BACKUP_DIR"',
@@ -1228,11 +1320,18 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '    launchctl_setenv WBP_PROFILE_DIR "$PROFILE_DIR"',
             '    launchctl_setenv WBP_MANAGED_DIR "$PROFILE_DIR/managed"',
             '    launchctl_setenv WBP_EXTERNAL_MODELS_DIR "$OWNER_EXTERNAL_MODELS_DIR"',
+            '    if [ -n "${WBP_ACTIVE_PROJECT_ROOT:-}" ]; then',
+            '      launchctl_setenv WBP_ACTIVE_PROJECT_ROOT "$WBP_ACTIVE_PROJECT_ROOT"',
+            "    else",
+            '      launchctl_unsetenv WBP_ACTIVE_PROJECT_ROOT',
+            "    fi",
             '    launchctl_setenv HOME "$APP_HOME"',
             '    launchctl_setenv XDG_CONFIG_HOME "$APP_HOME/.config"',
             '    launchctl_setenv XDG_CACHE_HOME "$APP_HOME/.cache"',
             '    launchctl_setenv TMPDIR "$APP_RUNTIME_TMPDIR"',
             '    launchctl_setenv CODEX_ELECTRON_USER_DATA_PATH "$APP_USER_DATA_DIR"',
+            '    launchctl_setenv WBP_PYTHON_BIN "$APP_PYTHON_BIN"',
+            '    launchctl_setenv PATH "$PATH"',
             '    if [ -n "${OPENAI_API_KEY:-}" ]; then',
             '      launchctl_setenv OPENAI_API_KEY "$OPENAI_API_KEY"',
             "    else",
@@ -3528,7 +3627,15 @@ def stable_proxyless_reproof_timeout_seconds() -> float:
     return value if value >= 0 else 12.0
 
 
-def launch_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
+def _launcher_smoke_requires_real_stable_runtime_restart(launcher_path: Path) -> bool:
+    return repo_managed_default_launcher_payload_if_valid(launcher_path) is not None
+
+
+def launch_stable_runtime_process(
+    paths: RuntimePaths,
+    *,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
     cli_proxy_bin = resolve_cli_proxy_bin()
     if not cli_proxy_bin.exists():
         return {
@@ -3539,21 +3646,39 @@ def launch_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
             "launch_observed": False,
             "error": f"Missing cli-proxy-api binary: {cli_proxy_bin}",
         }
+    effective_config_path = (config_path or paths.stable_config).expanduser()
     launch_result = start_detached_process(
-        [str(cli_proxy_bin), "-config", str(paths.stable_config)],
+        [str(cli_proxy_bin), "-config", str(effective_config_path)],
         env=sanitized_env(),
-        cwd=paths.stable_config.parent,
+        cwd=effective_config_path.parent,
         text=True,
     )
-    return launch_result.to_dict()
+    payload = launch_result.to_dict()
+    payload["config_path"] = str(effective_config_path)
+    return payload
 
 
-def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
+def restart_owned_stable_runtime_process(
+    paths: RuntimePaths,
+    *,
+    config_path: Path | None = None,
+    admitted_existing_config_paths: Sequence[Path] | None = None,
+) -> dict[str, Any]:
     stable_host, stable_port, _ = get_endpoint(paths, "stable")
     listener_was_present = socket_is_listening(stable_host, stable_port)
     raw_pids = discover_stable_runtime_pids(paths) if listener_was_present else []
+    expected_existing_paths = [
+        path.expanduser()
+        for path in (
+            admitted_existing_config_paths
+            if admitted_existing_config_paths is not None
+            else [paths.stable_config]
+        )
+    ]
     owned_pids = [
-        pid for pid in raw_pids if stable_pid_matches_expected(paths, str(pid))
+        pid
+        for pid in raw_pids
+        if any(pid_command_line_contains_path(str(pid), path) for path in expected_existing_paths)
     ]
     if listener_was_present and not owned_pids:
         return {
@@ -3561,6 +3686,7 @@ def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
             "machine_error_code": "STABLE_RUNTIME_OWNER_UNPROVEN",
             "listener_was_present": True,
             "discovered_pids": raw_pids,
+            "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
             "terminated_pids": [],
             "launch_result": None,
         }
@@ -3577,11 +3703,16 @@ def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
             "machine_error_code": "STABLE_RUNTIME_TERMINATION_FAILED",
             "listener_was_present": listener_was_present,
             "discovered_pids": raw_pids,
+            "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
             "terminated_pids": terminated_pids,
             "failed_terminations": failed_terminations,
             "launch_result": None,
         }
-    launch_result = launch_stable_runtime_process(paths)
+    effective_config_path = (config_path or paths.stable_config).expanduser()
+    launch_result = launch_stable_runtime_process(
+        paths,
+        config_path=effective_config_path,
+    )
     if str(launch_result.get("status", "")) != "ok":
         return {
             "status": "error",
@@ -3590,6 +3721,8 @@ def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
             ),
             "listener_was_present": listener_was_present,
             "discovered_pids": raw_pids,
+            "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
+            "launched_config_path": str(effective_config_path),
             "terminated_pids": terminated_pids,
             "launch_result": launch_result,
         }
@@ -3601,6 +3734,8 @@ def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
                 "machine_error_code": "OK",
                 "listener_was_present": listener_was_present,
                 "discovered_pids": raw_pids,
+                "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
+                "launched_config_path": str(effective_config_path),
                 "terminated_pids": terminated_pids,
                 "launch_result": launch_result,
             }
@@ -3610,6 +3745,8 @@ def restart_owned_stable_runtime_process(paths: RuntimePaths) -> dict[str, Any]:
         "machine_error_code": "STABLE_RUNTIME_LISTENER_NOT_READY",
         "listener_was_present": listener_was_present,
         "discovered_pids": raw_pids,
+        "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
+        "launched_config_path": str(effective_config_path),
         "terminated_pids": terminated_pids,
         "launch_result": launch_result,
     }
@@ -4467,6 +4604,7 @@ def get_stable_runtime_consumer_selection_context(
         approved_target.get("status") == "materialized_aligned"
         and not target_plan.get("target_would_add")
         and not target_plan.get("target_would_prune")
+        and not target_plan.get("target_would_rewrite")
     )
     desired_path = (
         paths.repair_target_inventory_dir if approved_target_ready else observed_path
@@ -5222,6 +5360,56 @@ def run_stable_runtime_launcher_attempt(
             and process_result.exit_code >= 0
             else 1
         )
+        selected_config_path = Path(selected_config_file).expanduser()
+        if (
+            launcher_exit_code == 0
+            and _launcher_smoke_requires_real_stable_runtime_restart(paths.launcher_script)
+        ):
+            restart_result = restart_owned_stable_runtime_process(
+                paths,
+                config_path=selected_config_path,
+                admitted_existing_config_paths=[
+                    paths.stable_config,
+                    selected_config_path,
+                ],
+            )
+            process_payload["stable_runtime_restart_result"] = restart_result
+            if restart_result.get("status") != "ok":
+                launcher_exit_code = 1
+                restart_error = str(
+                    restart_result.get("machine_error_code")
+                    or "STABLE_RUNTIME_RESTART_FAILED"
+                )
+                process_payload.update(
+                    {
+                        "status": "error",
+                        "machine_error_code": restart_error,
+                        "exit_code": 1,
+                        "stderr": (
+                            process_payload.get("stderr", "")
+                            + f"stable-runtime-restart:{restart_error}\n"
+                        ),
+                    }
+                )
+                process_payload["timed_out"] = False
+                process_payload["stderr_truncated"] = False
+                process_payload["stdout_truncated"] = bool(
+                    process_payload.get("stdout_truncated")
+                )
+                process_payload["duration_seconds"] = float(
+                    process_payload.get("duration_seconds") or 0.0
+                )
+                process_result = BoundedProcessResult(
+                    status="error",
+                    machine_error_code=restart_error,
+                    exit_code=1,
+                    stdout=str(process_payload.get("stdout", "")),
+                    stderr=str(process_payload.get("stderr", "")),
+                    stdout_truncated=bool(process_payload.get("stdout_truncated")),
+                    stderr_truncated=bool(process_payload.get("stderr_truncated")),
+                    timed_out=False,
+                    duration_seconds=float(process_payload.get("duration_seconds") or 0.0),
+                )
     return StableRuntimeLaunchAttempt(
         desired_kind=desired_kind,
         observed_path=observed_path,
@@ -5704,7 +5892,7 @@ def build_repair_target_contract_surface(paths: RuntimePaths) -> dict[str, Any]:
 
 def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
     auth_ref = Path(str(backend.get("auth_ref"))).expanduser()
-    return {
+    payload = {
         "backend_id": backend.get("id"),
         "auth_basename": get_auth_basename(backend.get("auth_ref")),
         "auth_ref": str(auth_ref),
@@ -5712,10 +5900,61 @@ def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
         "pool": backend.get("pool"),
         "status": backend.get("status"),
     }
+    if auth_ref.is_file():
+        _, materialization = build_runtime_consumer_auth_materialization(auth_ref)
+        payload.update(materialization)
+    return payload
+
+
+def hash_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
 
 
 def hash_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hash_bytes(path.read_bytes())
+
+
+def runtime_consumer_auth_payload_requires_codex_type(
+    payload: dict[str, Any],
+) -> bool:
+    auth_type = str(payload.get("type") or "").strip().lower()
+    if auth_type != "chatgpt":
+        return False
+    required_fields = ("access_token", "refresh_token", "account_id", "email")
+    return all(str(payload.get(field) or "").strip() for field in required_fields)
+
+
+def build_runtime_consumer_auth_materialization(
+    source_path: Path,
+) -> tuple[bytes, dict[str, Any]]:
+    source_bytes = source_path.read_bytes()
+    metadata = {
+        "source_auth_type": "",
+        "runtime_consumer_auth_type": "",
+        "runtime_consumer_auth_normalized": False,
+        "runtime_consumer_materialized_sha256": hash_bytes(source_bytes),
+    }
+    try:
+        payload = json.loads(source_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return source_bytes, metadata
+    if not isinstance(payload, dict):
+        return source_bytes, metadata
+    source_auth_type = str(payload.get("type") or "").strip().lower()
+    metadata["source_auth_type"] = source_auth_type
+    metadata["runtime_consumer_auth_type"] = source_auth_type
+    if not runtime_consumer_auth_payload_requires_codex_type(payload):
+        return source_bytes, metadata
+    normalized_payload = dict(payload)
+    normalized_payload["type"] = "codex"
+    materialized_bytes = (
+        json.dumps(normalized_payload, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
+    metadata["runtime_consumer_auth_type"] = "codex"
+    metadata["runtime_consumer_auth_normalized"] = True
+    metadata["runtime_consumer_materialized_sha256"] = hash_bytes(materialized_bytes)
+    return materialized_bytes, metadata
+
 
 
 def discover_experimental_package_repo_root() -> Path:
@@ -6848,7 +7087,8 @@ def verify_stable_repair_target_inventory(
             operator_action="user_action",
         )
     for basename, source_path in source_map.items():
-        if (target_dir / basename).read_bytes() != source_path.read_bytes():
+        expected_bytes, _ = build_runtime_consumer_auth_materialization(source_path)
+        if (target_dir / basename).read_bytes() != expected_bytes:
             raise RuntimeErrorInfo(
                 "Stable repair apply verification failed because a target file does not match its source bytes.",
                 machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
@@ -6872,7 +7112,10 @@ def verify_stable_repair_apply_result(
 
 def stage_stable_repair_inventory(stage_dir: Path, source_map: dict[str, Path]) -> None:
     for basename, source_path in source_map.items():
-        shutil.copy2(source_path, stage_dir / basename)
+        materialized_bytes, _ = build_runtime_consumer_auth_materialization(source_path)
+        target_path = stage_dir / basename
+        target_path.write_bytes(materialized_bytes)
+        target_path.chmod(source_path.stat().st_mode & 0o777)
 
 
 def remove_tree_if_exists(path: Path) -> None:
@@ -6974,19 +7217,34 @@ def build_stable_repair_transaction_plan(
         for item in eligible_registry_auth_refs
         if item.get("source_exists") is False
     ]
-    target_would_keep = [
-        item
-        for item in eligible_registry_auth_refs
-        if item.get("auth_basename") in target_inventory_set
-    ]
-    target_would_add = [
-        {
-            **item,
-            "reason": "eligible_registry_auth_ref_missing_from_target_inventory",
-        }
-        for item in eligible_registry_auth_refs
-        if item.get("auth_basename") not in target_inventory_set
-    ]
+    target_would_keep = []
+    target_would_add = []
+    target_would_rewrite = []
+    for item in eligible_registry_auth_refs:
+        auth_basename = str(item.get("auth_basename") or "")
+        if not auth_basename:
+            continue
+        if auth_basename not in target_inventory_set:
+            target_would_add.append(
+                {
+                    **item,
+                    "reason": "eligible_registry_auth_ref_missing_from_target_inventory",
+                }
+            )
+            continue
+        target_path = paths.repair_target_inventory_dir / auth_basename
+        expected_digest = str(item.get("runtime_consumer_materialized_sha256") or "")
+        observed_digest = hash_file(target_path) if target_path.is_file() else ""
+        if expected_digest and observed_digest != expected_digest:
+            target_would_rewrite.append(
+                {
+                    **item,
+                    "reason": "runtime_consumer_auth_materialization_drift",
+                    "target_auth_sha256_observed": observed_digest,
+                }
+            )
+            continue
+        target_would_keep.append(item)
     eligible_target_auths = {
         item.get("auth_basename")
         for item in eligible_registry_auth_refs
@@ -7097,6 +7355,7 @@ def build_stable_repair_transaction_plan(
             "target_inventory_entries": target_inventory,
             "target_would_add": target_would_add,
             "target_would_prune": target_would_prune,
+            "target_would_rewrite": target_would_rewrite,
             "target_would_keep": target_would_keep,
         },
         "blocked_reasons": blocked_reasons,
@@ -7223,27 +7482,12 @@ def run_stable_repair_apply(paths: RuntimePaths) -> dict[str, Any]:
         )
 
     before_target = snapshot_target_inventory_state(paths.repair_target_inventory_dir)
-    if before_target.get("non_auth_entries"):
-        return build_command_payload(
-            ok=False,
-            human_message="Stable repair apply blocked by unexpected non-auth target inventory entries.",
-            machine_error_code="STABLE_REPAIR_UNEXPECTED_TARGET_ENTRY",
-            liveness="unknown",
-            severity="recoverable",
-            operator_action="user_action",
-            changed_files=[],
-            extra={
-                "command_mode": "apply",
-                "would_change": False,
-                "transaction_plan": transaction_plan,
-                "next_action": "inspect_target_inventory",
-            },
-        )
 
     target_plan = transaction_plan.get("target_reconciliation_plan", {})
     target_would_add = target_plan.get("target_would_add", [])
     target_would_prune = target_plan.get("target_would_prune", [])
-    if not target_would_add and not target_would_prune:
+    target_would_rewrite = target_plan.get("target_would_rewrite", [])
+    if not target_would_add and not target_would_prune and not target_would_rewrite:
         return build_command_payload(
             ok=True,
             human_message="Stable repair apply found the approved target inventory already aligned.",
@@ -7449,7 +7693,8 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
     target_plan = transaction_plan.get("target_reconciliation_plan", {})
     target_would_add = target_plan.get("target_would_add", [])
     target_would_prune = target_plan.get("target_would_prune", [])
-    if not target_would_add and not target_would_prune:
+    target_would_rewrite = target_plan.get("target_would_rewrite", [])
+    if not target_would_add and not target_would_prune and not target_would_rewrite:
         return build_command_payload(
             ok=True,
             human_message="Stable repair dry-run completed; no repair needed.",
@@ -13193,9 +13438,14 @@ def materialize_rollout_stage_advance_stable_auth(
     stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
     stable_auth_dir.mkdir(parents=True, exist_ok=True)
     target_path = stable_auth_dir / auth_basename
-    if auth_ref.resolve() != target_path.resolve():
-        shutil.copy2(auth_ref, target_path)
-    if target_path.read_bytes() != auth_ref.read_bytes():
+    materialized_bytes, materialization = build_runtime_consumer_auth_materialization(
+        auth_ref
+    )
+    current_bytes = target_path.read_bytes() if target_path.exists() else None
+    if current_bytes != materialized_bytes:
+        target_path.write_bytes(materialized_bytes)
+        target_path.chmod(auth_ref.stat().st_mode & 0o777)
+    if target_path.read_bytes() != materialized_bytes:
         raise RuntimeErrorInfo(
             "Rollout stage advance stable inventory verification failed after copying the promoted auth.",
             machine_error_code="STAGE_ADVANCE_STABLE_INVENTORY_VERIFY_FAILED",
@@ -13208,6 +13458,12 @@ def materialize_rollout_stage_advance_stable_auth(
         "target_path": str(target_path),
         "target_dir": str(stable_auth_dir),
         "inventory_source": inventory_source,
+        "runtime_consumer_auth_normalized": bool(
+            materialization.get("runtime_consumer_auth_normalized")
+        ),
+        "runtime_consumer_auth_type": str(
+            materialization.get("runtime_consumer_auth_type") or ""
+        ),
     }
 
 

@@ -13,6 +13,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
 import tempfile
@@ -65,6 +66,7 @@ POST_LAUNCH_USABILITY_RECHECK_SECONDS = 8.0
 POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS = 0.5
 CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_SECONDS = 20.0
 CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_POLL_SECONDS = 0.25
+WINDOW_LIFECYCLE_SCOPE_FRESHNESS_SECONDS = 30.0
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
@@ -87,6 +89,7 @@ CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
 CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS = 24
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
 CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS = 0.25
+REMOTE_DEBUGGING_PORT_ARG_RE = re.compile(r"--remote-debugging-port=(\d+)")
 CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
     {
         "cdp_renderer_input_surface_not_observed",
@@ -230,6 +233,40 @@ def _custom_window_candidate_pids(process_inventory: dict[str, Any]) -> list[int
         if pid not in default_pids and pid not in candidate_pids:
             candidate_pids.append(pid)
     return candidate_pids
+
+
+def _remote_debugging_port_from_process_line(line: str) -> int | None:
+    if not isinstance(line, str):
+        return None
+    match = REMOTE_DEBUGGING_PORT_ARG_RE.search(line)
+    if not match:
+        return None
+    try:
+        port = int(match.group(1))
+    except ValueError:
+        return None
+    return port if 1024 <= port <= 65535 else None
+
+
+def _custom_runtime_cdp_port(
+    process_inventory: dict[str, Any],
+    *,
+    profile_root: Path,
+) -> tuple[int, str]:
+    persisted_port = read_profile_remote_debugging_port(profile_root)
+    custom_lines = process_inventory.get("custom_process_lines", [])
+    if not isinstance(custom_lines, list):
+        custom_lines = []
+    preferred_lines = [
+        line
+        for line in custom_lines
+        if isinstance(line, str) and "/Contents/MacOS/Codex" in line
+    ]
+    for candidate_line in [*preferred_lines, *custom_lines]:
+        port = _remote_debugging_port_from_process_line(candidate_line)
+        if port is not None:
+            return port, "custom_process_command_line_remote_debugging_port"
+    return persisted_port, "persistent_profile_remote_debugging_port"
 
 
 def _custom_pid_binding_fields(
@@ -466,6 +503,153 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     return packet
 
 
+def _profile_window_lifecycle_scope_packet(
+    profile_dir: Path,
+    *,
+    freshness_seconds: float = WINDOW_LIFECYCLE_SCOPE_FRESHNESS_SECONDS,
+) -> dict[str, Any]:
+    scope_path = profile_dir / "electron-user-data" / "sentry" / "scope_v3.json"
+    try:
+        stat_result = scope_path.stat()
+        payload = json.loads(scope_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {
+            "status": "blocked",
+            "machine_error_code": "PROFILE_WINDOW_LIFECYCLE_SCOPE_MISSING",
+            "window_lifecycle_scope_present": False,
+            "window_lifecycle_scope_fresh": False,
+            "window_lifecycle_created_observed": False,
+            "window_lifecycle_show_observed": False,
+            "window_lifecycle_focus_observed": False,
+            "window_lifecycle_ready_to_show_observed": False,
+            "window_lifecycle_main_frame_loaded_observed": False,
+            "window_lifecycle_observed": False,
+            "window_lifecycle_scope_path_redacted": True,
+        }
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "blocked",
+            "machine_error_code": "PROFILE_WINDOW_LIFECYCLE_SCOPE_INVALID",
+            "window_lifecycle_scope_present": True,
+            "window_lifecycle_scope_fresh": False,
+            "window_lifecycle_created_observed": False,
+            "window_lifecycle_show_observed": False,
+            "window_lifecycle_focus_observed": False,
+            "window_lifecycle_ready_to_show_observed": False,
+            "window_lifecycle_main_frame_loaded_observed": False,
+            "window_lifecycle_observed": False,
+            "window_lifecycle_scope_path_redacted": True,
+        }
+    breadcrumbs = payload.get("scope", {}).get("breadcrumbs", [])
+    if not isinstance(breadcrumbs, list):
+        breadcrumbs = []
+    created_observed = False
+    show_observed = False
+    focus_observed = False
+    ready_to_show_observed = False
+    main_frame_loaded_observed = False
+    for crumb in breadcrumbs:
+        if not isinstance(crumb, dict):
+            continue
+        message = str(crumb.get("message") or "")
+        if message == "app.browser-window-created":
+            created_observed = True
+        elif message == "window.show":
+            show_observed = True
+        elif message in {"window.focus", "app.browser-window-focus"}:
+            focus_observed = True
+        elif "window ready-to-show" in message:
+            ready_to_show_observed = True
+        elif "window main frame finished load" in message:
+            main_frame_loaded_observed = True
+    scope_fresh = (time.time() - stat_result.st_mtime) <= freshness_seconds
+    lifecycle_observed = (
+        scope_fresh
+        and created_observed
+        and show_observed
+        and focus_observed
+    )
+    return {
+        "status": "ok" if lifecycle_observed else "blocked",
+        "machine_error_code": "OK"
+        if lifecycle_observed
+        else "PROFILE_WINDOW_LIFECYCLE_NOT_PROVEN",
+        "window_lifecycle_scope_present": True,
+        "window_lifecycle_scope_fresh": scope_fresh,
+        "window_lifecycle_created_observed": created_observed,
+        "window_lifecycle_show_observed": show_observed,
+        "window_lifecycle_focus_observed": focus_observed,
+        "window_lifecycle_ready_to_show_observed": ready_to_show_observed,
+        "window_lifecycle_main_frame_loaded_observed": main_frame_loaded_observed,
+        "window_lifecycle_observed": lifecycle_observed,
+        "window_lifecycle_scope_path_redacted": True,
+    }
+
+
+def _window_observation_from_profile_window_lifecycle(
+    process_inventory: dict[str, Any],
+    *,
+    profile_dir: Path,
+) -> dict[str, Any] | None:
+    lifecycle_packet = _profile_window_lifecycle_scope_packet(profile_dir)
+    if lifecycle_packet.get("window_lifecycle_observed") is not True:
+        return None
+    candidate_pids = _custom_window_candidate_pids(process_inventory)
+    if not candidate_pids:
+        return None
+    root_pids = _custom_root_app_pids(process_inventory)
+    observed_pid = root_pids[0] if root_pids else candidate_pids[0]
+    candidate_index = (
+        candidate_pids.index(observed_pid) if observed_pid in candidate_pids else 0
+    )
+    packet = build_native_window_observation_packet(window_observed=True)
+    packet.update(
+        {
+            **_custom_pid_binding_fields(
+                process_inventory,
+                candidate_pids=candidate_pids,
+            ),
+            "observed_pid": observed_pid,
+            "window_candidate_index": candidate_index,
+            "window_candidate_source": (
+                "custom_root_process"
+                if observed_pid in root_pids
+                else "custom_profile_process"
+            ),
+            "window_candidate_attempt_count": candidate_index + 1,
+            "window_query": "window_created=true\twindow_show=true\twindow_focus=true",
+            "window_query_method": "Electron/Sentry window lifecycle scope",
+            "window_query_rc": 0,
+            "window_query_error_class": "",
+            "window_count": 1,
+            "window_frontmost": True,
+            "window_visible": True,
+            "window_background_only": False,
+            "window_bounds": {},
+            "window_position": "",
+            "window_size": "",
+            "window_lifecycle_scope_fallback_used": True,
+            "window_lifecycle_scope_packet": lifecycle_packet,
+        }
+    )
+    return packet
+
+
+def _window_observation_packet_for_process_inventory(
+    process_inventory: dict[str, Any],
+    *,
+    profile_dir: Path | None = None,
+) -> dict[str, Any]:
+    packet = _window_observation_via_ax(process_inventory)
+    if packet.get("window_observed") is True or profile_dir is None:
+        return packet
+    lifecycle_packet = _window_observation_from_profile_window_lifecycle(
+        process_inventory,
+        profile_dir=profile_dir,
+    )
+    return lifecycle_packet if lifecycle_packet is not None else packet
+
+
 def _focus_custom_window_by_pid(
     observed_pid: int,
     *,
@@ -536,7 +720,6 @@ def show_custom_native_window_packet(
     )
     user_data_dir = str(paths["user_data_dir"])
     profile_root = Path(str(paths["persistent_profile_root"])).expanduser()
-    cdp_port = read_profile_remote_debugging_port(profile_root)
     inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     root_pids = _custom_root_app_pids(inventory)
     profile_pids = _custom_profile_process_pids(inventory)
@@ -557,7 +740,7 @@ def show_custom_native_window_packet(
             "human_message": "No Custom Codex process using the WBP profile was found.",
             "persistent_profile_id": persistent_profile_id,
             "persistent_user_data_dir": user_data_dir,
-            "cdp_port": cdp_port,
+            "cdp_port": read_profile_remote_debugging_port(profile_root),
             "cdp_port_source": "persistent_profile_remote_debugging_port",
             "custom_process_observed": False,
             "custom_profile_process_pids": profile_pids,
@@ -588,7 +771,10 @@ def show_custom_native_window_packet(
         }
 
     observed_pid = int(root_pids[0] if root_pids else candidate_pids[0])
-    before = _window_observation_via_ax(inventory)
+    before = _window_observation_packet_for_process_inventory(
+        inventory,
+        profile_dir=profile_root,
+    )
     focus_pid = (
         before.get("observed_pid")
         if before.get("window_observed") is True
@@ -600,10 +786,37 @@ def show_custom_native_window_packet(
     after_inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     after_profile_pids = _custom_profile_process_pids(after_inventory)
     after_candidate_pids = _custom_window_candidate_pids(after_inventory)
-    after = _window_observation_via_ax(after_inventory)
+    after = _window_observation_packet_for_process_inventory(
+        after_inventory,
+        profile_dir=profile_root,
+    )
+    focus_visibility_proven = (
+        focus.get("window_focus_visible") is True
+        and focus.get("window_focus_frontmost") is True
+    )
+    cdp_port, cdp_port_source = _custom_runtime_cdp_port(
+        after_inventory,
+        profile_root=profile_root,
+    )
     after_observed_pid = after.get("observed_pid")
     if not isinstance(after_observed_pid, int):
         after_observed_pid = focus_pid
+    if (
+        after.get("window_observed") is not True
+        and focus_visibility_proven
+        and isinstance(after_observed_pid, int)
+    ):
+        after = {
+            **after,
+            "window_observed": True,
+            "window_visible": True,
+            "window_frontmost": True,
+            "observed_pid": after_observed_pid,
+            "window_bounds": after.get("window_bounds") or focus.get("window_focus_bounds") or {},
+            "window_query_method": "AX/System Events focus-visible process fallback",
+            "window_focus_visibility_fallback_used": True,
+            "window_focus_visibility_packet": focus,
+        }
     usability_packet = _window_usability_from_observation(after, cdp_port=cdp_port)
     usability_packet = _apply_codex_desktop_auth_blocker(
         usability_packet,
@@ -611,6 +824,7 @@ def show_custom_native_window_packet(
     )
     usability_packet, renderer_recovery_packet, recovered_after = _recover_startup_loader_if_needed(
         usability_packet,
+        window_packet=after,
         observed_pid=after_observed_pid,
         allowed_cdp_owner_pids=after_candidate_pids,
         profile_dir=profile_root,
@@ -630,7 +844,9 @@ def show_custom_native_window_packet(
         if native_app_usable
         else "not_proven"
     )
-    window_focused = focus.get("window_focus_action_succeeded") is True
+    window_focused = (
+        focus.get("window_focus_action_succeeded") is True or focus_visibility_proven
+    )
     status_ok = visible and window_focused and native_app_usable
     window_visible_but_unusable = visible and window_focused and not native_app_usable
     desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
@@ -688,7 +904,7 @@ def show_custom_native_window_packet(
         "persistent_profile_id": persistent_profile_id,
         "persistent_user_data_dir": user_data_dir,
         "cdp_port": cdp_port,
-        "cdp_port_source": "persistent_profile_remote_debugging_port",
+        "cdp_port_source": cdp_port_source,
         "custom_process_observed": True,
         "custom_process_pid": observed_pid,
         "custom_profile_process_pids": after_profile_pids,
@@ -773,15 +989,22 @@ def show_custom_native_window_packet(
 def _wait_for_window_observation_via_ax(
     process_inventory: dict[str, Any],
     *,
+    profile_dir: Path | None = None,
     timeout_seconds: float = WINDOW_OBSERVATION_WAIT_SECONDS,
     poll_seconds: float = WINDOW_OBSERVATION_POLL_SECONDS,
 ) -> dict[str, Any]:
     deadline = time.time() + timeout_seconds
-    last_packet = _window_observation_via_ax(process_inventory)
+    last_packet = _window_observation_packet_for_process_inventory(
+        process_inventory,
+        profile_dir=profile_dir,
+    )
     attempt_count = 1
     while last_packet.get("window_observed") is not True and time.time() < deadline:
         time.sleep(poll_seconds)
-        last_packet = _window_observation_via_ax(process_inventory)
+        last_packet = _window_observation_packet_for_process_inventory(
+            process_inventory,
+            profile_dir=profile_dir,
+        )
         attempt_count += 1
     last_packet["window_observation_attempt_count"] = attempt_count
     last_packet["window_observation_wait_seconds"] = timeout_seconds
@@ -3173,7 +3396,7 @@ def _cdp_submit_prompt_to_app_page(
   };
   const textNode = document.activeElement || document.querySelector(selector);
   const buttons = Array.from(document.querySelectorAll('button'));
-  const submitButton = buttons.find((button) => {
+  const labeledSubmitButton = buttons.find((button) => {
     if (!visible(button) || button.disabled) return false;
     const label = [
       button.getAttribute('aria-label') || '',
@@ -3187,12 +3410,28 @@ def _cdp_submit_prompt_to_app_page(
       label.includes('отправ') ||
       label.includes('arrow');
   });
+  const textRect = textNode ? textNode.getBoundingClientRect() : null;
+  const nearbyComposerButton = textRect
+    ? buttons
+        .filter((button) => visible(button) && !button.disabled)
+        .map((button) => ({button, rect: button.getBoundingClientRect()}))
+        .filter(({rect}) =>
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.width <= 48 &&
+          rect.height <= 48 &&
+          rect.x >= Math.max(textRect.x + textRect.width - 96, 0) &&
+          Math.abs((rect.y + rect.height / 2) - (textRect.y + textRect.height / 2)) <= 48
+        )
+        .sort((left, right) => right.rect.x - left.rect.x)[0]
+    : null;
+  const submitButton = labeledSubmitButton || (nearbyComposerButton ? nearbyComposerButton.button : null);
   if (submitButton) {
     submitButton.click();
     return {
       submitted: true,
       submitButtonObserved: true,
-      submitMechanism: 'cdp_button_click',
+      submitMechanism: labeledSubmitButton ? 'cdp_button_click' : 'cdp_nearby_button_click',
       textValueCaptured: false
     };
   }
@@ -3846,6 +4085,7 @@ def _cdp_reload_app_page_for_pid(
 def _recover_startup_loader_if_needed(
     usability_packet: dict[str, Any],
     *,
+    window_packet: dict[str, Any],
     observed_pid: int,
     allowed_cdp_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
     profile_dir: Path,
@@ -3865,7 +4105,19 @@ def _recover_startup_loader_if_needed(
     recovered_inventory = collect_codex_process_inventory(
         custom_user_data_dir=custom_user_data_dir
     )
-    recovered_observation = _window_observation_via_ax(recovered_inventory)
+    recovered_observation = _window_observation_packet_for_process_inventory(
+        recovered_inventory,
+        profile_dir=profile_dir,
+    )
+    if (
+        window_packet.get("window_observed") is True
+        and recovered_observation.get("window_observed") is not True
+    ):
+        recovered_observation = {
+            **window_packet,
+            "window_observation_regressed_after_renderer_recovery": True,
+            "regressed_window_observation_packet": recovered_observation,
+        }
     recovered_usability = _window_usability_from_observation(
         recovered_observation,
         cdp_port=cdp_port,
@@ -3957,7 +4209,10 @@ def _wait_for_post_launch_window_usability(
         inventory = collect_codex_process_inventory(
             custom_user_data_dir=custom_user_data_dir
         )
-        window_packet = _window_observation_via_ax(inventory)
+        window_packet = _window_observation_packet_for_process_inventory(
+            inventory,
+            profile_dir=profile_dir,
+        )
         usability_packet = _window_usability_from_observation(
             window_packet,
             cdp_port=cdp_port,
@@ -4118,6 +4373,25 @@ def _codex_desktop_profile_auth_state_blocker(profile_dir: Path) -> dict[str, An
             "codex_desktop_auth_diagnostic_source": "custom_profile_chatgpt_auth_state_present",
             "desktop_auth_state_path_redacted": True,
         }
+    profile_auth_json = profile_dir / "auth.json"
+    if profile_auth_json.is_file():
+        try:
+            profile_auth = json.loads(profile_auth_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            profile_auth = {}
+        if isinstance(profile_auth, dict):
+            auth_mode = str(profile_auth.get("auth_mode") or "").strip().lower()
+            api_key_present = bool(str(profile_auth.get("OPENAI_API_KEY") or "").strip())
+            if auth_mode == "apikey" or api_key_present:
+                return {
+                    "codex_desktop_auth_blocker_observed": False,
+                    "codex_desktop_auth_blocked_reason_class": "",
+                    "codex_desktop_auth_error_class": "",
+                    "codex_desktop_auth_diagnostic_source": (
+                        "custom_profile_api_key_auth_present"
+                    ),
+                    "desktop_auth_state_path_redacted": True,
+                }
     return {
         "codex_desktop_auth_blocker_observed": True,
         "codex_desktop_auth_blocked_reason_class": (
@@ -4509,25 +4783,25 @@ def _build_identity_binding(
     window_observed = window_packet.get("window_observed") is True
     window_name = window_packet.get("window_query", "")
     observed_pid = window_packet.get("observed_pid")
-    startup_inventory = launch_result.get("startup_inventory", {})
+    process_inventory = _launch_window_process_inventory(launch_result)
     custom_root_pids = (
-        _custom_root_app_pids(startup_inventory)
-        if isinstance(startup_inventory, dict)
+        _custom_root_app_pids(process_inventory)
+        if isinstance(process_inventory, dict)
         else []
     )
     default_profile_pids = (
-        _default_profile_process_pids(startup_inventory)
-        if isinstance(startup_inventory, dict)
+        _default_profile_process_pids(process_inventory)
+        if isinstance(process_inventory, dict)
         else []
     )
     custom_profile_pids = (
-        _custom_profile_process_pids(startup_inventory)
-        if isinstance(startup_inventory, dict)
+        _custom_profile_process_pids(process_inventory)
+        if isinstance(process_inventory, dict)
         else []
     )
     custom_candidate_pids = (
-        _custom_window_candidate_pids(startup_inventory)
-        if isinstance(startup_inventory, dict)
+        _custom_window_candidate_pids(process_inventory)
+        if isinstance(process_inventory, dict)
         else []
     )
     bound = (
@@ -4564,6 +4838,16 @@ def _build_identity_binding(
         "custom_window_candidate_pids": custom_candidate_pids,
         "identity_chain": identity_chain,
     }
+
+
+def _launch_window_process_inventory(launch_result: dict[str, Any]) -> dict[str, Any]:
+    stability_inventory = launch_result.get("stability_inventory")
+    if isinstance(stability_inventory, dict) and stability_inventory:
+        return stability_inventory
+    startup_inventory = launch_result.get("startup_inventory")
+    if isinstance(startup_inventory, dict):
+        return startup_inventory
+    return {}
 
 
 def launch_custom_native_app_packet(
@@ -4889,7 +5173,11 @@ def launch_custom_native_app_packet(
                     persistent_profile_id=persistent_profile_id,
                     persistent_profile_base_dir=persistent_profile_base_dir,
                 )
-                existing_window_visible = show_packet.get("status") == "ok"
+                existing_window_visible = bool(
+                    show_packet.get("custom_window_observed") is True
+                    and show_packet.get("custom_window_visible") is True
+                    and show_packet.get("custom_window_frontmost") is True
+                )
                 existing_window_usable = show_packet.get("native_app_usable") is True
                 existing_machine_error = (
                     "OK"
@@ -5000,7 +5288,11 @@ def launch_custom_native_app_packet(
                     "show_existing_window_packet": show_packet,
                     "cleanup_result": {
                         "attempted": False,
-                        "status": "existing_window_reused" if existing_window_visible else "existing_process_left_running",
+                        "status": (
+                            "existing_window_reused"
+                            if existing_window_usable
+                            else "existing_process_left_running"
+                        ),
                         "termination": {},
                         "cleanup_error_class": "",
                     },
@@ -5057,22 +5349,41 @@ def launch_custom_native_app_packet(
         process_still_alive = (
             launch_result.get("custom_process_still_observed_after_wait") is True
         )
-        window_packet = _wait_for_window_observation_via_ax(launch_result["startup_inventory"])
+        window_inventory = _launch_window_process_inventory(launch_result)
+        window_packet = _wait_for_window_observation_via_ax(
+            window_inventory,
+            profile_dir=layout.profile_dir,
+        )
+        root_window_candidate_pids = _custom_root_app_pids(window_inventory)
+        all_window_candidate_pids = _custom_window_candidate_pids(window_inventory)
         focus_packet: dict[str, Any] = {
             "window_focus_action_attempted": False,
             "window_focus_action_succeeded": False,
         }
-        observed_pid_for_focus = window_packet.get("observed_pid")
+        observed_pid_for_focus = (
+            window_packet.get("observed_pid")
+            if window_packet.get("window_observed") is True
+            else (
+                root_window_candidate_pids[0]
+                if root_window_candidate_pids
+                else (
+                    all_window_candidate_pids[0]
+                    if all_window_candidate_pids
+                    else window_packet.get("observed_pid")
+                )
+            )
+        )
         if isinstance(observed_pid_for_focus, int) and (
             window_packet.get("window_observed") is not True
             or window_packet.get("window_visible") is not True
             or window_packet.get("window_frontmost") is not True
         ):
             focus_packet = _focus_custom_window_by_pid(observed_pid_for_focus)
-            window_packet = _window_observation_via_ax(
+            window_packet = _window_observation_packet_for_process_inventory(
                 collect_codex_process_inventory(
                     custom_user_data_dir=str(layout.custom_user_data_dir)
-                )
+                ),
+                profile_dir=layout.profile_dir,
             )
         usability_packet = _window_usability_from_observation(
             window_packet,
@@ -5097,6 +5408,7 @@ def launch_custom_native_app_packet(
                 recovered_window_packet,
             ) = _recover_startup_loader_if_needed(
                 usability_packet,
+                window_packet=window_packet,
                 observed_pid=observed_pid_for_recovery,
                 allowed_cdp_owner_pids=window_packet.get("custom_window_candidate_pids")
                 if isinstance(window_packet.get("custom_window_candidate_pids"), list)
@@ -5528,10 +5840,13 @@ def run_native_window_probe(
     process_packet.update(
         {
             "process_id": launch_result["launcher_pid"],
-            "process_lineage": launch_result["startup_inventory"].get("sample", []),
+            "process_lineage": _launch_window_process_inventory(launch_result).get("sample", []),
         }
     )
-    window_packet = _window_observation_via_ax(launch_result["startup_inventory"])
+    window_packet = _window_observation_packet_for_process_inventory(
+        _launch_window_process_inventory(launch_result),
+        profile_dir=layout.profile_dir,
+    )
     usability_packet = _window_usability_from_observation(window_packet)
     protection_before = build_native_current_codex_protection_packet(
         before_snapshot_captured=True,

@@ -86,10 +86,20 @@ fallback chains, or local imitation. Required success fields include
 `gpt_lane_selected`, `tools_wbp_dip_invoked=false`, `dip_run_invoked=false`, and
 `codex_exec_invoked=false`.
 
+Callers must not manually pre-read or summarize
+`wbp-agent-runtime-context.json` before normal `auto-route` handling. The
+router owns that read; manual context inspection is only for diagnostics of the
+router or runtime-context file itself.
+
+For direct exact-answer prompts such as `DIP: ответь ровно ...`, callers should
+not narrate the routing step. They should call `auto-route`, then display only
+packet `output_text` when `status=ok`, `auto_router_proven=true`, and
+`exact_plain_reply_matched=true`.
+
 Canonical auto route:
 
 ```sh
-python3 -m wild_boar_proxy router-hook auto-route \
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route \
   --prompt "DIP: ответь коротко." \
   --json
 ```
@@ -109,9 +119,10 @@ imitation. It must fail closed if the alias is missing, resolves to the
 ChatGPT/primary lane, uses a route outside `allowed_api_route_ids`, or returns a
 repo-tool JSON call as the final answer.
 
-By default, `direct-reply` runs with `--work-mode full` and `--repo-bridge off`.
-That keeps normal direct answers short-path and no-write while still giving the
-API route the larger full-answer budget. If an operator explicitly enables
+By default, `direct-reply` runs with `--work-mode standard` and `--repo-bridge off`.
+That keeps normal direct answers short-path and no-write. Use
+`--work-mode full` only for deep investigation, long reports, or explicit
+implementation work. If an operator explicitly enables
 `--repo-bridge auto|on`, the command is classified as potentially mutating and
 the packet must expose any controlled code mutation through `effect=mutate`,
 `file_mutation_attempted`, `changed_files`, and `dip_action_mutated_files`.
@@ -137,7 +148,7 @@ Required success fields include:
 Canonical direct reply:
 
 ```sh
-python3 -m wild_boar_proxy router-hook direct-reply \
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook direct-reply \
   --prompt "DIP: ответь коротко." \
   --json
 ```

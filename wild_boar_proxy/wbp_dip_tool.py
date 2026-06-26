@@ -87,6 +87,7 @@ WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT = "WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVE
 WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
 WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
+WBP_DIP_TOOL_EXACT_REPLY_MISMATCH = "WBP_DIP_TOOL_EXACT_REPLY_MISMATCH"
 WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT = "WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT"
 WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
 WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING = "WBP_DIP_TOOL_ROUTE_CONTEXT_MISSING"
@@ -205,6 +206,20 @@ READONLY_TASK_GUARD_PHRASES = (
     "без изменения файлов",
     "ничего не меняй",
     "не трогай файлы",
+)
+SCOPED_NON_REPO_MUTATION_GUARD_PHRASES = (
+    "do not edit files outside active repo",
+    "do not change files outside active repo",
+    "do not modify files outside active repo",
+    "do not touch files outside active repo",
+    "do not edit files outside the active repo",
+    "do not change files outside the active repo",
+    "do not modify files outside the active repo",
+    "do not touch files outside the active repo",
+    "не редактируй файлы вне active repo",
+    "не изменяй файлы вне active repo",
+    "не меняй файлы вне active repo",
+    "не трогай файлы вне active repo",
 )
 REPO_BRIDGE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./-])"
@@ -344,6 +359,114 @@ def _dip_work_mode_settings(work_mode: str) -> dict[str, int | str]:
         "output_token_limit": DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS,
         "repo_bridge_max_steps": DEFAULT_REPO_BRIDGE_MAX_STEPS,
     }
+
+
+def _exact_plain_reply_requested(task: str) -> bool:
+    text = str(task or "").casefold()
+    return any(
+        marker in text
+        for marker in (
+            "ответь ровно",
+            "ответь точно",
+            "answer exactly",
+            "reply exactly",
+            "respond exactly",
+        )
+    )
+
+
+def _exact_plain_reply_expected_text(task: str) -> str:
+    text = str(task or "").strip()
+    folded = text.casefold()
+    markers = (
+        "ответь ровно",
+        "ответь точно",
+        "answer exactly",
+        "reply exactly",
+        "respond exactly",
+    )
+    marker_start = -1
+    marker = ""
+    for candidate in markers:
+        marker_start = folded.find(candidate)
+        if marker_start >= 0:
+            marker = candidate
+            break
+    if marker_start < 0:
+        return ""
+    tail = text[marker_start + len(marker) :].strip(" \t\n\r:：\"'`")
+    for stop_marker in (
+        ". Без",
+        ". без",
+        ". Никаких",
+        ". никаких",
+        ". No",
+        ". no",
+        ". Without",
+        ". without",
+        " Без прав",
+        " без прав",
+        " Никаких прав",
+        " никаких прав",
+        " No file",
+        " no file",
+        " Without file",
+        " without file",
+    ):
+        index = tail.find(stop_marker)
+        if index >= 0:
+            tail = tail[:index]
+            break
+    tail = tail.splitlines()[0].strip(" \t\n\r\"'`")
+    return tail.rstrip(".!?").strip(" \t\n\r\"'`")
+
+
+def _exact_plain_reply_prompt(expected_text: str) -> str:
+    return (
+        "Return only this exact string, with no quotes, no markdown, "
+        f"and no extra words:\n{expected_text}"
+    )
+
+
+def _apply_exact_plain_reply_gate(
+    result: Mapping[str, Any],
+    *,
+    expected_text: str,
+    result_text_limit: int,
+) -> dict[str, Any]:
+    packet = dict(result)
+    observed_text = _bounded_result_text(
+        packet.get("result_text"),
+        limit=result_text_limit,
+    )
+    matched = bool(expected_text and observed_text == expected_text)
+    packet.update(
+        {
+            "exact_plain_reply_expected_text_sha256": _sha256_text(expected_text)
+            if expected_text
+            else "",
+            "exact_plain_reply_expected_text_recorded": False,
+            "exact_plain_reply_observed_text_sha256": _sha256_text(observed_text)
+            if observed_text
+            else "",
+            "exact_plain_reply_observed_text_recorded": False,
+            "exact_plain_reply_matched": matched,
+        }
+    )
+    if packet.get("status") == "ok" and not matched:
+        packet.update(
+            {
+                "status": "error",
+                "machine_error_code": WBP_DIP_TOOL_EXACT_REPLY_MISMATCH,
+                "operator_action": "retry",
+                "result_available": False,
+                "result_text": "",
+                "result_text_sha256": "",
+                "result_text_length": 0,
+                "result_text_truncated": False,
+            }
+        )
+    return packet
 
 
 def _sha256_text(value: str) -> str:
@@ -907,6 +1030,8 @@ def _task_contains_keyword(task_key: str, keywords: Sequence[str]) -> bool:
 
 def _task_has_readonly_guard(task: str) -> bool:
     task_key = task.casefold()
+    for phrase in SCOPED_NON_REPO_MUTATION_GUARD_PHRASES:
+        task_key = task_key.replace(phrase, "")
     return any(phrase in task_key for phrase in READONLY_TASK_GUARD_PHRASES)
 
 
@@ -1934,8 +2059,9 @@ def _build_live_result_prompt(
         )
     else:
         answer_instruction = (
-            "If the task asks for a check, answer with concrete findings and "
-            "limits in 2-6 concise bullets."
+            "If the task asks to answer exactly, output exactly the requested "
+            "text and nothing else. If the task asks for a check, answer with "
+            "concrete findings and limits in 2-6 concise bullets."
         )
     return (
         f"You are {expected_alias} called through the WBP bounded live-result path. "
@@ -2175,15 +2301,24 @@ def _set_request_output_budget(payload: dict[str, Any], output_token_limit: int)
         minimum=1,
         maximum=64000,
     )
+    cap_existing_budget = output_token_limit <= 96
     if "max_tokens" in payload:
-        payload["max_tokens"] = max(
-            _safe_int(payload.get("max_tokens"), default=0, minimum=0),
-            output_token_limit,
+        payload["max_tokens"] = (
+            output_token_limit
+            if cap_existing_budget
+            else max(
+                _safe_int(payload.get("max_tokens"), default=0, minimum=0),
+                output_token_limit,
+            )
         )
     if "max_output_tokens" in payload:
-        payload["max_output_tokens"] = max(
-            _safe_int(payload.get("max_output_tokens"), default=0, minimum=0),
-            output_token_limit,
+        payload["max_output_tokens"] = (
+            output_token_limit
+            if cap_existing_budget
+            else max(
+                _safe_int(payload.get("max_output_tokens"), default=0, minimum=0),
+                output_token_limit,
+            )
         )
 
 
@@ -2269,6 +2404,7 @@ def _live_result_turn(
     timeout_seconds: float,
     output_token_limit: int = DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS,
     result_text_limit: int = DEFAULT_LIVE_RESULT_TEXT_LIMIT,
+    skip_file_bridge: bool = False,
 ) -> dict[str, Any]:
     turn_base = dict(base)
     http_bridge_configured = _is_enabled_mapping(
@@ -2277,8 +2413,11 @@ def _live_result_turn(
     file_bridge_configured = _is_enabled_mapping(
         context.get("deepseek_live_format_check_file_bridge")
     )
-    turn_base["bridge_attempted"] = http_bridge_configured or file_bridge_configured
-    turn_base["file_bridge_attempted"] = file_bridge_configured
+    turn_base["bridge_attempted"] = http_bridge_configured or (
+        file_bridge_configured and not skip_file_bridge
+    )
+    turn_base["file_bridge_attempted"] = False
+    turn_base["file_bridge_skipped"] = bool(skip_file_bridge)
     http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
         context=context,
         prompt=prompt,
@@ -2288,7 +2427,14 @@ def _live_result_turn(
     )
     if http_bridge_result is not None:
         return {**turn_base, **http_bridge_result}
-    if file_bridge_configured:
+    file_bridge_should_attempt = (
+        file_bridge_configured
+        and not skip_file_bridge
+        and permission_style_bridge_failure
+    )
+    if file_bridge_should_attempt:
+        turn_base["file_bridge_attempted"] = True
+        turn_base["file_bridge_skipped"] = False
         file_bridge_result = _runtime_file_bridge_result(
             context=context,
             prompt=prompt,
@@ -2298,7 +2444,9 @@ def _live_result_turn(
         )
         if file_bridge_result is not None:
             return {**turn_base, **file_bridge_result}
-    elif permission_style_bridge_failure:
+    elif file_bridge_configured and not skip_file_bridge:
+        turn_base["file_bridge_skipped"] = True
+    if permission_style_bridge_failure:
         turn_base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
     return _direct_provider_live_result(
         route_id=route_id,
@@ -2335,6 +2483,15 @@ def request_live_result(
     )
     route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
     repo_bridge_required = _repo_bridge_requested(task=task, mode=repo_bridge_mode)
+    exact_reply_text = (
+        _exact_plain_reply_expected_text(task) if not repo_bridge_required else ""
+    )
+    exact_plain_reply = bool(
+        exact_reply_text and _exact_plain_reply_requested(task)
+    )
+    if exact_plain_reply:
+        live_result_text_limit = min(live_result_text_limit, 512)
+        output_token_limit = min(output_token_limit, 512)
     code_mutation_required = _code_mutation_requested(
         task=task,
         repo_bridge_required=repo_bridge_required,
@@ -2400,6 +2557,8 @@ def request_live_result(
         "dip_full_work_mode": effective_work_mode == "full",
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": output_token_limit,
+        "exact_plain_reply_fast_path": exact_plain_reply,
+        "exact_plain_reply_file_bridge_skipped": exact_plain_reply,
         "repo_bridge_max_steps": repo_bridge_max_steps,
         **active_project_root_fields,
         **target_repo_fields,
@@ -2415,14 +2574,18 @@ def request_live_result(
             "operator_action": "retry",
         }
 
-    prompt = _build_live_result_prompt(
-        task=task,
-        expected_alias=expected_alias,
-        repo_bridge_context_pack=repo_context_pack,
-        dip_work_mode=effective_work_mode,
+    prompt = (
+        _exact_plain_reply_prompt(exact_reply_text)
+        if exact_plain_reply
+        else _build_live_result_prompt(
+            task=task,
+            expected_alias=expected_alias,
+            repo_bridge_context_pack=repo_context_pack,
+            dip_work_mode=effective_work_mode,
+        )
     )
     if not repo_bridge_required:
-        return _live_result_turn(
+        result = _live_result_turn(
             context=context,
             route_id=route_id,
             prompt=prompt,
@@ -2430,7 +2593,15 @@ def request_live_result(
             timeout_seconds=timeout_seconds,
             output_token_limit=output_token_limit,
             result_text_limit=live_result_text_limit,
+            skip_file_bridge=exact_plain_reply,
         )
+        if exact_plain_reply:
+            return _apply_exact_plain_reply_gate(
+                result,
+                expected_text=exact_reply_text,
+                result_text_limit=live_result_text_limit,
+            )
+        return result
 
     conversation_prompt = prompt
     if repo_bridge_required and active_project_root is not None:

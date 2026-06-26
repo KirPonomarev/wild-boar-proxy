@@ -8986,6 +8986,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(before, after)
 
+    def test_stable_repair_apply_rewrites_chatgpt_typed_runtime_auth_to_codex(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text(
+            json.dumps(
+                {
+                    "type": "chatgpt",
+                    "email": "kir@example.com",
+                    "account_id": "acct-1",
+                    "access_token": "access-1",
+                    "refresh_token": "refresh-1",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        target_auth = self.managed_dir / "stable-repair-target" / "codex-active.json"
+        target_auth.write_text(source_auth.read_text(encoding="utf-8"), encoding="utf-8")
+        dry_run = self.run_cli("stable", "repair", "--dry-run", "--json")
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        dry_payload = json.loads(dry_run.stdout)
+        self.assertEqual(dry_payload["machine_error_code"], "OK")
+        self.assertTrue(dry_payload["would_change"])
+        self.assertEqual(
+            dry_payload["transaction_plan"]["target_reconciliation_plan"]["target_would_rewrite"][0][
+                "reason"
+            ],
+            "runtime_consumer_auth_materialization_drift",
+        )
+
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_APPLIED")
+        rewritten = json.loads(target_auth.read_text(encoding="utf-8"))
+        self.assertEqual(rewritten["type"], "codex")
+        self.assertEqual(rewritten["email"], "kir@example.com")
+        self.assertIn(str(target_auth), payload["changed_files"])
+
+    def test_stable_repair_apply_prunes_control_owned_non_auth_entries_from_target(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"type":"codex","token":"ok"}\n', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        logs_dir = self.managed_dir / "stable-repair-target" / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        stale_log = logs_dir / "error-v1-responses.log"
+        stale_log.write_text("stale\n", encoding="utf-8")
+
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_APPLIED")
+        self.assertFalse(logs_dir.exists())
+        self.assertIn(str(logs_dir), payload["changed_files"])
+
     def test_stable_repair_apply_rolls_back_on_verification_failure(self) -> None:
         source_auth = self.profile_dir / "sources" / "codex-active.json"
         source_auth.parent.mkdir(parents=True, exist_ok=True)
@@ -23028,6 +23099,67 @@ class CliTests(unittest.TestCase):
             attempt.process_result["machine_error_code"], runtime_mod.PROCESS_OK
         )
 
+    def test_stable_runtime_launcher_attempt_restarts_real_listener_for_repo_managed_default_launcher(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        process_result = BoundedProcessResult(
+            status="ok",
+            machine_error_code=runtime_mod.PROCESS_OK,
+            exit_code=0,
+            stdout="launcher-ok\n",
+            stderr="",
+            stdout_truncated=False,
+            stderr_truncated=False,
+            timed_out=False,
+            duration_seconds=0.0,
+        )
+        self.default_launcher_script.write_text(
+            runtime_mod.build_repo_owned_default_launcher_script_text() + "\n",
+            encoding="utf-8",
+        )
+        self.default_launcher_script.chmod(0o755)
+        with mock.patch.dict(
+            os.environ,
+            {
+                **self.env(),
+                "WBP_LAUNCHER_SCRIPT": str(self.default_launcher_script),
+            },
+            clear=False,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with (
+                mock.patch(
+                    "wild_boar_proxy.runtime.run_bounded_process",
+                    return_value=process_result,
+                ) as runner,
+                mock.patch(
+                    "wild_boar_proxy.runtime.restart_owned_stable_runtime_process",
+                    return_value={"status": "ok", "machine_error_code": "OK"},
+                ) as restart,
+            ):
+                attempt = runtime_mod.run_stable_runtime_launcher_attempt(
+                    paths, selection
+                )
+
+        runner.assert_called_once()
+        restart.assert_called_once_with(
+            paths,
+            config_path=paths.stable_runtime_generated_config_file,
+            admitted_existing_config_paths=[
+                paths.stable_config,
+                paths.stable_runtime_generated_config_file,
+            ],
+        )
+        self.assertEqual(attempt.launcher_exit_code, 0)
+        self.assertEqual(
+            attempt.process_result["stable_runtime_restart_result"]["machine_error_code"],
+            "OK",
+        )
+
     def test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces(
         self,
     ) -> None:
@@ -23702,8 +23834,21 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', payload)
+        self.assertIn('APP_PYTHON_BIN="${WBP_PYTHON_BIN:-', payload)
+        self.assertIn('APP_PYTHON_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$APP_PYTHON_BIN")"', payload)
+        self.assertIn('export WBP_PYTHON_BIN="$APP_PYTHON_BIN"', payload)
+        self.assertIn('export PATH="$APP_PYTHON_BIN_DIR${PATH:+:$PATH}"', payload)
+        self.assertIn('launchctl_setenv WBP_PYTHON_BIN "$APP_PYTHON_BIN"', payload)
+        self.assertIn('launchctl_setenv PATH "$PATH"', payload)
         self.assertIn('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
         self.assertIn('OPENAI_API_KEY_FROM_AUTH="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('CONFIG_OPENAI_API_KEY_REQUIRED="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('model_provider == "cliproxy"', payload)
+        self.assertIn('cliproxy_env_key == "OPENAI_API_KEY"', payload)
+        self.assertIn(
+            'if [ -n "$OPENAI_API_KEY_FROM_AUTH" ] && [ "$CONFIG_OPENAI_API_KEY_REQUIRED" = "1" ]; then',
+            payload,
+        )
         self.assertIn('if [ "$AUTH_MODE" = "chatgpt" ]; then', payload)
         self.assertIn('unset OPENAI_API_KEY', payload)
         self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)

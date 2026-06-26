@@ -231,6 +231,8 @@ def _natural_alias_occurrences(
     )
     for alias_key, display, agent_id in ranked_aliases:
         for start, end in _alias_boundary_match_positions(prompt_key, alias_key):
+            if alias_key.isdecimal() and start != 0:
+                continue
             raw_occurrences.append(
                 {
                     "start": start,

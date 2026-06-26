@@ -879,17 +879,100 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 node("codexCustomAgentReplyBlock").hidden = true;
 vm.runInContext(`
 renderCodexCustomSessionPacket({
+  status: "blocked",
+  machine_error_code: "WBP_TRACE_PROOF_MISSING",
+  agent_reply_block: true,
+  reply_block_kind: "session_agent_reply",
+  reply_author_alias: "Codex",
+  reply_agent_id: "codex",
+  reply_lane: "primary_chatgpt",
+  reply_provider_label: "ChatGPT",
+  reply_preview_bounded: "PRIMARY_PREVIEW_OK",
+  reply_proof_summary: {
+    reply_visible: true,
+    inference_proven: true,
+    runtime_lane_proven: false,
+    prompt_runner_called: true,
+    fallback_used: false,
+    local_imitation_used: false
+  },
+  inference_proven: true,
+  runtime_lane_proven: false,
+  prompt_runner_called: true,
+  fallback_used: false,
+  local_imitation_used: false,
+  session: {
+    session_id: "ccs-primary",
+    status: "prompt_blocked_after_response_e2e",
+    model_id: "gpt-5.5",
+    current_execution_slot_id: "primary_model_slot",
+    role_slot_binding_count: 2,
+    role_slots: {}
+  }
+});
+`, sandbox);
+
+let rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
+if (rendered.agent_reply_block !== true) {
+  throw new Error(`agent reply block flag missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (
+  rendered.reply_block_kind !== "session_agent_reply" ||
+  rendered.reply_author_alias !== "Codex" ||
+  rendered.reply_agent_id !== "codex" ||
+  rendered.reply_lane !== "primary_chatgpt" ||
+  rendered.reply_provider_label !== "ChatGPT" ||
+  rendered.reply_preview_bounded !== "PRIMARY_PREVIEW_OK"
+) {
+  throw new Error(`primary reply block fields missing: ${node("codexCustomSessionResponse").textContent}`);
+}
+if (node("codexCustomAgentReplyBlock").hidden !== false) {
+  throw new Error("primary reply UI block stayed hidden");
+}
+if (node("codexCustomAgentReplyTitle").textContent !== "Codex / ChatGPT") {
+  throw new Error(`primary reply title mismatch: ${node("codexCustomAgentReplyTitle").textContent}`);
+}
+if (node("codexCustomAgentReplyText").textContent !== "PRIMARY_PREVIEW_OK") {
+  throw new Error(`primary reply text mismatch: ${node("codexCustomAgentReplyText").textContent}`);
+}
+if (
+  !node("codexCustomAgentReplyChip").className.includes("amber") ||
+  node("codexCustomAgentReplyChip").lastElementChild.textContent !== "proof incomplete"
+) {
+  throw new Error(`primary reply chip mismatch: ${node("codexCustomAgentReplyChip").className} / ${node("codexCustomAgentReplyChip").lastElementChild.textContent}`);
+}
+let proofText = node("codexCustomAgentReplyProof").textContent;
+for (const fragment of [
+  "reply=ok",
+  "inference=ok",
+  "lane=fail",
+  "prompt_runner=ok",
+  "fallback=off",
+  "local_imitation=off"
+]) {
+  if (!proofText.includes(fragment)) {
+    throw new Error(`primary reply proof UI missing ${fragment}: ${proofText}`);
+  }
+}
+
+vm.runInContext(`
+renderCodexCustomSessionPacket({
   status: "ok",
   machine_error_code: "OK",
   direct_api_reply_block: true,
+  agent_reply_block: true,
   reply_block_kind: "api_agent_direct_reply",
   reply_author_alias: "DIP",
   reply_agent_id: "dip",
   reply_lane: "api_route",
   reply_provider_label: "deepseek",
+  reply_preview_bounded: "WBP_DIRECT_UI_OK",
   reply_text: "WBP_DIRECT_UI_OK",
   reply_text_sha256: "sha",
   reply_proof_summary: {
+    reply_visible: true,
+    inference_proven: true,
+    runtime_lane_proven: true,
     direct_reply_proven: true,
     api_agent_provider_called: true,
     prompt_runner_called: false,
@@ -913,7 +996,7 @@ renderCodexCustomSessionPacket({
 });
 `, sandbox);
 
-const rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
+rendered = JSON.parse(node("codexCustomSessionResponse").textContent);
 if (rendered.direct_api_reply_block !== true) {
   throw new Error(`direct reply block flag missing: ${node("codexCustomSessionResponse").textContent}`);
 }
@@ -954,7 +1037,7 @@ if (
 ) {
   throw new Error(`direct reply chip mismatch: ${node("codexCustomAgentReplyChip").className} / ${node("codexCustomAgentReplyChip").lastElementChild.textContent}`);
 }
-const proofText = node("codexCustomAgentReplyProof").textContent;
+proofText = node("codexCustomAgentReplyProof").textContent;
 for (const fragment of [
   "direct_reply=ok",
   "provider=ok",

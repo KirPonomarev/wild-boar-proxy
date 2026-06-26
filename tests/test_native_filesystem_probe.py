@@ -343,6 +343,22 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn('wire_api = "responses"', config)
         self.assertIn('sandbox_mode = "workspace-write"', config)
 
+    def test_provider_config_prefers_explicit_local_token_over_cli_proxy_key(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
+            return_value="stale-cli-token",
+        ):
+            config = build_provider_config(
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.4-mini",
+                auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
+                local_token="fresh-local-token",
+            )
+
+        self.assertIn('experimental_bearer_token = "fresh-local-token"', config)
+        self.assertNotIn('experimental_bearer_token = "stale-cli-token"', config)
+        self.assertNotIn("[model_providers.wbp.auth]", config)
+
     def test_provider_config_rejects_unadmitted_sandbox_mode(self) -> None:
         with self.assertRaises(ValueError):
             build_provider_config(
@@ -4556,6 +4572,10 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(env["WBP_STABLE_CONFIG"], str(runtime_paths.stable_config))
         self.assertEqual(env["WBP_RUNTIME_TMPDIR"], str(layout.tmp_root / "runtime-bind"))
         self.assertEqual(env["WBP_PYTHON_BIN"], sys.executable)
+        self.assertEqual(
+            env["WBP_ACTIVE_PROJECT_ROOT"],
+            str(root.resolve(strict=False)),
+        )
 
     def test_materialize_probe_profile_writes_agent_runtime_context(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

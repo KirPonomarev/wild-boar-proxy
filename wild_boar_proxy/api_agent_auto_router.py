@@ -28,6 +28,7 @@ from .command_effects import EFFECT_MUTATE, EFFECT_PROBE
 from .core import packets
 from .natural_intent_contract import (
     DISPATCH_STATUS_NOT_ATTEMPTED,
+    FAIL_ALIAS_CONTEXT_MISSING,
     FAIL_ALIAS_NOT_API_LANE,
     INTENT_AMBIGUOUS_NO_DISPATCH,
     NO_ALIAS_DETECTED,
@@ -110,6 +111,24 @@ def _leading_address_label(prompt_text: object) -> str:
     return _safe_text(match.group(1), limit=80) if match else ""
 
 
+def _leading_label_looks_like_unknown_alias(label: str) -> bool:
+    normalized = _safe_text(label, limit=80).casefold()
+    if not normalized:
+        return False
+    parts = normalized.split()
+    if len(parts) == 1:
+        return True
+    return parts[0] in {
+        "agent",
+        "агент",
+        "api",
+        "gpt",
+        "codex",
+        "dip",
+        "deepseek",
+    }
+
+
 def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "direct_reply_packet_kind": _safe_text(packet.get("packet_kind"), limit=80),
@@ -177,9 +196,77 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "bridge_or_file_bridge_used": _as_bool(packet.get("bridge_or_file_bridge_used")),
         "network_dependent": _as_bool(packet.get("network_dependent")),
+        "exact_plain_reply_fast_path": _as_bool(
+            packet.get("exact_plain_reply_fast_path")
+        ),
+        "exact_plain_reply_file_bridge_skipped": _as_bool(
+            packet.get("exact_plain_reply_file_bridge_skipped")
+        ),
+        "exact_plain_reply_matched": _as_bool(packet.get("exact_plain_reply_matched")),
+        "exact_plain_reply_expected_text_sha256": _safe_text(
+            packet.get("exact_plain_reply_expected_text_sha256"),
+            limit=80,
+        ),
+        "exact_plain_reply_expected_text_recorded": _as_bool(
+            packet.get("exact_plain_reply_expected_text_recorded")
+        ),
+        "exact_plain_reply_observed_text_sha256": _safe_text(
+            packet.get("exact_plain_reply_observed_text_sha256"),
+            limit=80,
+        ),
+        "exact_plain_reply_observed_text_recorded": _as_bool(
+            packet.get("exact_plain_reply_observed_text_recorded")
+        ),
+        "file_bridge_attempted": _as_bool(packet.get("file_bridge_attempted")),
+        "file_bridge_skipped": _as_bool(packet.get("file_bridge_skipped")),
+        "dip_work_mode": _safe_text(packet.get("dip_work_mode"), limit=40),
+        "dip_full_work_mode": _as_bool(packet.get("dip_full_work_mode")),
+        "live_result_text_limit": int(packet.get("live_result_text_limit") or 0),
+        "live_result_output_token_limit": int(
+            packet.get("live_result_output_token_limit") or 0
+        ),
         "repo_bridge_mode": _safe_text(packet.get("repo_bridge_mode"), limit=40),
         "repo_bridge_required": _as_bool(packet.get("repo_bridge_required")),
+        "repo_bridge_available": _as_bool(packet.get("repo_bridge_available")),
         "repo_bridge_used": _as_bool(packet.get("repo_bridge_used")),
+        "dip_repo_tool_bridge_required": _as_bool(
+            packet.get("dip_repo_tool_bridge_required")
+        ),
+        "dip_repo_tool_bridge_available": _as_bool(
+            packet.get("dip_repo_tool_bridge_available")
+        ),
+        "dip_repo_tool_bridge_used": _as_bool(
+            packet.get("dip_repo_tool_bridge_used")
+        ),
+        "dip_repo_direct_access": _as_bool(packet.get("dip_repo_direct_access")),
+        "repo_bridge_context_pack_used": _as_bool(
+            packet.get("repo_bridge_context_pack_used")
+        ),
+        "repo_bridge_context_pack_recorded": _as_bool(
+            packet.get("repo_bridge_context_pack_recorded")
+        ),
+        "repo_bridge_readonly": _as_bool(packet.get("repo_bridge_readonly")),
+        "repo_bridge_mutation_allowed": _as_bool(
+            packet.get("repo_bridge_mutation_allowed")
+        ),
+        "repo_bridge_mutation_controlled": _as_bool(
+            packet.get("repo_bridge_mutation_controlled")
+        ),
+        "repo_bridge_bootstrap_used": _as_bool(
+            packet.get("repo_bridge_bootstrap_used")
+        ),
+        "repo_bridge_bootstrap_tool_call_count": int(
+            packet.get("repo_bridge_bootstrap_tool_call_count") or 0
+        ),
+        "repo_bridge_tool_call_count": int(
+            packet.get("repo_bridge_tool_call_count") or 0
+        ),
+        "repo_bridge_successful_tool_call_count": int(
+            packet.get("repo_bridge_successful_tool_call_count") or 0
+        ),
+        "repo_bridge_raw_tool_results_recorded": _as_bool(
+            packet.get("repo_bridge_raw_tool_results_recorded")
+        ),
         "dip_action_bridge_required": _as_bool(
             packet.get("dip_action_bridge_required")
         ),
@@ -249,6 +336,9 @@ def build_api_agent_auto_router_packet(
     lane = _safe_text(parser_packet.get("lane_candidate"), limit=40)
     slot = _safe_text(parser_packet.get("slot_candidate"), limit=80)
     leading_label = _leading_address_label(prompt)
+    leading_label_unknown_alias_candidate = _leading_label_looks_like_unknown_alias(
+        leading_label
+    )
 
     direct_packet: Mapping[str, Any] = {}
     blocking_reasons: list[str] = []
@@ -299,12 +389,15 @@ def build_api_agent_auto_router_packet(
         decision = AUTO_ROUTER_DECISION_GPT_LANE
         ok = True
         machine_error_code = API_AGENT_AUTO_ROUTER_OK
-    elif parser_code == NO_ALIAS_DETECTED and not leading_label:
+    elif parser_code == NO_ALIAS_DETECTED and not leading_label_unknown_alias_candidate:
         gpt_lane_selected = True
         passthrough_to_gpt = True
         decision = AUTO_ROUTER_DECISION_GPT_PASSTHROUGH
         ok = True
         machine_error_code = API_AGENT_AUTO_ROUTER_OK
+    elif parser_code == FAIL_ALIAS_CONTEXT_MISSING:
+        machine_error_code = FAIL_ALIAS_CONTEXT_MISSING
+        blocking_reasons.append("alias_context_missing_or_invalid")
     elif parser_code == INTENT_AMBIGUOUS_NO_DISPATCH:
         machine_error_code = API_AGENT_AUTO_ROUTER_AMBIGUOUS
         blocking_reasons.append("ambiguous_alias_intent")
@@ -312,7 +405,7 @@ def build_api_agent_auto_router_packet(
         if alias:
             machine_error_code = parser_code or "alias_intent_not_admitted"
             blocking_reasons.append(machine_error_code)
-        elif leading_label:
+        elif leading_label_unknown_alias_candidate:
             machine_error_code = API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS
             blocking_reasons.append("unknown_addressed_alias")
         else:
@@ -411,6 +504,9 @@ def build_api_agent_auto_router_packet(
         "natural_phrase_recorded": False,
         "leading_address_label_present": bool(leading_label),
         "leading_address_label_recorded": False,
+        "leading_address_label_unknown_alias_candidate": bool(
+            leading_label_unknown_alias_candidate
+        ),
         "parser_packet_kind": _safe_text(parser_packet.get("packet_kind"), limit=80),
         "parser_status": _safe_text(parser_packet.get("parser_status"), limit=80),
         "parser_machine_error_code": parser_code,
@@ -474,6 +570,7 @@ def build_api_agent_auto_router_packet(
             if api_direct_selected
             else "api_agent_auto_router_to_gpt_lane"
         ),
+        "output_text": direct_summary["reply_text"] if direct_reply_ok else "",
         **direct_summary,
         "requested_repo_bridge_mode": repo_bridge,
         "requested_work_mode": work,

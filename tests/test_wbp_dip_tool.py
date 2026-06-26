@@ -26,6 +26,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_CODEX_NOT_EXECUTABLE,
     WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
     WBP_DIP_TOOL_DRY_RUN,
+    WBP_DIP_TOOL_EXACT_REPLY_MISMATCH,
     WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT,
     WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
     WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
@@ -207,6 +208,18 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(
             _code_mutation_requested(
                 task="fix demo.py, но без правок README",
+                repo_bridge_required=True,
+            )
+        )
+        self.assertTrue(
+            _code_mutation_requested(
+                task="fix app.py. Не трогай файлы вне active repo.",
+                repo_bridge_required=True,
+            )
+        )
+        self.assertFalse(
+            _code_mutation_requested(
+                task="fix app.py, но без правок файлов.",
                 repo_bridge_required=True,
             )
         )
@@ -1628,6 +1641,12 @@ class WbpDipToolTests(unittest.TestCase):
                         "alias_to_agent_id": {"DIP": "dip"},
                         "agent_id_to_route": {"dip": "route-ok"},
                         "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_file_bridge": {
+                            "enabled": True,
+                            "request_dir": str(profile / "bridge-requests"),
+                            "response_dir": str(profile / "bridge-responses"),
+                            "timeout_seconds": 45,
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -1652,6 +1671,138 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(result["positive_provider_proof_gate_satisfied"])
         self.assertFalse(result["bridge_or_file_bridge_used"])
         request_json_mock.assert_called_once()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_exact_plain_reply_uses_fast_budget(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=12,
+            payload={"choices": [{"message": {"content": "WBP_FAST"}}]},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: ответь ровно WBP_FAST. Без правок файлов.",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_bridge_mode="off",
+                timeout_seconds=0.01,
+            )
+
+        payload = request_json_mock.call_args.kwargs["payload"]
+        encoded_payload = json.dumps(payload, ensure_ascii=False)
+        self.assertEqual(payload["max_tokens"], 512)
+        self.assertIn("Return only this exact string", encoded_payload)
+        self.assertIn("WBP_FAST", encoded_payload)
+        self.assertNotIn("You are DIP called through", encoded_payload)
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["exact_plain_reply_fast_path"])
+        self.assertTrue(result["exact_plain_reply_file_bridge_skipped"])
+        self.assertTrue(result["file_bridge_skipped"])
+        self.assertFalse(result["file_bridge_attempted"])
+        self.assertEqual(result["dip_work_mode"], "standard")
+        self.assertFalse(result["dip_full_work_mode"])
+        self.assertEqual(result["live_result_text_limit"], 512)
+        self.assertEqual(result["live_result_output_token_limit"], 512)
+        self.assertTrue(result["exact_plain_reply_matched"])
+        self.assertFalse(result["exact_plain_reply_expected_text_recorded"])
+        self.assertFalse(result["exact_plain_reply_observed_text_recorded"])
+        self.assertEqual(result["result_text"], "WBP_FAST")
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_exact_plain_reply_mismatch_fails_closed(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=12,
+            payload={"choices": [{"message": {"content": "WBP_FAST"}}]},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: ответь ровно WBP_FAST_96_OK. Без правок файлов.",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_bridge_mode="off",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["machine_error_code"],
+            WBP_DIP_TOOL_EXACT_REPLY_MISMATCH,
+        )
+        self.assertTrue(result["provider_called"])
+        self.assertTrue(result["exact_plain_reply_fast_path"])
+        self.assertTrue(result["exact_plain_reply_file_bridge_skipped"])
+        self.assertTrue(result["file_bridge_skipped"])
+        self.assertFalse(result["file_bridge_attempted"])
+        self.assertFalse(result["exact_plain_reply_matched"])
+        self.assertFalse(result["exact_plain_reply_expected_text_recorded"])
+        self.assertFalse(result["exact_plain_reply_observed_text_recorded"])
+        self.assertFalse(result["result_available"])
+        self.assertEqual(result["result_text"], "")
+        self.assertEqual(result["result_text_sha256"], "")
+        self.assertEqual(result["result_text_length"], 0)
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
@@ -3801,14 +3952,14 @@ class WbpDipToolTests(unittest.TestCase):
     @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
-    def test_request_live_result_tries_file_bridge_before_direct_provider(
+    def test_request_live_result_tries_file_bridge_on_permission_style_failure(
         self,
         request_json_mock: mock.Mock,
         find_route_mock: mock.Mock,
         file_bridge_mock: mock.Mock,
     ) -> None:
         request_json_mock.side_effect = RuntimeErrorInfo(
-            "Provider network request failed: refused",
+            "Provider network request failed: PermissionError Operation not permitted",
             machine_error_code=errors.PROVIDER_NETWORK_FAILED,
             operator_action="retry",
         )
@@ -3869,6 +4020,85 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(result["provider_auth_ok"])
         self.assertFalse(result["positive_provider_proof_gate_satisfied"])
         find_route_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_skips_file_bridge_on_connection_refused(
+        self,
+        request_json_mock: mock.Mock,
+        file_bridge_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.side_effect = [
+            RuntimeErrorInfo(
+                "Provider network request failed: connection refused",
+                machine_error_code=errors.PROVIDER_NETWORK_FAILED,
+                operator_action="retry",
+            ),
+            SimpleNamespace(
+                status_code=200,
+                latency_ms=12,
+                payload={"choices": [{"message": {"content": "Direct provider result."}}]},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "method": "POST",
+                            "model": "route-ok",
+                            "response_text_field": "output_text",
+                            "url_candidates": ["http://127.0.0.1:50555/v1/responses"],
+                        },
+                        "deepseek_live_format_check_file_bridge": {
+                            "enabled": True,
+                            "request_dir": str(profile / "requests"),
+                            "response_dir": str(profile / "responses"),
+                            "response_text_field": "output_text",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["source"], "external_models_direct")
+        self.assertEqual(result["result_text"], "Direct provider result.")
+        self.assertTrue(result["bridge_attempted"])
+        self.assertFalse(result["file_bridge_attempted"])
+        self.assertTrue(result["file_bridge_skipped"])
+        self.assertFalse(result["runtime_context_file_bridge_used"])
+        self.assertFalse(result["bridge_or_file_bridge_used"])
+        self.assertTrue(result["direct_provider_response_observed"])
+        file_bridge_mock.assert_not_called()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
     def test_request_live_result_rejects_route_outside_allowlist(

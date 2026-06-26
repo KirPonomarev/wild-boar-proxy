@@ -121,18 +121,31 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertNotIn("DEEPSEEK_API_KEY", payload)
         self.assertNotIn("OPENROUTER_API_KEY", payload)
 
-    def test_repo_owned_default_launcher_unsets_global_api_key_for_chatgpt_auth(
+    def test_repo_owned_default_launcher_preserves_cliproxy_key_for_chatgpt_auth(
         self,
     ) -> None:
         payload = runtime.build_repo_owned_default_launcher_script_payload()
 
+        self.assertIn('APP_PYTHON_BIN="${WBP_PYTHON_BIN:-', payload)
+        self.assertIn('APP_PYTHON_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$APP_PYTHON_BIN")"', payload)
+        self.assertIn('export WBP_PYTHON_BIN="$APP_PYTHON_BIN"', payload)
+        self.assertIn('export PATH="$APP_PYTHON_BIN_DIR${PATH:+:$PATH}"', payload)
+        self.assertIn('launchctl_setenv WBP_PYTHON_BIN "$APP_PYTHON_BIN"', payload)
+        self.assertIn('launchctl_setenv PATH "$PATH"', payload)
         self.assertIn('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
         self.assertIn("print(str(data.get(\"auth_mode\", \"\")).strip().lower())", payload)
         self.assertIn('OPENAI_API_KEY_FROM_AUTH="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('CONFIG_OPENAI_API_KEY_REQUIRED="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn('model_provider == "cliproxy"', payload)
+        self.assertIn('cliproxy_env_key == "OPENAI_API_KEY"', payload)
+        self.assertIn(
+            'if [ -n "$OPENAI_API_KEY_FROM_AUTH" ] && [ "$CONFIG_OPENAI_API_KEY_REQUIRED" = "1" ]; then',
+            payload,
+        )
+        self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
         self.assertIn('if [ "$AUTH_MODE" = "chatgpt" ]; then', payload)
         self.assertIn('unset OPENAI_API_KEY', payload)
         self.assertIn('elif [ -n "$OPENAI_API_KEY_FROM_AUTH" ]; then', payload)
-        self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
 
     def test_repo_owned_default_launcher_repairs_stale_native_model_before_desktop_launch(
         self,
@@ -245,6 +258,76 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
         self.assertFalse(hint["owner_action_required"])
         self.assertEqual(hint["next_action"], "sync")
         self.assertEqual(hint["command_surface"], "sync --json")
+
+    def test_runtime_consumer_auth_materialization_normalizes_chatgpt_type_to_codex(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            auth_path = Path(tmpdir) / "codex-auth.json"
+            auth_path.write_text(
+                json.dumps(
+                    {
+                        "type": "chatgpt",
+                        "email": "kir@example.com",
+                        "account_id": "acct-1",
+                        "access_token": "access-1",
+                        "refresh_token": "refresh-1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            materialized_bytes, metadata = runtime.build_runtime_consumer_auth_materialization(
+                auth_path
+            )
+
+        materialized = json.loads(materialized_bytes.decode("utf-8"))
+        self.assertEqual(materialized["type"], "codex")
+        self.assertTrue(metadata["runtime_consumer_auth_normalized"])
+        self.assertEqual(metadata["source_auth_type"], "chatgpt")
+        self.assertEqual(metadata["runtime_consumer_auth_type"], "codex")
+
+    def test_stage_advance_materialization_normalizes_chatgpt_runtime_auth(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = _runtime_paths(root)
+            paths.profile_dir.mkdir(parents=True, exist_ok=True)
+            paths.managed_dir.mkdir(parents=True, exist_ok=True)
+            paths.stable_config.parent.mkdir(parents=True, exist_ok=True)
+            stable_auth_dir = root / "stable-auth"
+            stable_auth_dir.mkdir(parents=True, exist_ok=True)
+            paths.stable_config.write_text(
+                f'host: 127.0.0.1\nport: 8318\nauth-dir: "{stable_auth_dir}"\n',
+                encoding="utf-8",
+            )
+            source_auth = root / "sources" / "codex-auth.json"
+            source_auth.parent.mkdir(parents=True, exist_ok=True)
+            source_auth.write_text(
+                json.dumps(
+                    {
+                        "type": "chatgpt",
+                        "email": "kir@example.com",
+                        "account_id": "acct-1",
+                        "access_token": "access-1",
+                        "refresh_token": "refresh-1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = runtime.materialize_rollout_stage_advance_stable_auth(
+                paths,
+                {"auth_ref": str(source_auth)},
+            )
+
+            materialized = json.loads((stable_auth_dir / source_auth.name).read_text())
+            self.assertEqual(materialized["type"], "codex")
+            self.assertTrue(result["runtime_consumer_auth_normalized"])
+            self.assertEqual(result["runtime_consumer_auth_type"], "codex")
 
     def test_owner_login_inventory_scope_allows_stable_config_parent(self) -> None:
         paths = runtime.RuntimePaths(

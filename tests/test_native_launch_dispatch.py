@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -318,6 +319,124 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["window_query_method"], "CGWindowList pid-bound on-screen window")
         self.assertEqual(packet["ax_window_count"], 0)
         self.assertEqual(packet["window_count"], 1)
+
+    def test_window_observation_can_use_fresh_window_lifecycle_scope_when_ax_reports_zero_windows(self) -> None:
+        process_inventory = {
+            "root_app_pids": [222],
+            "custom_process_lines": [
+                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+            ],
+        }
+        completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex\ttrue\ttrue\tfalse\t0\n",
+            stderr="",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir) / "profile"
+            scope_path = (
+                profile_dir / "electron-user-data" / "sentry" / "scope_v3.json"
+            )
+            scope_path.parent.mkdir(parents=True, exist_ok=True)
+            scope_path.write_text(
+                json.dumps(
+                    {
+                        "scope": {
+                            "breadcrumbs": [
+                                {"message": "app.browser-window-created"},
+                                {"message": "window.show"},
+                                {"message": "app.browser-window-focus"},
+                                {
+                                    "message": "[window-manager] window ready-to-show appearance=primary hostId=local startupElapsedMs=592 webContentsId=1 windowId=1"
+                                },
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.subprocess.run",
+                    return_value=completed,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cg_window_presence",
+                    return_value=(False, "cg_query_unavailable_pyobjc_framework_quartz_not_installed"),
+                ),
+            ):
+                packet = native_probe._window_observation_packet_for_process_inventory(
+                    process_inventory,
+                    profile_dir=profile_dir,
+                )
+
+        self.assertTrue(packet["window_observed"])
+        self.assertEqual(packet["observed_pid"], 222)
+        self.assertEqual(
+            packet["window_query_method"],
+            "Electron/Sentry window lifecycle scope",
+        )
+        self.assertTrue(packet["window_lifecycle_scope_fallback_used"])
+        self.assertTrue(
+            packet["window_lifecycle_scope_packet"]["window_lifecycle_observed"]
+        )
+
+    def test_window_observation_scope_fallback_requires_fresh_window_lifecycle_scope(self) -> None:
+        process_inventory = {
+            "root_app_pids": [222],
+            "custom_process_lines": [
+                "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+            ],
+        }
+        completed = subprocess.CompletedProcess(
+            args=["osascript"],
+            returncode=0,
+            stdout="Codex\ttrue\ttrue\tfalse\t0\n",
+            stderr="",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir) / "profile"
+            scope_path = (
+                profile_dir / "electron-user-data" / "sentry" / "scope_v3.json"
+            )
+            scope_path.parent.mkdir(parents=True, exist_ok=True)
+            scope_path.write_text(
+                json.dumps(
+                    {
+                        "scope": {
+                            "breadcrumbs": [
+                                {"message": "app.browser-window-created"},
+                                {"message": "window.show"},
+                                {"message": "app.browser-window-focus"},
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            os.utime(scope_path, (1, 1))
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.subprocess.run",
+                    return_value=completed,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cg_window_presence",
+                    return_value=(False, "cg_query_unavailable_pyobjc_framework_quartz_not_installed"),
+                ),
+            ):
+                packet = native_probe._window_observation_packet_for_process_inventory(
+                    process_inventory,
+                    profile_dir=profile_dir,
+                )
+
+        self.assertFalse(packet["window_observed"])
+        self.assertEqual(
+            packet["blocked_reason_class"],
+            "pid_visible_but_accessible_window_absent",
+        )
+        self.assertNotIn("window_lifecycle_scope_fallback_used", packet)
 
     def test_window_observation_can_bind_same_profile_renderer_pid_after_root_miss(self) -> None:
         process_inventory = {
@@ -1002,6 +1121,36 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             )
             auth_path.parent.mkdir(parents=True, exist_ok=True)
             auth_path.write_text("{}", encoding="utf-8")
+            stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
+            stderr_path.parent.mkdir(parents=True, exist_ok=True)
+            stderr_path.write_text(
+                "DevTools listening on ws://127.0.0.1:9223/devtools/browser/current\n",
+                encoding="utf-8",
+            )
+            packet = native_probe._apply_codex_desktop_auth_blocker(
+                {
+                    "native_window_usable": False,
+                    "input_capable_ui_observed": False,
+                    "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+                    "native_app_usability_source": "not_proven",
+                },
+                profile_dir=profile_dir,
+                launcher_stderr_path=stderr_path,
+                allow_profile_auth_state_fallback=True,
+                profile_auth_state_fallback_allowed_by_current_launch=True,
+            )
+
+        self.assertNotIn("codex_desktop_auth_blocker_observed", packet)
+        self.assertEqual(packet["blocked_reason_class"], "input_capable_window_not_proven_for_pid")
+
+    def test_codex_desktop_auth_state_fallback_skips_chatgpt_blocker_for_api_key_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_dir = Path(temp_dir)
+            (profile_dir / "home").mkdir(parents=True, exist_ok=True)
+            (profile_dir / "auth.json").write_text(
+                json.dumps({"auth_mode": "apikey", "OPENAI_API_KEY": "local-token"}) + "\n",
+                encoding="utf-8",
+            )
             stderr_path = profile_dir / "tmp" / "launcher.stderr.log"
             stderr_path.parent.mkdir(parents=True, exist_ok=True)
             stderr_path.write_text(
@@ -2656,6 +2805,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     "native_prompt_turn_accepted": True,
                     "assistant_turn_machine_error_code": "OK",
                     "input_text_insert_succeeded": True,
+                    "custom_codex_response_text_read_proven": True,
                     "custom_response_exact_token_observed": True,
                     "custom_response_bound_to_request": True,
                     "native_codex_subagent_used_as_dip": False,
@@ -2687,12 +2837,202 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             self.assertTrue(packet["native_ui_observer_packet_file_written"])
             self.assertFalse(packet["native_ui_observer_packet_file_path_recorded"])
             self.assertTrue(packet["native_ui_observer_packet_proven"])
+            self.assertTrue(packet["native_ui_request_id_valid"])
+            self.assertTrue(packet["native_ui_observer_packet_request_id_matches_input"])
+            self.assertTrue(packet["native_ui_expected_text_contains_request_id"])
+            self.assertTrue(packet["native_ui_strict_request_bound_observed"])
+            self.assertTrue(packet["native_ui_exact_token_smoke_observed"])
+            self.assertEqual(
+                packet["native_ui_observer_proof_strength"],
+                "strict_request_bound",
+            )
+            self.assertEqual(
+                packet["native_ui_observer_proof_machine_error_code"],
+                "OK",
+            )
             self.assertEqual(packet["exit_code"], 0)
             self.assertFalse(packet["product_ready"])
             written = proof_dir / "native-ui-observer.packet.json"
             self.assertTrue(written.exists())
             persisted = json.loads(written.read_text(encoding="utf-8"))
             self.assertEqual(persisted["request_id"], "req-1")
+
+    def test_native_ui_observer_proof_command_does_not_greenwash_exact_token_smoke_without_request_binding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "req-smoke",
+                    "prompt_sha256": "abc",
+                    "prompt_length": 8,
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "native_app_usable": True,
+                    "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": (
+                        "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_PROVEN"
+                    ),
+                    "input_text_insert_succeeded": True,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": False,
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                    "native_free_text_observer_machine_error_code": (
+                        "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                    ),
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-smoke",
+                    expected_text="WBP_NATIVE_req-smoke",
+                    proof_dir=str(proof_dir),
+                )
+
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            self.assertTrue(packet["native_ui_request_id_valid"])
+            self.assertTrue(packet["native_ui_observer_packet_request_id_matches_input"])
+            self.assertTrue(packet["native_ui_expected_text_contains_request_id"])
+            self.assertFalse(packet["native_ui_strict_request_bound_observed"])
+            self.assertTrue(packet["native_ui_exact_token_smoke_observed"])
+            self.assertEqual(
+                packet["native_ui_observer_proof_strength"],
+                "exact_token_smoke_only",
+            )
+            self.assertEqual(
+                packet["native_ui_observer_proof_machine_error_code"],
+                "CUSTOM_NATIVE_UI_OBSERVER_EXACT_TOKEN_SMOKE_ONLY",
+            )
+            self.assertFalse(packet["custom_response_bound_to_request"])
+            self.assertEqual(
+                packet["assistant_turn_machine_error_code"],
+                "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_PROVEN",
+            )
+
+    def test_native_ui_observer_proof_command_fails_closed_when_expected_text_is_not_request_bound(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "req-unbound",
+                    "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": "OK",
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                    "native_free_text_observer_machine_error_code": "OK",
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-unbound",
+                    expected_text="WBP_NATIVE_VISIBLE_RESPONSE_ONLY",
+                    proof_dir=str(proof_dir),
+                )
+
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            self.assertTrue(packet["native_ui_request_id_valid"])
+            self.assertTrue(packet["native_ui_observer_packet_request_id_matches_input"])
+            self.assertFalse(packet["native_ui_expected_text_contains_request_id"])
+            self.assertFalse(packet["native_ui_strict_request_bound_observed"])
+            self.assertTrue(packet["native_ui_exact_token_smoke_observed"])
+            self.assertEqual(
+                packet["native_ui_observer_proof_strength"],
+                "exact_token_smoke_only",
+            )
+            self.assertEqual(
+                packet["native_ui_observer_proof_machine_error_code"],
+                "CUSTOM_NATIVE_UI_OBSERVER_EXPECTED_TEXT_NOT_REQUEST_BOUND",
+            )
+
+    def test_native_ui_observer_proof_command_fails_closed_when_request_id_is_invalid(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_ui_observer_proof.submit_custom_native_window_prompt_packet",
+                return_value={
+                    "schema_version": 1,
+                    "packet_kind": "custom_codex_native_prompt_submit",
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "request_id": "bad request id",
+                    "prompt_submitted": True,
+                    "native_prompt_turn_accepted": True,
+                    "assistant_turn_machine_error_code": "OK",
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                    "native_free_text_observer_machine_error_code": "OK",
+                    "custom_codex_ui_visibility_proven": False,
+                    "product_ready": False,
+                    "fallback_used": False,
+                    "local_imitation_used": False,
+                },
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="bad request id",
+                    expected_text="WBP_NATIVE_bad request id",
+                    proof_dir=str(proof_dir),
+                )
+
+            self.assertFalse(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 1)
+            self.assertFalse(packet["native_ui_request_id_valid"])
+            self.assertFalse(packet["native_ui_observer_packet_request_id_matches_input"])
+            self.assertFalse(packet["native_ui_expected_text_contains_request_id"])
+            self.assertFalse(packet["native_ui_strict_request_bound_observed"])
+            self.assertTrue(packet["native_ui_exact_token_smoke_observed"])
+            self.assertEqual(
+                packet["native_ui_observer_proof_strength"],
+                "exact_token_smoke_only",
+            )
+            self.assertEqual(
+                packet["native_ui_observer_proof_machine_error_code"],
+                "CUSTOM_NATIVE_UI_REQUEST_ID_INVALID",
+            )
 
     def test_native_ui_observer_auto_launch_retries_after_missing_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2975,6 +3315,98 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             self.assertEqual(submitter.call_count, 2)
             self.assertTrue(packet["native_ui_observer_retry_after_auto_launch"])
             self.assertTrue(packet["native_auto_launch_attempted"])
+            self.assertFalse(packet["native_auto_launch_native_app_usable"])
+            self.assertTrue(packet["native_ui_observer_packet_proven"])
+            self.assertEqual(packet["exit_code"], 0)
+
+    def test_native_ui_observer_auto_launch_retries_after_window_not_proven_but_running(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = SimpleNamespace(managed_dir=root / "managed")
+            proof_dir = root / "proof"
+            blocked_packet = {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_prompt_submit",
+                "status": "error",
+                "machine_error_code": "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+                "request_id": "req-window-not-proven",
+                "native_window_observed": False,
+                "input_capable_ui_observed": False,
+                "prompt_submitted": False,
+                "native_prompt_turn_accepted": False,
+                "assistant_turn_machine_error_code": (
+                    "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+                ),
+                "native_free_text_observer_machine_error_code": (
+                    "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                ),
+                "custom_response_exact_token_observed": False,
+                "custom_response_bound_to_request": False,
+                "native_codex_subagent_used_as_dip": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+            }
+            proven_packet = {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_prompt_submit",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "request_id": "req-window-not-proven",
+                "native_window_observed": True,
+                "input_capable_ui_observed": True,
+                "native_app_usable": True,
+                "prompt_submitted": True,
+                "native_prompt_turn_accepted": True,
+                "assistant_turn_machine_error_code": "OK",
+                "custom_response_exact_token_observed": True,
+                "custom_response_bound_to_request": True,
+                "native_codex_subagent_used_as_dip": False,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": "OK",
+                "custom_codex_ui_visibility_proven": False,
+                "product_ready": False,
+                "fallback_used": False,
+                "local_imitation_used": False,
+            }
+            launch_packet = {
+                "status": "blocked",
+                "machine_error_code": "CUSTOM_NATIVE_WINDOW_NOT_PROVEN",
+                "process_started": True,
+                "running_status": True,
+                "native_app_usable": False,
+                "cleanup_deferred_while_running": True,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=[blocked_packet, proven_packet],
+                ) as submitter,
+                mock.patch(
+                    "wild_boar_proxy.custom_codex_native_ui_observer_proof."
+                    "launch_custom_native_app_packet",
+                    return_value=launch_packet,
+                ),
+            ):
+                packet = run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text="prompt",
+                    request_id="req-window-not-proven",
+                    expected_text="WBP_NATIVE_req-window-not-proven",
+                    proof_dir=str(proof_dir),
+                    auto_launch_custom_codex=True,
+                    auto_launch_owner_authorization_phrase=(
+                        OWNER_STANDING_AUTHORIZATION_PHRASE
+                    ),
+                    auto_launch_repo_root=str(ROOT),
+                )
+
+            self.assertEqual(submitter.call_count, 2)
+            self.assertTrue(packet["native_ui_observer_retry_after_auto_launch"])
+            self.assertTrue(packet["native_auto_launch_attempted"])
+            self.assertTrue(packet["native_auto_launch_running_status"])
             self.assertFalse(packet["native_auto_launch_native_app_usable"])
             self.assertTrue(packet["native_ui_observer_packet_proven"])
             self.assertEqual(packet["exit_code"], 0)
@@ -3555,6 +3987,330 @@ class NativeLaunchDispatchTests(unittest.TestCase):
             allowed_owner_pids=[222],
         )
 
+    def test_show_custom_native_window_can_use_focus_visibility_fallback_when_ax_window_count_stays_zero(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            user_data_dir = (
+                profile_base / "wbp-custom-main" / "electron-user-data"
+            )
+            profile_root = profile_base / "wbp-custom-main"
+            native_fs.remote_debugging_port_file(profile_root).parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            native_fs.remote_debugging_port_file(profile_root).write_text(
+                "49231\n",
+                encoding="utf-8",
+            )
+            process_inventory = {
+                "root_app_pids": [222],
+                "custom_process_lines": [
+                    f"222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir={user_data_dir}"
+                ],
+            }
+            before = {
+                "window_observed": False,
+                "observed_pid": 333,
+                "window_visible": False,
+                "window_frontmost": False,
+                "window_bounds": {},
+                "blocked_reason_class": "pid_visible_but_accessible_window_absent",
+                "window_query_method": "AX/System Events process window count",
+            }
+            after = {
+                "window_observed": False,
+                "observed_pid": 333,
+                "window_visible": False,
+                "window_frontmost": False,
+                "window_bounds": {},
+                "blocked_reason_class": "pid_visible_but_accessible_window_absent",
+                "window_query_method": "AX/System Events process window count",
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=process_inventory,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    side_effect=[before, after],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": False,
+                        "window_focus_query": "Codex\ttrue\ttrue\t0",
+                        "window_focus_query_rc": 0,
+                        "window_focus_query_error_class": "",
+                        "window_focus_stderr_bounded": "",
+                        "window_focus_observed_pid": 222,
+                        "window_focus_visible": True,
+                        "window_focus_frontmost": True,
+                        "window_focus_window_count": 0,
+                        "window_focus_bounds": {},
+                    },
+                ) as focus,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                        "native_app_usability_source": "cdp_renderer_input_capable_ui",
+                    },
+                ) as usability,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_voice_icon_observation",
+                    return_value={
+                        "packet_kind": "custom_codex_native_voice_icon_observation",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "native_voice_icon_observed": True,
+                        "native_voice_shortcut_available": False,
+                        "native_voice_shortcut_tested": False,
+                        "voice_blocked_reason_code": "",
+                        "voice_shortcut_blocked_reason_code": "",
+                        "microphone_permission_check_required": False,
+                        "does_not_patch_codex_ui": True,
+                        "voice_is_not_locally_imitated": True,
+                    },
+                ),
+            ):
+                packet = native_probe.show_custom_native_window_packet(
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["custom_window_observed"])
+        self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["custom_window_frontmost"])
+        self.assertTrue(packet["native_app_usable"])
+        self.assertFalse(packet["window_focus_action_succeeded"])
+        self.assertTrue(
+            packet["window_observation_after_focus"]["window_focus_visibility_fallback_used"]
+        )
+        focus.assert_called_once_with(222)
+        self.assertTrue(
+            usability.call_args.args[0]["window_focus_visibility_fallback_used"]
+        )
+
+    def test_show_custom_native_window_can_use_fresh_window_lifecycle_scope_when_ax_reports_zero_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            user_data_dir = (
+                profile_base / "wbp-custom-main" / "electron-user-data"
+            )
+            profile_root = profile_base / "wbp-custom-main"
+            native_fs.remote_debugging_port_file(profile_root).parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            native_fs.remote_debugging_port_file(profile_root).write_text(
+                "49231\n",
+                encoding="utf-8",
+            )
+            scope_path = profile_root / "electron-user-data" / "sentry" / "scope_v3.json"
+            scope_path.parent.mkdir(parents=True, exist_ok=True)
+            scope_path.write_text(
+                json.dumps(
+                    {
+                        "scope": {
+                            "breadcrumbs": [
+                                {"message": "app.browser-window-created"},
+                                {"message": "window.show"},
+                                {"message": "app.browser-window-focus"},
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            process_inventory = {
+                "root_app_pids": [222],
+                "custom_process_lines": [
+                    f"222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir={user_data_dir}"
+                ],
+            }
+            completed = subprocess.CompletedProcess(
+                args=["osascript"],
+                returncode=0,
+                stdout="Codex\ttrue\ttrue\tfalse\t0\n",
+                stderr="",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=process_inventory,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.subprocess.run",
+                    return_value=completed,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cg_window_presence",
+                    return_value=(False, "cg_query_unavailable_pyobjc_framework_quartz_not_installed"),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": True,
+                        "window_focus_observed_pid": 222,
+                        "window_focus_bounds": {},
+                    },
+                ) as focus,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ) as usability,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_voice_icon_observation",
+                    return_value={
+                        "packet_kind": "custom_codex_native_voice_icon_observation",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "native_voice_icon_observed": True,
+                        "native_voice_shortcut_available": False,
+                        "native_voice_shortcut_tested": False,
+                        "voice_blocked_reason_code": "",
+                        "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                        "microphone_permission_check_required": False,
+                        "does_not_patch_codex_ui": True,
+                        "voice_is_not_locally_imitated": True,
+                    },
+                ),
+            ):
+                packet = native_probe.show_custom_native_window_packet(
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["custom_window_observed"])
+        self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["custom_window_frontmost"])
+        self.assertTrue(packet["native_app_usable"])
+        self.assertTrue(
+            packet["window_observation_before_focus"]["window_lifecycle_scope_fallback_used"]
+        )
+        self.assertTrue(
+            packet["window_observation_after_focus"]["window_lifecycle_scope_fallback_used"]
+        )
+        focus.assert_called_once_with(222)
+        self.assertTrue(
+            usability.call_args.args[0]["window_lifecycle_scope_fallback_used"]
+        )
+
+    def test_show_custom_native_window_prefers_live_process_remote_debugging_port_over_stale_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            user_data_dir = (
+                profile_base / "wbp-custom-main" / "electron-user-data"
+            )
+            profile_root = profile_base / "wbp-custom-main"
+            native_fs.remote_debugging_port_file(profile_root).parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            native_fs.remote_debugging_port_file(profile_root).write_text(
+                "49231\n",
+                encoding="utf-8",
+            )
+            process_inventory = {
+                "root_app_pids": [222],
+                "custom_process_lines": [
+                    (
+                        "222 /Users/kirillponomarev/Applications/Codex WBP Clean.app/"
+                        "Contents/MacOS/Codex --remote-debugging-port=9223 "
+                        f"--user-data-dir={user_data_dir}"
+                    )
+                ],
+            }
+            before = {
+                "window_observed": True,
+                "observed_pid": 222,
+                "window_visible": True,
+                "window_frontmost": False,
+                "window_bounds": {"x": 793, "y": 0, "width": 1280, "height": 783},
+            }
+            after = {
+                "window_observed": True,
+                "observed_pid": 222,
+                "window_visible": True,
+                "window_frontmost": True,
+                "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=process_inventory,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    side_effect=[before, after],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": True,
+                        "window_focus_observed_pid": 222,
+                        "window_focus_bounds": after["window_bounds"],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ) as usability,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_voice_icon_observation",
+                    return_value={
+                        "packet_kind": "custom_codex_native_voice_icon_observation",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "native_voice_icon_observed": True,
+                        "native_voice_shortcut_available": False,
+                        "native_voice_shortcut_tested": False,
+                        "voice_blocked_reason_code": "",
+                        "voice_shortcut_blocked_reason_code": "",
+                        "microphone_permission_check_required": False,
+                        "does_not_patch_codex_ui": True,
+                        "voice_is_not_locally_imitated": True,
+                    },
+                ) as voice_observation,
+            ):
+                packet = native_probe.show_custom_native_window_packet(
+                    persistent_profile_base_dir=profile_base,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["cdp_port"], 9223)
+        self.assertEqual(
+            packet["cdp_port_source"],
+            "custom_process_command_line_remote_debugging_port",
+        )
+        usability.assert_called_once_with(after, cdp_port=9223)
+        voice_observation.assert_called_once_with(
+            222,
+            port=9223,
+            allowed_owner_pids=[222],
+        )
+
     def test_show_custom_native_window_accepts_helper_only_same_profile_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -3664,6 +4420,52 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["custom_profile_process_pids"], [333])
         self.assertEqual(packet["default_profile_process_pids"], [111])
         self.assertEqual(packet["custom_window_candidate_pids"], [333])
+
+    def test_identity_binding_prefers_stability_inventory_for_same_profile_window_pid(
+        self,
+    ) -> None:
+        launch_result = {
+            "launcher_pid": 222,
+            "startup_inventory": {
+                "root_app_pids": [111],
+                "custom_process_lines": [
+                    "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                ],
+                "default_process_lines": [
+                    "999 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/me/Library/Application Support/Codex"
+                ],
+            },
+            "stability_inventory": {
+                "root_app_pids": [111],
+                "custom_process_lines": [
+                    "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                    "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                ],
+                "default_process_lines": [
+                    "999 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/me/Library/Application Support/Codex"
+                ],
+            },
+        }
+        window_packet = {
+            "window_observed": True,
+            "observed_pid": 333,
+            "window_query": "Codex Helper\ttrue\ttrue\tfalse\t1\t120,80\t1320,820",
+        }
+        layout = SimpleNamespace(launcher_path=Path("/tmp/wbp-launcher.sh"))
+
+        packet = native_probe._build_identity_binding(
+            window_packet,
+            layout,
+            launch_result,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["window_bound_to_custom_launch"])
+        self.assertTrue(packet["window_distinguishable_from_original_codex"])
+        self.assertEqual(packet["custom_root_process_pids"], [111])
+        self.assertEqual(packet["custom_profile_process_pids"], [111, 333])
+        self.assertEqual(packet["default_profile_process_pids"], [999])
+        self.assertEqual(packet["custom_window_candidate_pids"], [111, 333])
 
     def test_show_custom_native_window_does_not_promote_visible_window_to_usable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3833,6 +4635,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 encoding="utf-8",
             )
             layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
                 custom_user_data_dir=temp_root / "electron-user-data",
                 custom_home_dir=temp_root / "profile" / "home",
                 profile_dir=temp_root / "profile",
@@ -3846,7 +4649,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
-                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
                 mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
@@ -4422,6 +5228,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
                 custom_user_data_dir=temp_root / "electron-user-data",
                 custom_home_dir=temp_root / "profile" / "home",
                 profile_dir=temp_root / "profile",
@@ -4435,7 +5242,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
-                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
                 mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
@@ -4497,6 +5307,7 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
                 custom_user_data_dir=temp_root / "electron-user-data",
                 custom_home_dir=temp_root / "profile" / "home",
                 profile_dir=temp_root / "profile",
@@ -4510,7 +5321,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     return_value=SimpleNamespace(managed_dir=temp_root, stable_config=temp_root / "stable.json"),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
-                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
                 mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
@@ -4776,10 +5590,182 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         )
         sleep.assert_called_once_with(native_probe.CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
 
+    def test_live_custom_native_launch_preserves_proven_window_when_recovery_recheck_regresses(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            observed_window = {
+                "window_observed": True,
+                "observed_pid": 222,
+                "blocked_reason_class": "",
+                "window_visible": True,
+                "window_frontmost": True,
+                "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                "window_query_method": "Electron/Sentry window lifecycle scope",
+                "custom_window_candidate_pids": [222],
+            }
+            regressed_window = {
+                "window_observed": False,
+                "observed_pid": 333,
+                "blocked_reason_class": "pid_visible_but_accessible_window_absent",
+                "window_visible": False,
+                "window_frontmost": False,
+                "window_bounds": {},
+                "window_query_method": "AX/System Events process window count",
+                "custom_window_candidate_pids": [222],
+            }
+            startup_usability = {
+                "native_window_usable": False,
+                "input_capable_ui_observed": False,
+                "blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                "renderer_surface_blocked_reason_class": "cdp_renderer_startup_loader_stuck",
+                "native_app_usability_source": "cdp_renderer_startup_loader_without_editable_surface",
+                "renderer_startup_loader_observed": True,
+                "renderer_mounted": False,
+                "cdp_target_bound_to_custom_launch": True,
+            }
+            launch_result = {
+                "custom_process_observed": True,
+                "custom_process_still_observed_after_wait": True,
+                "post_observation_wait_seconds": 2.0,
+                "startup_inventory": {
+                    "root_app_pids": [222],
+                    "custom_process_lines": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                    "sample": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                },
+                "launcher_pid": 222,
+                "launcher_stdout_path": str(layout.launcher_stdout),
+            }
+            reload_packet = native_probe._renderer_recovery_packet(
+                status="ok",
+                machine_error_code="OK",
+                reason_class="ok",
+                reload_targets=[
+                    {
+                        "target_url": "app://-/index.html",
+                        "target_type": "page",
+                        "reload_ok": True,
+                        "error_class": "",
+                    }
+                ],
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.materialize_probe_profile",
+                    return_value={"profile_dir": str(layout.profile_dir)},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={"custom_processes_gone": True, "initial_custom_pids": []},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value=launch_result,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=launch_result["startup_inventory"],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    side_effect=[observed_window, regressed_window],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    side_effect=[startup_usability, startup_usability],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._apply_codex_desktop_auth_blocker",
+                    side_effect=lambda packet, **_: packet,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_reload_app_page_for_pid",
+                    return_value=reload_packet,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._runtime_ready_from_launcher_stdout",
+                    return_value={
+                        "runtime_ready_observed": True,
+                        "runtime_ready_source": "test",
+                        "runtime_ready_stdout_paths_checked": [],
+                        "runtime_ready_markers": [],
+                        "runtime_ready_missing_markers": [],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._post_launch_usability_recheck_candidate",
+                    return_value=False,
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.time.sleep"),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.5",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    keep_running_on_window_observed=True,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_RENDERER_STARTUP_LOADER_STUCK",
+        )
+        self.assertTrue(packet["native_window_observed"])
+        self.assertTrue(packet["running_status"])
+        self.assertTrue(packet["native_window_process_kept_running"])
+        self.assertTrue(packet["renderer_recovery_attempted"])
+        self.assertEqual(packet["renderer_recovery_status"], "ok")
+        self.assertEqual(
+            packet["renderer_surface_blocked_reason_class"],
+            "cdp_renderer_startup_loader_stuck",
+        )
+
     def test_live_custom_native_launch_blocks_if_existing_same_profile_process_survives(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
                 custom_user_data_dir=temp_root / "electron-user-data",
                 custom_home_dir=temp_root / "profile" / "home",
                 profile_dir=temp_root / "profile",
@@ -4796,7 +5782,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                     ),
                 ),
                 mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
-                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
                 mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
                 mock.patch(
                     "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
@@ -5001,6 +5990,104 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["real_codex_app_launched"])
         self.assertEqual(packet["custom_process_pid"], 222)
         self.assertEqual(packet["cleanup_result"]["status"], "existing_window_reused")
+        show_window.assert_called_once()
+        terminate.assert_not_called()
+        launch_native.assert_not_called()
+
+    def test_live_custom_native_launch_existing_visible_but_unusable_is_not_downgraded_to_visibility_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            profile_base = temp_root / "profiles"
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.emit_local_token",
+                    return_value="local-token",
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_filesystem_probe.build_configured_model_availability_packet",
+                    return_value=advertised_model_packet("gpt-5.3-codex"),
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value={"custom_process_count": 1},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.show_custom_native_window_packet",
+                    return_value={
+                        "status": "blocked",
+                        "machine_error_code": "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN",
+                        "custom_process_pid": 222,
+                        "custom_window_observed": True,
+                        "custom_window_visible": True,
+                        "custom_window_frontmost": True,
+                        "custom_window_bounds": {
+                            "x": 120,
+                            "y": 80,
+                            "width": 1320,
+                            "height": 820,
+                        },
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": False,
+                        "native_app_usable": False,
+                        "input_capable_ui_observed": False,
+                        "native_app_usability_source": "not_proven",
+                        "native_app_usability_blocked_reason_class": (
+                            "input_capable_window_not_proven_for_pid"
+                        ),
+                    },
+                ) as show_window,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes"
+                ) as terminate,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate"
+                ) as launch_native,
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.3-codex",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                    persistent_profile_base_dir=profile_base,
+                    reuse_existing_window_if_present=True,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN",
+        )
+        self.assertTrue(packet["running_status"])
+        self.assertTrue(packet["expected_custom_identity_observed"])
+        self.assertTrue(packet["native_window_observed"])
+        self.assertTrue(packet["custom_window_visible"])
+        self.assertTrue(packet["custom_window_frontmost"])
+        self.assertFalse(packet["native_app_usable"])
+        self.assertFalse(packet["existing_custom_window_reused"])
+        self.assertFalse(packet["reused_existing_window"])
+        self.assertEqual(packet["launch_origin"], "existing_window_unproven")
+        self.assertEqual(packet["cleanup_result"]["status"], "existing_process_left_running")
+        self.assertIn("visible", packet["human_message"])
+        self.assertIn("input-capable UI was not proven", packet["human_message"])
         show_window.assert_called_once()
         terminate.assert_not_called()
         launch_native.assert_not_called()
@@ -5397,6 +6484,277 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["real_user_keychain_modified"])
         self.assertFalse(packet["keychain_item_read"])
         self.assertFalse(packet["keychain_reset_performed"])
+
+    def test_live_custom_native_launch_prefers_stability_inventory_for_window_probe(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                tmp_root=temp_root / "tmp",
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            launch_result = {
+                "custom_process_observed": True,
+                "custom_process_still_observed_after_wait": True,
+                "post_observation_wait_seconds": 2.0,
+                "startup_inventory": {
+                    "root_app_pids": [111],
+                    "custom_process_lines": [
+                        "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                    "sample": [
+                        "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data"
+                    ],
+                },
+                "stability_inventory": {
+                    "root_app_pids": [111],
+                    "custom_process_lines": [
+                        "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                    "sample": [
+                        "111 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                },
+                "launcher_pid": 222,
+                "remote_debugging_port": int(native_probe.CODEX_REMOTE_DEBUGGING_PORT),
+                "remote_debugging_port_source": "allocated_loopback_launch_port",
+                "remote_debugging_port_file_written": True,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.create_persistent_custom_profile_layout",
+                    return_value=layout,
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={"custom_processes_gone": True, "initial_custom_pids": []},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value=launch_result,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._wait_for_window_observation_via_ax",
+                    return_value={
+                        "window_observed": True,
+                        "observed_pid": 333,
+                        "window_visible": True,
+                        "window_frontmost": True,
+                        "window_bounds": {},
+                        "blocked_reason_class": "",
+                    },
+                ) as wait_for_window,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._apply_codex_desktop_auth_blocker",
+                    side_effect=lambda packet, **_: packet,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._runtime_ready_from_launcher_stdout",
+                    return_value={
+                        "runtime_ready_observed": True,
+                        "runtime_ready_source": "test",
+                        "runtime_ready_stdout_paths_checked": [],
+                        "runtime_ready_markers": [],
+                        "runtime_ready_missing_markers": [],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.5",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        wait_for_window.assert_called_once_with(
+            launch_result["stability_inventory"],
+            profile_dir=layout.profile_dir,
+        )
+
+    def test_live_custom_native_launch_focuses_root_pid_when_window_not_yet_observed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            layout = SimpleNamespace(
+                custom_user_data_dir=temp_root / "electron-user-data",
+                custom_home_dir=temp_root / "profile" / "home",
+                profile_dir=temp_root / "profile",
+                launcher_stdout=temp_root / "launcher.stdout.log",
+                launcher_stderr=temp_root / "launcher.stderr.log",
+                launcher_path=temp_root / "launcher.sh",
+            )
+            launch_result = {
+                "custom_process_observed": True,
+                "custom_process_still_observed_after_wait": True,
+                "post_observation_wait_seconds": 2.0,
+                "startup_inventory": {
+                    "root_app_pids": [222],
+                    "custom_process_lines": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                    "sample": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                },
+                "stability_inventory": {
+                    "root_app_pids": [222],
+                    "custom_process_lines": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                    "sample": [
+                        "222 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/custom/electron-user-data",
+                        "333 /Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper --type=renderer --user-data-dir=/tmp/custom/electron-user-data",
+                    ],
+                },
+                "launcher_pid": 222,
+                "remote_debugging_port": int(native_probe.CODEX_REMOTE_DEBUGGING_PORT),
+                "remote_debugging_port_source": "allocated_loopback_launch_port",
+                "remote_debugging_port_file_written": True,
+            }
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.RuntimePaths.from_env",
+                    return_value=SimpleNamespace(
+                        managed_dir=temp_root,
+                        stable_config=temp_root / "stable.json",
+                    ),
+                ),
+                mock.patch("wild_boar_proxy.native_window_probe.emit_local_token", return_value="local-token"),
+                mock.patch("wild_boar_proxy.native_window_probe.create_native_probe_layout", return_value=layout),
+                mock.patch("wild_boar_proxy.native_window_probe.materialize_probe_profile", return_value={"profile_dir": str(layout.profile_dir)}),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.prepare_isolated_home_keychain",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_avoidance_claim_scope": "keychain_not_found_prompt_only",
+                        "isolated_default_keychain_verified": True,
+                        "isolated_search_list_verified": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.terminate_custom_processes",
+                    return_value={"custom_processes_gone": True, "initial_custom_pids": []},
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.launch_native_candidate",
+                    return_value=launch_result,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._wait_for_window_observation_via_ax",
+                    return_value={
+                        "window_observed": False,
+                        "observed_pid": 333,
+                        "window_visible": False,
+                        "window_frontmost": False,
+                        "window_bounds": {},
+                        "blocked_reason_class": "pid_visible_but_accessible_window_absent",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._focus_custom_window_by_pid",
+                    return_value={
+                        "window_focus_action_attempted": True,
+                        "window_focus_action_succeeded": True,
+                        "window_focus_observed_pid": 222,
+                        "window_focus_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                    },
+                ) as focus_window,
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.collect_codex_process_inventory",
+                    return_value=launch_result["stability_inventory"],
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_observation_via_ax",
+                    return_value={
+                        "window_observed": True,
+                        "observed_pid": 222,
+                        "window_visible": True,
+                        "window_frontmost": True,
+                        "window_bounds": {"x": 120, "y": 80, "width": 1320, "height": 820},
+                        "blocked_reason_class": "",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._window_usability_from_observation",
+                    return_value={
+                        "native_window_usable": True,
+                        "input_capable_ui_observed": True,
+                        "blocked_reason_class": "",
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._apply_codex_desktop_auth_blocker",
+                    side_effect=lambda packet, **_: packet,
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._runtime_ready_from_launcher_stdout",
+                    return_value={
+                        "runtime_ready_observed": True,
+                        "runtime_ready_source": "test",
+                        "runtime_ready_stdout_paths_checked": [],
+                        "runtime_ready_markers": [],
+                        "runtime_ready_missing_markers": [],
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._build_identity_binding",
+                    return_value={"status": "ok", "window_bound_to_custom_launch": True},
+                ),
+            ):
+                packet = launch_custom_native_app_packet(
+                    repo_root=ROOT,
+                    endpoint="http://127.0.0.1:8318/v1",
+                    model="gpt-5.5",
+                    owner_authorization_phrase=OWNER_STANDING_AUTHORIZATION_PHRASE,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        focus_window.assert_called_once_with(222)
 
     def test_authorization_blocks_without_owner_authorization(self) -> None:
         packet = build_native_dispatch_authorization_packet(

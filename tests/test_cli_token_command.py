@@ -114,6 +114,43 @@ class TokenCommandCliTests(unittest.TestCase):
         self.assertEqual(result.stdout, "fallback-runtime-token-456")
         self.assertEqual(result.stderr, "")
 
+    def test_token_plain_falls_back_to_profile_config_bearer_token(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("token")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "profile-bearer-token-789")
+        self.assertEqual(result.stderr, "")
+
+    def test_token_json_reports_profile_config_fallback_without_secret_leak(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("token", "--json")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr, "")
+        self.assertNotIn("profile-bearer-token-789", result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["data"]["token_source_kind"],
+            "custom_profile_config_toml_experimental_bearer_token",
+        )
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(
+                payload,
+                secret_values=["profile-bearer-token-789"],
+            )
+        )
+
     def test_token_json_fails_cleanly_when_generated_config_missing(self) -> None:
         result = self.run_cli("token", "--json")
 
@@ -163,6 +200,18 @@ class TokenCommandCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "local-runtime-token-123")
+        self.assertEqual(result.stderr, "")
+
+    def test_repo_owned_auth_command_helper_falls_back_to_profile_config_bearer_token(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "profile-bearer-token-789")
         self.assertEqual(result.stderr, "")
 
     def test_repo_owned_auth_command_helper_writes_audit_stamp_when_requested(self) -> None:

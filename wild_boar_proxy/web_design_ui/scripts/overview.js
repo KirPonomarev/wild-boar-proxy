@@ -8348,90 +8348,142 @@ function renderCodexCustomAgentReplyBlock(packet) {
   }
   const directReply = packet?.direct_api_reply_block === true
     || packet?.reply_block_kind === "api_agent_direct_reply";
-  if (!directReply) {
+  const agentReply = packet?.agent_reply_block === true
+    || directReply
+    || Boolean(packet?.reply_block_kind);
+  if (!agentReply) {
     block.hidden = true;
     return;
   }
 
   const proof = codexCustomProofObject(packet);
-  const alias = packet?.reply_author_alias || packet?.selected_alias || "API agent";
-  const provider = packet?.reply_provider_label || packet?.selected_provider_label || "API";
-  const replyText = packet?.reply_text || packet?.direct_reply_text || "";
-  const proofPairs = [
-    [
-      "direct_reply",
-      codexCustomProofLabel(
-        codexCustomProofValue(
-          packet,
-          proof,
-          "direct_reply_proven",
-          packet?.direct_reply_proven === true || packet?.api_agent_direct_reply_proven === true
-        ),
-        true
-      )
-    ],
-    [
-      "provider",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "api_agent_provider_called", packet?.api_agent_provider_called === true),
-        true
-      )
-    ],
-    [
-      "prompt_runner",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
-        false
-      )
-    ],
-    [
-      "codex_exec",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "codex_exec_invoked", packet?.codex_exec_invoked),
-        false
-      )
-    ],
-    [
-      "tools_wbp_dip",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "tools_wbp_dip_invoked", packet?.tools_wbp_dip_invoked),
-        false
-      )
-    ],
-    [
-      "dip_run",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "dip_run_invoked", packet?.dip_run_invoked),
-        false
-      )
-    ],
-    [
-      "fallback",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
-        false
-      )
-    ],
-    [
-      "local_imitation",
-      codexCustomProofLabel(
-        codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
-        false
-      )
-    ],
-    [
-      "final_tool_call",
-      codexCustomProofLabel(
-        codexCustomProofValue(
-          packet,
-          proof,
-          "final_answer_was_repo_tool_call",
-          packet?.final_answer_was_repo_tool_call
-        ),
-        false
-      )
+  const alias = packet?.reply_author_alias || packet?.selected_alias || "Agent";
+  const provider = packet?.reply_provider_label || packet?.selected_provider_label || "model";
+  const replyText = packet?.reply_text
+    || packet?.reply_preview_bounded
+    || packet?.direct_reply_text
+    || packet?.response_preview_bounded
+    || "";
+  const proofPairs = directReply
+    ? [
+      [
+        "direct_reply",
+        codexCustomProofLabel(
+          codexCustomProofValue(
+            packet,
+            proof,
+            "direct_reply_proven",
+            packet?.direct_reply_proven === true || packet?.api_agent_direct_reply_proven === true
+          ),
+          true
+        )
+      ],
+      [
+        "provider",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "api_agent_provider_called", packet?.api_agent_provider_called === true),
+          true
+        )
+      ],
+      [
+        "prompt_runner",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
+          false
+        )
+      ],
+      [
+        "codex_exec",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "codex_exec_invoked", packet?.codex_exec_invoked),
+          false
+        )
+      ],
+      [
+        "tools_wbp_dip",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "tools_wbp_dip_invoked", packet?.tools_wbp_dip_invoked),
+          false
+        )
+      ],
+      [
+        "dip_run",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "dip_run_invoked", packet?.dip_run_invoked),
+          false
+        )
+      ],
+      [
+        "fallback",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
+          false
+        )
+      ],
+      [
+        "local_imitation",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
+          false
+        )
+      ],
+      [
+        "final_tool_call",
+        codexCustomProofLabel(
+          codexCustomProofValue(
+            packet,
+            proof,
+            "final_answer_was_repo_tool_call",
+            packet?.final_answer_was_repo_tool_call
+          ),
+          false
+        )
+      ]
     ]
-  ];
+    : [
+      [
+        "reply",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "reply_visible", Boolean(replyText)),
+          true
+        )
+      ],
+      [
+        "inference",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "inference_proven", packet?.inference_proven === true),
+          true
+        )
+      ],
+      [
+        "lane",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "runtime_lane_proven", packet?.runtime_lane_proven === true),
+          true
+        )
+      ],
+      [
+        "prompt_runner",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
+          true
+        )
+      ],
+      [
+        "fallback",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
+          false
+        )
+      ],
+      [
+        "local_imitation",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
+          false
+        )
+      ]
+    ];
   const proofOk = proofPairs.every(([, status]) => status === "ok" || status === "off");
   const title = document.getElementById("codexCustomAgentReplyTitle");
   if (title) {
@@ -8441,12 +8493,14 @@ function renderCodexCustomAgentReplyBlock(packet) {
   if (chip) {
     chip.className = `chip ${proofOk ? "green" : "amber"}`;
     if (chip.lastElementChild) {
-      chip.lastElementChild.textContent = proofOk ? "direct proof" : "proof incomplete";
+      chip.lastElementChild.textContent = proofOk
+        ? (directReply ? "direct proof" : "agent proof")
+        : "proof incomplete";
     }
   }
   const text = document.getElementById("codexCustomAgentReplyText");
   if (text) {
-    text.textContent = replyText || "No direct reply text.";
+    text.textContent = replyText || "No reply preview.";
   }
   const proofNode = document.getElementById("codexCustomAgentReplyProof");
   if (proofNode) {
@@ -8599,15 +8653,20 @@ function renderCodexCustomSessionPacket(packet) {
       prompt_preview_redacted: packet?.prompt_preview_redacted || "",
       raw_prompt_not_stored: packet?.raw_prompt_not_stored === true,
       transcript_kind: packet?.transcript_kind || "",
+      agent_reply_entries_present: packet?.agent_reply_entries_present === true,
+      agent_reply_entry_count: packet?.agent_reply_entry_count || 0,
+      agent_reply_authors: packet?.agent_reply_authors || [],
       model_response_present: modelResponsePresent,
       response_digest: packet?.response_digest || "",
       response_preview_bounded: packet?.response_preview_bounded || "",
+      agent_reply_block: packet?.agent_reply_block === true,
       direct_api_reply_block: packet?.direct_api_reply_block === true,
       reply_block_kind: packet?.reply_block_kind || "",
       reply_author_alias: packet?.reply_author_alias || packet?.selected_alias || "",
       reply_agent_id: packet?.reply_agent_id || packet?.selected_slot || "",
       reply_lane: packet?.reply_lane || packet?.selected_alias_lane || "",
       reply_provider_label: packet?.reply_provider_label || "",
+      reply_preview_bounded: packet?.reply_preview_bounded || "",
       reply_text: packet?.reply_text || packet?.direct_reply_text || "",
       reply_text_sha256: packet?.reply_text_sha256 || packet?.direct_reply_text_sha256 || "",
       reply_proof_summary: packet?.reply_proof_summary || null,
@@ -8679,6 +8738,9 @@ function renderCodexCustomTranscript(packet) {
       transcript_kind: packet?.transcript_kind || "service_ledger_only",
       model_response_present: packet?.model_response_present === true,
       inference_proven: packet?.inference_proven === true,
+      agent_reply_entries_present: packet?.agent_reply_entries_present === true,
+      agent_reply_entry_count: packet?.agent_reply_entry_count || 0,
+      agent_reply_authors: packet?.agent_reply_authors || [],
       entries: packet?.entries || [],
     }, null, 2);
   }

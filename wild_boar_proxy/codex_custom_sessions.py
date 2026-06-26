@@ -597,10 +597,33 @@ def _agent_aliases_for_slot(alias_binding: dict[str, Any], slot_id: str) -> list
     return _unique_nonempty(aliases)
 
 
+def _preferred_alias_for_slot(alias_binding: dict[str, Any], slot_id: str) -> str:
+    aliases = _agent_aliases_for_slot(alias_binding, slot_id)
+    if aliases:
+        return aliases[0]
+    return _display_name_for_slot(slot_id)
+
+
 def _slot_lane_for_auto_route(slot: dict[str, Any]) -> str:
     if slot.get("selected_source_class") == "route_backed":
         return "api_route"
     return "primary_chatgpt"
+
+
+def _reply_provider_label_for_slot(
+    slot_id: str,
+    slot: dict[str, Any],
+    *,
+    configured_provider: object = "",
+) -> str:
+    if slot_id == PRIMARY_MODEL_SLOT and slot.get("selected_source_class") != "route_backed":
+        return "ChatGPT"
+    configured = str(configured_provider or "").strip()
+    if configured:
+        return configured
+    if slot.get("selected_source_class") == "route_backed":
+        return "API"
+    return "ChatGPT"
 
 
 def _session_auto_route_runtime_context(session: dict[str, Any]) -> dict[str, Any]:
@@ -2264,6 +2287,35 @@ class CodexCustomSessionManager:
         duration_seconds = result.get("duration_seconds")
         if isinstance(duration_seconds, (int, float)):
             latency_ms = int(float(duration_seconds) * 1000)
+        alias_binding = _agent_alias_binding_from_session(
+            session,
+            source="server_session_state",
+        )
+        reply_author_alias = _preferred_alias_for_slot(alias_binding, requested_slot_id)
+        reply_agent_id = _agent_id_for_slot(requested_slot_id)
+        reply_lane = _slot_lane_for_auto_route(slot)
+        reply_provider_label = _reply_provider_label_for_slot(
+            requested_slot_id,
+            slot,
+            configured_provider=result.get("configured_provider"),
+        )
+        reply_preview = _response_preview(response_text) if status_ok else ""
+        reply_proof_summary = {
+            "reply_visible": bool(status_ok and reply_preview),
+            "inference_proven": status_ok,
+            "runtime_lane_proven": bool(
+                status_ok
+                and wbp_path_proven
+                and source_provenance_proven
+                and not runtime_model_mismatch_after_response
+            ),
+            "provider_response_proven": bool(
+                status_ok and slot.get("route_provenance_required") is True
+            ),
+            "prompt_runner_called": True,
+            "fallback_used": False,
+            "local_imitation_used": False,
+        }
         packet = {
             "schema_version": 1,
             "status": packet_status,
@@ -2382,7 +2434,21 @@ class CodexCustomSessionManager:
                 and not runtime_model_mismatch_after_response
             ),
             "response_digest": response_digest,
-            "response_preview_bounded": _response_preview(response_text) if status_ok else "",
+            "response_preview_bounded": reply_preview,
+            "agent_reply_block": bool(status_ok and reply_preview),
+            "reply_block_kind": "session_agent_reply" if status_ok and reply_preview else "",
+            "reply_author_alias": reply_author_alias if status_ok and reply_preview else "",
+            "reply_agent_id": reply_agent_id if status_ok and reply_preview else "",
+            "reply_lane": reply_lane if status_ok and reply_preview else "",
+            "reply_provider_label": reply_provider_label if status_ok and reply_preview else "",
+            "reply_preview_bounded": reply_preview,
+            "reply_text": "",
+            "reply_text_sha256": "",
+            "reply_text_length": 0,
+            "reply_text_truncated": False,
+            "reply_proof_summary": (
+                reply_proof_summary if status_ok and reply_preview else {}
+            ),
             "token_usage_present": token_usage_present,
             "token_usage": token_usage,
             "token_burn": token_burn,
@@ -2549,7 +2615,19 @@ class CodexCustomSessionManager:
                 "model_response_present": status_ok,
                 "inference_proven": persisted_success,
                 "response_digest": response_digest,
-                "response_preview_bounded": _response_preview(response_text) if status_ok else "",
+                "response_preview_bounded": reply_preview,
+                "agent_reply_block": bool(status_ok and reply_preview),
+                "entry_kind": "agent_reply" if status_ok and reply_preview else "service_event",
+                "reply_block_kind": "session_agent_reply" if status_ok and reply_preview else "",
+                "reply_author_alias": reply_author_alias if status_ok and reply_preview else "",
+                "reply_agent_id": reply_agent_id if status_ok and reply_preview else "",
+                "reply_lane": reply_lane if status_ok and reply_preview else "",
+                "reply_provider_label": reply_provider_label if status_ok and reply_preview else "",
+                "reply_preview_bounded": reply_preview,
+                "reply_text_recorded_in_transcript": False,
+                "reply_proof_summary": (
+                    reply_proof_summary if status_ok and reply_preview else {}
+                ),
                 "selected_source_class": slot.get("selected_source_class"),
                 "selected_backend_server_issued": slot.get("selected_backend_server_issued") is True,
                 "selected_route_server_issued": slot.get("selected_route_server_issued") is True,
@@ -3041,6 +3119,9 @@ class CodexCustomSessionManager:
             slot.get("source_provenance_status") or "not_proven"
         )
         reply_proof_summary = {
+            "reply_visible": bool(status_ok and response_preview),
+            "inference_proven": status_ok,
+            "runtime_lane_proven": status_ok,
             "auto_router_decision": str(auto_packet.get("auto_router_decision") or ""),
             "direct_reply_proven": auto_packet.get("direct_reply_proven") is True,
             "route_bound_dispatch_proven": auto_packet.get("route_bound_dispatch_proven")
@@ -3069,12 +3150,14 @@ class CodexCustomSessionManager:
         packet.update(
             {
                 "custom_codex_prompt_ingress_packet": True,
+                "agent_reply_block": bool(status_ok and response_preview),
                 "direct_api_reply_block": True,
                 "reply_block_kind": "api_agent_direct_reply",
                 "reply_author_alias": reply_author_alias,
                 "reply_agent_id": reply_agent_id,
                 "reply_lane": reply_lane,
                 "reply_provider_label": reply_provider_label,
+                "reply_preview_bounded": response_preview,
                 "reply_text": response_text if status_ok else "",
                 "reply_text_sha256": response_digest if status_ok else "",
                 "reply_text_length": len(response_text) if status_ok else 0,
@@ -3223,6 +3306,18 @@ class CodexCustomSessionManager:
                 "inference_proven": status_ok,
                 "response_digest": response_digest,
                 "response_preview_bounded": response_preview,
+                "agent_reply_block": bool(status_ok and response_preview),
+                "entry_kind": "agent_reply" if status_ok and response_preview else "service_event",
+                "reply_block_kind": "api_agent_direct_reply" if status_ok and response_preview else "",
+                "reply_author_alias": reply_author_alias if status_ok and response_preview else "",
+                "reply_agent_id": reply_agent_id if status_ok and response_preview else "",
+                "reply_lane": reply_lane if status_ok and response_preview else "",
+                "reply_provider_label": reply_provider_label if status_ok and response_preview else "",
+                "reply_preview_bounded": response_preview,
+                "reply_text_recorded_in_transcript": False,
+                "reply_proof_summary": (
+                    reply_proof_summary if status_ok and response_preview else {}
+                ),
                 "fallback_attempted": packet.get("fallback_used") is True,
             },
         )
@@ -4468,12 +4563,23 @@ class CodexCustomSessionManager:
         entries = list(session.get("ledger") or [])
         model_response_present = any(entry.get("model_response_present") is True for entry in entries)
         inference_proven = any(entry.get("inference_proven") is True for entry in entries)
+        agent_reply_entries = [
+            entry
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("entry_kind") == "agent_reply"
+        ]
+        agent_reply_authors = _unique_nonempty(
+            [str(entry.get("reply_author_alias") or "") for entry in agent_reply_entries]
+        )
         return {
             **self._base_packet("ok", "OK"),
             "session_id": session_id,
             "transcript_kind": "service_ledger_only",
             "model_response_present": model_response_present,
             "inference_proven": inference_proven,
+            "agent_reply_entries_present": bool(agent_reply_entries),
+            "agent_reply_entry_count": len(agent_reply_entries),
+            "agent_reply_authors": agent_reply_authors,
             "raw_prompt_not_stored": True,
             "raw_response_not_stored": True,
             "raw_backend_id_exposed": False,
