@@ -112,6 +112,8 @@ REPO_BRIDGE_TASK_KEYWORDS = (
     "codebase",
     "project",
     "files",
+    "test",
+    "verify",
     "tests",
     "audit",
     "review",
@@ -127,27 +129,23 @@ REPO_BRIDGE_TASK_KEYWORDS = (
     "отчет",
 )
 ACTION_BRIDGE_TASK_KEYWORDS = (
-    "fix",
-    "repair",
-    "implement",
-    "patch",
-    "change",
-    "edit",
-    "test",
-    "verify",
-    "run",
-    "почини",
-    "чинить",
-    "исправь",
-    "исправить",
-    "реализуй",
-    "реализовать",
-    "сделай",
-    "доделай",
-    "патч",
-    "тест",
-    "проверь",
-    "запусти",
+    "propose patch",
+    "patch proposal",
+    "run command",
+    "run tests",
+    "run pytest",
+    "run unittest",
+    "execute command",
+    "pytest",
+    "unittest",
+    "git status",
+    "предложи патч",
+    "запусти команду",
+    "выполни команду",
+    "запусти тест",
+    "запусти тесты",
+    "прогони тест",
+    "прогони тесты",
 )
 CODE_MUTATION_TASK_KEYWORDS = (
     "fix",
@@ -181,6 +179,32 @@ CODE_MUTATION_NEGATED_PHRASES = (
     "не редактируй",
     "не изменяй",
     "не меняй",
+)
+READONLY_TASK_GUARD_PHRASES = (
+    "read-only",
+    "readonly",
+    "no file changes",
+    "without file changes",
+    "do not edit files",
+    "do not change files",
+    "do not modify files",
+    "don't edit files",
+    "don't change files",
+    "don't modify files",
+    "without editing files",
+    "without changing files",
+    "do not apply patch",
+    "don't apply patch",
+    "without applying patch",
+    "не редактируй файлы",
+    "не изменяй файлы",
+    "не меняй файлы",
+    "не применяй patch",
+    "не применяй патч",
+    "без правок файлов",
+    "без изменения файлов",
+    "ничего не меняй",
+    "не трогай файлы",
 )
 REPO_BRIDGE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./-])"
@@ -269,6 +293,38 @@ def _safe_int(
     if maximum is not None:
         number = min(number, maximum)
     return number
+
+
+def _safe_timeout_seconds(
+    value: object,
+    *,
+    default: float,
+    minimum: float = 0.01,
+    maximum: float = 600.0,
+) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    if number <= 0:
+        number = default
+    number = max(number, minimum)
+    number = min(number, maximum)
+    return number
+
+
+def _bridge_timeout_seconds(
+    timeout_seconds: float,
+    *,
+    configured_timeout: object,
+    default: float,
+) -> float:
+    requested = _safe_timeout_seconds(timeout_seconds, default=default)
+    configured = _safe_timeout_seconds(
+        configured_timeout,
+        default=requested,
+    )
+    return min(requested, configured)
 
 
 def _dip_work_mode_settings(work_mode: str) -> dict[str, int | str]:
@@ -838,18 +894,20 @@ def _route_status_machine_error_code(route_status: str) -> str:
 def _task_contains_keyword(task_key: str, keywords: Sequence[str]) -> bool:
     for keyword in keywords:
         keyword_key = keyword.casefold()
-        ascii_wordish = all(
-            char.isascii() and (char.isalnum() or char in {"_", " "})
-            for char in keyword_key
-        )
-        if ascii_wordish:
-            pattern = rf"(?<![a-z0-9_]){re.escape(keyword_key)}(?![a-z0-9_])"
+        wordish = all(char.isalnum() or char in {"_", " "} for char in keyword_key)
+        if wordish:
+            pattern = rf"(?<![\w]){re.escape(keyword_key)}(?![\w])"
             if re.search(pattern, task_key):
                 return True
             continue
         if keyword_key in task_key:
             return True
     return False
+
+
+def _task_has_readonly_guard(task: str) -> bool:
+    task_key = task.casefold()
+    return any(phrase in task_key for phrase in READONLY_TASK_GUARD_PHRASES)
 
 
 def _task_path_candidates(task: str, *, limit: int = 4) -> list[str]:
@@ -908,8 +966,10 @@ def _action_bridge_requested(*, task: str, repo_bridge_required: bool) -> bool:
     return _task_contains_keyword(task_key, ACTION_BRIDGE_TASK_KEYWORDS)
 
 
-def _code_mutation_requested(*, task: str, action_required: bool) -> bool:
-    if not action_required:
+def _code_mutation_requested(*, task: str, repo_bridge_required: bool) -> bool:
+    if not repo_bridge_required:
+        return False
+    if _task_has_readonly_guard(task):
         return False
     task_key = task.casefold()
     normalized_task_key = task_key
@@ -1390,7 +1450,12 @@ def _git_status_repo(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def _build_repo_context_pack(repo_root: Path) -> dict[str, Any]:
+def _build_repo_context_pack(
+    repo_root: Path,
+    *,
+    action_tools_allowed: bool = True,
+    mutation_tools_allowed: bool = True,
+) -> dict[str, Any]:
     files = _repo_file_list(repo_root)
     status = _git_status_repo(repo_root)
     excerpts: list[dict[str, Any]] = []
@@ -1422,9 +1487,12 @@ def _build_repo_context_pack(repo_root: Path) -> dict[str, Any]:
         "file_list_sample": files[:240],
         "canonical_file_excerpts": excerpts,
         "sensitive_paths_blocked": True,
-        "mutations_allowed": True,
-        "mutation_tools": ["propose_patch", "apply_patch"],
-        "command_tools": ["run_tests", "run_command"],
+        "action_tools_allowed": bool(action_tools_allowed),
+        "mutations_allowed": bool(mutation_tools_allowed),
+        "mutation_tools": (
+            ["propose_patch", "apply_patch"] if mutation_tools_allowed else []
+        ),
+        "command_tools": ["run_tests", "run_command"] if action_tools_allowed else [],
         "command_allowlist_recorded": False,
     }
     return pack
@@ -1437,26 +1505,51 @@ def _repo_context_pack_sha256(pack: Mapping[str, Any]) -> str:
 
 
 def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
+    command_tools_allowed = bool(context_pack.get("action_tools_allowed"))
+    mutation_tools_allowed = bool(context_pack.get("mutations_allowed"))
+    tool_examples = [
+        '{"wbp_repo_tool_call":{"tool":"list_files","path":"wild_boar_proxy"}}',
+        '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}',
+        '{"wbp_repo_tool_call":{"tool":"search","pattern":"delegate_to_dip","glob":"wild_boar_proxy/**/*.py"}}',
+        '{"wbp_repo_tool_call":{"tool":"git_status"}}',
+    ]
+    if mutation_tools_allowed:
+        tool_examples.extend(
+            [
+                '{"wbp_repo_tool_call":{"tool":"propose_patch","patch":"<unified diff>"}}',
+                '{"wbp_repo_tool_call":{"tool":"apply_patch","patch":"<unified diff>"}}',
+            ]
+        )
+    if command_tools_allowed:
+        tool_examples.extend(
+            [
+                '{"wbp_repo_tool_call":{"tool":"run_tests","args":["python3","-m","unittest","tests.test_wbp_dip_tool"]}}',
+                '{"wbp_repo_tool_call":{"tool":"run_command","args":["git","diff","--check"]}}',
+            ]
+        )
+    policy_lines = [
+        "For repository inspection/report tasks, request at least one repo tool before the final answer.",
+    ]
+    if mutation_tools_allowed:
+        policy_lines.append(
+            "For implementation/fix/edit tasks, completion requires an apply_patch tool call that actually changes code followed by a successful run_tests or run_command verification; a final answer without both facts will be rejected by WBP."
+        )
+    elif command_tools_allowed:
+        policy_lines.append(
+            "For explicit command/test tasks, use only run_tests or run_command when they are directly needed by the operator request."
+        )
+    else:
+        policy_lines.append(
+            "This task is read-only. Do not request propose_patch, apply_patch, run_tests, or run_command."
+        )
+    tool_examples_text = "\n".join(tool_examples)
     return (
         "\n\nWBP action bridge: You have WBP-mediated access to the local "
         "repository through a strict JSON tool protocol. You do not have direct "
         "filesystem or shell access; WBP executes approved tools locally and "
-        "returns evidence. For repository inspection/report tasks, request at "
-        "least one repo tool before the final answer. For implementation/fix/test "
-        "tasks, request action tools until the work is either completed or blocked. "
-        "For implementation/fix/edit tasks, completion requires an apply_patch "
-        "tool call that actually changes code followed by a successful run_tests "
-        "or run_command verification; a final answer without both facts will be "
-        "rejected by WBP. "
+        f"returns evidence. {' '.join(policy_lines)} "
         "To request a tool, output only one JSON object and no prose:\n"
-        '{"wbp_repo_tool_call":{"tool":"list_files","path":"wild_boar_proxy"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"read_file","path":"AGENTS.md"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"search","pattern":"delegate_to_dip","glob":"wild_boar_proxy/**/*.py"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"git_status"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"propose_patch","patch":"<unified diff>"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"apply_patch","patch":"<unified diff>"}}\n'
-        '{"wbp_repo_tool_call":{"tool":"run_tests","args":["python3","-m","unittest","tests.test_wbp_dip_tool"]}}\n'
-        '{"wbp_repo_tool_call":{"tool":"run_command","args":["git","diff","--check"]}}\n'
+        f"{tool_examples_text}\n"
         "After WBP returns tool evidence, continue with another tool request or "
         "give the final answer. Initial WBP context pack follows; treat it as "
         "evidence, not as memory:\n"
@@ -1913,10 +2006,19 @@ def _runtime_http_bridge_result(
             "stream": False,
         }
     )
-    if not base_payload.get("max_output_tokens"):
+    _set_request_output_budget(base_payload, output_token_limit)
+    if (
+        not base_payload.get("max_output_tokens")
+        and not base_payload.get("max_tokens")
+    ):
         base_payload["max_output_tokens"] = output_token_limit
     method = _safe_text(bridge.get("method"), limit=20) or "POST"
     response_field = _safe_text(bridge.get("response_text_field"), limit=80) or "output_text"
+    bridge_timeout_seconds = _bridge_timeout_seconds(
+        timeout_seconds,
+        configured_timeout=bridge.get("timeout_seconds"),
+        default=DEFAULT_BRIDGE_TIMEOUT_SECONDS,
+    )
     permission_style_failure = False
     for url in urls:
         url_text = _safe_text(url, limit=500)
@@ -1928,7 +2030,7 @@ def _runtime_http_bridge_result(
                 method=method,
                 headers={},
                 payload=base_payload,
-                timeout_seconds=min(float(timeout_seconds), DEFAULT_BRIDGE_TIMEOUT_SECONDS),
+                timeout_seconds=bridge_timeout_seconds,
             )
         except RuntimeErrorInfo as exc:
             message = str(getattr(exc, "message", "") or exc)
@@ -2009,7 +2111,12 @@ def _runtime_file_bridge_result(
     except OSError:
         return None
     response_field = _safe_text(bridge.get("response_text_field"), limit=80) or "output_text"
-    deadline = time.monotonic() + min(float(timeout_seconds), DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS)
+    bridge_timeout_seconds = _bridge_timeout_seconds(
+        timeout_seconds,
+        configured_timeout=bridge.get("timeout_seconds"),
+        default=DEFAULT_FILE_BRIDGE_TIMEOUT_SECONDS,
+    )
+    deadline = time.monotonic() + bridge_timeout_seconds
     while time.monotonic() < deadline:
         try:
             response_payload = json.loads(response_file.read_text(encoding="utf-8"))
@@ -2228,14 +2335,15 @@ def request_live_result(
     )
     route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
     repo_bridge_required = _repo_bridge_requested(task=task, mode=repo_bridge_mode)
+    code_mutation_required = _code_mutation_requested(
+        task=task,
+        repo_bridge_required=repo_bridge_required,
+    )
     action_bridge_required = _action_bridge_requested(
         task=task,
         repo_bridge_required=repo_bridge_required,
     )
-    code_mutation_required = _code_mutation_requested(
-        task=task,
-        action_required=action_bridge_required,
-    )
+    action_bridge_required = bool(action_bridge_required or code_mutation_required)
     active_project_root, active_project_root_fields = active_project_root_metadata(
         repo_root,
         source=target_repo_source,
@@ -2249,7 +2357,11 @@ def request_live_result(
         active_project_root_fields["active_project_root_available"]
     )
     repo_context_pack = (
-        _build_repo_context_pack(active_project_root)
+        _build_repo_context_pack(
+            active_project_root,
+            action_tools_allowed=action_bridge_required,
+            mutation_tools_allowed=code_mutation_required,
+        )
         if repo_bridge_required
         and repo_bridge_available
         and active_project_root is not None
@@ -2375,10 +2487,56 @@ def request_live_result(
                 conversation_prompt += gate_prompt
                 continue
             break
-        tool_result = _execute_repo_tool_call(
-            tool_call,
-            repo_root=active_project_root,
-        )
+        tool_name = _safe_text(tool_call.get("tool"), limit=80)
+        if tool_name == "apply_patch" and not code_mutation_required:
+            tool_result = {
+                "schema_version": 1,
+                "tool": tool_name,
+                "origin": _safe_text(tool_call.get("origin"), limit=80),
+                "status": "error",
+                "machine_error_code": "code_mutation_not_permitted",
+                "path": "",
+                "result_text": "",
+                "result_text_sha256": _sha256_text(""),
+                "result_text_truncated": False,
+                "patch_sha256": "",
+                "patch_recorded": False,
+                "touched_files": [],
+                "command_sha256": "",
+                "command_recorded": False,
+                "command_exit_code": None,
+                "mutation_applied": False,
+                "raw_result_recorded": False,
+                "repo_root_recorded": False,
+                "mutated_files": [],
+            }
+        elif tool_name in ACTION_BRIDGE_TOOLS and not action_bridge_required:
+            tool_result = {
+                "schema_version": 1,
+                "tool": tool_name,
+                "origin": _safe_text(tool_call.get("origin"), limit=80),
+                "status": "error",
+                "machine_error_code": "action_bridge_not_permitted",
+                "path": "",
+                "result_text": "",
+                "result_text_sha256": _sha256_text(""),
+                "result_text_truncated": False,
+                "patch_sha256": "",
+                "patch_recorded": False,
+                "touched_files": [],
+                "command_sha256": "",
+                "command_recorded": False,
+                "command_exit_code": None,
+                "mutation_applied": False,
+                "raw_result_recorded": False,
+                "repo_root_recorded": False,
+                "mutated_files": [],
+            }
+        else:
+            tool_result = _execute_repo_tool_call(
+                tool_call,
+                repo_root=active_project_root,
+            )
         repo_tool_results.append(tool_result)
         conversation_prompt += _repo_tool_result_prompt(tool_result)
 

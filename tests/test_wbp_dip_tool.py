@@ -38,11 +38,14 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_REPO_BRIDGE_NOT_USED,
     _codex_exec_forbidden_event_reasons,
     _attach_live_result_text_artifact,
+    _bridge_timeout_seconds,
     _build_live_result_prompt,
     _command_from_call,
     _dip_work_mode_settings,
     _build_repo_context_pack,
+    _code_mutation_requested,
     _git_status_repo,
+    _repo_bridge_requested,
     _select_target_repo_candidate,
     build_codex_exec_argv,
     build_delegate_prompt,
@@ -182,6 +185,60 @@ def _live_result(**overrides: object) -> dict[str, object]:
 
 
 class WbpDipToolTests(unittest.TestCase):
+    def test_repo_bridge_requested_treats_plain_test_and_verify_as_repo_intent(
+        self,
+    ) -> None:
+        self.assertTrue(
+            _repo_bridge_requested(task="DIP: test demo.py", mode="auto")
+        )
+        self.assertTrue(
+            _repo_bridge_requested(task="DIP: verify demo.py", mode="auto")
+        )
+
+    def test_code_mutation_requested_keeps_scoped_no_edit_clause_non_readonly(
+        self,
+    ) -> None:
+        self.assertTrue(
+            _code_mutation_requested(
+                task="fix demo.py but without editing README",
+                repo_bridge_required=True,
+            )
+        )
+        self.assertTrue(
+            _code_mutation_requested(
+                task="fix demo.py, но без правок README",
+                repo_bridge_required=True,
+            )
+        )
+
+    def test_bridge_timeout_seconds_prefers_requested_timeout_and_drops_old_hard_clamp(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _bridge_timeout_seconds(
+                60.0,
+                configured_timeout=None,
+                default=8.0,
+            ),
+            60.0,
+        )
+        self.assertEqual(
+            _bridge_timeout_seconds(
+                60.0,
+                configured_timeout=45.0,
+                default=2.0,
+            ),
+            45.0,
+        )
+        self.assertEqual(
+            _bridge_timeout_seconds(
+                0.01,
+                configured_timeout=45.0,
+                default=2.0,
+            ),
+            0.01,
+        )
+
     def test_codex_exec_forbidden_event_reasons_allows_delegate_to_dip_tool_field(
         self,
     ) -> None:
@@ -1655,6 +1712,61 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(result["result_text"], long_text)
         self.assertFalse(result["result_text_truncated"])
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_full_mode_http_bridge_raises_template_budget(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+    ) -> None:
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=5,
+            payload={"output_text": "Bridge result from WBP."},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "method": "POST",
+                            "model": "route-ok",
+                            "response_text_field": "output_text",
+                            "request_json_template": {
+                                "model": "route-ok",
+                                "max_output_tokens": 32,
+                                "stream": False,
+                            },
+                            "url_candidates": ["http://127.0.0.1:50555/v1/responses"],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task="DIP: дай подробный отчет",
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_bridge_mode="off",
+                dip_work_mode="full",
+                timeout_seconds=12.5,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["source"], "runtime_context_http_bridge")
+        self.assertEqual(
+            request_json_mock.call_args.kwargs["payload"]["max_output_tokens"],
+            32768,
+        )
+        self.assertEqual(request_json_mock.call_args.kwargs["timeout_seconds"], 12.5)
+        find_route_mock.assert_not_called()
+
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
@@ -2981,6 +3093,77 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(result["dip_code_mutation_required"])
         self.assertFalse(result["dip_code_written"])
         self.assertFalse(result["dip_code_verification_required"])
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_readonly_repo_audit_keeps_action_and_mutation_off(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        _provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.return_value = {
+            "route_id": "route-ok",
+            "base_url": "https://example.invalid",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "provider": "deepseek",
+            "auth": {"type": "none"},
+            "cost_class": "paid_or_free_limited",
+            "enabled": True,
+        }
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=12,
+            payload={"choices": [{"message": {"content": "Readonly audit complete."}}]},
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "demo.py").write_text('VALUE = "ok"\n', encoding="utf-8")
+            subprocess.run(
+                ["git", "init"],
+                cwd=repo,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=True,
+            )
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: read-only audit repo, скажи как починить demo.py, "
+                    "но без правок файлов."
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="auto",
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["dip_repo_tool_bridge_required"])
+        self.assertFalse(result["dip_action_bridge_required"])
+        self.assertFalse(result["dip_action_bridge_used"])
+        self.assertFalse(result["dip_code_mutation_required"])
+        self.assertTrue(result["repo_bridge_readonly"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
