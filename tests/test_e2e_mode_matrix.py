@@ -131,6 +131,7 @@ def _gpt_packet(**overrides: object) -> dict[str, object]:
         "chatgpt_plus_api_mode_proven": False,
         "gpt_api_mode_proven": False,
         "native_response_matrix_proven": True,
+        "all_cases_proven": True,
         "positive_case_count": 1,
         "raw_dom_exposed": False,
         "text_value_captured": False,

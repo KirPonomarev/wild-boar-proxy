@@ -91,7 +91,8 @@ With `--proof-dir <path>`, `auto-route` may write only its own
 object. The packet must set `evidence_written=true`, keep
 `proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
 only the proof packet filename in `changed_files` for no-repo-write paths, with
-`file_mutation_attempted=true`. It must not write a nested direct-reply packet.
+`effect=mutate` and `file_mutation_attempted=false`. It must not write a nested
+direct-reply packet.
 Proof write failure must fail closed as JSON with
 `machine_error_code=WBP_API_AGENT_AUTO_ROUTER_PROOF_WRITE_FAILED`.
 
@@ -141,7 +142,8 @@ With `--proof-dir <path>`, `direct-reply` may write only its own
 object. The packet must set `evidence_written=true`, keep
 `proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
 only the proof packet filename in `changed_files` for no-repo-write paths, with
-`file_mutation_attempted=true`. Proof write failure must fail closed as JSON with
+`effect=mutate` and `file_mutation_attempted=false`. Proof write failure must
+fail closed as JSON with
 `machine_error_code=WBP_API_AGENT_DIRECT_REPLY_PROOF_WRITE_FAILED`.
 
 Required success fields include:

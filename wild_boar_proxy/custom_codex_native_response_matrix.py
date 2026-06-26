@@ -45,7 +45,10 @@ def default_native_response_prompt_variants() -> list[NativeResponsePromptVarian
         ),
         NativeResponsePromptVariant(
             name="plain_text_only",
-            template="Plain text only. No markdown. No quotes. Output:\n{expected_text}",
+            template=(
+                "Reply with exactly this plain-text line and nothing else. "
+                "No markdown, no quotes, no explanation:\n{expected_text}"
+            ),
         ),
         NativeResponsePromptVariant(
             name="bare_marker",
@@ -160,7 +163,10 @@ def _case_summary(
 
 
 def _matrix_machine_code(case_summaries: Sequence[dict[str, Any]]) -> str:
-    if any(case.get("native_ui_observer_packet_proven") is True for case in case_summaries):
+    if case_summaries and all(
+        case.get("native_ui_observer_packet_proven") is True
+        for case in case_summaries
+    ):
         return "OK"
     if any(
         case.get("assistant_turn_machine_error_code")
@@ -241,27 +247,31 @@ def run_native_response_matrix_command(
     positive_case_count = sum(
         1 for case in case_summaries if case["native_ui_observer_packet_proven"]
     )
+    all_cases_proven = bool(
+        case_summaries and positive_case_count == len(case_summaries)
+    )
     machine_code = _matrix_machine_code(case_summaries)
     active_root_fields = active_project_root_fields_from_mapping(active_project_root)
     packet = {
         "schema_version": 1,
         "packet_kind": "custom_codex_native_response_matrix",
         "matrix_id": matrix_id,
-        "status": "ok" if positive_case_count else "error",
+        "status": "ok" if all_cases_proven else "error",
         "machine_error_code": machine_code,
         **dispatch_mode_truth_fields(
             execution_mode=DISPATCH_MODE_CHATGPT_ONLY,
             truth_source="custom_codex_native_response_matrix",
             orchestrator=ORCHESTRATOR_CHATGPT,
             executor=EXECUTOR_CHATGPT,
-            mode_proven=positive_case_count > 0,
+            mode_proven=all_cases_proven,
             chatgpt_lane_selected=True,
             api_route_selected=False,
-            chatgpt_lane_called=positive_case_count > 0,
+            chatgpt_lane_called=all_cases_proven,
             api_route_called=False,
             **active_root_fields,
         ),
-        "native_response_matrix_proven": positive_case_count > 0,
+        "native_response_matrix_proven": all_cases_proven,
+        "all_cases_proven": all_cases_proven,
         "positive_case_count": positive_case_count,
         "case_count": len(case_summaries),
         "cases": case_summaries,
@@ -285,7 +295,7 @@ def run_native_response_matrix_command(
         "product_ready": False,
         "packet_file_written": True,
         "packet_file_path_recorded": False,
-        "exit_code": 0 if positive_case_count else 1,
+        "exit_code": 0 if all_cases_proven else 1,
     }
     write_json_atomic(proof_root / NATIVE_RESPONSE_MATRIX_PACKET_FILE_NAME, packet)
     return packet

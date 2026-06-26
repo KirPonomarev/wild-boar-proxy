@@ -310,14 +310,28 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
                 dip_repo_direct_access=False,
                 repo_bridge_context_pack_used=True,
                 repo_bridge_context_pack_recorded=False,
-                repo_bridge_readonly=True,
-                repo_bridge_mutation_allowed=False,
-                repo_bridge_mutation_controlled=False,
+                repo_bridge_readonly=False,
+                repo_bridge_mutation_allowed=True,
+                repo_bridge_mutation_controlled=True,
                 repo_bridge_bootstrap_used=True,
                 repo_bridge_bootstrap_tool_call_count=1,
                 repo_bridge_tool_call_count=2,
                 repo_bridge_successful_tool_call_count=2,
                 repo_bridge_raw_tool_results_recorded=False,
+                dip_action_bridge_required=True,
+                dip_action_bridge_available=True,
+                dip_action_bridge_used=True,
+                dip_action_tool_call_count=2,
+                dip_action_successful_tool_call_count=2,
+                dip_action_mutation_applied=True,
+                dip_action_tests_run=True,
+                dip_action_patch_applied=True,
+                dip_code_mutation_required=True,
+                dip_code_written=True,
+                dip_code_patch_applied=True,
+                dip_code_verification_required=True,
+                dip_code_verified=True,
+                dip_action_mutated_files=["calculator.py"],
             ),
         )
 
@@ -332,14 +346,28 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(packet["dip_repo_direct_access"])
         self.assertTrue(packet["repo_bridge_context_pack_used"])
         self.assertFalse(packet["repo_bridge_context_pack_recorded"])
-        self.assertTrue(packet["repo_bridge_readonly"])
-        self.assertFalse(packet["repo_bridge_mutation_allowed"])
-        self.assertFalse(packet["repo_bridge_mutation_controlled"])
+        self.assertFalse(packet["repo_bridge_readonly"])
+        self.assertTrue(packet["repo_bridge_mutation_allowed"])
+        self.assertTrue(packet["repo_bridge_mutation_controlled"])
         self.assertTrue(packet["repo_bridge_bootstrap_used"])
         self.assertEqual(packet["repo_bridge_bootstrap_tool_call_count"], 1)
         self.assertEqual(packet["repo_bridge_tool_call_count"], 2)
         self.assertEqual(packet["repo_bridge_successful_tool_call_count"], 2)
         self.assertFalse(packet["repo_bridge_raw_tool_results_recorded"])
+        self.assertTrue(packet["dip_action_bridge_required"])
+        self.assertTrue(packet["dip_action_bridge_available"])
+        self.assertTrue(packet["dip_action_bridge_used"])
+        self.assertEqual(packet["dip_action_tool_call_count"], 2)
+        self.assertEqual(packet["dip_action_successful_tool_call_count"], 2)
+        self.assertTrue(packet["dip_action_mutation_applied"])
+        self.assertTrue(packet["dip_action_tests_run"])
+        self.assertTrue(packet["dip_action_patch_applied"])
+        self.assertTrue(packet["dip_code_mutation_required"])
+        self.assertTrue(packet["dip_code_written"])
+        self.assertTrue(packet["dip_code_patch_applied"])
+        self.assertTrue(packet["dip_code_verification_required"])
+        self.assertTrue(packet["dip_code_verified"])
+        self.assertEqual(packet["dip_action_mutated_files"], ["calculator.py"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_codex_alias_selects_gpt_lane_without_api_call(self) -> None:
@@ -743,7 +771,7 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
         self.assertEqual(payload["direct_reply_text"], "proof auto answer")
-        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertFalse(payload["file_mutation_attempted"])
         self.assertTrue(payload["evidence_written"])
         self.assertFalse(payload["state_written"])

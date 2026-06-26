@@ -300,6 +300,7 @@ def _gpt_failures(packet: Mapping[str, Any]) -> list[str]:
         api_route_called=False,
     )
     _check_true(packet, "native_response_matrix_proven", failures, prefix)
+    _check_true(packet, "all_cases_proven", failures, prefix)
     _check_positive_int(packet, "positive_case_count", failures, prefix)
     _check_true(packet, "chatgpt_only_mode_proven", failures, prefix)
     _check_false(packet, "api_only_mode_proven", failures, prefix)

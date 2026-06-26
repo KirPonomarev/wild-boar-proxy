@@ -131,7 +131,7 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
             self.assertFalse(packet["raw_prompt_recorded"])
             self.assertFalse(packet["raw_dom_exposed"])
 
-    def test_matrix_turns_green_only_when_native_observer_packet_is_proven(self) -> None:
+    def test_matrix_requires_every_native_observer_packet_to_be_proven(self) -> None:
         variants = [
             matrix.NativeResponsePromptVariant(name="bad", template="{expected_text}"),
             matrix.NativeResponsePromptVariant(name="good", template="{expected_text}"),
@@ -167,21 +167,24 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
                     },
                 )
 
-        self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_RESPONSE_MATRIX_COMPLETED_WITHOUT_EXACT_TOKEN",
+        )
         self.assertEqual(packet["execution_mode"], "chatgpt_only")
         self.assertEqual(packet["selected_mode"], "chatgpt_only")
         self.assertEqual(packet["orchestrator"], "custom_codex_chatgpt")
         self.assertEqual(packet["executor"], "custom_codex_chatgpt")
         self.assertTrue(packet["runtime_dispatch_mode_truth_recorded"])
-        self.assertTrue(packet["dispatch_mode_truth_proven"])
-        self.assertTrue(packet["chatgpt_only_mode_proven"])
-        self.assertTrue(packet["gpt_mode_proven"])
+        self.assertFalse(packet["dispatch_mode_truth_proven"])
+        self.assertFalse(packet["chatgpt_only_mode_proven"])
+        self.assertFalse(packet["gpt_mode_proven"])
         self.assertFalse(packet["api_only_mode_proven"])
         self.assertFalse(packet["gpt_api_mode_proven"])
         self.assertTrue(packet["chatgpt_lane_selected"])
         self.assertFalse(packet["api_route_selected"])
-        self.assertTrue(packet["chatgpt_lane_called"])
+        self.assertFalse(packet["chatgpt_lane_called"])
         self.assertFalse(packet["api_route_called"])
         self.assertTrue(packet["active_project_root_required"])
         self.assertTrue(packet["active_project_root_available"])
@@ -194,11 +197,43 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
         self.assertFalse(packet["active_project_root_fallback_used"])
         self.assertFalse(packet["active_project_root_legacy_target_repo_alias_used"])
         self.assertFalse(packet["wrapper_substitution_used"])
-        self.assertTrue(packet["native_response_matrix_proven"])
+        self.assertFalse(packet["native_response_matrix_proven"])
+        self.assertFalse(packet["all_cases_proven"])
         self.assertEqual(packet["positive_case_count"], 1)
-        self.assertEqual(packet["exit_code"], 0)
+        self.assertEqual(packet["exit_code"], 1)
         self.assertFalse(packet["product_ready"])
         self.assertFalse(packet["secret_value_exposed"])
+
+    def test_matrix_turns_green_when_all_native_observer_packets_are_proven(self) -> None:
+        variants = [
+            matrix.NativeResponsePromptVariant(name="one", template="{expected_text}"),
+            matrix.NativeResponsePromptVariant(name="two", template="{expected_text}"),
+        ]
+
+        def fake_runner(**kwargs: object) -> dict[str, object]:
+            return _native_packet(request_id=str(kwargs["request_id"]), proven=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with mock.patch(
+                "wild_boar_proxy.custom_codex_native_response_matrix.run_native_ui_observer_proof_command",
+                side_effect=fake_runner,
+            ):
+                packet = matrix.run_native_response_matrix_command(
+                    paths=SimpleNamespace(managed_dir=root / "managed"),
+                    proof_dir=str(root / "proof"),
+                    matrix_id="matrix-2b",
+                    request_prefix="req",
+                    variants=variants,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["native_response_matrix_proven"])
+        self.assertTrue(packet["all_cases_proven"])
+        self.assertEqual(packet["positive_case_count"], 2)
+        self.assertEqual(packet["case_count"], 2)
+        self.assertEqual(packet["exit_code"], 0)
 
     def test_candidate_map_and_completed_turn_do_not_greenwash_matrix(self) -> None:
         variants = [
@@ -231,6 +266,7 @@ class CustomCodexNativeResponseMatrixTests(TestCase):
             "CUSTOM_NATIVE_RESPONSE_MATRIX_COMPLETED_WITHOUT_EXACT_TOKEN",
         )
         self.assertFalse(packet["native_response_matrix_proven"])
+        self.assertFalse(packet["all_cases_proven"])
         self.assertEqual(packet["positive_case_count"], 0)
         self.assertEqual(packet["exit_code"], 1)
         self.assertTrue(packet["cases"][0]["custom_response_candidate_map_available"])

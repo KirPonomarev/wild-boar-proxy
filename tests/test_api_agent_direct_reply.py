@@ -611,7 +611,7 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(payload, persisted)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["direct_reply_text"], "proof direct answer")
-        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["effect"], "mutate")
         self.assertFalse(payload["file_mutation_attempted"])
         self.assertTrue(payload["evidence_written"])
         self.assertFalse(payload["state_written"])

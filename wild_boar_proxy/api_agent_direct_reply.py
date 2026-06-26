@@ -94,6 +94,7 @@ def _persist_proof_packet(
     persisted.update(
         {
             "changed_files": changed_files,
+            "effect": EFFECT_MUTATE,
             "state_written": False,
             "evidence_written": True,
             "proof_file_written": True,
@@ -600,14 +601,39 @@ def build_api_agent_direct_reply_packet(
         "dip_action_bridge_required": _as_bool(
             live_result.get("dip_action_bridge_required")
         ),
+        "dip_action_bridge_available": _as_bool(
+            live_result.get("dip_action_bridge_available")
+        ),
         "dip_action_bridge_used": _as_bool(live_result.get("dip_action_bridge_used")),
+        "dip_action_tool_call_count": int(
+            live_result.get("dip_action_tool_call_count") or 0
+        ),
+        "dip_action_successful_tool_call_count": int(
+            live_result.get("dip_action_successful_tool_call_count") or 0
+        ),
         "dip_action_mutation_applied": _as_bool(
             live_result.get("dip_action_mutation_applied")
+        ),
+        "dip_action_tests_run": _as_bool(live_result.get("dip_action_tests_run")),
+        "dip_action_commands_run": _as_bool(
+            live_result.get("dip_action_commands_run")
+        ),
+        "dip_action_patch_proposed": _as_bool(
+            live_result.get("dip_action_patch_proposed")
+        ),
+        "dip_action_patch_applied": _as_bool(
+            live_result.get("dip_action_patch_applied")
         ),
         "dip_code_mutation_required": _as_bool(
             live_result.get("dip_code_mutation_required")
         ),
         "dip_code_written": _as_bool(live_result.get("dip_code_written")),
+        "dip_code_patch_applied": _as_bool(
+            live_result.get("dip_code_patch_applied")
+        ),
+        "dip_code_verification_required": _as_bool(
+            live_result.get("dip_code_verification_required")
+        ),
         "dip_code_verified": _as_bool(live_result.get("dip_code_verified")),
         "dip_action_mutated_files": mutated_files,
         "repo_bridge_final_answer_required": _live_result_bool(
