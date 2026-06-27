@@ -17,11 +17,11 @@ from .http_client import request_json
 from .paths import ExternalModelsPaths
 from .routes import find_route, load_routes_file
 from .state import (
-    atomic_write_json,
     build_evidence_artifact_path,
     dual_lock,
     ensure_secrets_permissions,
     load_state_file,
+    write_evidence_file,
     write_state_file,
 )
 
@@ -384,7 +384,7 @@ def _write_network_evidence(
         route_id=route.get("route_id"),
         suffix=f"{command_context.replace(' ', '_')}-{stamp}",
     )
-    atomic_write_json(path, payload)
+    write_evidence_file(path, payload)
     return path
 
 

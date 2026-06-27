@@ -80,6 +80,9 @@ STATE_LOCAL_AUTH_FIELDS = frozenset(
 OBSERVED_ROUTE_ALLOWED_FIELDS = frozenset(
     {
         "availability_state",
+        "bridge_green_counts_as_provider_proof",
+        "bridge_live_response_observed",
+        "direct_provider_error",
         "evidence_level",
         "last_verified_at",
         "last_validate",

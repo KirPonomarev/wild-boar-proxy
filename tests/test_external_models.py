@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -44,6 +45,39 @@ def sample_route() -> dict[str, object]:
         "fallback_eligible": False,
         "enabled": True,
     }
+
+
+def sample_evidence_payload(*, network_dependent: bool) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": contracts.EVIDENCE_SCHEMA_VERSION,
+        "captured_at_utc": "2026-06-27T00:00:00Z",
+        "route_id": "wbp-deepseek-v3",
+        "command_context": (
+            "external-models check"
+            if network_dependent
+            else "external-models evidence capture"
+        ),
+        "network_dependent_evidence": network_dependent,
+        "result": {
+            "status": "ok",
+            "machine_error_code": errors.OK,
+            "requested_model": "wbp-deepseek-v3",
+            "effective_model": "deepseek/deepseek-chat" if network_dependent else None,
+            "provider": "openrouter",
+            "fallback_used": False,
+            "fallback_chain": ["wbp-deepseek-v3"],
+            "cost_class": "paid_or_free_limited",
+            "latency_ms": 42 if network_dependent else None,
+        },
+    }
+    if network_dependent:
+        payload["verification_scope"] = "route_provider_only"
+        result = payload["result"]
+        assert isinstance(result, dict)
+        result["verification_scope"] = "route_provider_only"
+    canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    payload["artifact_sha256"] = hashlib.sha256(canonical).hexdigest()
+    return payload
 
 
 class ExternalModelContractTests(unittest.TestCase):
@@ -347,6 +381,242 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertIn("file", fsync_kinds)
             self.assertIn("directory", fsync_kinds)
 
+    def test_write_state_file_rejects_incomplete_payload_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "state.json"
+            target.write_text(
+                json.dumps(contracts.default_state_payload(), ensure_ascii=True, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            before = target.read_text(encoding="utf-8")
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                state_mod.write_state_file(
+                    target,
+                    {
+                        "schema_version": contracts.STATE_SCHEMA_VERSION,
+                        "policy": {},
+                    },
+                )
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertEqual(target.read_text(encoding="utf-8"), before)
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_write_state_file_rejects_invalid_observed_route_patch_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "state.json"
+            target.write_text(
+                json.dumps(contracts.default_state_payload(), ensure_ascii=True, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            before = target.read_text(encoding="utf-8")
+            payload = contracts.default_state_payload()
+            payload["routes"] = {"wbp-deepseek-v3": {"unexpected": "value"}}
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                state_mod.write_state_file(target, payload)
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertEqual(target.read_text(encoding="utf-8"), before)
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_write_routes_file_rejects_invalid_route_payload_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "routes.json"
+            target.write_text(
+                json.dumps(contracts.default_routes_payload(), ensure_ascii=True, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            before = target.read_text(encoding="utf-8")
+            payload = contracts.default_routes_payload()
+            payload["routes"] = [sample_route() | {"auth": {}}]
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                routes.write_routes_file(target, payload)
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertEqual(target.read_text(encoding="utf-8"), before)
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_write_evidence_file_rejects_hash_drift_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "evidence.json"
+            payload = sample_evidence_payload(network_dependent=False)
+            payload["artifact_sha256"] = "0" * 64
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                state_mod.write_evidence_file(target, payload)
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertFalse(target.exists())
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_write_evidence_file_rejects_missing_network_scope_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "evidence.json"
+            payload = sample_evidence_payload(network_dependent=True)
+            del payload["verification_scope"]
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                state_mod.write_evidence_file(target, payload)
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertFalse(target.exists())
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_write_evidence_file_rejects_invalid_fallback_chain_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "evidence.json"
+            payload = sample_evidence_payload(network_dependent=True)
+            result = payload["result"]
+            assert isinstance(result, dict)
+            result["fallback_chain"] = ["wbp-deepseek-v3", 7]
+            canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+            payload["artifact_sha256"] = hashlib.sha256(canonical).hexdigest()
+
+            with self.assertRaises(RuntimeErrorInfo) as ctx:
+                state_mod.write_evidence_file(target, payload)
+
+            self.assertEqual(ctx.exception.machine_error_code, errors.SCHEMA_INVALID)
+            self.assertFalse(target.exists())
+            self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
+
+    def test_check_command_fails_closed_when_evidence_write_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            paths = ExternalModelsPaths.from_root(managed_dir / "external-models")
+            ensure_installed_layout(paths)
+            routes.write_routes_file(
+                paths.routes_file,
+                contracts.default_routes_payload() | {"routes": [sample_route()]},
+            )
+            state_mod.write_secrets_file_text(
+                paths.secrets_file,
+                "OPENROUTER_API_KEY=test-key\n",
+            )
+            args = mock.Mock(external_models_command="check", route="wbp-deepseek-v3")
+            response = mock.Mock(
+                status_code=200,
+                payload={
+                    "choices": [
+                        {"message": {"role": "assistant", "content": "pong"}}
+                    ]
+                },
+                latency_ms=12,
+            )
+            evidence_error = RuntimeErrorInfo(
+                "Evidence validator rejected payload.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="stop",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_MANAGED_DIR": str(managed_dir),
+                    "WBP_EXTERNAL_MODELS_DIR": str(paths.root_dir),
+                },
+                clear=False,
+            ), mock.patch.object(
+                validate_mod,
+                "request_json",
+                return_value=response,
+            ), mock.patch.object(
+                validate_mod,
+                "write_evidence_file",
+                side_effect=evidence_error,
+            ):
+                packet = run_external_models_command(args)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(packet["machine_error_code"], errors.SCHEMA_INVALID)
+            self.assertEqual(packet["effect"], "mutate")
+            self.assertEqual(
+                [str(Path(item).resolve()) for item in packet["changed_files"]],
+                [str(paths.state_file.resolve())],
+            )
+            self.assertEqual(packet["data"]["verification_scope"], "route_provider_only")
+            self.assertEqual(packet["data"]["route_state"], "limited")
+            self.assertFalse(packet["data"]["bridge_or_file_bridge_used"])
+            self.assertEqual(
+                json.loads(paths.state_file.read_text(encoding="utf-8"))["routes"][
+                    "wbp-deepseek-v3"
+                ]["availability_state"],
+                "limited",
+            )
+            self.assertEqual(list(paths.evidence_dir.glob("*")), [])
+
+    def test_routes_validate_command_fails_closed_when_evidence_write_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            paths = ExternalModelsPaths.from_root(managed_dir / "external-models")
+            ensure_installed_layout(paths)
+            routes.write_routes_file(
+                paths.routes_file,
+                contracts.default_routes_payload() | {"routes": [sample_route()]},
+            )
+            state_mod.write_secrets_file_text(
+                paths.secrets_file,
+                "OPENROUTER_API_KEY=test-key\n",
+            )
+            args = mock.Mock(
+                external_models_command="routes",
+                routes_command="validate",
+                route="wbp-deepseek-v3",
+            )
+            evidence_error = RuntimeErrorInfo(
+                "Evidence validator rejected payload.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="stop",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_MANAGED_DIR": str(managed_dir),
+                    "WBP_EXTERNAL_MODELS_DIR": str(paths.root_dir),
+                },
+                clear=False,
+            ), mock.patch.object(
+                validate_mod,
+                "_handle_models_probe",
+                return_value=({"available_models_count": 1, "latency_ms": 7}, 1),
+            ), mock.patch.object(
+                validate_mod,
+                "write_evidence_file",
+                side_effect=evidence_error,
+            ):
+                packet = run_external_models_command(args)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(packet["machine_error_code"], errors.SCHEMA_INVALID)
+            self.assertEqual(packet["effect"], "mutate")
+            self.assertEqual(
+                [str(Path(item).resolve()) for item in packet["changed_files"]],
+                [str(paths.state_file.resolve())],
+            )
+            self.assertEqual(packet["data"]["verification_scope"], "route_provider_only")
+            self.assertEqual(packet["data"]["route_state"], "limited")
+            self.assertEqual(
+                json.loads(paths.state_file.read_text(encoding="utf-8"))["routes"][
+                    "wbp-deepseek-v3"
+                ]["availability_state"],
+                "limited",
+            )
+            self.assertEqual(list(paths.evidence_dir.glob("*")), [])
+
     def test_secret_write_sets_mode_before_publish(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             target = Path(temp_dir) / "secrets.env"
@@ -608,8 +878,6 @@ class ExternalModelContractTests(unittest.TestCase):
             canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True).encode(
                 "utf-8"
             )
-            import hashlib
-
             self.assertEqual(artifact_sha, hashlib.sha256(canonical).hexdigest())
 
     def test_capture_local_evidence_blocks_unvalidated_traversal_route_id(self) -> None:

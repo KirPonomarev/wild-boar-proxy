@@ -110,8 +110,45 @@ def load_routes_file(routes_file: Path) -> dict[str, Any]:
     return payload
 
 
+def validate_routes_payload(payload: dict[str, Any]) -> None:
+    missing = sorted(contracts.ROUTES_TOP_LEVEL_FIELDS - payload.keys())
+    unexpected = sorted(set(payload.keys()) - contracts.ROUTES_TOP_LEVEL_FIELDS)
+    if missing or unexpected:
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if unexpected:
+            details.append(f"unexpected={unexpected}")
+        raise RuntimeErrorInfo(
+            "routes.json payload is invalid: " + ", ".join(details),
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="stop",
+        )
+    if payload.get("schema_version") != contracts.ROUTE_SCHEMA_VERSION:
+        raise RuntimeErrorInfo(
+            "Unsupported external-models routes schema version.",
+            machine_error_code=errors.UNSUPPORTED_SCHEMA_VERSION,
+            operator_action="stop",
+        )
+    routes_payload = payload.get("routes")
+    if not isinstance(routes_payload, list):
+        raise RuntimeErrorInfo(
+            "routes.json must contain a list under routes.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="stop",
+        )
+    for route in routes_payload:
+        if not isinstance(route, dict):
+            raise RuntimeErrorInfo(
+                "routes.json routes entries must be JSON objects.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="stop",
+            )
+        validate_route_schema(route)
+
+
 def write_routes_file(routes_file: Path, payload: dict[str, Any]) -> None:
-    atomic_write_json(routes_file, payload)
+    atomic_write_json(routes_file, payload, validator=validate_routes_payload)
 
 
 def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:

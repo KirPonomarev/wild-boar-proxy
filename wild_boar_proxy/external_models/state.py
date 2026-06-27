@@ -8,7 +8,7 @@ import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from wild_boar_proxy import state_store
 from wild_boar_proxy.runtime import RuntimeErrorInfo
@@ -43,7 +43,413 @@ def _read_json(path: Path) -> Any:
         ) from exc
 
 
-def atomic_write_json(path: Path, payload: Any) -> None:
+def _schema_invalid(message: str) -> None:
+    raise RuntimeErrorInfo(
+        message,
+        machine_error_code=errors.SCHEMA_INVALID,
+        operator_action="stop",
+    )
+
+
+def _unsupported_schema_version(message: str) -> None:
+    raise RuntimeErrorInfo(
+        message,
+        machine_error_code=errors.UNSUPPORTED_SCHEMA_VERSION,
+        operator_action="stop",
+    )
+
+
+def _require_dict(value: Any, *, surface_name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        _schema_invalid(f"{surface_name} must be a JSON object.")
+    return value
+
+
+def _require_string(value: Any, *, field_name: str, surface_name: str) -> str:
+    if not isinstance(value, str):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return value
+
+
+def _require_bool(value: Any, *, field_name: str, surface_name: str) -> bool:
+    if not isinstance(value, bool):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return value
+
+
+def _require_int_or_none(value: Any, *, field_name: str, surface_name: str) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return value
+
+
+def _require_string_or_none(value: Any, *, field_name: str, surface_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return value
+
+
+def _require_string_list(value: Any, *, field_name: str, surface_name: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return value
+
+
+def _require_sha256_hex(value: Any, *, field_name: str, surface_name: str) -> str:
+    digest = _require_string(value, field_name=field_name, surface_name=surface_name)
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        _schema_invalid(f"{surface_name} field {field_name} is missing or invalid.")
+    return digest
+
+
+def _require_exact_fields(
+    payload: dict[str, Any],
+    *,
+    required_fields: frozenset[str],
+    surface_name: str,
+) -> None:
+    missing = sorted(required_fields - payload.keys())
+    unexpected = sorted(set(payload.keys()) - required_fields)
+    if missing or unexpected:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing={missing}")
+        if unexpected:
+            details.append(f"unexpected={unexpected}")
+        _schema_invalid(f"{surface_name} is invalid: {', '.join(details)}")
+
+
+def _validate_observed_routes_payload(payload: Any) -> dict[str, dict[str, Any]]:
+    routes_payload = _require_dict(payload, surface_name="external-models state routes")
+    for route_id, route_state in routes_payload.items():
+        route_id_error = contracts.route_id_validation_error(route_id)
+        if route_id_error:
+            _schema_invalid(route_id_error)
+        route_state_dict = _require_dict(
+            route_state,
+            surface_name=f"external-models state routes[{route_id}]",
+        )
+        unexpected = sorted(
+            set(route_state_dict.keys()) - contracts.OBSERVED_ROUTE_ALLOWED_FIELDS
+        )
+        if unexpected:
+            _schema_invalid(
+                "external-models state routes "
+                f"[{route_id}] has unexpected fields: {unexpected}"
+            )
+        for field_name, value in route_state_dict.items():
+            surface_name = f"external-models state routes[{route_id}]"
+            if field_name in {
+                "availability_state",
+                "direct_provider_error",
+                "evidence_level",
+                "last_verified_at",
+                "last_validate",
+                "last_check",
+                "last_error",
+                "effective_model",
+            }:
+                _require_string(value, field_name=field_name, surface_name=surface_name)
+            elif field_name == "latency_ms":
+                _require_int_or_none(value, field_name=field_name, surface_name=surface_name)
+            elif field_name in {
+                "fallback_used",
+                "bridge_green_counts_as_provider_proof",
+                "bridge_live_response_observed",
+            }:
+                _require_bool(value, field_name=field_name, surface_name=surface_name)
+    return routes_payload
+
+
+def _validate_state_payload(payload: dict[str, Any]) -> None:
+    schema_version = payload.get("schema_version")
+    if schema_version != contracts.STATE_SCHEMA_VERSION:
+        _unsupported_schema_version("Unsupported external-models state schema version.")
+    _require_exact_fields(
+        payload,
+        required_fields=contracts.STATE_TOP_LEVEL_FIELDS,
+        surface_name="external-models state payload",
+    )
+
+    policy = _require_dict(payload.get("policy"), surface_name="external-models state policy")
+    _require_exact_fields(
+        policy,
+        required_fields=contracts.STATE_POLICY_FIELDS,
+        surface_name="external-models state policy",
+    )
+    _require_bool(
+        policy.get("paid_routes_enabled"),
+        field_name="paid_routes_enabled",
+        surface_name="external-models state policy",
+    )
+    _require_string_list(
+        policy.get("paid_route_allowlist"),
+        field_name="paid_route_allowlist",
+        surface_name="external-models state policy",
+    )
+    _require_string(
+        policy.get("paid_route_default"),
+        field_name="paid_route_default",
+        surface_name="external-models state policy",
+    )
+
+    adapter = _require_dict(payload.get("adapter"), surface_name="external-models state adapter")
+    _require_exact_fields(
+        adapter,
+        required_fields=contracts.STATE_ADAPTER_FIELDS,
+        surface_name="external-models state adapter",
+    )
+    _require_string(
+        adapter.get("lifecycle_mode"),
+        field_name="lifecycle_mode",
+        surface_name="external-models state adapter",
+    )
+    _require_string(
+        adapter.get("state"),
+        field_name="state",
+        surface_name="external-models state adapter",
+    )
+    _require_string(
+        adapter.get("host"),
+        field_name="host",
+        surface_name="external-models state adapter",
+    )
+    _require_int_or_none(
+        adapter.get("port"),
+        field_name="port",
+        surface_name="external-models state adapter",
+    )
+    _require_string_or_none(
+        adapter.get("base_url"),
+        field_name="base_url",
+        surface_name="external-models state adapter",
+    )
+    _require_bool(
+        adapter.get("listener_proven"),
+        field_name="listener_proven",
+        surface_name="external-models state adapter",
+    )
+    _require_bool(
+        adapter.get("runtime_claim_blocked"),
+        field_name="runtime_claim_blocked",
+        surface_name="external-models state adapter",
+    )
+    _require_string_or_none(
+        adapter.get("started_at_utc"),
+        field_name="started_at_utc",
+        surface_name="external-models state adapter",
+    )
+    _require_string(
+        adapter.get("last_transition"),
+        field_name="last_transition",
+        surface_name="external-models state adapter",
+    )
+
+    local_auth = _require_dict(
+        payload.get("local_auth"),
+        surface_name="external-models state local_auth",
+    )
+    _require_exact_fields(
+        local_auth,
+        required_fields=contracts.STATE_LOCAL_AUTH_FIELDS,
+        surface_name="external-models state local_auth",
+    )
+    _require_string(
+        local_auth.get("token_ref"),
+        field_name="token_ref",
+        surface_name="external-models state local_auth",
+    )
+    _require_bool(
+        local_auth.get("token_present"),
+        field_name="token_present",
+        surface_name="external-models state local_auth",
+    )
+    _require_string_or_none(
+        local_auth.get("token_created_at_utc"),
+        field_name="token_created_at_utc",
+        surface_name="external-models state local_auth",
+    )
+
+    _validate_observed_routes_payload(payload.get("routes"))
+
+
+def _validate_evidence_result(
+    payload: Any,
+    *,
+    route_id: str,
+    surface_name: str,
+) -> dict[str, Any]:
+    result = _require_dict(payload, surface_name=f"{surface_name} result")
+    required_fields = frozenset(
+        {
+            "status",
+            "machine_error_code",
+            "requested_model",
+            "effective_model",
+            "provider",
+            "fallback_used",
+            "fallback_chain",
+            "cost_class",
+            "latency_ms",
+        }
+    )
+    missing = sorted(required_fields - result.keys())
+    if missing:
+        _schema_invalid(f"{surface_name} result is invalid: missing={missing}")
+    requested_model = _require_string(
+        result.get("requested_model"),
+        field_name="requested_model",
+        surface_name=f"{surface_name} result",
+    )
+    if requested_model != route_id:
+        _schema_invalid(
+            f"{surface_name} result field requested_model must match route_id."
+        )
+    _require_string(
+        result.get("status"),
+        field_name="status",
+        surface_name=f"{surface_name} result",
+    )
+    _require_string(
+        result.get("machine_error_code"),
+        field_name="machine_error_code",
+        surface_name=f"{surface_name} result",
+    )
+    _require_string_or_none(
+        result.get("effective_model"),
+        field_name="effective_model",
+        surface_name=f"{surface_name} result",
+    )
+    _require_string(
+        result.get("provider"),
+        field_name="provider",
+        surface_name=f"{surface_name} result",
+    )
+    _require_bool(
+        result.get("fallback_used"),
+        field_name="fallback_used",
+        surface_name=f"{surface_name} result",
+    )
+    _require_string_list(
+        result.get("fallback_chain"),
+        field_name="fallback_chain",
+        surface_name=f"{surface_name} result",
+    )
+    _require_string(
+        result.get("cost_class"),
+        field_name="cost_class",
+        surface_name=f"{surface_name} result",
+    )
+    _require_int_or_none(
+        result.get("latency_ms"),
+        field_name="latency_ms",
+        surface_name=f"{surface_name} result",
+    )
+    if "verification_scope" in result:
+        _require_string(
+            result.get("verification_scope"),
+            field_name="verification_scope",
+            surface_name=f"{surface_name} result",
+        )
+    return result
+
+
+def _validate_evidence_payload(payload: dict[str, Any]) -> None:
+    required_fields = frozenset(
+        {
+            "schema_version",
+            "captured_at_utc",
+            "route_id",
+            "command_context",
+            "network_dependent_evidence",
+            "result",
+            "artifact_sha256",
+        }
+    )
+    allowed_fields = required_fields | frozenset({"verification_scope"})
+    missing = sorted(required_fields - payload.keys())
+    unexpected = sorted(set(payload.keys()) - allowed_fields)
+    if missing or unexpected:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing={missing}")
+        if unexpected:
+            details.append(f"unexpected={unexpected}")
+        _schema_invalid(f"external-models evidence payload is invalid: {', '.join(details)}")
+    if payload.get("schema_version") != contracts.EVIDENCE_SCHEMA_VERSION:
+        _unsupported_schema_version("Unsupported external-models evidence schema version.")
+    route_id = _require_string(
+        payload.get("route_id"),
+        field_name="route_id",
+        surface_name="external-models evidence payload",
+    )
+    route_id_error = contracts.route_id_validation_error(route_id)
+    if route_id_error:
+        _schema_invalid(route_id_error)
+    _require_string(
+        payload.get("captured_at_utc"),
+        field_name="captured_at_utc",
+        surface_name="external-models evidence payload",
+    )
+    _require_string(
+        payload.get("command_context"),
+        field_name="command_context",
+        surface_name="external-models evidence payload",
+    )
+    network_dependent = _require_bool(
+        payload.get("network_dependent_evidence"),
+        field_name="network_dependent_evidence",
+        surface_name="external-models evidence payload",
+    )
+    result = _validate_evidence_result(
+        payload.get("result"),
+        route_id=route_id,
+        surface_name="external-models evidence payload",
+    )
+    verification_scope = payload.get("verification_scope")
+    if network_dependent:
+        _require_string(
+            verification_scope,
+            field_name="verification_scope",
+            surface_name="external-models evidence payload",
+        )
+    elif verification_scope is not None:
+        _schema_invalid(
+            "external-models evidence payload must not declare verification_scope for local evidence."
+        )
+    result_verification_scope = result.get("verification_scope")
+    if verification_scope is not None and result_verification_scope not in {None, verification_scope}:
+        _schema_invalid(
+            "external-models evidence payload result verification_scope must match top-level verification_scope."
+        )
+    artifact_sha256 = _require_sha256_hex(
+        payload.get("artifact_sha256"),
+        field_name="artifact_sha256",
+        surface_name="external-models evidence payload",
+    )
+    canonical_payload = dict(payload)
+    canonical_payload.pop("artifact_sha256", None)
+    expected_sha256 = hashlib.sha256(
+        json.dumps(canonical_payload, ensure_ascii=True, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    if artifact_sha256 != expected_sha256:
+        _schema_invalid("external-models evidence payload artifact_sha256 does not match payload.")
+
+
+def atomic_write_json(
+    path: Path,
+    payload: Any,
+    *,
+    validator: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    if not isinstance(payload, dict):
+        _schema_invalid(f"External-models JSON payload must be an object: {path}")
+    if validator is not None:
+        validator(payload)
     atomic_write_text(
         path,
         json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
@@ -145,7 +551,11 @@ def load_state_file(state_file: Path) -> dict[str, Any]:
 
 
 def write_state_file(state_file: Path, payload: dict[str, Any]) -> None:
-    atomic_write_json(state_file, payload)
+    atomic_write_json(state_file, payload, validator=_validate_state_payload)
+
+
+def write_evidence_file(path: Path, payload: dict[str, Any]) -> None:
+    atomic_write_json(path, payload, validator=_validate_evidence_payload)
 
 
 def build_evidence_artifact_path(
@@ -225,5 +635,5 @@ def capture_local_evidence(
         route_id=route_id,
         suffix=stamp,
     )
-    atomic_write_json(path, payload)
+    write_evidence_file(path, payload)
     return path

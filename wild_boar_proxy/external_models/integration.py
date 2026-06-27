@@ -11,7 +11,6 @@ from . import contracts
 from .paths import ExternalModelsPaths
 from .routes import load_routes_file, write_routes_file
 from .state import (
-    atomic_write_json,
     load_state_file,
     write_secrets_file_text,
     write_state_file,
@@ -41,9 +40,9 @@ def ensure_installed_layout(paths: ExternalModelsPaths) -> None:
     paths.root_dir.mkdir(parents=True, exist_ok=True)
     paths.evidence_dir.mkdir(parents=True, exist_ok=True)
     if not paths.routes_file.exists():
-        atomic_write_json(paths.routes_file, contracts.default_routes_payload())
+        write_routes_file(paths.routes_file, contracts.default_routes_payload())
     if not paths.state_file.exists():
-        atomic_write_json(paths.state_file, contracts.default_state_payload())
+        write_state_file(paths.state_file, contracts.default_state_payload())
     if not paths.secrets_file.exists():
         _write_secrets_file(paths.secrets_file, "")
     else:
