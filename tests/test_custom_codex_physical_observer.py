@@ -66,6 +66,29 @@ class CustomCodexPhysicalObserverTests(unittest.TestCase):
         self.assertTrue(packet["output_after_worked_contains_expected_text"])
         self.assertTrue(packet["output_after_worked_exact_expected_text"])
 
+    def test_api_exact_rejects_stale_output_after_worked_without_fresh_delta(self) -> None:
+        before_text = (
+            "Builder: ответь ровно TOKEN\n"
+            "Выполнена команда WBP_ROUTER_PROMPT='Builder: ответь ровно TOKEN'\n"
+            "Работал на протяжении 6s\n\nTOKEN"
+        )
+        packet = observe_visible_output(
+            before_text=before_text,
+            after_text=before_text,
+            prompt="Builder: ответь ровно TOKEN",
+            expected_text="TOKEN",
+            mode="api",
+        ).as_packet()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_PHYSICAL_STALE_EXPECTED_TEXT_ONLY",
+        )
+        self.assertFalse(packet["custom_response_bound_to_request"])
+        self.assertEqual(packet["observed_count_delta"], 0)
+        self.assertEqual(packet["required_count_delta"], 2)
+
     def test_api_exact_rejects_expected_token_with_extra_condition_text(self) -> None:
         packet = observe_visible_output(
             before_text="",

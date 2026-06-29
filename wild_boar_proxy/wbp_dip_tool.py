@@ -1372,10 +1372,12 @@ def _file_write_text_from_task(task: str, *, path: str) -> str | None:
     raw_value = match.group(1)
     terminator = re.search(
         r"(?:,\s*(?:then|and\s+then|read|return|answer|show|verify)\b|"
+        r",\s*(?:if|если)\b|"
         r"\s+(?:then|and\s+then)\b|"
         r",\s*(?:затем|потом|после\s+этого)\b|"
+        r",\s*(?:прочитай|верни|ответь|выведи|проверь|покажи)\b|"
         r"\s+(?:затем|потом)\b|"
-        r"\s+и\s+(?:прочитай|верни|ответь|выведи|проверь|покажи)\b)",
+        r"\s+и\s+(?:прочитай|верни|ответь|выведи|проверь|покажи|если)\b)",
         raw_value,
         flags=re.IGNORECASE,
     )
@@ -1473,12 +1475,14 @@ def _repo_bridge_bootstrap_calls(
         ]
     if action_bridge_required and _create_or_write_file_requested(task):
         for candidate in _task_path_candidates(task):
-            if _path_looks_like_code_mutation(candidate):
+            if _path_looks_like_code_mutation(candidate) and not (
+                _path_is_bootstrap_scratch_code_path(candidate)
+            ):
                 continue
             write_text = _file_write_text_from_task(task, path=candidate)
             if write_text is None:
                 continue
-            return [
+            calls = [
                 {
                     "tool": "write_file",
                     "path": candidate,
@@ -1487,26 +1491,21 @@ def _repo_bridge_bootstrap_calls(
                 },
                 {"tool": "read_file", "path": candidate, "origin": "wbp_bootstrap"},
             ]
+            if _delete_file_requested(task):
+                calls.extend(
+                    _delete_bootstrap_calls_from_candidates(
+                        task=task,
+                        candidates=_task_path_candidates(task),
+                    )
+                )
+            return calls
     if action_bridge_required and _bootstrap_delete_file_requested(task):
-        for candidate in _task_path_candidates(task):
-            if _path_looks_like_code_mutation(candidate):
-                continue
-            if _delete_tree_requested(task):
-                return [
-                    {
-                        "tool": "delete_tree",
-                        "path": candidate,
-                        "origin": "wbp_bootstrap",
-                    }
-                ]
-            return [
-                {
-                    "tool": "delete_file",
-                    "path": candidate,
-                    "cleanup_empty_parent": _cleanup_empty_parent_requested(task),
-                    "origin": "wbp_bootstrap",
-                }
-            ]
+        delete_calls = _delete_bootstrap_calls_from_candidates(
+            task=task,
+            candidates=_task_path_candidates(task),
+        )
+        if delete_calls:
+            return delete_calls
     path_calls = [
         {"tool": "read_file", "path": candidate, "origin": "wbp_bootstrap"}
         for candidate in _task_path_candidates(task)
@@ -1516,6 +1515,39 @@ def _repo_bridge_bootstrap_calls(
     if action_bridge_required:
         return [{"tool": "git_status", "origin": "wbp_bootstrap"}]
     return [{"tool": "list_files", "path": ".", "origin": "wbp_bootstrap"}]
+
+
+def _delete_bootstrap_calls_from_candidates(
+    *,
+    task: str,
+    candidates: Sequence[str],
+) -> list[dict[str, Any]]:
+    if _delete_tree_requested(task):
+        for candidate in candidates:
+            if _path_looks_like_code_mutation(candidate):
+                continue
+            return [
+                {
+                    "tool": "delete_tree",
+                    "path": candidate,
+                    "origin": "wbp_bootstrap",
+                }
+            ]
+        return []
+    for candidate in candidates:
+        if _path_looks_like_code_mutation(candidate) and not (
+            _path_is_bootstrap_scratch_code_path(candidate)
+        ):
+            continue
+        return [
+            {
+                "tool": "delete_file",
+                "path": candidate,
+                "cleanup_empty_parent": _cleanup_empty_parent_requested(task),
+                "origin": "wbp_bootstrap",
+            }
+        ]
+    return []
 
 
 def _repo_bridge_requested(*, task: str, mode: str) -> bool:
@@ -1598,6 +1630,18 @@ def _bootstrap_delete_file_requested(task: str) -> bool:
 
 def _delete_tree_requested(task: str) -> bool:
     task_key = task.casefold()
+    whole_tree_requested = any(
+        marker in task_key
+        for marker in (
+            "recursively",
+            "entire directory",
+            "entire folder",
+            "whole directory",
+            "whole folder",
+            "целиком",
+            "полностью",
+        )
+    )
     if (
         "if directory" in task_key
         or "if the directory" in task_key
@@ -1605,7 +1649,7 @@ def _delete_tree_requested(task: str) -> bool:
         or "if the folder" in task_key
         or "если директория" in task_key
         or "если папка" in task_key
-    ):
+    ) and not whole_tree_requested:
         return False
     return bool(
         "delete directory" in task_key
@@ -1626,6 +1670,7 @@ def _cleanup_empty_parent_requested(task: str) -> bool:
         or "empty parent" in task_key
         or "директория" in task_key
         or "пустая" in task_key
+        or "пустую" in task_key
         or "пустой" in task_key
     )
 
@@ -1656,6 +1701,12 @@ def _path_is_scratch_mutation_path(relative: str) -> bool:
     )
 
 
+def _path_is_bootstrap_scratch_code_path(relative: str) -> bool:
+    return relative == "tmp/wbp-scratch-code" or relative.startswith(
+        "tmp/wbp-scratch-code/"
+    )
+
+
 def _file_artifact_mutation_requested(
     *, task: str, repo_bridge_required: bool
 ) -> bool:
@@ -1671,7 +1722,11 @@ def _file_artifact_mutation_requested(
     candidates = _task_path_candidates(task)
     if not candidates:
         return False
-    return not any(_path_looks_like_code_mutation(candidate) for candidate in candidates)
+    return not any(
+        _path_looks_like_code_mutation(candidate)
+        and not _path_is_bootstrap_scratch_code_path(candidate)
+        for candidate in candidates
+    )
 
 
 def _code_mutation_requested(*, task: str, repo_bridge_required: bool) -> bool:

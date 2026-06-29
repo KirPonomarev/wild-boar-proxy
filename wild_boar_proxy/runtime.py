@@ -598,6 +598,35 @@ def dispatch_external_client(
             "stderr": result.stderr,
         }
 
+    launcher_payload = repo_managed_default_launcher_payload_if_valid(client_path)
+    if launcher_payload is not None and 'if [ "$mode" = "desktop" ]; then' in launcher_payload:
+        try:
+            result = subprocess.run(
+                [str(client_path), "desktop"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env=sanitized_env(),
+                cwd=str(paths.profile_dir),
+                text=True,
+                check=False,
+                timeout=45,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeErrorInfo(
+                f"Host-client dispatch failed: {exc}",
+                machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
+                severity="recoverable",
+                operator_action="retry",
+            ) from exc
+        return {
+            "dispatch_method": "wbp_desktop_launcher",
+            "dispatch_observed": result.returncode == 0,
+            "dispatch_exit_code": result.returncode,
+            "process_observed_running": False,
+            "stderr": result.stderr,
+        }
+
     try:
         process = subprocess.Popen(
             [str(client_path)],

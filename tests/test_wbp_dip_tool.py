@@ -359,6 +359,61 @@ class WbpDipToolTests(unittest.TestCase):
             ],
         )
 
+    def test_file_artifact_write_text_stops_before_russian_readback_clause(self) -> None:
+        task = (
+            "DIP: через repo bridge создай файл "
+            "tmp/wbp-custom-strong/mutation-a.txt с текстом "
+            "WBP_CHAOS_REPO_MUTATION_FILE_OK_20260629, прочитай его обратно, "
+            "и если readback совпал, ответь ровно WBP_CHAOS_REPO_MUTATION_OK_20260629"
+        )
+
+        self.assertEqual(
+            _file_write_text_from_task(
+                task,
+                path="tmp/wbp-custom-strong/mutation-a.txt",
+            ),
+            "WBP_CHAOS_REPO_MUTATION_FILE_OK_20260629",
+        )
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertEqual(calls[0]["tool"], "write_file")
+        self.assertEqual(
+            calls[0]["text"], "WBP_CHAOS_REPO_MUTATION_FILE_OK_20260629"
+        )
+
+    def test_file_artifact_write_bootstrap_allows_named_scratch_code_path(self) -> None:
+        task = (
+            "DIP: через repo bridge создай файл tmp/wbp-scratch-code/demo.py "
+            "с текстом VALUE = 1, затем прочитай его обратно"
+        )
+
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "tool": "write_file",
+                    "path": "tmp/wbp-scratch-code/demo.py",
+                    "text": "VALUE = 1",
+                    "origin": "wbp_bootstrap",
+                },
+                {
+                    "tool": "read_file",
+                    "path": "tmp/wbp-scratch-code/demo.py",
+                    "origin": "wbp_bootstrap",
+                },
+            ],
+        )
+
     def test_file_artifact_write_bootstrap_does_not_shortcut_code_paths(self) -> None:
         task = (
             "DIP: using the repo bridge, create file tmp/generated_probe.py "
@@ -381,6 +436,154 @@ class WbpDipToolTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_delete_file_bootstrap_allows_named_scratch_code_path(self) -> None:
+        task = "DIP: через repo bridge удали файл tmp/wbp-scratch-code/demo.py"
+
+        self.assertTrue(
+            _repo_mutation_requested(task=task, repo_bridge_required=True)
+        )
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "tool": "delete_file",
+                    "path": "tmp/wbp-scratch-code/demo.py",
+                    "cleanup_empty_parent": False,
+                    "origin": "wbp_bootstrap",
+                }
+            ],
+        )
+
+    def test_delete_file_bootstrap_does_not_shortcut_product_code_paths(self) -> None:
+        task = "DIP: через repo bridge удали файл wild_boar_proxy/demo.py"
+
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertFalse(any(call.get("tool") == "delete_file" for call in calls))
+        self.assertFalse(any(call.get("tool") == "delete_tree" for call in calls))
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_deletes_named_scratch_code_without_provider_claim(
+        self,
+        request_json_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            target = repo / "tmp" / "wbp-scratch-code" / "demo.py"
+            profile.mkdir()
+            target.parent.mkdir(parents=True)
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: через repo bridge удали файл "
+                    "tmp/wbp-scratch-code/demo.py и ответь ровно "
+                    "WBP_SCRATCH_DELETE_OK"
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=1,
+            )
+            target_absent = not target.exists()
+
+        request_json_mock.assert_not_called()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["source"], "repo_bridge_verified_evidence")
+        self.assertEqual(result["result_text"], "WBP_SCRATCH_DELETE_OK")
+        self.assertFalse(result["provider_called"])
+        self.assertTrue(result["dip_action_bridge_required"])
+        self.assertTrue(result["dip_mutation_required"])
+        self.assertTrue(result["dip_mutation_written"])
+        self.assertTrue(result["dip_mutation_readback_verified"])
+        self.assertEqual(
+            result["dip_action_mutated_files"], ["tmp/wbp-scratch-code/demo.py"]
+        )
+        self.assertTrue(target_absent)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_mixed_scratch_create_delete_tree_proves_cleanup(
+        self,
+        request_json_mock: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            target_dir = repo / "tmp" / "wbp-scratch-code"
+            profile.mkdir()
+            repo.mkdir()
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: через repo bridge создай файл "
+                    "tmp/wbp-scratch-code/demo.py с текстом VALUE = 1, "
+                    "прочитай его обратно, затем удали директорию "
+                    "tmp/wbp-scratch-code целиком. Если директория отсутствует "
+                    "после cleanup, ответь ровно WBP_SCRATCH_TREE_DELETE_OK"
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=1,
+            )
+            target_dir_absent = not target_dir.exists()
+
+        request_json_mock.assert_not_called()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["source"], "repo_bridge_verified_evidence")
+        self.assertEqual(result["result_text"], "WBP_SCRATCH_TREE_DELETE_OK")
+        self.assertFalse(result["provider_called"])
+        self.assertTrue(result["dip_action_bridge_required"])
+        self.assertTrue(result["dip_mutation_required"])
+        self.assertTrue(result["dip_mutation_written"])
+        self.assertTrue(result["dip_mutation_readback_verified"])
+        self.assertEqual(
+            result["dip_action_tool_names"],
+            ["write_file", "delete_tree"],
+        )
+        self.assertEqual(
+            result["repo_bridge_bootstrap_tool_names"],
+            ["write_file", "read_file", "delete_tree"],
+        )
+        self.assertTrue(target_dir_absent)
 
     def test_code_mutation_bootstrap_does_not_run_requested_pytest_before_mutation(
         self,
@@ -420,6 +623,25 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertTrue(calls)
         self.assertNotEqual(calls[0]["tool"], "delete_file")
 
+    def test_mixed_create_delete_tree_task_bootstraps_cleanup_after_readback(self) -> None:
+        task = (
+            "DIP: через repo bridge создай файл tmp/wbp-scratch-code/demo.py "
+            "с текстом VALUE = 1, прочитай его обратно, затем удали директорию "
+            "tmp/wbp-scratch-code целиком"
+        )
+
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertEqual(
+            [call["tool"] for call in calls],
+            ["write_file", "read_file", "delete_tree"],
+        )
+        self.assertEqual(calls[2]["path"], "tmp/wbp-scratch-code")
+
     def test_pure_delete_task_still_bootstraps_delete(self) -> None:
         task = (
             "DIP: через repo bridge удали файл "
@@ -434,6 +656,25 @@ class WbpDipToolTests(unittest.TestCase):
 
         self.assertEqual(calls[0]["tool"], "delete_file")
         self.assertEqual(calls[0]["path"], "tmp/wbp-custom-strong/mutation-a.txt")
+
+    def test_delete_file_with_empty_directory_cleanup_bootstraps_parent_cleanup(
+        self,
+    ) -> None:
+        task = (
+            "DIP: через repo bridge удали файл "
+            "tmp/wbp-chaos-rerun/mutation-a.txt и пустую директорию "
+            "tmp/wbp-chaos-rerun. После успешной очистки ответь ровно OK"
+        )
+
+        calls = _repo_bridge_bootstrap_calls(
+            task=task,
+            repo_bridge_required=True,
+            action_bridge_required=True,
+        )
+
+        self.assertEqual(calls[0]["tool"], "delete_file")
+        self.assertEqual(calls[0]["path"], "tmp/wbp-chaos-rerun/mutation-a.txt")
+        self.assertTrue(calls[0]["cleanup_empty_parent"])
 
     def test_pure_directory_delete_task_bootstraps_delete_tree(self) -> None:
         task = (
@@ -2696,7 +2937,7 @@ index 0000000..1111111
                 profile_dir=profile,
                 repo_root=repo,
                 repo_bridge_mode="on",
-                timeout_seconds=0.01,
+                timeout_seconds=1,
             )
 
         self.assertEqual(result["status"], "ok")

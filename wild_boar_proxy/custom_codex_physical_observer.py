@@ -100,6 +100,7 @@ def observe_visible_output(
     delta_count = max(0, after_count - before_count)
     prompt_contains_expected = expected_text in prompt
     required_delta = 2 if prompt_contains_expected else 1
+    fresh_expected_observed = delta_count >= required_delta
     delta_text = visible_text_delta(before_text, after_text)
     after_worked = output_after_worked_segment(delta_text)
     after_worked_contains_expected = expected_text in after_worked
@@ -139,16 +140,24 @@ def observe_visible_output(
         )
 
     if mode == "api":
-        ok = after_worked_exact_expected
+        ok = after_worked_exact_expected and fresh_expected_observed
     elif mode == "native":
-        ok = delta_exact_expected and not queued_recommendations_observed
+        ok = (
+            delta_exact_expected
+            and fresh_expected_observed
+            and not queued_recommendations_observed
+        )
     elif mode == "fail_closed":
-        ok = delta_exact_expected
+        ok = delta_exact_expected and fresh_expected_observed
     else:
         ok = (
-            after_worked_exact_expected
+            after_worked_exact_expected and fresh_expected_observed
             if "WBP_ROUTER_PROMPT" in delta_text
-            else delta_exact_expected and not queued_recommendations_observed
+            else (
+                delta_exact_expected
+                and fresh_expected_observed
+                and not queued_recommendations_observed
+            )
         )
 
     if ok:
@@ -159,6 +168,8 @@ def observe_visible_output(
         machine_error_code = "CUSTOM_PHYSICAL_COMMAND_ECHO_ONLY"
     elif queued_recommendations_observed:
         machine_error_code = "CUSTOM_PHYSICAL_PROMPT_SPLIT_INTO_RECOMMENDATIONS"
+    elif expected_text in after_text and not fresh_expected_observed:
+        machine_error_code = "CUSTOM_PHYSICAL_STALE_EXPECTED_TEXT_ONLY"
     else:
         machine_error_code = "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED"
 

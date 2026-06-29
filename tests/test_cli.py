@@ -25089,6 +25089,139 @@ class CliTests(unittest.TestCase):
         self.assertEqual(launch_result["launch_claim_scope"], "bounded_executable_launch_with_process_observation")
         self.assertEqual(launch_result["final_outcome"], "app_process_observed")
 
+    def test_launch_client_passes_desktop_mode_to_repo_managed_launcher(self) -> None:
+        port = free_port()
+        trace_file = self.managed_dir / "repo-managed-launcher-mode.txt"
+        client_script = self.profile_dir / "repo-managed-client.sh"
+        script_payload = "\n".join(
+            [
+                "set -eu",
+                'mode="${1:-}"',
+                f'printf "%s\\n" "$mode" > "{trace_file}"',
+                'if [ "$mode" = "desktop" ]; then',
+                "  exit 0",
+                "fi",
+                "exit 7",
+            ]
+        )
+        client_script.write_text(
+            runtime_mod.render_repo_owned_default_launcher_script_text(script_payload)
+            + "\n",
+            encoding="utf-8",
+        )
+        client_script.chmod(0o755)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "effective_mode": "managed",
+                "status": "healthy",
+                "managed_port": port,
+                "last_error": "",
+            }
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli(
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        launch_result = payload["client_launch_result"]
+        self.assertEqual(launch_result["dispatch_method"], "wbp_desktop_launcher")
+        self.assertEqual(launch_result["dispatch_exit_code"], 0)
+        self.assertTrue(launch_result["dispatch_observed"])
+        self.assertFalse(launch_result["process_observed_running"])
+        self.assertFalse(launch_result["real_codex_app_launched"])
+        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
+        self.assertEqual(trace_file.read_text(encoding="utf-8"), "desktop\n")
+
+    def test_launch_client_blocks_failed_repo_managed_launcher_false_green(self) -> None:
+        port = free_port()
+        trace_file = self.managed_dir / "repo-managed-launcher-failed-mode.txt"
+        client_script = self.profile_dir / "repo-managed-client-fails.sh"
+        script_payload = "\n".join(
+            [
+                "set -eu",
+                'mode="${1:-}"',
+                f'printf "%s\\n" "$mode" > "{trace_file}"',
+                'if [ "$mode" = "desktop" ]; then',
+                "  sleep 1",
+                "  exit 7",
+                "fi",
+                "exit 7",
+            ]
+        )
+        client_script.write_text(
+            runtime_mod.render_repo_owned_default_launcher_script_text(script_payload)
+            + "\n",
+            encoding="utf-8",
+        )
+        client_script.chmod(0o755)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "effective_mode": "managed",
+                "status": "healthy",
+                "managed_port": port,
+                "last_error": "",
+            }
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli(
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.returncode, 7, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "CLIENT_LAUNCH_DISPATCH_FAILED")
+        launch_result = payload["client_launch_result"]
+        self.assertEqual(launch_result["dispatch_method"], "wbp_desktop_launcher")
+        self.assertEqual(launch_result["dispatch_exit_code"], 7)
+        self.assertFalse(launch_result["process_observed_running"])
+        self.assertFalse(launch_result["real_codex_app_launched"])
+        self.assertEqual(launch_result["final_outcome"], "dispatch_failed")
+        self.assertEqual(trace_file.read_text(encoding="utf-8"), "desktop\n")
+
     def test_launch_client_reports_exec_format_failure_as_json_packet(self) -> None:
         port = free_port()
         client_script = self.profile_dir / "fake-host-client-bad-format.sh"
