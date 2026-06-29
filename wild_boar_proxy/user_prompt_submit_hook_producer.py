@@ -1378,10 +1378,11 @@ def _router_command_additional_context(*, runtime_context_file: Path) -> str:
         "argument must remain exactly 300 and must never be changed to 90.\n"
         "COMMAND:\n"
         "WBP_ROUTER_PROMPT='<original prompt>'; "
+        'WBP_ROUTER_PROOF_DIR="${WBP_PROFILE_DIR:-${TMPDIR:-/tmp}/wbp-router-proof-profile}/tmp/user-prompt-submit-router-proof"; '
         "${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output "
         f"--runtime-context-file {quoted_runtime_context_file} "
         "--active-project-root \"$PWD\" --repo-bridge auto --work-mode full "
-        "--timeout-seconds 300 "
+        "--timeout-seconds 300 --proof-dir \"$WBP_ROUTER_PROOF_DIR\" "
         "--prompt \"$WBP_ROUTER_PROMPT\""
     )
 

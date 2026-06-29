@@ -989,6 +989,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=60.0,
     )
+    router_hook_auto_route_output.add_argument("--proof-dir")
     router_hook_direct_reply = router_hook_subparsers.add_parser("direct-reply")
     router_hook_direct_reply.add_argument("--prompt", required=True)
     router_hook_direct_reply.add_argument("--runtime-context-file")
@@ -2930,7 +2931,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo_bridge_mode=args.repo_bridge,
                 work_mode=args.work_mode,
                 timeout_seconds=args.timeout_seconds,
-                proof_dir=None,
+                proof_dir=args.proof_dir,
             )
             sys.stdout.write(_auto_route_visible_output(packet) + "\n")
             return 0

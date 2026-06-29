@@ -1177,6 +1177,82 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "WBP_MUTATION_OK\n")
         self.assertNotIn("WBP_ROUTER_OUTPUT_NOT_AVAILABLE", stdout.getvalue())
 
+    def test_cli_auto_route_output_can_write_proof_packet_without_polluting_stdout(self) -> None:
+        expected = "WBP_ROUTER_PROOF_OK"
+        prompt = f"DIP: ответь ровно {expected}"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            proof_dir = root / "proof"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def live_result(**kwargs: object) -> dict[str, object]:
+                work_mode = str(kwargs.get("dip_work_mode") or "standard")
+                full = work_mode == "full"
+                return _live_result(
+                    expected,
+                    dip_work_mode=work_mode,
+                    dip_full_work_mode=full,
+                    live_result_text_limit=64000 if full else 2400,
+                    live_result_output_token_limit=32768 if full else 768,
+                    exact_plain_reply_matched=True,
+                    exact_plain_reply_expected_text_sha256=direct._sha256_text(expected),
+                    exact_plain_reply_expected_text_recorded=False,
+                    exact_plain_reply_observed_text_sha256=direct._sha256_text(expected),
+                    exact_plain_reply_observed_text_recorded=False,
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                            "--proof-dir",
+                            str(proof_dir),
+                        ]
+                    )
+            proof_packet = json.loads(
+                (proof_dir / auto.API_AGENT_AUTO_ROUTER_FILE_NAME).read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), f"{expected}\n")
+        self.assertTrue(proof_packet["proof_file_written"])
+        self.assertTrue(proof_packet["evidence_written"])
+        self.assertTrue(proof_packet["auto_router_proven"])
+        self.assertTrue(proof_packet["direct_reply_proven"])
+        self.assertEqual(proof_packet["output_text"], expected)
+        self.assertNotIn(auto.API_AGENT_AUTO_ROUTER_PACKET_KIND, stdout.getvalue())
+        self.assertEqual(packets.inspect_command_packet_semantics(proof_packet), [])
+
     def test_cli_auto_route_output_prints_repo_bridge_readonly_evidence_reply(
         self,
     ) -> None:

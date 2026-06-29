@@ -317,6 +317,18 @@ def _default_custom_user_data_dir(paths: RuntimePaths) -> str:
     return str((paths.profile_dir / "electron-user-data").expanduser())
 
 
+def _command_default_runtime_paths(paths: RuntimePaths) -> RuntimePaths:
+    if "WBP_PROFILE_DIR" in os.environ:
+        return paths
+    cli_default_profile = Path("~/.codex-custom-cli").expanduser().resolve(strict=False)
+    if paths.profile_dir.expanduser().resolve(strict=False) != cli_default_profile:
+        return paths
+    defaults = default_persistent_custom_profile_paths()
+    return RuntimePaths.from_roots(
+        profile_dir=Path(str(defaults["persistent_profile_root"])).expanduser()
+    )
+
+
 def _read_process_inventory_file(path: Path | None) -> tuple[dict[str, Any] | None, bool]:
     if path is None:
         return None, True
@@ -592,8 +604,9 @@ def run_custom_codex_auth_session_readiness_command(
     inventory, live = _read_process_inventory_file(
         Path(process_inventory_file).expanduser() if process_inventory_file else None
     )
+    effective_paths = paths if custom_user_data_dir else _command_default_runtime_paths(paths)
     return build_custom_codex_auth_session_readiness_packet(
-        paths=paths,
+        paths=effective_paths,
         custom_user_data_dir=custom_user_data_dir,
         process_inventory=inventory,
         process_inventory_live=live,

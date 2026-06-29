@@ -831,6 +831,8 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             context = output["hookSpecificOutput"]["additionalContext"]
             self.assertIn("router-hook auto-route-output", context)
             self.assertIn("--timeout-seconds 300", context)
+            self.assertIn("--proof-dir \"$WBP_ROUTER_PROOF_DIR\"", context)
+            self.assertIn("user-prompt-submit-router-proof", context)
             self.assertIn("must remain exactly 300", context)
             self.assertIn("must never be changed to 90", context)
             self.assertIn("WBP_ROUTER_PROMPT='<original prompt>'", context)

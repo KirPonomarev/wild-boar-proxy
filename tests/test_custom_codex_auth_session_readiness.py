@@ -16,6 +16,7 @@ from unittest import mock
 from wild_boar_proxy import custom_codex_auth_session_readiness as readiness
 from wild_boar_proxy import cli as cli_mod
 from wild_boar_proxy.core import packets
+from wild_boar_proxy.native_filesystem_probe import default_persistent_custom_profile_paths
 from wild_boar_proxy.runtime import RuntimePaths
 
 
@@ -83,6 +84,23 @@ def _process_inventory_with_wrong_user_data() -> dict[str, object]:
             "102 /Users/example/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --listen unix://sock",
         ],
         "custom_process_lines": [],
+        "default_process_lines": [],
+    }
+
+
+def _persistent_custom_process_inventory() -> dict[str, object]:
+    profile_paths = default_persistent_custom_profile_paths()
+    custom_user_data_dir = str(profile_paths["user_data_dir"])
+    app_line = (
+        "/Users/example/Applications/Codex WBP Clean.app/Contents/MacOS/Codex "
+        f"--user-data-dir={custom_user_data_dir}"
+    )
+    return {
+        "sample": [
+            f"101 {app_line}",
+            "102 /Users/example/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --listen unix://sock",
+        ],
+        "custom_process_lines": [f"101 {app_line}"],
         "default_process_lines": [],
     }
 
@@ -336,6 +354,59 @@ class CustomCodexAuthSessionReadinessTests(unittest.TestCase):
             self.assertFalse(packet["process_inventory_raw_lines_recorded"])
             self.assertIn("custom_user_data_dir_not_observed", packet["blocking_reasons"])
             self.assertNotIn(str(paths.profile_dir), json.dumps(packet, ensure_ascii=True))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_command_default_uses_persistent_custom_profile_when_profile_env_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inventory_file = root / "inventory.json"
+            inventory_file.write_text(
+                json.dumps(_persistent_custom_process_inventory()) + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {}, clear=True):
+                paths = RuntimePaths.from_env()
+                packet = readiness.run_custom_codex_auth_session_readiness_command(
+                    paths=paths,
+                    process_inventory_file=str(inventory_file),
+                    probe_hook_readiness=False,
+                    probe_account_app_server=False,
+                )
+
+            self.assertTrue(packet["wbp_clean_app_process_observed"])
+            self.assertTrue(packet["wbp_clean_app_server_process_observed"])
+            self.assertTrue(packet["expected_custom_user_data_dir_observed"])
+            self.assertNotIn("custom_user_data_dir_not_observed", packet["blocking_reasons"])
+            self.assertNotIn(str(Path("~/.codex-custom-cli").expanduser()), json.dumps(packet, ensure_ascii=True))
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_command_default_preserves_explicit_profile_env_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            explicit_profile = root / "explicit-profile"
+            paths = RuntimePaths.from_roots(profile_dir=explicit_profile)
+            inventory_file = root / "inventory.json"
+            inventory_file.write_text(
+                json.dumps(_persistent_custom_process_inventory()) + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"WBP_PROFILE_DIR": str(explicit_profile)},
+                clear=True,
+            ):
+                packet = readiness.run_custom_codex_auth_session_readiness_command(
+                    paths=paths,
+                    process_inventory_file=str(inventory_file),
+                    probe_hook_readiness=False,
+                    probe_account_app_server=False,
+                )
+
+            self.assertTrue(packet["wbp_clean_app_process_observed"])
+            self.assertTrue(packet["wbp_clean_app_server_process_observed"])
+            self.assertFalse(packet["expected_custom_user_data_dir_observed"])
+            self.assertIn("custom_user_data_dir_not_observed", packet["blocking_reasons"])
+            self.assertNotIn(str(explicit_profile), json.dumps(packet, ensure_ascii=True))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_hook_readiness_must_be_trusted(self) -> None:

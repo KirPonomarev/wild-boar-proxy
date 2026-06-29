@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,14 @@ def utc_now() -> str:
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def bounded_tail(value: str, limit: int = 4000) -> str:
@@ -246,6 +255,109 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def validate_router_proof(
+    *,
+    proof_file: Path | None,
+    expected_text: str,
+    started_after_ns: int | None,
+) -> dict[str, Any]:
+    if proof_file is None:
+        return {
+            "router_proof_required": False,
+            "router_proof_proven": False,
+            "router_proof_machine_error_code": "",
+            "router_proof_blocking_reasons": [],
+        }
+
+    proof_path = proof_file.expanduser()
+    result: dict[str, Any] = {
+        "router_proof_required": True,
+        "router_proof_proven": False,
+        "router_proof_file_path_recorded": False,
+        "router_proof_file_sha256": sha256_text(str(proof_path.resolve(strict=False))),
+        "router_proof_packet_sha256": "",
+        "router_proof_machine_error_code": "CUSTOM_PHYSICAL_ROUTER_PROOF_NOT_PROVEN",
+        "router_proof_blocking_reasons": [],
+        "router_proof_output_text_sha256": "",
+        "router_proof_output_text_recorded": False,
+    }
+    if not proof_path.is_file():
+        result["router_proof_machine_error_code"] = "CUSTOM_PHYSICAL_ROUTER_PROOF_FILE_MISSING"
+        result["router_proof_blocking_reasons"] = ["router_proof_file_missing"]
+        return result
+
+    stat = proof_path.stat()
+    if started_after_ns is not None and stat.st_mtime_ns < started_after_ns:
+        result["router_proof_machine_error_code"] = "CUSTOM_PHYSICAL_ROUTER_PROOF_FILE_STALE"
+        result["router_proof_blocking_reasons"] = ["router_proof_file_stale"]
+        return result
+
+    try:
+        packet = json.loads(proof_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        result["router_proof_machine_error_code"] = "CUSTOM_PHYSICAL_ROUTER_PROOF_INVALID_JSON"
+        result["router_proof_blocking_reasons"] = ["router_proof_invalid_json"]
+        return result
+    if not isinstance(packet, dict):
+        result["router_proof_machine_error_code"] = "CUSTOM_PHYSICAL_ROUTER_PROOF_NOT_OBJECT"
+        result["router_proof_blocking_reasons"] = ["router_proof_not_object"]
+        return result
+
+    result["router_proof_packet_sha256"] = sha256_file(proof_path)
+    output_text = str(packet.get("output_text") or "")
+    result["router_proof_output_text_sha256"] = sha256_text(output_text)
+    visible_output_allowed = bool(
+        packet.get("exact_plain_reply_matched") is True
+        or packet.get("output_passthrough_required") is True
+        or packet.get("repo_bridge_evidence_response_proven") is True
+    )
+    failures: list[str] = []
+    expected_fields = {
+        "packet_kind": "wbp_api_agent_auto_router",
+        "status": "ok",
+        "machine_error_code": "OK",
+    }
+    for key, expected_value in expected_fields.items():
+        if packet.get(key) != expected_value:
+            failures.append(f"router_proof_{key}_not_expected")
+    for key in (
+        "auto_router_proven",
+        "direct_reply_proven",
+        "api_route_selected",
+        "direct_reply_selected",
+    ):
+        if packet.get(key) is not True:
+            failures.append(f"router_proof_{key}_not_true")
+    for key in (
+        "fallback_used",
+        "local_imitation_used",
+        "tools_wbp_dip_invoked",
+        "dip_run_invoked",
+        "codex_exec_invoked",
+        "native_codex_subagent_used_as_dip",
+        "secret_value_exposed",
+    ):
+        if packet.get(key) is not False:
+            failures.append(f"router_proof_{key}_not_false")
+    if output_text != expected_text:
+        failures.append("router_proof_output_text_not_expected")
+    if not visible_output_allowed:
+        failures.append("router_proof_visible_output_not_allowed")
+
+    if failures:
+        result["router_proof_blocking_reasons"] = failures
+        return result
+
+    result.update(
+        {
+            "router_proof_proven": True,
+            "router_proof_machine_error_code": "OK",
+            "router_proof_blocking_reasons": [],
+        }
+    )
+    return result
 
 
 NODE_RUNNER = r"""
@@ -447,6 +559,8 @@ def build_packet(
     evidence_dir: Path,
     cdp_url: str,
     owner_proof: dict[str, Any],
+    router_proof_file: Path | None = None,
+    router_proof_started_after_ns: int | None = None,
 ) -> dict[str, Any]:
     before_text = str(raw.get("before_text") or "")
     after_text = str(raw.get("after_text") or "")
@@ -477,13 +591,33 @@ def build_packet(
         mode=mode,
         run_active=raw.get("run_active") is True,
     ).as_packet()
-    ok = observation["status"] == "ok"
+    router_proof = validate_router_proof(
+        proof_file=router_proof_file,
+        expected_text=expected_text,
+        started_after_ns=router_proof_started_after_ns,
+    )
+    router_proof_required = router_proof["router_proof_required"] is True
+    router_proof_ok = (
+        not router_proof_required or router_proof["router_proof_proven"] is True
+    )
+    ok = observation["status"] == "ok" and router_proof_ok
+    machine_error_code = str(observation["machine_error_code"])
+    if observation["status"] == "ok" and not router_proof_ok:
+        machine_error_code = str(router_proof["router_proof_machine_error_code"])
+    blocking_reasons: list[str] = []
+    if observation["status"] != "ok":
+        blocking_reasons.append(str(observation["machine_error_code"]))
+    if router_proof_required and not router_proof_ok:
+        blocking_reasons.extend(
+            str(reason)
+            for reason in router_proof.get("router_proof_blocking_reasons", [])
+        )
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_physical_smoke",
         "captured_at_utc": utc_now(),
         "status": "ok" if ok else "blocked",
-        "machine_error_code": observation["machine_error_code"],
+        "machine_error_code": machine_error_code,
         "prompt_sha256": sha256_text(prompt),
         "prompt_text_recorded": False,
         "expected_text": expected_text,
@@ -503,15 +637,19 @@ def build_packet(
         "elapsed_ms": raw.get("elapsed_ms"),
         "screenshot_path": raw.get("screenshot_path", ""),
         "observer": observation,
+        "router_proof": router_proof,
         "custom_response_exact_token_observed": observation["expected_text_observed"],
-        "custom_response_bound_to_request": observation["custom_response_bound_to_request"],
+        "custom_response_bound_to_request": bool(
+            observation["custom_response_bound_to_request"] and router_proof_ok
+        ),
         "false_green_blocked": observation["machine_error_code"]
         in {
             "CUSTOM_PHYSICAL_PROMPT_ECHO_ONLY",
             "CUSTOM_PHYSICAL_COMMAND_ECHO_ONLY",
             "CUSTOM_PHYSICAL_PROMPT_SPLIT_INTO_RECOMMENDATIONS",
-        },
-        "blocking_reasons": [] if ok else [str(observation["machine_error_code"])],
+        }
+        or bool(router_proof_required and not router_proof_ok),
+        "blocking_reasons": [] if ok else blocking_reasons,
     }
 
 
@@ -538,6 +676,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--node-bin", default="")
     parser.add_argument("--node-modules", default="")
     parser.add_argument("--allow-while-active", action="store_true")
+    parser.add_argument(
+        "--required-router-proof-file",
+        default="",
+        help="Require a fresh auto-route-output proof packet written by this UI turn.",
+    )
     parser.add_argument(
         "--profile-dir",
         default=os.environ.get("WBP_PROFILE_DIR", str(DEFAULT_PROFILE_DIR)),
@@ -596,6 +739,12 @@ def main() -> int:
         write_json(evidence_dir / "packet.json", packet)
         print(json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True))
         return 1
+    router_proof_file = (
+        Path(args.required_router_proof_file).expanduser()
+        if args.required_router_proof_file
+        else None
+    )
+    router_proof_started_after_ns = time.time_ns() if router_proof_file else None
     raw = run_node_submitter(
         node_bin=node_bin,
         node_modules=node_modules,
@@ -611,6 +760,8 @@ def main() -> int:
         evidence_dir=evidence_dir,
         cdp_url=args.cdp_url,
         owner_proof=owner_proof,
+        router_proof_file=router_proof_file,
+        router_proof_started_after_ns=router_proof_started_after_ns,
     )
     write_json(evidence_dir / "packet.json", packet)
     print(json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True))

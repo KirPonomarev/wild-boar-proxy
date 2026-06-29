@@ -1,0 +1,85 @@
+{
+  "contour": "targeted_fix_custom_readiness_and_gpt_api_proof",
+  "notes": [
+    "readiness no longer reports process-not-live for live WBP Clean persistent profile",
+    "current readiness remains API_KEY_ONLY because this profile is not a proven ChatGPT UI session",
+    "physical GPT->API proof uses canonical natural delegation prompt and proof-dir sidecar"
+  ],
+  "physical_custom_runs": [
+    {
+      "evidence": "physical-gpt-api-ui/packet.json",
+      "id": "gpt_api_self_claim_guard",
+      "machine_error_code": "CUSTOM_PHYSICAL_ROUTER_PROOF_FILE_MISSING",
+      "status": "blocked"
+    },
+    {
+      "evidence": "physical-gpt-api-ui-v2/packet.json",
+      "id": "gpt_api_shell_prompt_without_hook",
+      "machine_error_code": "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED",
+      "status": "blocked"
+    },
+    {
+      "evidence": "physical-gpt-api-hook-ui/packet.json",
+      "id": "gpt_api_canonical_hook_delegation",
+      "machine_error_code": "OK",
+      "status": "ok"
+    }
+  ],
+  "physical_gpt_api_hook_machine_error_code": "OK",
+  "physical_gpt_api_hook_status": "ok",
+  "physical_gpt_api_router_proof_proven": true,
+  "product_ready_claimed": false,
+  "readiness_api_key_only_current_state": true,
+  "readiness_current_machine_error_code": "WBP_CUSTOM_CODEX_API_KEY_ONLY",
+  "readiness_false_negative_fixed": true,
+  "router_auto_router_proven": true,
+  "router_direct_reply_proven": true,
+  "router_output_text_recorded": true,
+  "router_packet_machine_error_code": "OK",
+  "router_packet_status": "ok",
+  "schema_version": 1,
+  "secret_value_exposed": false,
+  "status": "ok",
+  "tests_run": [
+    {
+      "command": "python3 -m pytest tests/test_custom_codex_auth_session_readiness.py tests/test_api_agent_auto_router.py tests/test_custom_codex_physical_smoke.py tests/test_custom_codex_physical_observer.py -q",
+      "result": "68 passed, 11 subtests passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m pytest tests/test_user_prompt_submit_hook_producer.py -q",
+      "result": "21 passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m pytest tests/test_api_agent_auto_router.py tests/test_user_prompt_submit_hook_producer.py tests/test_custom_codex_physical_smoke.py tests/test_custom_codex_auth_session_readiness.py -q",
+      "result": "81 passed, 11 subtests passed",
+      "status": "passed"
+    },
+    {
+      "command": "make test-custom-stability",
+      "result": "27 passed, 5 subtests passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m pytest tests/test_wbp_dip_tool.py -q",
+      "result": "134 passed, 2 subtests passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m pytest tests/test_cli.py -q",
+      "result": "510 passed, 123 subtests passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m compileall -q wild_boar_proxy tools tests/test_api_agent_auto_router.py tests/test_user_prompt_submit_hook_producer.py tests/test_custom_codex_physical_smoke.py tests/test_custom_codex_auth_session_readiness.py",
+      "result": "exit 0",
+      "status": "passed"
+    },
+    {
+      "command": "python3 tools/check_repo_hygiene.py --staged-only && python3 tools/check_closeout_resilience.py && git diff --check",
+      "result": "exit 0",
+      "status": "passed"
+    }
+  ]
+}
