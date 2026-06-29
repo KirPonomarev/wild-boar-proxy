@@ -1,0 +1,10 @@
+{
+  "api_label_equals_codex_high_or_extra_high": false,
+  "captured_at_utc": "2026-06-29T22:25:15.708049Z",
+  "label_coexistence_implies_comparability": false,
+  "metadata_badge_proves_underlying_capability": false,
+  "packet_kind": "intelligence_parity_non_claims",
+  "preserved_native_label_proves_internal_ranking_semantics": false,
+  "provider_declared_intelligence_equals_measured_intelligence": false,
+  "status": "ok"
+}

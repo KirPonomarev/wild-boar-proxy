@@ -35,6 +35,28 @@ def _router_proof_packet(expected: str) -> dict[str, object]:
     }
 
 
+def _router_fail_closed_packet(machine_error_code: str) -> dict[str, object]:
+    return {
+        "packet_kind": "wbp_api_agent_auto_router",
+        "status": "error",
+        "machine_error_code": machine_error_code,
+        "auto_router_proven": False,
+        "auto_router_fail_closed": True,
+        "direct_reply_proven": False,
+        "api_route_selected": False,
+        "direct_reply_selected": False,
+        "output_text": "",
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "tools_wbp_dip_invoked": False,
+        "dip_run_invoked": False,
+        "codex_exec_invoked": False,
+        "native_codex_subagent_used_as_dip": False,
+        "secret_value_exposed": False,
+        "blocking_reasons": ["unknown_addressed_alias"],
+    }
+
+
 class CustomCodexPhysicalSmokeTests(unittest.TestCase):
     def test_owner_proof_accepts_single_main_process_with_shared_helper_fd(self) -> None:
         profile_dir = Path("/tmp/wbp-profile")
@@ -188,6 +210,47 @@ class CustomCodexPhysicalSmokeTests(unittest.TestCase):
         self.assertTrue(packet["custom_response_bound_to_request"])
         self.assertTrue(packet["router_proof"]["router_proof_proven"])
         self.assertEqual(packet["router_proof"]["router_proof_machine_error_code"], "OK")
+        self.assertTrue(packet["router_proof"]["router_proof_evidence_copy_recorded"])
+        self.assertEqual(packet["router_proof"]["router_proof_evidence_copy"], "router-proof.packet.json")
+
+    def test_router_proof_requirement_accepts_fail_closed_unknown_alias_packet(self) -> None:
+        expected = "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS"
+        prompt = "DIPP: ответь ровно SHOULD_NOT_ROUTE"
+        raw = {
+            "status": "ok",
+            "before_text": "",
+            "after_text": f"{prompt}\nРаботал на протяжении 1s\n{expected}",
+            "run_active": False,
+            "prompt_submitted": True,
+            "input_text_insert_succeeded": True,
+            "insertion_strategy_used": "insertText",
+            "elapsed_ms": 1000,
+            "screenshot_path": "",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proof_file = Path(temp_dir) / "router-proof.json"
+            proof_file.write_text(
+                json.dumps(_router_fail_closed_packet(expected)),
+                encoding="utf-8",
+            )
+            packet = smoke.build_packet(
+                raw=raw,
+                prompt=prompt,
+                expected_text=expected,
+                mode="fail_closed",
+                evidence_dir=Path(temp_dir),
+                cdp_url="http://127.0.0.1:9223",
+                owner_proof={"status": "ok", "machine_error_code": "OK"},
+                router_proof_file=proof_file,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["router_proof"]["router_proof_proven"])
+        self.assertEqual(packet["router_proof"]["router_proof_machine_error_code"], "OK")
+        self.assertTrue(packet["router_proof"]["router_proof_evidence_copy_recorded"])
+        self.assertEqual(packet["router_proof"]["router_proof_evidence_copy"], "router-proof.packet.json")
 
 
 if __name__ == "__main__":

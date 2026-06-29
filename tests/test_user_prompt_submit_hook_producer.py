@@ -891,6 +891,11 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                 runtime_context=runtime_context,
                 runtime_context_file=context_file,
             )
+            agent1_exact_context = producer._user_prompt_submit_additional_context(
+                prompt_text="Agent   1: ответь ровно WBP_PRIMARY_AGENT1_OK",
+                runtime_context=runtime_context,
+                runtime_context_file=context_file,
+            )
             dip_context = producer._user_prompt_submit_additional_context(
                 prompt_text="DIP: ответь ровно WBP_API_OK",
                 runtime_context=runtime_context,
@@ -915,6 +920,9 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
         self.assertIn("Ignore the leading alias prefix", codex_exact_context)
         self.assertIn("return only the requested exact content", codex_exact_context)
         self.assertNotIn("router-hook auto-route-output", codex_exact_context)
+        self.assertIn("WBP PRIMARY EXACT ALIAS CONTEXT", agent1_exact_context)
+        self.assertIn("native ChatGPT lane", agent1_exact_context)
+        self.assertNotIn("router-hook auto-route-output", agent1_exact_context)
         self.assertIn("WBP ROUTER HARD OVERRIDE", dip_context)
         self.assertIn("router-hook auto-route-output", dip_context)
         self.assertIn("router-hook auto-route-output", codex_to_dip_context)

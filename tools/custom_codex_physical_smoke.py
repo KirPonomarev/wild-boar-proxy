@@ -307,29 +307,47 @@ def validate_router_proof(
 
     result["router_proof_packet_sha256"] = sha256_file(proof_path)
     output_text = str(packet.get("output_text") or "")
+    machine_error_code = str(packet.get("machine_error_code") or "")
     result["router_proof_output_text_sha256"] = sha256_text(output_text)
+    fail_closed_allowed = bool(
+        packet.get("packet_kind") == "wbp_api_agent_auto_router"
+        and packet.get("status") == "error"
+        and machine_error_code == expected_text
+        and packet.get("auto_router_fail_closed") is True
+    )
     visible_output_allowed = bool(
         packet.get("exact_plain_reply_matched") is True
         or packet.get("output_passthrough_required") is True
         or packet.get("repo_bridge_evidence_response_proven") is True
     )
     failures: list[str] = []
-    expected_fields = {
-        "packet_kind": "wbp_api_agent_auto_router",
-        "status": "ok",
-        "machine_error_code": "OK",
-    }
+    expected_fields = {"packet_kind": "wbp_api_agent_auto_router"}
+    if not fail_closed_allowed:
+        expected_fields.update(
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+            }
+        )
     for key, expected_value in expected_fields.items():
         if packet.get(key) != expected_value:
             failures.append(f"router_proof_{key}_not_expected")
-    for key in (
-        "auto_router_proven",
-        "direct_reply_proven",
-        "api_route_selected",
-        "direct_reply_selected",
-    ):
-        if packet.get(key) is not True:
-            failures.append(f"router_proof_{key}_not_true")
+    if fail_closed_allowed:
+        if packet.get("auto_router_fail_closed") is not True:
+            failures.append("router_proof_auto_router_fail_closed_not_true")
+        if packet.get("direct_reply_proven") is not False:
+            failures.append("router_proof_direct_reply_proven_not_false")
+        if packet.get("api_route_selected") is not False:
+            failures.append("router_proof_api_route_selected_not_false")
+    else:
+        for key in (
+            "auto_router_proven",
+            "direct_reply_proven",
+            "api_route_selected",
+            "direct_reply_selected",
+        ):
+            if packet.get(key) is not True:
+                failures.append(f"router_proof_{key}_not_true")
     for key in (
         "fallback_used",
         "local_imitation_used",
@@ -341,9 +359,9 @@ def validate_router_proof(
     ):
         if packet.get(key) is not False:
             failures.append(f"router_proof_{key}_not_false")
-    if output_text != expected_text:
+    if not fail_closed_allowed and output_text != expected_text:
         failures.append("router_proof_output_text_not_expected")
-    if not visible_output_allowed:
+    if not (visible_output_allowed or fail_closed_allowed):
         failures.append("router_proof_visible_output_not_allowed")
 
     if failures:
@@ -358,6 +376,36 @@ def validate_router_proof(
         }
     )
     return result
+
+
+def copy_router_proof_evidence(
+    *,
+    proof_file: Path | None,
+    evidence_dir: Path,
+    router_proof: dict[str, Any],
+) -> dict[str, Any]:
+    if router_proof.get("router_proof_proven") is not True or proof_file is None:
+        return {
+            "router_proof_evidence_copy_recorded": False,
+            "router_proof_evidence_copy": "",
+            "router_proof_evidence_copy_sha256": "",
+        }
+    try:
+        proof_path = proof_file.expanduser()
+        copy_path = evidence_dir / "router-proof.packet.json"
+        copy_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(proof_path, copy_path)
+    except OSError:
+        return {
+            "router_proof_evidence_copy_recorded": False,
+            "router_proof_evidence_copy": "",
+            "router_proof_evidence_copy_sha256": "",
+        }
+    return {
+        "router_proof_evidence_copy_recorded": True,
+        "router_proof_evidence_copy": copy_path.name,
+        "router_proof_evidence_copy_sha256": sha256_file(copy_path),
+    }
 
 
 NODE_RUNNER = r"""
@@ -595,6 +643,13 @@ def build_packet(
         proof_file=router_proof_file,
         expected_text=expected_text,
         started_after_ns=router_proof_started_after_ns,
+    )
+    router_proof.update(
+        copy_router_proof_evidence(
+            proof_file=router_proof_file,
+            evidence_dir=evidence_dir,
+            router_proof=router_proof,
+        )
     )
     router_proof_required = router_proof["router_proof_required"] is True
     router_proof_ok = (

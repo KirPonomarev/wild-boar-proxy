@@ -24,7 +24,7 @@ from typing import Any
 
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets
-from .custom_agent_bindings import API_ROUTE_LANE, PRIMARY_CHATGPT_LANE
+from .custom_agent_bindings import API_ROUTE_LANE, PRIMARY_CHATGPT_LANE, _canonical_alias_key
 from .natural_intent_contract import PARSER_STATUS_MATCHED, parse_natural_alias_intent
 from .real_custom_codex_hook_proof import (
     ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
@@ -1297,18 +1297,18 @@ def _runtime_aliases(runtime_context: Mapping[str, Any]) -> set[str]:
             if isinstance(raw_aliases, list):
                 aliases.update(_safe_text(alias, limit=80) for alias in raw_aliases)
             aliases.add(_safe_text(binding.get("display_name"), limit=80))
-    return {alias.casefold() for alias in aliases if alias}
+    return {_canonical_alias_key(alias) for alias in aliases if alias}
 
 
 def _runtime_alias_lane(runtime_context: Mapping[str, Any], label: str) -> str:
-    normalized = _safe_text(label, limit=80).casefold()
+    normalized = _canonical_alias_key(_safe_text(label, limit=80))
     if not normalized:
         return ""
     alias_to_agent_id = runtime_context.get("alias_to_agent_id")
     agent_id = ""
     if isinstance(alias_to_agent_id, Mapping):
         for alias, candidate_agent_id in alias_to_agent_id.items():
-            if _safe_text(alias, limit=80).casefold() == normalized:
+            if _canonical_alias_key(_safe_text(alias, limit=80)) == normalized:
                 agent_id = _safe_text(candidate_agent_id, limit=80).casefold()
                 break
     bindings = runtime_context.get("agent_bindings")
@@ -1342,7 +1342,7 @@ def _user_prompt_submit_context_kind(
     if lane in {API_ROUTE_LANE, PRIMARY_CHATGPT_LANE}:
         return lane
     aliases = _runtime_aliases(runtime_context)
-    if label.casefold() in aliases or _leading_label_looks_like_addressed_alias(label):
+    if _canonical_alias_key(label) in aliases or _leading_label_looks_like_addressed_alias(label):
         return API_ROUTE_LANE
     return ""
 
