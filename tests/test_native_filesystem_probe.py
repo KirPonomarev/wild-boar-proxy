@@ -4622,6 +4622,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             layout = native_fs_probe.create_native_probe_layout(root)
+            mirror_context_path = root / "owner-profile" / "wbp-agent-runtime-context.json"
             context = {
                 "packet_kind": "codex_custom_native_agent_runtime_context",
                 "primary_aliases": ["Codex", "Agent 1"],
@@ -4661,12 +4662,15 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 auth_command_path=root / "auth.py",
                 local_token="local-token",
                 agent_runtime_context=context,
+                extra_agent_runtime_context_paths=[mirror_context_path],
             )
 
             context_path = layout.profile_dir / "wbp-agent-runtime-context.json"
             written = json.loads(context_path.read_text(encoding="utf-8"))
+            mirror_written = json.loads(mirror_context_path.read_text(encoding="utf-8"))
 
         self.assertTrue(packet["agent_runtime_context_written"])
+        self.assertEqual(packet["agent_runtime_context_extra_write_count"], 1)
         self.assertTrue(packet["native_alias_context_written"])
         self.assertTrue(packet["context_file_present"])
         self.assertTrue(packet["context_file_sha256_present"])
@@ -4675,6 +4679,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             "wbp-agent-runtime-context.json",
         )
         self.assertEqual(written["api_model_id"], "wbp-deepseek-chat")
+        self.assertEqual(mirror_written, written)
         self.assertEqual(written["coding_aliases"], ["DIP", "Agent 2"])
         self.assertEqual(written["forbidden_stale_route_ids"], ["wbp-deepseek-v3"])
         self.assertTrue(
@@ -4745,6 +4750,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             auth_wrapper = (
                 layout.profile_dir / "managed" / "bin" / "wbp-codex-auth-command"
             )
+            auth_wrapper_text = auth_wrapper.read_text(encoding="utf-8")
             stable_config = (
                 layout.profile_dir / "managed" / "stable-runtime-config.generated.yaml"
             )
@@ -4770,6 +4776,8 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn(str(auth_wrapper), config_text)
         self.assertTrue(auth_wrapper_is_file)
         self.assertTrue(auth_wrapper_is_executable)
+        self.assertIn("export WBP_STABLE_CONFIG=", auth_wrapper_text)
+        self.assertIn(".codex-custom-cli/managed/stable-runtime-config.generated.yaml", auth_wrapper_text)
         self.assertTrue(stable_config_is_file)
         self.assertIn("local-token", stable_config_text)
         self.assertNotIn("old-model", config_text)

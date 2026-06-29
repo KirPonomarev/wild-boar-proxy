@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from wild_boar_proxy.process_runner import (
     PROCESS_TIMEOUT,
     BoundedProcessResult,
 )
+from wild_boar_proxy import state_store
 from wild_boar_proxy.runtime import RuntimePaths
 from wild_boar_proxy import sandbox_owner_helpers as helpers
 
@@ -377,6 +379,125 @@ class SandboxOwnerHelpersTests(unittest.TestCase):
         self.assertIn("stderr_passthrough=sys.stderr", source)
         self.assertNotIn("subprocess.run", calls)
         self.assertNotIn("Popen", calls)
+
+    def test_save_registry_materializes_required_minimal_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+
+            helpers.save_registry(paths, {})
+
+            payload = json.loads(paths.registry_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["schema_version"], helpers.SCHEMA_VERSION)
+        self.assertEqual(payload["version"], helpers.SCHEMA_VERSION)
+        self.assertEqual(payload["stable_default_backend_id"], "")
+        self.assertEqual(payload["backends"], [])
+        self.assertEqual(
+            payload["pool_policy"],
+            {"active_target": 0, "active_min": 0, "reserve_target": 0},
+        )
+        self.assertTrue(payload["updated_at"])
+
+    def test_save_state_rejects_incomplete_truth_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            valid_state = {
+                "schema_version": helpers.SCHEMA_VERSION,
+                "version": helpers.SCHEMA_VERSION,
+                "status": "unknown",
+                "effective_mode": "stable",
+                "last_sync_at": "2026-06-27T00:00:00+00:00",
+                "last_error": "",
+                "selected_backend_ids": [],
+                "managed_port": helpers.DEFAULT_MANAGED_PORT,
+                "current_proxy_url": "",
+                "stable_default_backend_id": "",
+            }
+            paths.state_file.write_text(
+                json.dumps(valid_state, sort_keys=True),
+                encoding="utf-8",
+            )
+            before = paths.state_file.read_text(encoding="utf-8")
+
+            with self.assertRaises(state_store.StateStoreError) as raised:
+                helpers.save_state(
+                    paths,
+                    {
+                        "schema_version": helpers.SCHEMA_VERSION,
+                        "version": helpers.SCHEMA_VERSION,
+                        "status": "unknown",
+                        "effective_mode": "stable",
+                        "last_sync_at": "",
+                        "last_error": "",
+                        "selected_backend_ids": [],
+                        "current_proxy_url": "",
+                        "stable_default_backend_id": "",
+                    },
+                )
+            after = paths.state_file.read_text(encoding="utf-8")
+
+            self.assertEqual(
+                raised.exception.machine_error_code,
+                state_store.STATE_PAYLOAD_INVALID,
+            )
+            self.assertEqual(after, before)
+
+    def test_save_registry_rejects_backend_missing_required_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            helpers.save_registry(paths, {})
+            before = paths.registry_file.read_text(encoding="utf-8")
+
+            with self.assertRaises(state_store.StateStoreError) as raised:
+                helpers.save_registry(
+                    paths,
+                    {
+                        "stable_default_backend_id": "backend-a",
+                        "backends": [{"id": "backend-a"}],
+                        "pool_policy": {
+                            "active_target": 0,
+                            "active_min": 0,
+                            "reserve_target": 0,
+                        },
+                    },
+                )
+            after = paths.registry_file.read_text(encoding="utf-8")
+
+            self.assertEqual(
+                raised.exception.machine_error_code,
+                state_store.STATE_PAYLOAD_INVALID,
+            )
+            self.assertEqual(after, before)
+
+    def test_cmd_sync_materializes_required_supervisor_state_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            helpers.save_registry(paths, {})
+
+            exit_code = helpers.cmd_sync(paths, argparse.Namespace())
+            payload = json.loads(paths.state_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["schema_version"], helpers.SCHEMA_VERSION)
+        self.assertEqual(payload["version"], helpers.SCHEMA_VERSION)
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["managed_port"], helpers.DEFAULT_MANAGED_PORT)
+        self.assertEqual(payload["selected_backend_ids"], [])
+        self.assertEqual(payload["stable_default_backend_id"], "")
+
+    def test_cmd_accounts_status_does_not_materialize_supervisor_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = _runtime_paths(Path(temp_dir))
+            helpers.save_registry(paths, {})
+            stdout = io.StringIO()
+
+            with mock.patch("sys.stdout", stdout):
+                exit_code = helpers.cmd_accounts_status(paths, argparse.Namespace())
+            state_exists = paths.state_file.exists()
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(state_exists)
+        self.assertIn("Managed summary", stdout.getvalue())
 
 
 if __name__ == "__main__":

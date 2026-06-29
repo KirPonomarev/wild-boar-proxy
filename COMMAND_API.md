@@ -79,6 +79,13 @@ runtime truth, and chooses exactly one lane:
 - Prompts with no addressed runtime alias pass back to the native GPT lane.
 - Unknown or ambiguous addressed aliases fail closed.
 
+Callers must treat a short agent-like leading label followed by `:` as an
+addressed-alias prompt even when the label is unknown or misspelled. Examples
+include `DIP:`, `DIPP:`, `Agent 2:`, `Ghost:`, and custom single-token Latin
+agent labels. The caller must still invoke `auto-route` with the original prompt;
+it must not satisfy the request locally before the router has either admitted the
+alias or produced the fail-closed packet.
+
 `auto-route` is the short path that prevents wrapper shopping. It must not
 invoke `codex exec`, `tools/wbp_dip`, `dip run`, ordinary Codex subagents,
 fallback chains, or local imitation. Required success fields include
@@ -101,10 +108,26 @@ Callers must not manually pre-read or summarize
 router owns that read; manual context inspection is only for diagnostics of the
 router or runtime-context file itself.
 
+Callers must pass the original bounded operator prompt into `auto-route`,
+including the leading addressed alias such as `DIP:` or `Agent 2:`. They must
+not strip or rewrite that alias before routing; doing so changes an API-lane
+command into a native ChatGPT passthrough.
+
 For direct exact-answer prompts such as `DIP: ответь ровно ...`, callers should
 not narrate the routing step. They should call `auto-route`, then display only
-packet `output_text` when `status=ok`, `auto_router_proven=true`, and
-`exact_plain_reply_matched=true`.
+packet `output_text` when `status=ok`, `auto_router_proven=true`, and either
+`exact_plain_reply_matched=true` or `output_passthrough_required=true`.
+`output_passthrough_required=true` is the display contract for exact JSON
+requests such as `ответь ровно JSON ...`; callers must not add acknowledgements,
+summaries, code fences, Markdown, or extra prose around `output_text`.
+
+For exact-answer prompts addressed to the ChatGPT/primary lane, such as
+`Codex: answer exactly ...` or an operator-renamed primary alias, callers should
+preserve the native GPT lane. UserPromptSubmit may add primary-alias context,
+but it must not turn this into an API-route request or local deterministic
+imitation. Physical Custom proof for this case requires the visible native GPT
+response itself to match the requested exact answer. Non-exact primary-alias
+prompts continue to pass back to the native GPT lane.
 
 Canonical auto route:
 
@@ -113,6 +136,27 @@ ${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route \
   --prompt "DIP: ответь коротко." \
   --json
 ```
+
+Canonical visible-output route for Custom UI API-lane exact prompts and
+controlled repo-bridge evidence output:
+
+```sh
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output \
+  --prompt-file - \
+  --repo-bridge auto \
+  --work-mode full
+```
+
+If the selected alias is the ChatGPT/primary lane, this command must not
+synthesize an answer from the prompt. It should return a machine-readable
+"output not available" code for visible-output callers; the physical Custom
+response must come from the native GPT lane itself.
+
+For API-lane aliases this command may print `output_text` only when the routed
+packet proves one of: `exact_plain_reply_matched=true`,
+`output_passthrough_required=true`, or
+`repo_bridge_evidence_response_proven=true`. A merely available non-exact
+direct reply text is not enough for visible output.
 
 `router-hook direct-reply --prompt <text> --json` is the canonical short
 lower-level API-agent reply surface. It loads
@@ -128,6 +172,10 @@ ordinary Codex subagents, wrapper substitution, fallback chains, or local
 imitation. It must fail closed if the alias is missing, resolves to the
 ChatGPT/primary lane, uses a route outside `allowed_api_route_ids`, or returns a
 repo-tool JSON call as the final answer.
+
+The phrase `repo bridge` inside an ordinary addressed prompt is not permission
+to switch to `tools/wbp_dip`; it is interpreted by the canonical API-agent route
+as a request for its controlled repository bridge.
 
 By default, `direct-reply` runs with `--work-mode standard` and `--repo-bridge off`.
 That keeps normal direct answers short-path and no-write. Use

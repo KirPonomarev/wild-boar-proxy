@@ -32,6 +32,7 @@ TRUTH_PATH_ATTRS = {
 }
 
 WRITE_HELPERS = {
+    "write_json",
     "write_json_atomic",
     "write_text_atomic",
     "write_toml_string_atomic",
@@ -177,24 +178,17 @@ STATE_STORE_ENTRY_INVENTORY = frozenset(
             MUTATE,
         ),
         InventoryRow(
-            RUNTIME,
-            "_run_legacy_import_impl",
-            "runtime-effective-mode.txt",
-            "write_text_atomic",
-            MUTATE,
-        ),
-        InventoryRow(
             SANDBOX_OWNER_HELPERS,
             "save_registry",
             "backend-registry.json",
-            "write_json_atomic",
+            "write_json",
             MUTATE,
         ),
         InventoryRow(
             SANDBOX_OWNER_HELPERS,
             "save_state",
             "supervisor-state.json",
-            "write_json_atomic",
+            "write_json",
             MUTATE,
         ),
         InventoryRow(

@@ -26,7 +26,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import process_runner as _process_runner
 from . import (
@@ -134,6 +134,7 @@ SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
 ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
 BACKEND_REGISTRY_SCHEMA_VERSION = 2
+SUPERVISOR_STATE_SCHEMA_VERSION = 2
 RUNTIME_LOCK_CARRIER_SCHEMA_VERSION = 1
 RUNTIME_LOCK_CARRIER_KIND = "runtime_lock_owner_metadata"
 VALID_BACKEND_REGISTRY_POOLS = {"active", "reserve", "retired"}
@@ -754,8 +755,256 @@ def write_executable_text_atomic(path: Path, value: str) -> None:
     write_text_atomic(path, value, mode=0o755)
 
 
-def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    write_text_atomic(path, json.dumps(payload, indent=2, ensure_ascii=False))
+def write_json_atomic(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    expected_schema_version: int | None = None,
+    validator: Callable[[dict[str, Any]], object] | None = None,
+) -> None:
+    state_store.write_json(
+        path,
+        payload,
+        expected_schema_version=expected_schema_version,
+        validator=validator,
+        trailing_newline=True,
+    )
+
+
+def _require_schema_version(
+    payload: dict[str, Any],
+    expected_schema_version: int,
+    *,
+    surface_name: str,
+) -> None:
+    version = payload.get("schema_version")
+    if "schema_version" not in payload:
+        raise state_store.StateStoreError(
+            f"{surface_name} is missing schema_version.",
+            machine_error_code=state_store.STATE_SCHEMA_MISSING,
+        )
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != expected_schema_version
+    ):
+        raise state_store.StateStoreError(
+            f"{surface_name} schema_version is unsupported.",
+            machine_error_code=state_store.STATE_SCHEMA_UNSUPPORTED,
+        )
+
+
+def _require_string_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+    allow_empty: bool = False,
+) -> None:
+    value = payload.get(field_name)
+    if not isinstance(value, str):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    if not allow_empty and not value.strip():
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_present_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    if field_name not in payload:
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_int_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    value = payload.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_list_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    value = payload.get(field_name)
+    if not isinstance(value, list):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_dict_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> dict[str, Any]:
+    value = payload.get(field_name)
+    if not isinstance(value, dict):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    return value
+
+
+def _validate_backend_registry_backend_entry(entry: object, *, index: int) -> None:
+    if not isinstance(entry, dict):
+        raise state_store.StateStoreError(
+            f"backend-registry.json backend entry {index} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    surface_name = f"backend-registry.json.backends[{index}]"
+    _require_string_field(entry, "id", surface_name=surface_name)
+    _require_string_field(entry, "label", surface_name=surface_name)
+    _require_string_field(entry, "pool", surface_name=surface_name)
+    _require_string_field(entry, "status", surface_name=surface_name)
+    _require_string_field(entry, "auth_ref", surface_name=surface_name)
+    _require_string_field(
+        entry,
+        "last_error",
+        surface_name=surface_name,
+        allow_empty=True,
+    )
+    _require_string_field(
+        entry,
+        "notes",
+        surface_name=surface_name,
+        allow_empty=True,
+    )
+    _require_int_field(entry, "fail_count", surface_name=surface_name)
+    _require_int_field(entry, "success_count", surface_name=surface_name)
+    if not isinstance(entry.get("manual_hold"), bool):
+        raise state_store.StateStoreError(
+            f"{surface_name} field manual_hold is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_present_field(entry, "last_success", surface_name=surface_name)
+    _require_present_field(entry, "cooldown_until", surface_name=surface_name)
+
+
+def _validate_runtime_registry_payload(payload: dict[str, Any]) -> None:
+    _require_schema_version(
+        payload,
+        BACKEND_REGISTRY_SCHEMA_VERSION,
+        surface_name="backend-registry.json",
+    )
+    if "version" not in payload:
+        raise state_store.StateStoreError(
+            "backend-registry.json field version is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_string_field(
+        payload,
+        "updated_at",
+        surface_name="backend-registry.json",
+    )
+    _require_string_field(
+        payload,
+        "stable_default_backend_id",
+        surface_name="backend-registry.json",
+        allow_empty=True,
+    )
+    backends = payload.get("backends")
+    if not isinstance(backends, list):
+        raise state_store.StateStoreError(
+            "backend-registry.json field backends is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    for index, backend in enumerate(backends):
+        _validate_backend_registry_backend_entry(backend, index=index)
+    pool_policy = _require_dict_field(
+        payload,
+        "pool_policy",
+        surface_name="backend-registry.json",
+    )
+    for field_name in ("active_min", "active_target", "reserve_target"):
+        _require_int_field(
+            pool_policy,
+            field_name,
+            surface_name="backend-registry.json.pool_policy",
+        )
+
+
+def _validate_runtime_state_payload(payload: dict[str, Any]) -> None:
+    _require_schema_version(
+        payload,
+        SUPERVISOR_STATE_SCHEMA_VERSION,
+        surface_name="supervisor-state.json",
+    )
+    if "version" not in payload:
+        raise state_store.StateStoreError(
+            "supervisor-state.json field version is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_string_field(payload, "status", surface_name="supervisor-state.json")
+    _require_string_field(
+        payload,
+        "effective_mode",
+        surface_name="supervisor-state.json",
+    )
+    _require_string_field(
+        payload,
+        "last_sync_at",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_string_field(
+        payload,
+        "last_error",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_list_field(
+        payload,
+        "selected_backend_ids",
+        surface_name="supervisor-state.json",
+    )
+    _require_int_field(payload, "managed_port", surface_name="supervisor-state.json")
+    _require_string_field(
+        payload,
+        "current_proxy_url",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_string_field(
+        payload,
+        "stable_default_backend_id",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    if STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC not in payload:
+        return
+    snapshot = payload.get(STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC)
+    if not isinstance(snapshot, dict) or not all(
+        field in snapshot for field in STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS
+    ):
+        raise state_store.StateStoreError(
+            "supervisor-state.json field stable_runtime_consumer_snapshot is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
 
 
 def write_toml_string_atomic(path: Path, key: str, value: str) -> None:
@@ -784,6 +1033,24 @@ def read_api_key(path: Path) -> str:
             operator_action="user_action",
         )
     return str(api_key)
+
+
+def read_runtime_bearer_token(paths: RuntimePaths) -> tuple[str, str]:
+    try:
+        from .token_command import emit_local_token, emit_local_token_from_config_path
+
+        stable_config_override = os.environ.get("WBP_STABLE_CONFIG", "").strip()
+        if stable_config_override:
+            return (
+                emit_local_token_from_config_path(
+                    Path(stable_config_override).expanduser()
+                ),
+                "wbp_stable_config_env",
+            )
+
+        return emit_local_token(paths), "local_token_command"
+    except RuntimeErrorInfo:
+        return read_api_key(paths.auth_file), "auth_file"
 
 
 def socket_is_listening(host: str, port: int) -> bool:
@@ -842,6 +1109,40 @@ def is_transient_attestation_timeout_error(error_detail: str) -> bool:
     return bool(normalized) and (
         "timed out" in normalized or "timeout" in normalized
     )
+
+
+def is_transient_attestation_responses_probe_error(error_detail: str) -> bool:
+    normalized = error_detail.strip().lower()
+    return bool(normalized) and any(
+        marker in normalized
+        for marker in (
+            "remote end closed connection without response",
+            "remotedisconnected",
+            "connection reset by peer",
+            "connection aborted",
+            "unknown provider for model",
+        )
+    )
+
+
+def launch_smoke_transient_responses_retry_eligible(
+    payload: Mapping[str, Any],
+) -> bool:
+    if str(payload.get("status", "")) == "ok":
+        return False
+    if str(payload.get("effective_mode", "")) != "stable":
+        return False
+    if str(payload.get("machine_error_code", "")) != "ATTESTATION_FAILED":
+        return False
+    launch_readiness = payload.get("launch_readiness")
+    if not isinstance(launch_readiness, Mapping):
+        return False
+    if str(launch_readiness.get("blocking_reason", "")) != "responses_probe_failed":
+        return False
+    error_detail = str(payload.get("last_error", ""))
+    return is_transient_attestation_timeout_error(
+        error_detail
+    ) or is_transient_attestation_responses_probe_error(error_detail)
 
 
 def get_rollout_attestation_retry_delay_seconds() -> float:
@@ -1176,21 +1477,28 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"',
             'APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"',
             'APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"',
+            'PRIMARY_RUNTIME_CACHE_DIR="$APP_HOME/.cache/codex-runtimes"',
             'APP_TMP_DIR="$PROFILE_DIR/tmp"',
             'APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"',
             'APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"',
             'APP_PID_FILE="$APP_TMP_DIR/launcher.pid"',
+            'CODEX_SPARKLE_ENABLED="false"',
             'CONFIG_TOML="${WBP_CONFIG_TOML:-$PROFILE_DIR/config.toml}"',
             'PROFILE_BASENAME="$(basename "$PROFILE_DIR")"',
             'APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"',
             'APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"',
             'OWNER_EXTERNAL_MODELS_DIR="${WBP_OWNER_EXTERNAL_MODELS_DIR:-${WBP_EXTERNAL_MODELS_DIR:-$HOME/.wild-boar-proxy/external-models}}"',
+            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
             'PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"',
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
+            'CUSTOM_WBP_BUNDLE_ID="com.wildboarproxy.codex.wbpclean"',
+            'CUSTOM_WBP_PREFS_PLIST="$HOME/Library/Preferences/$CUSTOM_WBP_BUNDLE_ID.plist"',
+            'CUSTOM_WBP_SPARKLE_CACHE_DIR="$HOME/Library/Caches/$CUSTOM_WBP_BUNDLE_ID/org.sparkle-project.Sparkle"',
+            'CUSTOM_WBP_SPARKLE_PERSISTENT_DOWNLOADS_DIR="$CUSTOM_WBP_SPARKLE_CACHE_DIR/PersistentDownloads"',
             'CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"',
             'if [ -d "$PREFERRED_CODEX_APP_PATH" ] && [ -x "$PREFERRED_CODEX_APP_PATH/Contents/MacOS/Codex" ]; then',
             '  preferred_bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PREFERRED_CODEX_APP_PATH/Contents/Info.plist" 2>/dev/null || printf "")"',
-            '  if [ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ] && { [ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ] || [ -d "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app" ]; }; then',
+            '  if [ "$preferred_bundle_id" = "$CUSTOM_WBP_BUNDLE_ID" ] && { [ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ] || [ -d "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app" ]; }; then',
             '    CODEX_APP_PATH="$PREFERRED_CODEX_APP_PATH"',
             "  fi",
             "fi",
@@ -1223,6 +1531,19 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  { [ -f "$CODEX_APP_RESOURCES/app.asar" ] || [ -d "$CODEX_APP_RESOURCES/app" ]; } || exit 9',
             '  mkdir -p "$APP_USER_DATA_DIR" "$APP_SUPPORT_DIR" "$APP_CACHE_DIR" "$APP_HTTPSTORAGE_DIR" "$APP_TMP_DIR"',
             '  printf "wbp launch app path: %s\\n" "$CODEX_APP_PATH" >> "$APP_STDOUT_LOG"',
+            '  if [ "$CODEX_APP_PATH" = "$PREFERRED_CODEX_APP_PATH" ]; then',
+            '    chflags nouchg "$CUSTOM_WBP_PREFS_PLIST" 2>> "$APP_STDERR_LOG" || true',
+            '    /usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUEnableAutomaticChecks -bool false 2>> "$APP_STDERR_LOG" || true',
+            '    /usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyUpdate -bool false 2>> "$APP_STDERR_LOG" || true',
+            '    /usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAllowsAutomaticUpdates -bool false 2>> "$APP_STDERR_LOG" || true',
+            '    /usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyDownloadUpdates -bool false 2>> "$APP_STDERR_LOG" || true',
+            '    [ -f "$CUSTOM_WBP_PREFS_PLIST" ] && chflags uchg "$CUSTOM_WBP_PREFS_PLIST" 2>> "$APP_STDERR_LOG" || true',
+            '    chmod -R u+w "$CUSTOM_WBP_SPARKLE_CACHE_DIR" 2>> "$APP_STDERR_LOG" || true',
+            '    rm -rf "$CUSTOM_WBP_SPARKLE_CACHE_DIR" 2>> "$APP_STDERR_LOG" || true',
+            '    mkdir -p "$CUSTOM_WBP_SPARKLE_CACHE_DIR"',
+            '    chmod 500 "$CUSTOM_WBP_SPARKLE_CACHE_DIR" 2>> "$APP_STDERR_LOG" || true',
+            '    printf "wbp disabled custom sparkle auto update cache: %s\\n" "$CUSTOM_WBP_SPARKLE_CACHE_DIR" >> "$APP_STDOUT_LOG"',
+            "  fi",
             '  case "$APP_RUNTIME_TMPDIR" in',
             '    /tmp/wbp-cdx-*|/private/tmp/wbp-cdx-*) ;;',
             '    *)',
@@ -1252,6 +1573,10 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  mkdir -p "$APP_RUNTIME_TMPDIR"',
             '  printf "wild-boar-proxy runtime tmpdir\\n" > "$APP_RUNTIME_TMPDIR_MARKER"',
             '  printf "wbp runtime tmpdir: %s\\n" "$APP_RUNTIME_TMPDIR" >> "$APP_STDOUT_LOG"',
+            '  if [ -d "$PRIMARY_RUNTIME_CACHE_DIR" ]; then',
+            '    find "$PRIMARY_RUNTIME_CACHE_DIR" -mindepth 1 -maxdepth 1 -type d -name "codex-runtime-install-*" -exec rm -rf {} + 2>> "$APP_STDERR_LOG" || true',
+            '    printf "wbp cleared primary runtime install cache: %s\\n" "$PRIMARY_RUNTIME_CACHE_DIR" >> "$APP_STDOUT_LOG"',
+            "  fi",
             '  export CODEX_HOME="$PROFILE_DIR"',
             '  export WBP_EXTERNAL_MODELS_DIR="$OWNER_EXTERNAL_MODELS_DIR"',
             '  export HOME="$APP_HOME"',
@@ -1259,6 +1584,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
             '  export TMPDIR="$APP_RUNTIME_TMPDIR"',
             '  export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"',
+            '  export CODEX_SPARKLE_ENABLED',
             '  export WBP_PYTHON_BIN="$APP_PYTHON_BIN"',
             '  export PATH="$APP_PYTHON_BIN_DIR${PATH:+:$PATH}"',
             '  if [ -f "$CONFIG_TOML" ]; then',
@@ -1268,6 +1594,35 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "path = Path(sys.argv[1])",
             "text = path.read_text(encoding='utf-8')",
             "repaired = text.replace('model = \"gpt-5.3-codex\"', 'model = \"gpt-5.5\"')",
+            "lines = repaired.splitlines()",
+            "out = []",
+            "in_features = False",
+            "features_seen = False",
+            "workspace_flag_seen = False",
+            "for line in lines:",
+            "    stripped = line.strip()",
+            "    if stripped.startswith('[') and stripped.endswith(']'):",
+            "        if in_features and not workspace_flag_seen:",
+            "            out.append('workspace_dependencies = false')",
+            "            workspace_flag_seen = True",
+            "        in_features = stripped == '[features]'",
+            "        features_seen = features_seen or in_features",
+            "        out.append(line)",
+            "        continue",
+            "    if in_features and stripped.startswith('workspace_dependencies') and '=' in stripped:",
+            "        if not workspace_flag_seen:",
+            "            out.append('workspace_dependencies = false')",
+            "            workspace_flag_seen = True",
+            "        continue",
+            "    out.append(line)",
+            "if in_features and not workspace_flag_seen:",
+            "    out.append('workspace_dependencies = false')",
+            "    workspace_flag_seen = True",
+            "if not features_seen:",
+            "    if out and out[-1].strip():",
+            "        out.append('')",
+            "    out.extend(['[features]', 'workspace_dependencies = false'])",
+            "repaired = '\\n'.join(out) + ('\\n' if text.endswith('\\n') or repaired != text else '')",
             "if repaired != text:",
             "    tmp_path = path.with_name(f'.{path.name}.wbp-stale-model-repair.tmp')",
             "    tmp_path.write_text(repaired, encoding='utf-8')",
@@ -1340,7 +1695,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "  launchctl_unsetenv() {",
             '    /bin/launchctl unsetenv "$1" 2>> "$APP_STDERR_LOG" || true',
             "  }",
-            "  LAUNCH_ENV_KEYS=\"CODEX_HOME WBP_PROFILE_DIR WBP_MANAGED_DIR WBP_EXTERNAL_MODELS_DIR WBP_ACTIVE_PROJECT_ROOT HOME XDG_CONFIG_HOME XDG_CACHE_HOME TMPDIR CODEX_ELECTRON_USER_DATA_PATH WBP_PYTHON_BIN PATH OPENAI_API_KEY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\"",
+            "  LAUNCH_ENV_KEYS=\"CODEX_HOME WBP_PROFILE_DIR WBP_MANAGED_DIR WBP_EXTERNAL_MODELS_DIR WBP_STABLE_CONFIG WBP_ACTIVE_PROJECT_ROOT HOME XDG_CONFIG_HOME XDG_CACHE_HOME TMPDIR CODEX_ELECTRON_USER_DATA_PATH CODEX_SPARKLE_ENABLED WBP_PYTHON_BIN PATH OPENAI_API_KEY HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy\"",
             '  LAUNCH_ENV_BACKUP_DIR="$APP_TMP_DIR/launcher-env.$$"',
             "  save_launch_env() {",
             '    rm -rf "$LAUNCH_ENV_BACKUP_DIR"',
@@ -1366,6 +1721,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '    launchctl_setenv WBP_PROFILE_DIR "$PROFILE_DIR"',
             '    launchctl_setenv WBP_MANAGED_DIR "$PROFILE_DIR/managed"',
             '    launchctl_setenv WBP_EXTERNAL_MODELS_DIR "$OWNER_EXTERNAL_MODELS_DIR"',
+            '    launchctl_setenv WBP_STABLE_CONFIG "$OWNER_STABLE_CONFIG"',
             '    if [ -n "${WBP_ACTIVE_PROJECT_ROOT:-}" ]; then',
             '      launchctl_setenv WBP_ACTIVE_PROJECT_ROOT "$WBP_ACTIVE_PROJECT_ROOT"',
             "    else",
@@ -1376,6 +1732,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '    launchctl_setenv XDG_CACHE_HOME "$APP_HOME/.cache"',
             '    launchctl_setenv TMPDIR "$APP_RUNTIME_TMPDIR"',
             '    launchctl_setenv CODEX_ELECTRON_USER_DATA_PATH "$APP_USER_DATA_DIR"',
+            '    launchctl_setenv CODEX_SPARKLE_ENABLED "$CODEX_SPARKLE_ENABLED"',
             '    launchctl_setenv WBP_PYTHON_BIN "$APP_PYTHON_BIN"',
             '    launchctl_setenv PATH "$PATH"',
             '    if [ -n "${OPENAI_API_KEY:-}" ]; then',
@@ -2021,7 +2378,12 @@ def materialize_selected_backend_snapshot_for_sync(paths: RuntimePaths) -> None:
         if not selected_backend_ids:
             if SELECTED_BACKEND_SNAPSHOT_FIELD in state:
                 state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
-                write_json_atomic(paths.state_file, state)
+                write_json_atomic(
+                    paths.state_file,
+                    state,
+                    expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+                    validator=_validate_runtime_state_payload,
+                )
             return
 
         # Refresh observation time on every successful owner-path materialization
@@ -2040,7 +2402,12 @@ def materialize_selected_backend_snapshot_for_sync(paths: RuntimePaths) -> None:
         )
         state["selected_backend_ids_observed_at"] = observed_at_utc
         state[SELECTED_BACKEND_SNAPSHOT_FIELD] = snapshot
-        write_json_atomic(paths.state_file, state)
+        write_json_atomic(
+            paths.state_file,
+            state,
+            expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+            validator=_validate_runtime_state_payload,
+        )
 
 
 def parse_utc_datetime(value: Any) -> datetime | None:
@@ -3774,11 +4141,34 @@ def restart_owned_stable_runtime_process(
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         if socket_is_listening(stable_host, stable_port):
+            active_pids = discover_stable_runtime_pids(paths)
+            active_owner_pids = [
+                pid
+                for pid in active_pids
+                if pid_command_line_contains_path(str(pid), effective_config_path)
+            ]
+            if not active_owner_pids:
+                return {
+                    "status": "error",
+                    "machine_error_code": "STABLE_RUNTIME_LAUNCHED_OWNER_UNPROVEN",
+                    "listener_was_present": listener_was_present,
+                    "discovered_pids": raw_pids,
+                    "active_pids": active_pids,
+                    "active_owner_pids": [],
+                    "admitted_existing_config_paths": [
+                        str(path) for path in expected_existing_paths
+                    ],
+                    "launched_config_path": str(effective_config_path),
+                    "terminated_pids": terminated_pids,
+                    "launch_result": launch_result,
+                }
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
                 "listener_was_present": listener_was_present,
                 "discovered_pids": raw_pids,
+                "active_pids": active_pids,
+                "active_owner_pids": active_owner_pids,
                 "admitted_existing_config_paths": [str(path) for path in expected_existing_paths],
                 "launched_config_path": str(effective_config_path),
                 "terminated_pids": terminated_pids,
@@ -4612,7 +5002,12 @@ def refresh_last_known_good_proxy_from_healthcheck(
             else None
         )
         if rollback_evidence is None:
-            write_json_atomic(paths.state_file, live_state)
+            write_json_atomic(
+                paths.state_file,
+                live_state,
+                expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+                validator=_validate_runtime_state_payload,
+            )
         elif rollback_evidence_out is not None:
             rollback_evidence_out.append(rollback_evidence)
     return refreshed_state
@@ -4868,7 +5263,20 @@ def write_stable_runtime_consumer_snapshot(
     with mutation_lock:
         state = read_json(paths.state_file, required=False)
         state[STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC] = snapshot
-        write_json_atomic(paths.state_file, state)
+        try:
+            _validate_runtime_state_payload(state)
+        except state_store.StateStoreError as exc:
+            raise RuntimeErrorInfo(
+                str(exc),
+                machine_error_code=exc.machine_error_code,
+                operator_action="stop",
+            ) from exc
+        write_json_atomic(
+            paths.state_file,
+            state,
+            expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+            validator=_validate_runtime_state_payload,
+        )
 
 
 def build_stable_runtime_consumer_snapshot_payload(
@@ -8055,7 +8463,12 @@ def reconcile_stable_fallback(
     stable_state["last_sync_at"] = now_iso()
 
     with serialized_lock(paths):
-        write_json_atomic(paths.state_file, stable_state)
+        write_json_atomic(
+            paths.state_file,
+            stable_state,
+            expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+            validator=_validate_runtime_state_payload,
+        )
         write_text_atomic(paths.runtime_effective_mode_file, "stable")
         write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
         managed_pid_path(paths).unlink(missing_ok=True)
@@ -8080,7 +8493,12 @@ def reconcile_stable_recovery_success(
     stable_state["last_sync_at"] = now_iso()
 
     with serialized_lock(paths):
-        write_json_atomic(paths.state_file, stable_state)
+        write_json_atomic(
+            paths.state_file,
+            stable_state,
+            expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+            validator=_validate_runtime_state_payload,
+        )
         write_text_atomic(paths.runtime_effective_mode_file, "stable")
         write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
         managed_pid_path(paths).unlink(missing_ok=True)
@@ -9314,9 +9732,10 @@ def observe_runtime_precondition_for_launch_client(
     models_ok = False
     responses_ok = False
     error_detail = ""
+    api_key_source = ""
 
     if listener_ok:
-        api_key = read_api_key(paths.auth_file)
+        api_key, api_key_source = read_runtime_bearer_token(paths)
         try:
             models_payload = http_get_json(f"{attestation_endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
@@ -9368,6 +9787,8 @@ def observe_runtime_precondition_for_launch_client(
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
+        "auth_source_kind": api_key_source,
+        "auth_material_recorded": False,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
         "configured_proxy_url": configured_proxy_url,
@@ -9668,8 +10089,9 @@ def run_healthcheck(
     stable_proxyless_recovery_result: dict[str, Any] | None = None
 
     api_key = ""
+    api_key_source = ""
     if listener_ok:
-        api_key = read_api_key(paths.auth_file)
+        api_key, api_key_source = read_runtime_bearer_token(paths)
         try:
             models_payload = http_get_json(f"{attestation_endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
@@ -10262,6 +10684,8 @@ def run_healthcheck(
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
+        "auth_source_kind": api_key_source,
+        "auth_material_recorded": False,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
         "configured_proxy_url": configured_proxy_url,
@@ -10754,6 +11178,26 @@ def run_launch_smoke(
         allow_last_known_good_proxy_write=False,
         allow_current_proxy_auto_adoption=False,
     )
+    if (
+        attempt.launcher_exit_code == 0
+        and stabilization_seconds > 0
+        and launch_smoke_transient_responses_retry_eligible(health_payload)
+    ):
+        time.sleep(stabilization_seconds)
+        health_payload = run_healthcheck(
+            paths,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
+        )
+        if launch_smoke_transient_responses_retry_eligible(health_payload):
+            time.sleep(min(0.1, stabilization_seconds))
+            health_payload = run_healthcheck(
+                paths,
+                allow_recovery=False,
+                allow_last_known_good_proxy_write=False,
+                allow_current_proxy_auto_adoption=False,
+            )
     if (
         attempt.launcher_exit_code == 0
         and health_payload["status"] == "ok"
@@ -11252,7 +11696,12 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
                 or configured_base_url != stable_endpoint
             ):
                 state["effective_mode"] = "stable"
-                write_json_atomic(paths.state_file, state)
+                write_json_atomic(
+                    paths.state_file,
+                    state,
+                    expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+                    validator=_validate_runtime_state_payload,
+                )
                 write_text_atomic(paths.runtime_effective_mode_file, "stable")
                 write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
                 state = read_json(paths.state_file, required=False)
@@ -14366,7 +14815,12 @@ def run_policy_stage_set(
             updated_registry["pool_policy"] = next_pool_policy
             updated_registry["updated_at"] = now_iso()
             policy_update_result["write_attempted"] = True
-            write_json_atomic(paths.registry_file, updated_registry)
+            write_json_atomic(
+                paths.registry_file,
+                updated_registry,
+                expected_schema_version=BACKEND_REGISTRY_SCHEMA_VERSION,
+                validator=_validate_runtime_registry_payload,
+            )
 
             observed_registry = read_json(paths.registry_file)
             observed_pool_policy = observed_registry.get("pool_policy")
@@ -18522,9 +18976,19 @@ def _run_installer_init_impl(paths: RuntimePaths) -> dict[str, Any]:
         if not paths.runtime_effective_mode_file.exists():
             write_text_atomic(paths.runtime_effective_mode_file, "stable")
         if not paths.registry_file.exists():
-            write_json_atomic(paths.registry_file, build_installer_default_registry_payload())
+            write_json_atomic(
+                paths.registry_file,
+                build_installer_default_registry_payload(),
+                expected_schema_version=BACKEND_REGISTRY_SCHEMA_VERSION,
+                validator=_validate_runtime_registry_payload,
+            )
         if not paths.state_file.exists():
-            write_json_atomic(paths.state_file, build_installer_default_state_payload())
+            write_json_atomic(
+                paths.state_file,
+                build_installer_default_state_payload(),
+                expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+                validator=_validate_runtime_state_payload,
+            )
         if not paths.config_toml.exists():
             write_text_atomic(paths.config_toml, 'model = "gpt-5.5"\nbase_url = "http://127.0.0.1:8318/v1"')
         ensure_repo_owned_owner_helper_chain(paths)
@@ -18579,7 +19043,6 @@ def _run_legacy_import_impl(paths: RuntimePaths, source_dir_raw: str) -> dict[st
         paths.state_file,
         paths.config_toml,
         paths.runtime_mode_file,
-        paths.runtime_effective_mode_file,
         *installer_managed_paths(external_paths),
     ]
     before_state = snapshot_path_states(write_targets)
@@ -18618,37 +19081,71 @@ def _run_legacy_import_impl(paths: RuntimePaths, source_dir_raw: str) -> dict[st
             staged_state = read_json(source_dir / "supervisor-state.json")
             staged_config = read_text(source_dir / "config.toml")
             staged_mode = read_text(source_dir / "runtime-mode.txt", default="stable")
-            staged_effective = read_text(
-                source_dir / "runtime-effective-mode.txt", default=staged_mode
-            )
+            # Legacy import may carry desired mode, but effective mode remains local live truth.
+            staged_state["effective_mode"] = "stable"
 
             legacy_result["transaction_phase"] = "verify"
-            if not isinstance(staged_registry.get("backends"), list):
+            try:
+                _validate_runtime_registry_payload(staged_registry)
+                _validate_runtime_state_payload(staged_state)
+            except state_store.StateStoreError as exc:
                 raise RuntimeErrorInfo(
-                    "Legacy import registry backends must be a list.",
+                    str(exc),
                     machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
+                    severity="recoverable",
                     operator_action="user_action",
-                )
-            if not isinstance(staged_state, dict):
-                raise RuntimeErrorInfo(
-                    "Legacy import state must be a JSON object.",
-                    machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
-                    operator_action="user_action",
-                )
+                ) from exc
 
             legacy_result["transaction_phase"] = "switch"
-            write_json_atomic(paths.registry_file, staged_registry)
-            write_json_atomic(paths.state_file, staged_state)
+            write_json_atomic(
+                paths.registry_file,
+                staged_registry,
+                expected_schema_version=BACKEND_REGISTRY_SCHEMA_VERSION,
+                validator=_validate_runtime_registry_payload,
+            )
+            write_json_atomic(
+                paths.state_file,
+                staged_state,
+                expected_schema_version=SUPERVISOR_STATE_SCHEMA_VERSION,
+                validator=_validate_runtime_state_payload,
+            )
             if staged_config:
                 write_text_atomic(paths.config_toml, staged_config)
             write_text_atomic(paths.runtime_mode_file, staged_mode or "stable")
-            write_text_atomic(paths.runtime_effective_mode_file, staged_effective or "stable")
             external_models_result = import_legacy_layout(source_dir, external_paths)
-    except RuntimeErrorInfo as exc:
+    except (RuntimeErrorInfo, state_store.StateStoreError) as exc:
+        if isinstance(exc, state_store.StateStoreError):
+            exc = RuntimeErrorInfo(
+                str(exc),
+                machine_error_code=exc.machine_error_code,
+                operator_action="stop",
+            )
         legacy_result["rollback_attempted"] = True
         legacy_result["transaction_phase"] = "rollback"
-        for path, snapshot in before_state.items():
-            restore_path_state(path, snapshot)
+        try:
+            for path, snapshot in before_state.items():
+                if snapshot.get("state") == "missing" and path.exists() and path.is_dir():
+                    shutil.rmtree(path)
+                    continue
+                restore_path_state(path, snapshot)
+        except Exception as rollback_exc:  # noqa: BLE001
+            legacy_result["rollback_outcome"] = "failed"
+            legacy_result["final_outcome"] = "rollback_failed"
+            legacy_result["rollback_error"] = str(rollback_exc)
+            return build_command_payload(
+                ok=False,
+                human_message=f"{exc.message} Legacy import rollback failed.",
+                machine_error_code="LEGACY_IMPORT_ROLLBACK_FAILED",
+                liveness="unknown",
+                severity="fatal",
+                operator_action="stop",
+                changed_files=detect_changed_files_by_state(before_state, write_targets),
+                extra={
+                    "legacy_import_result": legacy_result,
+                    "external_models_result": external_models_result,
+                },
+                exit_code=1,
+            )
         legacy_result["rollback_outcome"] = "completed"
         legacy_result["final_outcome"] = "rollback_completed_after_failed_import"
         return build_command_payload(

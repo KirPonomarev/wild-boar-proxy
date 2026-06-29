@@ -36,7 +36,7 @@ from wild_boar_proxy.codex_custom_sessions import (  # noqa: E402
 from wild_boar_proxy.external_models import contracts  # noqa: E402
 
 
-PRIMARY_MODEL_ID = "gpt-5.3-codex"
+PRIMARY_MODEL_ID = "gpt-5.5"
 API_MODEL_ID = "wbp:deepseek-max"
 
 

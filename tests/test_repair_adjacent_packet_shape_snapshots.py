@@ -16,7 +16,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SECRET_SENTINEL = "sk-wbp-repair-adjacent-secret-should-not-leak-1234567890"
+SECRET_SENTINEL = "sk" + "-wbp-repair-adjacent-secret-should-not-leak-1234567890"
 
 COMMAND_PACKET_REQUIRED_FIELDS = {
     "status",
@@ -168,9 +168,11 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
                     "version": 2,
                     "status": "healthy",
                     "effective_mode": "stable",
+                    "last_sync_at": "",
                     "stable_default_backend_id": "default-backend",
                     "selected_backend_ids": [],
                     "managed_port": 9999,
+                    "current_proxy_url": "",
                     "last_error": "",
                 },
                 ensure_ascii=True,
@@ -278,7 +280,7 @@ class RepairAdjacentPacketShapeSnapshotTests(unittest.TestCase):
     def assert_no_secret_leak(self, payload: dict[str, Any]) -> None:
         serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
         self.assertNotIn(SECRET_SENTINEL, serialized)
-        self.assertNotIn("sk-wbp-repair-adjacent-secret", serialized)
+        self.assertNotIn("sk" + "-wbp-repair-adjacent-secret", serialized)
 
     def test_healthcheck_repair_absent_listener_packet_shape_is_repair_adjacent(self) -> None:
         result = self.run_cli("healthcheck", "--repair", "--json")

@@ -194,6 +194,77 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(packet["effect"], "probe")
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_direct_reply_accepts_repo_bridge_verified_evidence_without_provider_call(
+        self,
+    ) -> None:
+        text = (
+            '{"status":"ok","changed_files":["tmp/agent2-en.txt"],'
+            '"readback_ok":true}'
+        )
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            return _live_result(
+                text,
+                provider_called=False,
+                source="repo_bridge_verified_evidence",
+                direct_provider_auth_proven=False,
+                direct_provider_response_observed=False,
+                provider_auth_ok=False,
+                positive_provider_proof_gate_satisfied=False,
+                repo_bridge_required=True,
+                repo_bridge_available=True,
+                repo_bridge_used=True,
+                dip_repo_tool_bridge_required=True,
+                dip_repo_tool_bridge_available=True,
+                dip_repo_tool_bridge_used=True,
+                dip_action_bridge_required=True,
+                dip_action_bridge_used=True,
+                dip_action_bridge_succeeded=True,
+                dip_action_tool_call_count=1,
+                dip_action_successful_tool_call_count=1,
+                dip_action_tool_names=["write_file"],
+                dip_action_mutation_applied=True,
+                dip_mutation_required=True,
+                dip_mutation_written=True,
+                dip_mutation_verified=True,
+                dip_mutation_readback_verified=True,
+                dip_action_mutated_files=["tmp/agent2-en.txt"],
+                repo_bridge_final_answer_synthesized=True,
+            )
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text=(
+                "Agent 2: using the repo bridge, create file "
+                "tmp/agent2-en.txt with text OK, read it back, and answer JSON."
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            repo_bridge_mode="auto",
+            work_mode="full",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["api_agent_direct_reply_proven"])
+        self.assertFalse(packet["api_agent_provider_called"])
+        self.assertFalse(packet["api_agent_response_observed"])
+        self.assertFalse(packet["provider_response_proven"])
+        self.assertTrue(packet["repo_bridge_evidence_response_proven"])
+        self.assertTrue(
+            packet["reply_proof_summary"]["repo_bridge_evidence_response_proven"]
+        )
+        self.assertEqual(packet["direct_reply_text"], text)
+        self.assertEqual(packet["changed_files"], ["tmp/agent2-en.txt"])
+        self.assertTrue(packet["repo_bridge_final_answer_synthesized"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+
     def test_direct_reply_allows_missing_active_project_root_for_plain_reply(self) -> None:
         calls: list[dict[str, object]] = []
 
@@ -224,6 +295,202 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIsNone(calls[0]["repo_root"])
         self.assertEqual(calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_enables_repo_bridge_for_explicit_prompt_phrase(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result(
+                "repo bridge checked",
+                repo_bridge_required=True,
+                repo_bridge_available=True,
+                repo_bridge_used=True,
+                dip_repo_tool_bridge_required=True,
+                dip_repo_tool_bridge_available=True,
+                dip_repo_tool_bridge_used=True,
+                repo_bridge_context_pack_used=True,
+                repo_bridge_readonly=True,
+                repo_bridge_bootstrap_used=True,
+                repo_bridge_bootstrap_tool_call_count=1,
+                repo_bridge_tool_call_count=1,
+                repo_bridge_successful_tool_call_count=1,
+            )
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text="DIP: через repo bridge read-only проверь AGENTS.md.",
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["repo_bridge_mode"], "on")
+        self.assertTrue(packet["repo_bridge_required"])
+        self.assertTrue(packet["repo_bridge_available"])
+        self.assertTrue(packet["repo_bridge_used"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertTrue(packet["target_repo_required"])
+        self.assertEqual(packet["effect"], "mutate")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["repo_root"], _active_project_root_for_test())
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_enables_repo_bridge_for_natural_code_write_task(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result_from_kwargs(
+                '{"status":"success","marker":"WBP_UH_API_NATURAL_CODE_OK"}',
+                **kwargs,
+            )
+
+        prompt = (
+            "DIP: обычным человеческим языком создай Python-модуль "
+            "tmp/wbp-ultrahard/natural_api/command_parser.py и тест pytest, "
+            "запусти pytest и верни краткий JSON."
+        )
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text=prompt,
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["repo_bridge_mode"], "on")
+        self.assertTrue(packet["repo_bridge_required"])
+        self.assertEqual(packet["dip_work_mode"], "full")
+        self.assertTrue(packet["dip_full_work_mode"])
+        self.assertTrue(packet["active_project_root_required"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_enables_repo_bridge_for_english_create_module_task(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result_from_kwargs(
+                '{"status":"success","marker":"WBP_UH_API_EN_CODE_OK"}',
+                **kwargs,
+            )
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text=(
+                "DIP: create a Python module in "
+                "tmp/wbp-ultrahard/en_api/command_parser.py and return JSON."
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["repo_bridge_mode"], "on")
+        self.assertTrue(packet["repo_bridge_required"])
+        self.assertEqual(packet["dip_work_mode"], "full")
+        self.assertTrue(packet["dip_full_work_mode"])
+        self.assertTrue(packet["dip_action_bridge_required"])
+        self.assertTrue(packet["dip_code_mutation_required"])
+        self.assertTrue(packet["dip_code_verification_required"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_enables_repo_bridge_for_natural_readonly_repo_task(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result_from_kwargs(
+                '{"exists":true,"file":"CANON.md"}',
+                **kwargs,
+            )
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text=(
+                "DIP: проверь, существует ли файл CANON.md в текущем "
+                "репозитории, и верни JSON."
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["repo_bridge_mode"], "on")
+        self.assertTrue(packet["repo_bridge_required"])
+        self.assertEqual(packet["dip_work_mode"], "standard")
+        self.assertFalse(packet["dip_full_work_mode"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "standard")
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_direct_reply_keeps_non_repo_explanation_prompt_on_probe_path(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result_from_kwargs("Краткое объяснение.", **kwargs)
+
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text=(
+                "DIP: напиши объяснение без изменения файлов и без доступа к "
+                "репозиторию."
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["repo_bridge_mode"], "off")
+        self.assertFalse(packet["repo_bridge_required"])
+        self.assertEqual(packet["dip_work_mode"], "standard")
+        self.assertFalse(packet["dip_full_work_mode"])
+        self.assertEqual(packet["effect"], "probe")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "off")
+        self.assertEqual(calls[0]["dip_work_mode"], "standard")
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_direct_reply_blocks_without_active_project_root_when_repo_bridge_on(self) -> None:
@@ -368,6 +635,53 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(packet["dip_action_mutated_files"], ["src/app.py"])
         self.assertTrue(packet["dip_code_written"])
         self.assertTrue(packet["dip_code_verified"])
+        self.assertFalse(packet["dip_code_verification_failed"])
+        self.assertEqual(packet["dip_code_failed_verification_count"], 0)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_repo_bridge_mode_propagates_code_verification_failure(self) -> None:
+        packet = direct.build_api_agent_direct_reply_packet(
+            prompt_text="DIP: почини баг и запусти тест.",
+            runtime_context=_runtime_context(),
+            context_file_metadata={
+                "runtime_context_file_present": True,
+                "runtime_context_file_read": True,
+            },
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            repo_bridge_mode="on",
+            live_result_runner=lambda **_kwargs: _live_result(
+                "",
+                status="error",
+                machine_error_code="WBP_DIP_TOOL_CODE_VERIFICATION_FAILED",
+                result_available=False,
+                result_text="",
+                result_text_sha256="",
+                result_text_length=0,
+                dip_action_bridge_required=True,
+                dip_action_bridge_used=True,
+                dip_action_tests_run=True,
+                dip_action_patch_applied=True,
+                dip_code_mutation_required=True,
+                dip_code_written=True,
+                dip_code_verified=False,
+                dip_code_verification_failed=True,
+                dip_code_failed_verification_count=1,
+                dip_action_mutated_files=["src/app.py"],
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_DIP_TOOL_CODE_VERIFICATION_FAILED",
+        )
+        self.assertTrue(packet["dip_code_written"])
+        self.assertFalse(packet["dip_code_verified"])
+        self.assertTrue(packet["dip_code_verification_failed"])
+        self.assertEqual(packet["dip_code_failed_verification_count"], 1)
+        self.assertEqual(packet["changed_files"], ["src/app.py"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_repo_bridge_flags_accept_live_result_bridge_alias_fields(self) -> None:
@@ -508,6 +822,105 @@ class ApiAgentDirectReplyTests(unittest.TestCase):
         self.assertEqual(payload["active_project_root_source"], "server_runtime_env")
         self.assertTrue(payload["active_project_root_available"])
         self.assertTrue(payload["api_agent_direct_reply_proven"])
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_direct_reply_promotes_explicit_repo_action_to_full_work_mode(self) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ):
+                def runner(**kwargs: object) -> dict[str, object]:
+                    calls.append(dict(kwargs))
+                    result = _live_result_from_kwargs("cli direct action answer", **kwargs)
+                    result.update(
+                        {
+                            "repo_bridge_tool_names": ["run_tests"],
+                            "repo_bridge_bootstrap_tool_names": ["run_tests"],
+                            "dip_action_tool_names": ["run_tests"],
+                            "dip_evidence_trace_available": True,
+                            "dip_evidence_trace_recorded": True,
+                            "dip_evidence_trace_count": 1,
+                            "dip_evidence_trace": [
+                                {
+                                    "step": 1,
+                                    "tool": "run_tests",
+                                    "origin": "wbp_bootstrap",
+                                    "status": "error",
+                                    "machine_error_code": "command_failed",
+                                    "command_exit_code": 1,
+                                    "result_text_sha256": "a" * 64,
+                                    "result_text": "raw output must not propagate",
+                                }
+                            ],
+                            "dip_evidence_trace_raw_output_recorded": False,
+                        }
+                    )
+                    return result
+
+                with mock.patch(
+                    "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                    side_effect=runner,
+                ):
+                    stdout = io.StringIO()
+                    with contextlib.redirect_stdout(stdout):
+                        exit_code = cli.main(
+                            [
+                                "router-hook",
+                                "direct-reply",
+                                "--prompt",
+                                (
+                                    "DIP: через repo bridge read-only запусти "
+                                    "python3 -m pytest tests/test_wbp_dip_tool.py -q "
+                                    "и ответь JSON."
+                                ),
+                                "--runtime-context-file",
+                                str(context_file),
+                                "--json",
+                            ]
+                        )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["repo_bridge_mode"], "on")
+        self.assertEqual(payload["dip_work_mode"], "full")
+        self.assertTrue(payload["dip_full_work_mode"])
+        self.assertEqual(payload["repo_bridge_tool_names"], ["run_tests"])
+        self.assertEqual(payload["repo_bridge_bootstrap_tool_names"], ["run_tests"])
+        self.assertEqual(payload["dip_action_tool_names"], ["run_tests"])
+        self.assertTrue(payload["dip_evidence_trace_available"])
+        self.assertTrue(payload["dip_evidence_trace_recorded"])
+        self.assertEqual(payload["dip_evidence_trace_count"], 1)
+        self.assertEqual(payload["dip_evidence_trace"][0]["tool"], "run_tests")
+        self.assertEqual(
+            payload["dip_evidence_trace"][0]["machine_error_code"],
+            "command_failed",
+        )
+        self.assertNotIn("result_text", payload["dip_evidence_trace"][0])
+        self.assertFalse(payload["dip_evidence_trace_raw_output_recorded"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
         self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
 
     def test_cli_direct_reply_routes_agent_2_alias(self) -> None:
@@ -760,6 +1173,16 @@ class ApiAgentDirectReplyCommandTests(unittest.TestCase):
 
         self.assertEqual(cli.command_effect_from_args(probe_args), "probe")
         self.assertEqual(cli.command_effect_from_args(mutate_args), "mutate")
+        natural_bridge_args = parser.parse_args(
+            [
+                "router-hook",
+                "direct-reply",
+                "--prompt",
+                "DIP: через repo bridge read-only проверь AGENTS.md.",
+                "--json",
+            ]
+        )
+        self.assertEqual(cli.command_effect_from_args(natural_bridge_args), "mutate")
         proof_args = parser.parse_args(
             [
                 "router-hook",

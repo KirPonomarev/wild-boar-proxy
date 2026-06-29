@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .native_filesystem_probe import (
+    AGENT_RUNTIME_CONTEXT_FILENAME,
     NativeProbeLayout,
     clean_env,
     collect_codex_process_inventory,
@@ -5006,6 +5007,12 @@ def launch_custom_native_app_packet(
             base_dir=persistent_profile_base_dir,
         )
         tmp_root = layout.tmp_root
+        extra_agent_runtime_context_paths: list[Path] = []
+        runtime_profile_dir = getattr(real_runtime_paths, "profile_dir", None)
+        if isinstance(runtime_profile_dir, Path):
+            extra_agent_runtime_context_paths.append(
+                runtime_profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+            )
         materialized_profile = materialize_probe_profile(
             layout=layout,
             endpoint=endpoint,
@@ -5013,6 +5020,7 @@ def launch_custom_native_app_packet(
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
             agent_runtime_context=agent_runtime_context,
+            extra_agent_runtime_context_paths=extra_agent_runtime_context_paths,
             validate_model_against_endpoint=True,
         )
         persistent_fields = {
@@ -5335,10 +5343,21 @@ def launch_custom_native_app_packet(
             layout=layout,
             real_runtime_paths=real_runtime_paths,
         )
-        cdp_port = int(
-            launch_result.get("remote_debugging_port")
-            or read_profile_remote_debugging_port(layout.profile_dir)
-        )
+        window_inventory = _launch_window_process_inventory(launch_result)
+        cdp_port_source = str(launch_result.get("remote_debugging_port_source") or "")
+        raw_cdp_port = launch_result.get("remote_debugging_port")
+        if not raw_cdp_port:
+            raw_cdp_port, cdp_port_source = _custom_runtime_cdp_port(
+                window_inventory,
+                profile_root=layout.profile_dir,
+            )
+        cdp_port = int(raw_cdp_port) if raw_cdp_port else 0
+        if not cdp_port_source:
+            cdp_port_source = (
+                "launch_result_remote_debugging_port"
+                if raw_cdp_port
+                else "remote_debugging_port_not_observed"
+            )
         process_started = launch_result.get("custom_process_observed") is True
         launcher_exit_code_early = launch_result.get("launcher_exit_code_early")
         launcher_failed_before_process = (
@@ -5349,7 +5368,6 @@ def launch_custom_native_app_packet(
         process_still_alive = (
             launch_result.get("custom_process_still_observed_after_wait") is True
         )
-        window_inventory = _launch_window_process_inventory(launch_result)
         window_packet = _wait_for_window_observation_via_ax(
             window_inventory,
             profile_dir=layout.profile_dir,
@@ -5595,10 +5613,7 @@ def launch_custom_native_app_packet(
             "native_app_usability_source": native_app_usability_source,
             "input_capable_ui_observed": input_capable_ui_observed,
             "remote_debugging_port": cdp_port,
-            "remote_debugging_port_source": str(
-                launch_result.get("remote_debugging_port_source")
-                or "persistent_profile_remote_debugging_port"
-            ),
+            "remote_debugging_port_source": cdp_port_source,
             "remote_debugging_port_file_written": (
                 launch_result.get("remote_debugging_port_file_written") is True
             ),

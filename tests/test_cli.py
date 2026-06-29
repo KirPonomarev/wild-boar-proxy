@@ -21780,6 +21780,9 @@ class CliTests(unittest.TestCase):
     def test_legacy_import_updates_registry_and_state(self) -> None:
         source_dir = Path(self.temp_dir.name) / "legacy-source"
         source_dir.mkdir(parents=True, exist_ok=True)
+        before_effective_mode = (self.profile_dir / "runtime-effective-mode.txt").read_text(
+            encoding="utf-8"
+        )
         source_registry = {
             "schema_version": 2,
             "version": 2,
@@ -21863,10 +21866,23 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(registry["stable_default_backend_id"], "legacy-backend")
         self.assertEqual(state["selected_backend_ids"], ["legacy-backend"])
+        self.assertEqual(state["effective_mode"], "stable")
         self.assertEqual(
             (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
             "managed",
         )
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(encoding="utf-8"),
+            before_effective_mode,
+        )
+        self.assertNotIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"), payload["changed_files"]
+        )
+        mode_result = self.run_cli("mode", "get", "--json")
+        self.assertEqual(mode_result.returncode, 0, mode_result.stderr)
+        mode_payload = json.loads(mode_result.stdout)
+        self.assertEqual(mode_payload["desired_mode"], "managed")
+        self.assertEqual(mode_payload["effective_mode"], "stable")
 
     def test_legacy_import_optionally_imports_external_models_layout(self) -> None:
         source_dir = Path(self.temp_dir.name) / "legacy-external-source"
@@ -22053,6 +22069,99 @@ class CliTests(unittest.TestCase):
         )
         self.assertTrue(legacy_result["rollback_attempted"])
         self.assertEqual(legacy_result["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_legacy_import_rolls_back_on_source_state_missing_required_fields(self) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        source_dir = Path(self.temp_dir.name) / "legacy-missing-state-field"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        source_state = json.loads(before_state)
+        source_state.pop("stable_default_backend_id")
+        (source_dir / "supervisor-state.json").write_text(
+            json.dumps(source_state) + "\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LEGACY_IMPORT_VERIFY_FAILED")
+        self.assertEqual(
+            payload["legacy_import_result"]["final_outcome"],
+            "rollback_completed_after_failed_import",
+        )
+        self.assertTrue(payload["legacy_import_result"]["rollback_attempted"])
+        self.assertEqual(payload["legacy_import_result"]["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_legacy_import_rolls_back_on_source_registry_backend_missing_required_fields(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        source_dir = Path(self.temp_dir.name) / "legacy-missing-backend-field"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_registry = json.loads(before_registry)
+        source_registry["stable_default_backend_id"] = "backend-a"
+        source_registry["backends"] = [{"id": "backend-a"}]
+        (source_dir / "backend-registry.json").write_text(
+            json.dumps(source_registry) + "\n",
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            before_state,
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LEGACY_IMPORT_VERIFY_FAILED")
+        self.assertEqual(
+            payload["legacy_import_result"]["final_outcome"],
+            "rollback_completed_after_failed_import",
+        )
+        self.assertTrue(payload["legacy_import_result"]["rollback_attempted"])
+        self.assertEqual(payload["legacy_import_result"]["rollback_outcome"], "completed")
         self.assertEqual(
             (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
             before_registry,
@@ -23807,12 +23916,17 @@ class CliTests(unittest.TestCase):
         )
         launcher_text = self.default_launcher_script.read_text(encoding="utf-8")
         self.assertIn('if [ "$mode" = "desktop" ]; then', launcher_text)
+        self.assertIn('CODEX_SPARKLE_ENABLED="false"', launcher_text)
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', launcher_text)
         self.assertIn('export HOME="$APP_HOME"', launcher_text)
         self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', launcher_text)
         self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', launcher_text)
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', launcher_text)
         self.assertIn('APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"', launcher_text)
+        self.assertIn(
+            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
+            launcher_text,
+        )
         self.assertIn('case "$APP_RUNTIME_TMPDIR" in', launcher_text)
         self.assertIn('/tmp/wbp-cdx-*|/private/tmp/wbp-cdx-*)', launcher_text)
         self.assertIn('if [ -L "$APP_RUNTIME_TMPDIR" ]; then', launcher_text)
@@ -23826,14 +23940,60 @@ class CliTests(unittest.TestCase):
         self.assertIn('mkdir -p "$APP_RUNTIME_TMPDIR"', launcher_text)
         self.assertIn('> "$APP_RUNTIME_TMPDIR_MARKER"', launcher_text)
         self.assertNotIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', launcher_text)
+        self.assertIn(
+            'find "$PRIMARY_RUNTIME_CACHE_DIR" -mindepth 1 -maxdepth 1 -type d -name "codex-runtime-install-*" -exec rm -rf {} +',
+            launcher_text,
+        )
+        self.assertIn('workspace_dependencies = false', launcher_text)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', launcher_text)
         self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', launcher_text)
+        self.assertIn('export CODEX_SPARKLE_ENABLED', launcher_text)
+        self.assertIn(
+            'launchctl_setenv WBP_STABLE_CONFIG "$OWNER_STABLE_CONFIG"',
+            launcher_text,
+        )
+        self.assertIn(
+            'launchctl_setenv CODEX_SPARKLE_ENABLED "$CODEX_SPARKLE_ENABLED"',
+            launcher_text,
+        )
         self.assertIn('WORKSPACE_PATH="${1:-}"', launcher_text)
         self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', launcher_text)
         self.assertIn(
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
             launcher_text,
         )
+        self.assertIn('CUSTOM_WBP_BUNDLE_ID="com.wildboarproxy.codex.wbpclean"', launcher_text)
+        self.assertIn(
+            'CUSTOM_WBP_PREFS_PLIST="$HOME/Library/Preferences/$CUSTOM_WBP_BUNDLE_ID.plist"',
+            launcher_text,
+        )
+        self.assertIn(
+            'CUSTOM_WBP_SPARKLE_PERSISTENT_DOWNLOADS_DIR="$CUSTOM_WBP_SPARKLE_CACHE_DIR/PersistentDownloads"',
+            launcher_text,
+        )
+        self.assertIn('chflags nouchg "$CUSTOM_WBP_PREFS_PLIST"', launcher_text)
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUEnableAutomaticChecks -bool false',
+            launcher_text,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyUpdate -bool false',
+            launcher_text,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAllowsAutomaticUpdates -bool false',
+            launcher_text,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyDownloadUpdates -bool false',
+            launcher_text,
+        )
+        self.assertIn('chflags uchg "$CUSTOM_WBP_PREFS_PLIST"', launcher_text)
+        self.assertIn(
+            'rm -rf "$CUSTOM_WBP_SPARKLE_CACHE_DIR"',
+            launcher_text,
+        )
+        self.assertIn('chmod 500 "$CUSTOM_WBP_SPARKLE_CACHE_DIR"', launcher_text)
         self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', launcher_text)
         self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', launcher_text)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', launcher_text)
@@ -23845,7 +24005,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("preferred_bundle_id=", launcher_text)
         self.assertNotIn("preferred_codesign_ok=0", launcher_text)
         self.assertIn(
-            '[ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ]',
+            '[ "$preferred_bundle_id" = "$CUSTOM_WBP_BUNDLE_ID" ]',
             launcher_text,
         )
         self.assertIn(
@@ -23899,13 +24059,19 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"', payload)
         self.assertIn('APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"', payload)
         self.assertIn('APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"', payload)
+        self.assertIn('PRIMARY_RUNTIME_CACHE_DIR="$APP_HOME/.cache/codex-runtimes"', payload)
         self.assertIn('APP_TMP_DIR="$PROFILE_DIR/tmp"', payload)
         self.assertIn('APP_STDOUT_LOG="$APP_TMP_DIR/launcher.stdout.log"', payload)
         self.assertIn('APP_STDERR_LOG="$APP_TMP_DIR/launcher.stderr.log"', payload)
         self.assertIn('APP_PID_FILE="$APP_TMP_DIR/launcher.pid"', payload)
+        self.assertIn('CODEX_SPARKLE_ENABLED="false"', payload)
         self.assertIn('PROFILE_BASENAME="$(basename "$PROFILE_DIR")"', payload)
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', payload)
         self.assertIn('APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"', payload)
+        self.assertIn(
+            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
+            payload,
+        )
         self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', payload)
         self.assertIn('export HOME="$APP_HOME"', payload)
@@ -23924,13 +24090,27 @@ class CliTests(unittest.TestCase):
         self.assertIn('mkdir -p "$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('> "$APP_RUNTIME_TMPDIR_MARKER"', payload)
         self.assertNotIn('ln -snf "$APP_TMP_DIR" "$APP_RUNTIME_TMPDIR"', payload)
+        self.assertIn(
+            'find "$PRIMARY_RUNTIME_CACHE_DIR" -mindepth 1 -maxdepth 1 -type d -name "codex-runtime-install-*" -exec rm -rf {} +',
+            payload,
+        )
+        self.assertIn('workspace_dependencies = false', payload)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
         self.assertIn('export CODEX_ELECTRON_USER_DATA_PATH="$APP_USER_DATA_DIR"', payload)
+        self.assertIn('export CODEX_SPARKLE_ENABLED', payload)
         self.assertIn('APP_PYTHON_BIN="${WBP_PYTHON_BIN:-', payload)
         self.assertIn('APP_PYTHON_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$APP_PYTHON_BIN")"', payload)
         self.assertIn('export WBP_PYTHON_BIN="$APP_PYTHON_BIN"', payload)
         self.assertIn('export PATH="$APP_PYTHON_BIN_DIR${PATH:+:$PATH}"', payload)
         self.assertIn('launchctl_setenv WBP_PYTHON_BIN "$APP_PYTHON_BIN"', payload)
+        self.assertIn(
+            'launchctl_setenv WBP_STABLE_CONFIG "$OWNER_STABLE_CONFIG"',
+            payload,
+        )
+        self.assertIn(
+            'launchctl_setenv CODEX_SPARKLE_ENABLED "$CODEX_SPARKLE_ENABLED"',
+            payload,
+        )
         self.assertIn('launchctl_setenv PATH "$PATH"', payload)
         self.assertIn('AUTH_MODE="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
         self.assertIn('OPENAI_API_KEY_FROM_AUTH="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
@@ -23950,6 +24130,38 @@ class CliTests(unittest.TestCase):
             'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
             payload,
         )
+        self.assertIn('CUSTOM_WBP_BUNDLE_ID="com.wildboarproxy.codex.wbpclean"', payload)
+        self.assertIn(
+            'CUSTOM_WBP_PREFS_PLIST="$HOME/Library/Preferences/$CUSTOM_WBP_BUNDLE_ID.plist"',
+            payload,
+        )
+        self.assertIn(
+            'CUSTOM_WBP_SPARKLE_PERSISTENT_DOWNLOADS_DIR="$CUSTOM_WBP_SPARKLE_CACHE_DIR/PersistentDownloads"',
+            payload,
+        )
+        self.assertIn('chflags nouchg "$CUSTOM_WBP_PREFS_PLIST"', payload)
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUEnableAutomaticChecks -bool false',
+            payload,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyUpdate -bool false',
+            payload,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAllowsAutomaticUpdates -bool false',
+            payload,
+        )
+        self.assertIn(
+            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyDownloadUpdates -bool false',
+            payload,
+        )
+        self.assertIn('chflags uchg "$CUSTOM_WBP_PREFS_PLIST"', payload)
+        self.assertIn(
+            'rm -rf "$CUSTOM_WBP_SPARKLE_CACHE_DIR"',
+            payload,
+        )
+        self.assertIn('chmod 500 "$CUSTOM_WBP_SPARKLE_CACHE_DIR"', payload)
         self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', payload)
         self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', payload)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', payload)
@@ -24068,7 +24280,7 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("primary_bin_hash=", launcher_text)
         self.assertNotIn("preferred_codesign_ok=0", launcher_text)
         self.assertIn(
-            '[ "$preferred_bundle_id" = "com.wildboarproxy.codex.wbpclean" ]',
+            '[ "$preferred_bundle_id" = "$CUSTOM_WBP_BUNDLE_ID" ]',
             launcher_text,
         )
         self.assertTrue(os.access(self.default_launcher_script, os.X_OK))
@@ -24431,6 +24643,228 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["stabilization_seconds"], 1.0)
+
+    def test_launch_smoke_retries_transient_stable_responses_probe_failure(self) -> None:
+        attempt = runtime_mod.StableRuntimeLaunchAttempt(
+            desired_kind="approved_repair_target",
+            observed_path=self.stable_dir,
+            activation_attempted=True,
+            generated_config_regenerated=True,
+            activation_method="process_local_env_override",
+            selected_config_file=str(
+                self.managed_dir / "stable-runtime-config.generated.yaml"
+            ),
+            selected_source_kind="approved_repair_target",
+            selected_source_path=str(self.managed_dir / "stable-repair-target"),
+            launcher_exit_code=0,
+            stdout="",
+            stderr="",
+            process_result={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": "",
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "timed_out": False,
+                "duration_seconds": 0.01,
+            },
+        )
+
+        def status_payload(
+            *,
+            status: str,
+            machine_error_code: str,
+            last_error: str,
+            launch_status: str,
+            responses_ok: bool,
+            exit_code: int,
+        ) -> dict[str, object]:
+            return {
+                "status": status,
+                "machine_error_code": machine_error_code,
+                "liveness": "healthy" if status == "ok" else "degraded",
+                "severity": "recoverable",
+                "operator_action": "none" if status == "ok" else "retry",
+                "desired_mode": "stable",
+                "effective_mode": "stable",
+                "endpoint": "http://127.0.0.1:8318/v1",
+                "current_proxy_url": "",
+                "stable_runtime_consumer": {},
+                "auth_pool_hygiene": {},
+                "runtime_guardrails": {},
+                "attestation_summary": {
+                    "status": status,
+                    "machine_error_code": machine_error_code,
+                    "attestation_source": "healthcheck --json",
+                    "observed_at_utc": "2026-06-27T00:00:00+00:00",
+                },
+                "launch_readiness": {
+                    "status": launch_status,
+                    "blocking_reason": ""
+                    if launch_status == "ready"
+                    else "responses_probe_failed",
+                    "responses_proof_passed": responses_ok,
+                    "listener_reachable": True,
+                    "models_surface_reachable": True,
+                    "truth_alignment_passed": True,
+                    "failed_checks": []
+                    if launch_status == "ready"
+                    else ["responses_probe_failed"],
+                },
+                "last_error": last_error,
+                "exit_code": exit_code,
+            }
+
+        first_health_payload = status_payload(
+            status="error",
+            machine_error_code="ATTESTATION_FAILED",
+            last_error="Remote end closed connection without response",
+            launch_status="blocked",
+            responses_ok=False,
+            exit_code=1,
+        )
+        second_health_payload = status_payload(
+            status="ok",
+            machine_error_code="OK",
+            last_error="",
+            launch_status="ready",
+            responses_ok=True,
+            exit_code=0,
+        )
+
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=False),
+            mock.patch.object(
+                runtime_mod,
+                "run_stable_runtime_launcher_attempt",
+                return_value=attempt,
+            ),
+            mock.patch.object(
+                runtime_mod,
+                "run_healthcheck",
+                side_effect=[first_health_payload, second_health_payload],
+            ) as run_healthcheck,
+            mock.patch.object(
+                runtime_mod, "summarize_status", side_effect=lambda paths, health_payload: health_payload
+            ),
+            mock.patch.object(runtime_mod, "write_stable_runtime_consumer_snapshot"),
+            mock.patch.object(runtime_mod, "snapshot_known_files", return_value={}),
+            mock.patch.object(runtime_mod, "detect_changed_files", return_value=[]),
+            mock.patch.object(
+                runtime_mod, "ensure_repo_owned_default_launcher_consumer"
+            ),
+            mock.patch.object(
+                runtime_mod, "get_launch_stabilization_seconds", return_value=1.0
+            ),
+            mock.patch.object(runtime_mod.time, "sleep") as sleep,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            payload = runtime_mod.run_launch_smoke(paths)
+
+        self.assertEqual(run_healthcheck.call_count, 2)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["launch_readiness"]["status"], "ready")
+        self.assertEqual(payload["stabilization_seconds"], 1.0)
+        sleep.assert_called_once_with(1.0)
+
+    def test_launch_smoke_does_not_retry_auth_unavailable_responses_probe_failure(
+        self,
+    ) -> None:
+        attempt = runtime_mod.StableRuntimeLaunchAttempt(
+            desired_kind="approved_repair_target",
+            observed_path=self.stable_dir,
+            activation_attempted=True,
+            generated_config_regenerated=True,
+            activation_method="process_local_env_override",
+            selected_config_file=str(
+                self.managed_dir / "stable-runtime-config.generated.yaml"
+            ),
+            selected_source_kind="approved_repair_target",
+            selected_source_path=str(self.managed_dir / "stable-repair-target"),
+            launcher_exit_code=0,
+            stdout="",
+            stderr="",
+            process_result={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": "",
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "timed_out": False,
+                "duration_seconds": 0.01,
+            },
+        )
+        auth_unavailable_payload = {
+            "status": "error",
+            "machine_error_code": "AUTH_UNAVAILABLE",
+            "liveness": "degraded",
+            "severity": "recoverable",
+            "operator_action": "retry",
+            "desired_mode": "stable",
+            "effective_mode": "stable",
+            "endpoint": "http://127.0.0.1:8318/v1",
+            "current_proxy_url": "",
+            "stable_runtime_consumer": {},
+            "auth_pool_hygiene": {},
+            "runtime_guardrails": {},
+            "attestation_summary": {
+                "status": "error",
+                "machine_error_code": "AUTH_UNAVAILABLE",
+                "attestation_source": "healthcheck --json",
+                "observed_at_utc": "2026-06-27T00:00:00+00:00",
+            },
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "responses_probe_failed",
+                "responses_proof_passed": False,
+                "listener_reachable": True,
+                "models_surface_reachable": True,
+                "truth_alignment_passed": True,
+                "failed_checks": ["responses_probe_failed"],
+            },
+            "last_error": (
+                "HTTP 503: {\"error\":{\"message\":\"auth_unavailable: no auth "
+                "available (providers=codex, model=gpt-5.5)\"}}"
+            ),
+            "exit_code": 1,
+        }
+
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=False),
+            mock.patch.object(
+                runtime_mod,
+                "run_stable_runtime_launcher_attempt",
+                return_value=attempt,
+            ),
+            mock.patch.object(
+                runtime_mod, "run_healthcheck", return_value=auth_unavailable_payload
+            ) as run_healthcheck,
+            mock.patch.object(
+                runtime_mod, "summarize_status", side_effect=lambda paths, health_payload: health_payload
+            ),
+            mock.patch.object(runtime_mod, "write_stable_runtime_consumer_snapshot"),
+            mock.patch.object(runtime_mod, "snapshot_known_files", return_value={}),
+            mock.patch.object(runtime_mod, "detect_changed_files", return_value=[]),
+            mock.patch.object(
+                runtime_mod, "ensure_repo_owned_default_launcher_consumer"
+            ),
+            mock.patch.object(
+                runtime_mod, "get_launch_stabilization_seconds", return_value=1.0
+            ),
+            mock.patch.object(runtime_mod.time, "sleep") as sleep,
+        ):
+            paths = runtime_mod.RuntimePaths.from_env()
+            payload = runtime_mod.run_launch_smoke(paths)
+
+        self.assertEqual(run_healthcheck.call_count, 1)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        sleep.assert_not_called()
 
     def test_launch_client_dispatches_bounded_executable_with_sanitized_env(self) -> None:
         port = free_port()

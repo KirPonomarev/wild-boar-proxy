@@ -214,6 +214,32 @@ class TokenCommandCliTests(unittest.TestCase):
         self.assertEqual(result.stdout, "profile-bearer-token-789")
         self.assertEqual(result.stderr, "")
 
+    def test_repo_owned_auth_command_helper_prefers_wbp_stable_config_override(self) -> None:
+        self.generated_config.write_text(
+            'secret-key: ""\napi-keys:\n  - "profile-runtime-token-123"\n',
+            encoding="utf-8",
+        )
+        override_config = self.root / "stable-config.yaml"
+        override_config.write_text(
+            'secret-key: ""\napi-keys:\n  - "override-runtime-token-456"\n',
+            encoding="utf-8",
+        )
+        env = self.env()
+        env["WBP_STABLE_CONFIG"] = str(override_config)
+
+        result = subprocess.run(
+            [str(AUTH_COMMAND_HELPER)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "override-runtime-token-456")
+        self.assertEqual(result.stderr, "")
+
     def test_repo_owned_auth_command_helper_writes_audit_stamp_when_requested(self) -> None:
         self.generated_config.write_text(
             'secret-key: ""\napi-keys:\n  - "local-runtime-token-123"\n',

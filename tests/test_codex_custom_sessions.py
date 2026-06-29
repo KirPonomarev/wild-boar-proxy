@@ -87,7 +87,7 @@ def operator_status() -> dict[str, object]:
         "models": {
             "ok": True,
             "server_issued": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.5"],
         },
     }
 
@@ -215,7 +215,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -229,7 +229,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["current_codex_home_used"])
             self.assertTrue(packet["selected_backend_id_redacted"])
             self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.5")
             self.assertEqual(packet["current_execution_path_source"], "session_primary_model_slot")
             session = packet["session"]
             self.assertEqual(session["session_schema_version"], 3)
@@ -241,7 +241,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(session["current_execution_path_source"], "session_primary_model_slot")
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["model_id"],
-                "gpt-5.3-codex",
+                "gpt-5.5",
             )
             self.assertEqual(
                 session["role_slots"]["coding_agent_model_slot"]["model_id"],
@@ -316,7 +316,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "created_at_utc": "2026-05-28T00:00:00Z",
                     "updated_at_utc": "2026-05-28T00:00:00Z",
                     "status": "ready",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "model_server_issued": True,
                     "selected_source_class": "gpt_account",
                     "selected_backend_digest": "digest-acct-a",
@@ -361,14 +361,14 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(session["session_schema_version"], 3)
             self.assertTrue(session["legacy_single_model_migrated"])
             self.assertEqual(session["migration_status"], "legacy_single_model_migrated")
-            self.assertEqual(session["model_id"], "gpt-5.3-codex")
+            self.assertEqual(session["model_id"], "gpt-5.5")
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["binding_source"],
                 "legacy_single_model_migration",
             )
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["model_id"],
-                "gpt-5.3-codex",
+                "gpt-5.5",
             )
             self.assertEqual(
                 session["role_slots"]["coding_agent_model_slot"]["binding_status"],
@@ -390,7 +390,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
             bad_fields = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "account_id": "acct-a",
                     "backend_id": "acct-a",
                     "route_id": "route",
@@ -426,7 +426,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet({}, commands(), operator_status(), api_snapshot=api_snapshot())
             legacy_alias = manager.create_packet(
-                {"model_id": "gpt-5.3-codex"},
+                {"model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 api_snapshot=api_snapshot(),
@@ -563,7 +563,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 selection={
@@ -598,11 +598,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
-                    "reviewer_model_id": "gpt-5.4",
-                    "cheap_scanner_model_id": "gpt-5.4",
-                    "deep_reasoning_model_id": "gpt-5.4",
+                    "reviewer_model_id": "gpt-5.5",
+                    "cheap_scanner_model_id": "gpt-5.5",
+                    "deep_reasoning_model_id": "gpt-5.5",
                 },
                 commands(),
                 operator_status(),
@@ -613,15 +613,15 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["session"]["role_slot_binding_count"], 5)
             self.assertEqual(
                 packet["session"]["role_slots"]["reviewer_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
             self.assertEqual(
                 packet["session"]["role_slots"]["cheap_scanner_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
             self.assertEqual(
                 packet["session"]["role_slots"]["deep_reasoning_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
 
     def test_create_session_rejects_when_account_selection_is_not_proven(self) -> None:
@@ -630,7 +630,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 weak_commands,
                 operator_status(),
             )
@@ -648,7 +648,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -716,7 +716,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -757,7 +757,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(revalidated["same_provider_account_selection_proven"])
             self.assertEqual(revalidated["revalidated_bound_slot_count"], 2)
             self.assertEqual(primary["status"], "ok")
-            self.assertEqual(primary["runtime_selected_model"], "gpt-5.3-codex")
+            self.assertEqual(primary["runtime_selected_model"], "gpt-5.5")
             self.assertTrue(primary["runtime_selected_model_matches_bound_model"])
             self.assertEqual(primary["selected_source_provenance"], "backend_proven")
             self.assertEqual(primary["configured_provider"], "cliproxy")
@@ -771,7 +771,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "PRIMARY",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                     },
                     {
@@ -788,7 +788,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -819,7 +819,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_hashes_prompt_and_does_not_claim_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
             transcript = manager.transcript_packet(session_id)
@@ -882,7 +882,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -924,7 +924,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(primary["slot_source_revalidated"])
             self.assertTrue(primary["slot_admission_passed"])
             self.assertEqual(primary["wbp_runner_payload_slot_id"], "primary_model_slot")
-            self.assertEqual(primary["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(primary["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(primary["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(primary["wbp_session_manager_slot_dispatch_proven"])
@@ -936,13 +936,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(primary["downstream_runner_slot_echo"], "primary_model_slot")
             self.assertTrue(primary["downstream_runner_slot_echo_matches_requested"])
             self.assertEqual(primary["executed_slot_id"], "primary_model_slot")
-            self.assertEqual(primary["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["executed_slot_model_id"], "gpt-5.5")
             self.assertTrue(primary["runtime_slot_dispatch_proven"])
             self.assertTrue(primary["slot_binding_runtime_dispatch_claimed"])
             self.assertFalse(primary["parallel_slot_execution_proven"])
             self.assertFalse(primary["fanout_execution_proven"])
             self.assertEqual(primary["current_execution_path_source"], "session_bound_slot_runtime")
-            self.assertEqual(primary["model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["model_id"], "gpt-5.5")
             self.assertEqual(primary["selected_source_class"], "gpt_account")
             self.assertEqual(primary["selected_source_provenance"], "backend_proven")
             self.assertTrue(primary["selected_backend_server_issued"])
@@ -995,7 +995,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Reply primary OK.",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                     },
                     {
@@ -1058,7 +1058,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1083,11 +1083,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["same_session_dispatch_proven"])
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertTrue(packet["coding_dispatch_proven"])
-        self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_model_id"], "gpt-5.5")
         self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_executed_slot_id"], "primary_model_slot")
         self.assertEqual(packet["coding_executed_slot_id"], "coding_agent_model_slot")
-        self.assertEqual(packet["primary_runtime_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_runtime_model"], "gpt-5.5")
         self.assertEqual(packet["coding_runtime_model"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_configured_provider"], "cliproxy")
         self.assertEqual(packet["coding_configured_provider"], "external_route")
@@ -1145,7 +1145,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             [
                 {
                     "prompt": "Ответь одной строкой: WBP_MIXED_PRIMARY_SLOT_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -1199,7 +1199,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1264,7 +1264,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["deepseek_response_token_matched"])
         self.assertTrue(packet["exact_token_matched"])
         self.assertEqual(packet["response_match_basis"], "response_digest_exact")
-        self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_model_id"], "gpt-5.5")
         self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["local_imitation_used"])
@@ -1287,7 +1287,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             [
                 {
                     "prompt": "Alias activation check. Confirm orchestration intent for: Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -1339,7 +1339,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1383,7 +1383,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             [
                 {
                     "prompt": "Alias activation check. Confirm orchestration intent for: Оркестратор, дай Агент Птичка команду ответить ровно: WBP_RANDOM_ALIAS_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -1399,7 +1399,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1472,7 +1472,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1511,7 +1511,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1541,7 +1541,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
             )
@@ -1567,7 +1567,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1599,7 +1599,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         def runner(payload: dict[str, object]) -> dict[str, object]:
             model_id = str(payload.get("model_id") or "")
             route_backed = model_id == "wbp-deepseek-v3"
-            runtime_model = "gpt-5.3-codex" if route_backed else model_id
+            runtime_model = "gpt-5.5" if route_backed else model_id
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
@@ -1634,7 +1634,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1718,7 +1718,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             chatgpt_only = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 api_snapshot=deepseek_api_snapshot(),
@@ -1731,7 +1731,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
             mixed = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -1830,7 +1830,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertFalse(api_blocked_without_owner["prompt_runner_called"])
         self.assertFalse(api_blocked_without_owner["fallback_attempted"])
 
-        self.assertEqual(chatgpt_packet["model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_packet["model_id"], "gpt-5.5")
         self.assertEqual(chatgpt_packet["current_execution_slot_id"], "primary_model_slot")
         self.assertEqual(chatgpt_packet["configured_provider"], "cliproxy")
         self.assertEqual(chatgpt_packet["selected_source_class"], "gpt_account")
@@ -1854,7 +1854,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(mixed_packet["same_session_dispatch_proven"])
         self.assertTrue(mixed_packet["primary_dispatch_proven"])
         self.assertTrue(mixed_packet["coding_dispatch_proven"])
-        self.assertEqual(mixed_packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(mixed_packet["primary_model_id"], "gpt-5.5")
         self.assertEqual(mixed_packet["coding_agent_model_id"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(mixed_packet["primary_executed_slot_id"], "primary_model_slot")
         self.assertEqual(mixed_packet["coding_executed_slot_id"], "coding_agent_model_slot")
@@ -1879,9 +1879,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertEqual(
             [(call["model_id"], call["slot_id"]) for call in calls],
             [
-                ("gpt-5.3-codex", "primary_model_slot"),
+                ("gpt-5.5", "primary_model_slot"),
                 ("wbp-deepseek-v4-pro-max", "primary_model_slot"),
-                ("gpt-5.3-codex", "primary_model_slot"),
+                ("gpt-5.5", "primary_model_slot"),
                 ("wbp-deepseek-v4-pro-max", "coding_agent_model_slot"),
             ],
         )
@@ -1926,8 +1926,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
-                    "reviewer_model_id": "gpt-5.4",
+                    "primary_model_id": "gpt-5.5",
+                    "reviewer_model_id": "gpt-5.5",
                 },
                 commands(),
                 operator_status(),
@@ -1942,11 +1942,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertEqual(packet["current_execution_slot_id"], "reviewer_model_slot")
             self.assertEqual(packet["requested_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["model_id"], "gpt-5.4")
+            self.assertEqual(packet["model_id"], "gpt-5.5")
             self.assertEqual(packet["executed_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.4")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.5")
             self.assertEqual(packet["wbp_runner_payload_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.4")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
@@ -1959,7 +1959,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Review this.",
-                        "model_id": "gpt-5.4",
+                        "model_id": "gpt-5.5",
                         "slot_id": "reviewer_model_slot",
                     }
                 ],
@@ -1972,7 +1972,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -2012,7 +2012,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
             )
@@ -2032,7 +2032,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_rejects_forbidden_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(
                 session_id,
@@ -2047,7 +2047,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_live_prompt_not_admitted_packet_never_calls_runner_or_claims_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_not_admitted_packet(
                 session_id,
@@ -2105,7 +2105,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -2121,7 +2121,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Reply real OK.",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                         "slot_id_explicit": False,
                     }
@@ -2180,7 +2180,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["latency_ms"], 125)
             self.assertTrue(packet["requested_slot_defaulted_to_primary"])
             self.assertEqual(packet["wbp_runner_payload_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
@@ -2192,7 +2192,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["downstream_runner_slot_echo"], "")
             self.assertFalse(packet["downstream_runner_slot_echo_matches_requested"])
             self.assertEqual(packet["executed_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.5")
             self.assertFalse(packet["runtime_slot_dispatch_proven"])
             self.assertFalse(packet["slot_binding_runtime_dispatch_claimed"])
             self.assertFalse(packet["parallel_slot_execution_proven"])
@@ -2224,7 +2224,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         calls: list[dict[str, object]] = []
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -2243,7 +2243,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_forbidden_fields_and_failed_runner_does_not_overclaim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_packet(
                 session_id,
@@ -2279,8 +2279,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
-                "selected_model": "gpt-5.3-codex",
-                "runtime_model": "gpt-5.3-codex",
+                "selected_model": "gpt-5.5",
+                "runtime_model": "gpt-5.5",
                 "final_message": "TRACE_OK",
                 "secret_value_recorded": False,
                 "configured_provider": "cliproxy",
@@ -2311,7 +2311,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -2366,7 +2366,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2471,7 +2471,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2517,7 +2517,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2575,7 +2575,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2608,7 +2608,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Codex: ответь сам.",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                         "slot_id_explicit": False,
                     }
@@ -2624,7 +2624,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2667,7 +2667,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -2711,7 +2711,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
                 },
                 commands(),
@@ -3063,7 +3063,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             init_git_repo(repo)
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 api_snapshot=api_snapshot("wbp-deepseek-v3"),
@@ -3071,7 +3071,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
             packet = manager.repo_tmp_edit_probe_packet(
                 created["session"]["session_id"],
-                {"api_model_id": "gpt-5.3-codex"},
+                {"api_model_id": "gpt-5.5"},
                 lambda _payload, _writable_dir: self.fail("runner must not be called"),
                 owner_authorized=True,
                 repo_root=repo,
@@ -3223,8 +3223,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
-                "selected_model": "gpt-5.3-codex",
-                "runtime_model": "gpt-5.3-codex",
+                "selected_model": "gpt-5.5",
+                "runtime_model": "gpt-5.5",
                 "final_message": "MISMATCH_OK",
                 "secret_value_recorded": False,
                 "configured_provider": "external_route",
@@ -3253,7 +3253,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -3269,7 +3269,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(packet["machine_error_code"], "RUNTIME_MODEL_ID_MISMATCH")
-            self.assertEqual(packet["runtime_selected_model"], "gpt-5.3-codex")
+            self.assertEqual(packet["runtime_selected_model"], "gpt-5.5")
             self.assertTrue(packet["runtime_selected_model_recorded"])
             self.assertFalse(packet["runtime_selected_model_matches_bound_model"])
             self.assertEqual(packet["path_proof_status"], "runtime_model_mismatch_after_observation")
@@ -3306,7 +3306,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -3329,7 +3329,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -3398,7 +3398,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -3484,7 +3484,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -3510,7 +3510,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             manager.cleanup_packet(session_id)
             packet = manager.prompt_packet(
@@ -3528,7 +3528,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_cancel_and_cleanup_are_session_owned_without_process_kill_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             before_cleanup = list(Path(temp_dir).iterdir())
 
@@ -3553,11 +3553,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(list(Path(temp_dir).iterdir()), [])
 
     def test_forbidden_helpers_allow_only_declared_top_level_fields(self) -> None:
-        self.assertEqual(forbidden_session_create_fields({"primary_model_id": "gpt-5.3-codex"}), [])
-        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.3-codex"}), ["model_id"])
+        self.assertEqual(forbidden_session_create_fields({"primary_model_id": "gpt-5.5"}), [])
+        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.5"}), ["model_id"])
         self.assertEqual(
             forbidden_session_create_fields(
-                {"primary_model_id": "gpt-5.3-codex", "model_lane": "api_route_lane"}
+                {"primary_model_id": "gpt-5.5", "model_lane": "api_route_lane"}
             ),
             ["model_lane"],
         )

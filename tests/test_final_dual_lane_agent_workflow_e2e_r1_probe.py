@@ -300,7 +300,7 @@ class FinalDualLaneAgentWorkflowE2ER1ProbeTests(unittest.TestCase):
         binding = packets["final_dual_lane_session_binding_packet.json"]
         self.assertEqual(binding["status"], "ok")
         self.assertEqual(binding["role_slot_binding_count"], 2)
-        self.assertEqual(binding["primary_slot_model_id"], "gpt-5.3-codex")
+        self.assertEqual(binding["primary_slot_model_id"], "gpt-5.5")
         self.assertEqual(binding["coding_agent_slot_model_id"], "wbp-web-primary-openrouter")
         self.assertTrue(binding["role_slot_binding_proven"])
         self.assertTrue(binding["slot_catalog_revalidated"])

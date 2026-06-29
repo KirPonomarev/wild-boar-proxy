@@ -72,15 +72,49 @@ Do not manually pre-read, print, or summarize the runtime context before calling
 `auto-route` for normal prompt handling. Manual runtime-context reads are only
 for diagnostics of the router itself.
 
+Treat any prompt that begins with a short agent-like address label followed by
+`:` as an addressed-alias prompt, even when the label is unknown, misspelled, or
+only resembles a WBP agent name. Examples: `DIP:`, `DIPP:`, `Agent 2:`,
+`Ghost:`, and custom single-token Latin agent labels. Do not answer these
+prompts natively just because the label is not listed in runtime context. Pass
+the original prompt to `auto-route`; the router is the only layer allowed to
+decide whether the alias is known, unknown, ambiguous, or native-GPT.
+
+Pass the original bounded operator prompt to `auto-route`, including the leading
+address label such as `DIP:` or `Agent 2:`. Do not strip, translate, normalize,
+or re-address the alias before routing; alias removal turns an API-lane request
+into a native GPT passthrough and is a routing failure.
+
 For direct exact-answer prompts such as `DIP: ответь ровно ...`, do not narrate
 the routing step. Run `auto-route`, then return only packet `output_text` when
-`status=ok`, `auto_router_proven=true`, and `exact_plain_reply_matched=true`.
+`status=ok`, `auto_router_proven=true`, and either
+`exact_plain_reply_matched=true` or `output_passthrough_required=true`. This
+also applies to exact JSON requests such as `ответь ровно JSON ...`: do not add
+acknowledgements, summaries, code fences, Markdown, or extra prose around the
+packet `output_text`.
+
+For exact-answer prompts addressed to a primary ChatGPT alias, such as
+`Codex: answer exactly ...` or an operator-renamed primary alias, preserve the
+native GPT lane. The UserPromptSubmit hook may add primary-alias context that
+identifies the label as an alias for the current ChatGPT lane, but it must not
+turn this into an API-route request or a local deterministic imitation. This
+path proves native GPT handling only when the visible Custom response itself
+matches the requested exact answer.
 
 This path must resolve the addressed name from runtime context and choose exactly
 one lane. API-lane aliases such as `DIP`, `Agent 2`, or a custom WBP-defined API
 name route to direct API-agent reply. ChatGPT/primary aliases and prompts with
 no addressed runtime alias pass back to the native GPT lane. Unknown or
 ambiguous addressed aliases fail closed.
+
+`router-hook auto-route-output` is a visible-output helper for API-lane exact
+output and controlled repo-bridge output. It must not synthesize a primary
+ChatGPT exact answer from the prompt; primary-lane physical proof comes from the
+visible native GPT response. For API-lane aliases it may print `output_text`
+only when the routed packet proves `exact_plain_reply_matched=true`,
+`output_passthrough_required=true`, or
+`repo_bridge_evidence_response_proven=true`; merely available non-exact direct
+reply text is not a visible-output proof.
 
 For already-routed API-lane alias text, the lower-level direct reply entrypoint
 is:
@@ -97,6 +131,10 @@ For operator requests that specifically need the Custom Codex MCP/delegate
 working-tool proof path, use:
 
 `tools/wbp_dip --json --work-mode full --repo-bridge on "<bounded DIP task>"`
+
+The phrase `repo bridge` in a normal `DIP:` prompt does not by itself authorize
+`tools/wbp_dip`; it is an instruction for the canonical API-agent route to enable
+its controlled repository bridge.
 
 Do not use `dip run`, ambient ad hoc `mktemp` shell flows, ordinary Codex
 subagents, direct provider calls, or wrapper shopping as substitutes for either

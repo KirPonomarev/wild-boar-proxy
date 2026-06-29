@@ -194,7 +194,7 @@ def build_candidate_source_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
     native_ids = {str(model.get("model_id") or "") for model in native_models}
     wbp_ids = {str(model.get("model_id") or "") for model in wbp_models}
     seed_specs = [
-        ("current stable default backend model", "gpt-5.3-codex"),
+        ("current stable default backend model", "gpt-5.5"),
         ("canonical sample", "gpt-5.4-mini"),
         ("canonical sample", "gpt-5.4"),
         ("conditional sample", "gpt-5.5"),
@@ -246,7 +246,7 @@ def build_candidate_matrix_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
     catalog_packet = _candidate_catalog_packet(catalog_rows)
     routes_packet = _candidate_routes_packet(route_rows)
     candidate_list = build_candidate_model_list(
-        configured_model="gpt-5.3-codex",
+        configured_model="gpt-5.5",
         catalog_packet=catalog_packet,
         routes_packet=routes_packet,
     )

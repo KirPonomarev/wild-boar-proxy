@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -209,6 +210,357 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(packet["file_mutation_attempted"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_api_alias_address_matching_is_case_space_and_nfkc_insensitive(self) -> None:
+        cases = [
+            ("dip: ответь ровно OK", "DIP"),
+            ("agent   2: answer exactly OK", "Agent 2"),
+            ("\uff24\uff29\uff30: answer exactly OK", "DIP"),
+            ("кодер: ответь ровно OK", "Кодер"),
+            ("КОДЕР: answer exactly OK", "Кодер"),
+        ]
+
+        for prompt, expected_alias in cases:
+            with self.subTest(prompt=prompt):
+                calls: list[dict[str, object]] = []
+
+                def runner(**kwargs: object) -> dict[str, object]:
+                    calls.append(dict(kwargs))
+                    return _live_result("OK")
+
+                packet = auto.build_api_agent_auto_router_packet(
+                    prompt_text=prompt,
+                    runtime_context=_runtime_context(custom_alias="Кодер"),
+                    context_file_metadata=_metadata(),
+                    profile_dir=Path("/tmp/profile"),
+                    active_project_root=_active_project_root_for_test(),
+                    active_project_root_source="test_selected_active_project_root",
+                    work_mode="full",
+                    live_result_runner=runner,
+                )
+
+                self.assertEqual(packet["status"], "ok")
+                self.assertEqual(packet["machine_error_code"], "OK")
+                self.assertEqual(
+                    packet["auto_router_decision"],
+                    auto.AUTO_ROUTER_DECISION_API_DIRECT_REPLY,
+                )
+                self.assertTrue(packet["direct_reply_selected"])
+                self.assertTrue(packet["direct_reply_proven"])
+                self.assertEqual(packet["selected_alias"], expected_alias)
+                self.assertEqual(packet["selected_alias_lane"], "api_route")
+                self.assertEqual(packet["output_text"], "OK")
+                self.assertTrue(packet["api_lane_called"])
+                self.assertFalse(packet["chatgpt_lane_called"])
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0]["expected_alias"], expected_alias)
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_primary_alias_address_matching_is_case_space_and_nfkc_insensitive(self) -> None:
+        cases = [
+            ("codex: ответь сам.", "Codex"),
+            ("agent   1: answer yourself.", "Agent 1"),
+            ("\uff23\uff4f\uff44\uff45\uff58: answer yourself.", "Codex"),
+        ]
+
+        for prompt, expected_alias in cases:
+            with self.subTest(prompt=prompt):
+                runner = mock.Mock(return_value=_live_result("must not run"))
+
+                packet = auto.build_api_agent_auto_router_packet(
+                    prompt_text=prompt,
+                    runtime_context=_runtime_context(),
+                    context_file_metadata=_metadata(),
+                    profile_dir=Path("/tmp/profile"),
+                    active_project_root=_active_project_root_for_test(),
+                    active_project_root_source="test_selected_active_project_root",
+                    live_result_runner=runner,
+                )
+
+                self.assertEqual(packet["status"], "ok")
+                self.assertEqual(packet["machine_error_code"], "OK")
+                self.assertEqual(packet["selected_alias"], expected_alias)
+                self.assertEqual(packet["selected_alias_lane"], "primary_chatgpt")
+                self.assertEqual(
+                    packet["auto_router_decision"],
+                    auto.AUTO_ROUTER_DECISION_GPT_LANE,
+                )
+                self.assertTrue(packet["gpt_lane_selected"])
+                self.assertTrue(packet["gpt_passthrough_to_native_chat"])
+                self.assertFalse(packet["direct_reply_selected"])
+                self.assertFalse(packet["api_lane_called"])
+                self.assertFalse(packet["chatgpt_lane_called"])
+                runner.assert_not_called()
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_primary_alias_exact_reply_stays_native_without_local_visible_output(self) -> None:
+        runner = mock.Mock(return_value=_live_result("must not run"))
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text="Codex: answer exactly WBP_PRIMARY_EXACT_OK",
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["selected_alias"], "Codex")
+        self.assertEqual(packet["selected_alias_lane"], "primary_chatgpt")
+        self.assertEqual(packet["auto_router_decision"], auto.AUTO_ROUTER_DECISION_GPT_LANE)
+        self.assertTrue(packet["gpt_lane_selected"])
+        self.assertTrue(packet["gpt_passthrough_to_native_chat"])
+        self.assertFalse(packet["direct_reply_selected"])
+        self.assertFalse(packet["direct_reply_proven"])
+        self.assertFalse(packet["api_lane_called"])
+        self.assertFalse(packet["chatgpt_lane_called"])
+        self.assertTrue(packet["primary_exact_plain_reply_requested"])
+        self.assertFalse(packet["primary_exact_plain_reply_visible_output"])
+        self.assertEqual(packet["output_text"], "")
+        self.assertFalse(packet["output_passthrough_required"])
+        self.assertEqual(packet["output_passthrough_kind"], "")
+        self.assertFalse(packet["output_passthrough_text_available"])
+        self.assertFalse(packet["output_passthrough_text_recorded"])
+        runner.assert_not_called()
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_runtime_context_renamed_alias_routes_and_removed_alias_fails_closed(self) -> None:
+        renamed_context = _runtime_context()
+        renamed_context["agent_bindings"][0]["display_name"] = "Планер"
+        renamed_context["agent_bindings"][0]["aliases"] = ["Планер", "Planner"]
+        renamed_context["agent_bindings"][1]["display_name"] = "Строитель"
+        renamed_context["agent_bindings"][1]["aliases"] = ["Строитель", "Builder"]
+        renamed_context["alias_to_agent_id"] = {
+            "Планер": "codex",
+            "Planner": "codex",
+            "Строитель": "dip",
+            "Builder": "dip",
+        }
+
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result("renamed route ok")
+
+        routed = auto.build_api_agent_auto_router_packet(
+            prompt_text="builder: answer exactly RENAMED_OK",
+            runtime_context=renamed_context,
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            work_mode="full",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(routed["status"], "ok")
+        self.assertEqual(routed["machine_error_code"], "OK")
+        self.assertEqual(routed["selected_alias"], "Builder")
+        self.assertEqual(routed["selected_alias_lane"], "api_route")
+        self.assertEqual(routed["auto_router_decision"], auto.AUTO_ROUTER_DECISION_API_DIRECT_REPLY)
+        self.assertEqual(routed["output_text"], "renamed route ok")
+        self.assertTrue(routed["api_lane_called"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["expected_alias"], "Builder")
+
+        removed = auto.build_api_agent_auto_router_packet(
+            prompt_text="DIP: answer exactly SHOULD_NOT_ROUTE",
+            runtime_context=renamed_context,
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            work_mode="full",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(removed["status"], "error")
+        self.assertEqual(removed["machine_error_code"], auto.API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS)
+        self.assertEqual(removed["auto_router_decision"], auto.AUTO_ROUTER_DECISION_BLOCKED)
+        self.assertTrue(removed["auto_router_fail_closed"])
+        self.assertTrue(removed["auto_router_unknown_alias_blocked"])
+        self.assertFalse(removed["api_lane_called"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(packets.inspect_command_packet_semantics(routed), [])
+        self.assertEqual(packets.inspect_command_packet_semantics(removed), [])
+
+    def test_api_alias_accepts_repo_bridge_verified_evidence_without_provider_call(
+        self,
+    ) -> None:
+        text = (
+            '{"status":"ok","changed_files":["tmp/agent2-en.txt"],'
+            '"readback_ok":true}'
+        )
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            return _live_result(
+                text,
+                provider_called=False,
+                source="repo_bridge_verified_evidence",
+                direct_provider_auth_proven=False,
+                direct_provider_response_observed=False,
+                provider_auth_ok=False,
+                positive_provider_proof_gate_satisfied=False,
+                repo_bridge_required=True,
+                repo_bridge_available=True,
+                repo_bridge_used=True,
+                dip_repo_tool_bridge_required=True,
+                dip_repo_tool_bridge_available=True,
+                dip_repo_tool_bridge_used=True,
+                dip_action_bridge_required=True,
+                dip_action_bridge_used=True,
+                dip_action_bridge_succeeded=True,
+                dip_action_tool_call_count=1,
+                dip_action_successful_tool_call_count=1,
+                dip_action_tool_names=["write_file"],
+                dip_action_mutation_applied=True,
+                dip_mutation_required=True,
+                dip_mutation_written=True,
+                dip_mutation_verified=True,
+                dip_mutation_readback_verified=True,
+                dip_action_mutated_files=["tmp/agent2-en.txt"],
+                repo_bridge_final_answer_synthesized=True,
+            )
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text=(
+                "Agent 2: using the repo bridge, create file "
+                "tmp/agent2-en.txt with text OK, read it back, and answer JSON."
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            repo_bridge_mode="auto",
+            work_mode="full",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["auto_router_proven"])
+        self.assertTrue(packet["direct_reply_proven"])
+        self.assertEqual(packet["output_text"], text)
+        self.assertFalse(packet["api_agent_provider_called"])
+        self.assertFalse(packet["api_agent_response_observed"])
+        self.assertTrue(packet["repo_bridge_evidence_response_proven"])
+        self.assertTrue(
+            packet["reply_proof_summary"]["repo_bridge_evidence_response_proven"]
+        )
+        self.assertFalse(packet["api_lane_called"])
+        self.assertEqual(packet["changed_files"], ["tmp/agent2-en.txt"])
+        self.assertTrue(packet["repo_bridge_final_answer_synthesized"])
+        self.assertTrue(packet["file_mutation_attempted"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+
+    def test_api_alias_propagates_code_verification_failure_fields(self) -> None:
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text="DIP: почини баг и запусти тест.",
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            repo_bridge_mode="on",
+            live_result_runner=lambda **_kwargs: _live_result(
+                "",
+                status="error",
+                machine_error_code="WBP_DIP_TOOL_CODE_VERIFICATION_FAILED",
+                result_available=False,
+                result_text="",
+                result_text_sha256="",
+                result_text_length=0,
+                dip_action_bridge_required=True,
+                dip_action_bridge_used=True,
+                dip_action_tests_run=True,
+                dip_action_patch_applied=True,
+                dip_code_mutation_required=True,
+                dip_code_written=True,
+                dip_code_verified=False,
+                dip_code_verification_failed=True,
+                dip_code_failed_verification_count=1,
+                dip_action_mutated_files=["src/app.py"],
+            ),
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WBP_DIP_TOOL_CODE_VERIFICATION_FAILED",
+        )
+        self.assertTrue(packet["api_route_selected"])
+        self.assertTrue(packet["direct_reply_selected"])
+        self.assertTrue(packet["dip_code_written"])
+        self.assertFalse(packet["dip_code_verified"])
+        self.assertTrue(packet["dip_code_verification_failed"])
+        self.assertEqual(packet["dip_code_failed_verification_count"], 1)
+        self.assertEqual(packet["changed_files"], ["src/app.py"])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_leading_api_alias_wins_over_alias_mentions_in_human_task_body(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(**kwargs: object) -> dict[str, object]:
+            calls.append(dict(kwargs))
+            return _live_result("human coding task accepted")
+
+        prompt = (
+            "DIP: создай модуль, который распознает слова DIP, Agent 2, "
+            "Codex и Кодер внутри пользовательского текста."
+        )
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text=prompt,
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            work_mode="full",
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["auto_router_proven"])
+        self.assertEqual(
+            packet["auto_router_decision"],
+            auto.AUTO_ROUTER_DECISION_API_DIRECT_REPLY,
+        )
+        self.assertEqual(packet["selected_alias"], "DIP")
+        self.assertEqual(packet["parser_target_selection_rule"], "leading_address_alias")
+        self.assertFalse(packet["auto_router_ambiguous_alias_blocked"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertEqual(packet["output_text"], "human coding task accepted")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_unknown_leading_alias_ignores_known_alias_mentions_in_body(self) -> None:
+        runner = mock.Mock(return_value=_live_result("must not run"))
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text="DIPP: проверь, что строка DIP: внутри данных не меняет адресата.",
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            live_result_runner=runner,
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"],
+            auto.API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        )
+        self.assertTrue(packet["auto_router_fail_closed"])
+        self.assertTrue(packet["auto_router_unknown_alias_blocked"])
+        self.assertFalse(packet["auto_router_ambiguous_alias_blocked"])
+        self.assertFalse(packet["direct_reply_selected"])
+        self.assertFalse(packet["api_lane_called"])
+        runner.assert_not_called()
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_api_alias_allows_missing_active_project_root_for_plain_reply(self) -> None:
         calls: list[dict[str, object]] = []
 
@@ -317,6 +669,30 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
                 repo_bridge_bootstrap_tool_call_count=1,
                 repo_bridge_tool_call_count=2,
                 repo_bridge_successful_tool_call_count=2,
+                dip_evidence_trace_available=True,
+                dip_evidence_trace_recorded=True,
+                dip_evidence_trace_count=2,
+                dip_evidence_trace=[
+                    {
+                        "step": 1,
+                        "tool": "run_tests",
+                        "origin": "wbp_bootstrap",
+                        "status": "error",
+                        "machine_error_code": "command_failed",
+                        "command_exit_code": 1,
+                        "result_text_sha256": "b" * 64,
+                        "result_text": "raw output must not propagate",
+                    },
+                    {
+                        "step": 2,
+                        "tool": "read_file",
+                        "origin": "model",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "result_text_sha256": "c" * 64,
+                    },
+                ],
+                dip_evidence_trace_raw_output_recorded=False,
                 repo_bridge_raw_tool_results_recorded=False,
                 dip_action_bridge_required=True,
                 dip_action_bridge_available=True,
@@ -353,6 +729,16 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(packet["repo_bridge_bootstrap_tool_call_count"], 1)
         self.assertEqual(packet["repo_bridge_tool_call_count"], 2)
         self.assertEqual(packet["repo_bridge_successful_tool_call_count"], 2)
+        self.assertTrue(packet["dip_evidence_trace_available"])
+        self.assertTrue(packet["dip_evidence_trace_recorded"])
+        self.assertEqual(packet["dip_evidence_trace_count"], 2)
+        self.assertEqual(packet["dip_evidence_trace"][0]["tool"], "run_tests")
+        self.assertEqual(
+            packet["dip_evidence_trace"][0]["machine_error_code"],
+            "command_failed",
+        )
+        self.assertNotIn("result_text", packet["dip_evidence_trace"][0])
+        self.assertFalse(packet["dip_evidence_trace_raw_output_recorded"])
         self.assertFalse(packet["repo_bridge_raw_tool_results_recorded"])
         self.assertTrue(packet["dip_action_bridge_required"])
         self.assertTrue(packet["dip_action_bridge_available"])
@@ -486,30 +872,39 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_unknown_leading_alias_fails_closed_without_api_call(self) -> None:
-        runner = mock.Mock(return_value=_live_result("must not run"))
+        prompts = [
+            "Ghost: ответь.",
+            "DIPP: ответь ровно SHOULD_NOT_ROUTE",
+            "DIPP:ответь ровно SHOULD_NOT_ROUTE",
+        ]
 
-        packet = auto.build_api_agent_auto_router_packet(
-            prompt_text="Ghost: ответь.",
-            runtime_context=_runtime_context(),
-            context_file_metadata=_metadata(),
-            profile_dir=Path("/tmp/profile"),
-            active_project_root=_active_project_root_for_test(),
-            active_project_root_source="test_selected_active_project_root",
-            live_result_runner=runner,
-        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                runner = mock.Mock(return_value=_live_result("must not run"))
 
-        self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"],
-            auto.API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
-        )
-        self.assertTrue(packet["auto_router_fail_closed"])
-        self.assertTrue(packet["auto_router_unknown_alias_blocked"])
-        self.assertTrue(packet["leading_address_label_unknown_alias_candidate"])
-        self.assertFalse(packet["direct_reply_selected"])
-        self.assertFalse(packet["api_lane_called"])
-        runner.assert_not_called()
-        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+                packet = auto.build_api_agent_auto_router_packet(
+                    prompt_text=prompt,
+                    runtime_context=_runtime_context(),
+                    context_file_metadata=_metadata(),
+                    profile_dir=Path("/tmp/profile"),
+                    active_project_root=_active_project_root_for_test(),
+                    active_project_root_source="test_selected_active_project_root",
+                    live_result_runner=runner,
+                )
+
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(
+                    packet["machine_error_code"],
+                    auto.API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+                )
+                self.assertTrue(packet["auto_router_fail_closed"])
+                self.assertTrue(packet["auto_router_unknown_alias_blocked"])
+                self.assertTrue(packet["leading_address_label_unknown_alias_candidate"])
+                self.assertFalse(packet["direct_reply_selected"])
+                self.assertFalse(packet["api_lane_called"])
+                self.assertNotEqual(packet["output_text"], "SHOULD_NOT_ROUTE")
+                runner.assert_not_called()
+                self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_disallowed_api_route_fails_closed_without_provider_call(self) -> None:
         runner = mock.Mock(return_value=_live_result("must not run"))
@@ -663,6 +1058,640 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertFalse(payload["tools_wbp_dip_invoked"])
         self.assertFalse(payload["dip_run_invoked"])
         self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_auto_route_output_reads_stdin_and_prints_passthrough_only(self) -> None:
+        prompt = 'DIP: ответь ровно JSON {"status":"ok","quoted":"yes"}'
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "sys.stdin",
+                io.StringIO(prompt + "\n"),
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **kwargs: _live_result_from_kwargs(
+                    '{"status":"ok","quoted":"yes"}',
+                    **kwargs,
+                ),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), '{"status":"ok","quoted":"yes"}\n')
+        self.assertNotIn("packet_kind", stdout.getvalue())
+        self.assertNotIn("DIP:", stdout.getvalue())
+
+    def test_cli_auto_route_output_prints_proven_repo_bridge_output(self) -> None:
+        prompt = "DIP: через repo bridge создай файл tmp/a.txt и ответь ровно WBP_MUTATION_OK"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def live_result(**kwargs: object) -> dict[str, object]:
+                work_mode = str(kwargs.get("dip_work_mode") or "standard")
+                full = work_mode == "full"
+                return _live_result(
+                    "WBP_MUTATION_OK",
+                    dip_work_mode=work_mode,
+                    dip_full_work_mode=full,
+                    live_result_text_limit=64000 if full else 2400,
+                    live_result_output_token_limit=32768 if full else 768,
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                    repo_bridge_final_answer_synthesized=True,
+                    repo_bridge_mutation_controlled=True,
+                    source="repo_bridge_verified_evidence",
+                    provider_called=False,
+                    direct_provider_response_observed=False,
+                    provider_auth_ok=False,
+                    positive_provider_proof_gate_satisfied=False,
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_MUTATION_OK\n")
+        self.assertNotIn("WBP_ROUTER_OUTPUT_NOT_AVAILABLE", stdout.getvalue())
+
+    def test_cli_auto_route_output_blocks_non_exact_direct_reply_text(self) -> None:
+        prompt = "Builder: через repo bridge read-only проверь CANON.md и верни короткий статус"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(custom_alias="Builder"), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def live_result(**kwargs: object) -> dict[str, object]:
+                work_mode = str(kwargs.get("dip_work_mode") or "standard")
+                full = work_mode == "full"
+                return _live_result(
+                    "WBP_DIRECT_TEXT_AVAILABLE_OK",
+                    dip_work_mode=work_mode,
+                    dip_full_work_mode=full,
+                    live_result_text_limit=64000 if full else 2400,
+                    live_result_output_token_limit=32768 if full else 768,
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                    repo_bridge_readonly=True,
+                    repo_bridge_mutation_allowed=False,
+                    repo_bridge_mutation_controlled=False,
+                    repo_bridge_bootstrap_used=True,
+                    repo_bridge_bootstrap_tool_call_count=1,
+                    repo_bridge_tool_call_count=1,
+                    repo_bridge_successful_tool_call_count=1,
+                    repo_bridge_tool_names=["read_file"],
+                    repo_bridge_bootstrap_tool_names=["read_file"],
+                    repo_bridge_final_answer_synthesized=False,
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_ROUTER_OUTPUT_NOT_AVAILABLE\n")
+        self.assertNotIn("WBP_DIRECT_TEXT_AVAILABLE_OK", stdout.getvalue())
+
+    def test_cli_auto_route_output_does_not_synthesize_primary_exact(self) -> None:
+        prompt = "Codex: answer exactly WBP_PRIMARY_CLI_EXACT_OK"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=AssertionError("primary alias must not call API lane"),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_ROUTER_OUTPUT_NOT_AVAILABLE\n")
+        self.assertNotIn("Codex:", stdout.getvalue())
+
+    def test_cli_auto_route_output_unknown_alias_prints_machine_code(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO("DIPP: ответь ровно NOPE\n")):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS\n")
+
+    def test_cli_auto_route_progress_stderr_keeps_stdout_json_clean(self) -> None:
+        def runner(**_kwargs: object) -> dict[str, object]:
+            time.sleep(0.03)
+            return {
+                "exit_code": 0,
+                "status": "ok",
+                "machine_error_code": "OK",
+            }
+
+        with mock.patch(
+            "wild_boar_proxy.cli.run_api_agent_auto_router_command",
+            side_effect=runner,
+        ):
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = cli.main(
+                    [
+                        "router-hook",
+                        "auto-route",
+                        "--prompt",
+                        "DIP: ответь.",
+                        "--progress-stderr",
+                        "--progress-stderr-interval",
+                        "0.01",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("WBP_ROUTER_PROGRESS auto-route", stderr.getvalue())
+        self.assertNotIn("WBP_ROUTER_PROGRESS", stdout.getvalue())
+
+    def test_cli_auto_route_enables_repo_bridge_for_explicit_prompt_phrase(self) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def runner(**kwargs: object) -> dict[str, object]:
+                calls.append(dict(kwargs))
+                return _live_result(
+                    "cli repo bridge answer",
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                    dip_repo_tool_bridge_required=True,
+                    dip_repo_tool_bridge_available=True,
+                    dip_repo_tool_bridge_used=True,
+                    repo_bridge_context_pack_used=True,
+                    repo_bridge_readonly=True,
+                    repo_bridge_bootstrap_used=True,
+                    repo_bridge_bootstrap_tool_call_count=1,
+                    repo_bridge_tool_call_count=1,
+                    repo_bridge_successful_tool_call_count=1,
+                    repo_bridge_tool_names=["read_file"],
+                    repo_bridge_bootstrap_tool_names=["read_file"],
+                    dip_action_tool_names=[],
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=runner,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            "DIP: через repo bridge read-only проверь AGENTS.md.",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
+        self.assertEqual(payload["direct_reply_text"], "cli repo bridge answer")
+        self.assertEqual(payload["requested_repo_bridge_mode"], "on")
+        self.assertEqual(payload["repo_bridge_mode"], "on")
+        self.assertTrue(payload["repo_bridge_required"])
+        self.assertTrue(payload["repo_bridge_available"])
+        self.assertTrue(payload["repo_bridge_used"])
+        self.assertTrue(payload["active_project_root_required"])
+        self.assertTrue(payload["target_repo_required"])
+        self.assertEqual(payload["repo_bridge_tool_names"], ["read_file"])
+        self.assertEqual(payload["repo_bridge_bootstrap_tool_names"], ["read_file"])
+        self.assertEqual(payload["dip_action_tool_names"], [])
+        self.assertEqual(payload["active_project_root_source"], "server_runtime_env")
+        self.assertEqual(payload["effect"], "mutate")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["repo_root"], project.resolve(strict=False))
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_auto_route_promotes_explicit_repo_action_to_full_work_mode(self) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **kwargs: (
+                    calls.append(dict(kwargs))
+                    or _live_result_from_kwargs("cli action bridge answer", **kwargs)
+                ),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            (
+                                "DIP: через repo bridge read-only запусти "
+                                "python3 -m pytest tests/test_wbp_dip_tool.py -q "
+                                "и ответь JSON."
+                            ),
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["requested_repo_bridge_mode"], "on")
+        self.assertEqual(payload["requested_work_mode"], "full")
+        self.assertEqual(payload["repo_bridge_mode"], "on")
+        self.assertEqual(payload["dip_work_mode"], "full")
+        self.assertTrue(payload["dip_full_work_mode"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_auto_route_promotes_natural_code_write_task_to_repo_full_mode(self) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(custom_alias="Кодер"), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **kwargs: (
+                    calls.append(dict(kwargs))
+                    or _live_result_from_kwargs(
+                        '{"status":"success","marker":"WBP_UH_ROUTER_CODE_OK"}',
+                        **kwargs,
+                    )
+                ),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            (
+                                "Кодер: обычным русским языком создай Python-модуль "
+                                "tmp/wbp-ultrahard/router_natural/parser.py и тест "
+                                "pytest, запусти pytest и верни JSON."
+                            ),
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
+        self.assertEqual(payload["requested_repo_bridge_mode"], "on")
+        self.assertEqual(payload["requested_work_mode"], "full")
+        self.assertEqual(payload["repo_bridge_mode"], "on")
+        self.assertEqual(payload["dip_work_mode"], "full")
+        self.assertTrue(payload["dip_full_work_mode"])
+        self.assertTrue(payload["active_project_root_required"])
+        self.assertEqual(payload["selected_alias"], "Кодер")
+        self.assertEqual(payload["parser_target_selection_rule"], "leading_address_alias")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
+        self.assertEqual(calls[0]["repo_root"], project.resolve(strict=False))
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_cli_auto_route_promotes_english_create_module_task_to_repo_full_mode(
+        self,
+    ) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **kwargs: (
+                    calls.append(dict(kwargs))
+                    or _live_result_from_kwargs(
+                        '{"status":"success","marker":"WBP_UH_ROUTER_EN_CODE_OK"}',
+                        **kwargs,
+                    )
+                ),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route",
+                            "--prompt",
+                            (
+                                "DIP: create a Python module in "
+                                "tmp/wbp-ultrahard/router_en/parser.py and return JSON."
+                            ),
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["auto_router_decision"], "api_direct_reply")
+        self.assertEqual(payload["requested_repo_bridge_mode"], "on")
+        self.assertEqual(payload["requested_work_mode"], "full")
+        self.assertEqual(payload["repo_bridge_mode"], "on")
+        self.assertEqual(payload["dip_work_mode"], "full")
+        self.assertTrue(payload["dip_full_work_mode"])
+        self.assertTrue(payload["dip_action_bridge_required"])
+        self.assertTrue(payload["dip_code_mutation_required"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["repo_bridge_mode"], "on")
+        self.assertEqual(calls[0]["dip_work_mode"], "full")
+        self.assertEqual(calls[0]["repo_root"], project.resolve(strict=False))
+        self.assertEqual(packets.inspect_command_packet_semantics(payload), [])
+
+    def test_auto_route_marks_exact_json_output_passthrough(self) -> None:
+        result_text = json.dumps(
+            {
+                "status": "ok",
+                "passed_count": 73,
+                "subtests_count": 2,
+                "command_used": "python3 -m pytest tests/test_wbp_dip_tool.py -q",
+            },
+            separators=(",", ":"),
+        )
+
+        packet = auto.build_api_agent_auto_router_packet(
+            prompt_text=(
+                "DIP: через repo bridge read-only запусти python3 -m pytest "
+                "tests/test_wbp_dip_tool.py -q и ответь ровно JSON с полями "
+                "status, passed_count, subtests_count, command_used"
+            ),
+            runtime_context=_runtime_context(),
+            context_file_metadata=_metadata(),
+            profile_dir=Path("/tmp/profile"),
+            active_project_root=_active_project_root_for_test(),
+            active_project_root_source="test_selected_active_project_root",
+            live_result_runner=lambda **kwargs: _live_result_from_kwargs(
+                result_text,
+                **kwargs,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["output_text"], result_text)
+        self.assertTrue(packet["output_passthrough_required"])
+        self.assertEqual(packet["output_passthrough_kind"], "exact_json_reply")
+        self.assertTrue(packet["output_passthrough_text_available"])
+        self.assertFalse(packet["output_passthrough_text_recorded"])
+        self.assertEqual(
+            packet["output_passthrough_text_sha256"],
+            auto._sha256_text(result_text),
+        )
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_cli_auto_route_routes_agent_2_alias_to_direct_reply(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -866,6 +1895,16 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
 
         self.assertEqual(cli.command_effect_from_args(probe_args), "probe")
         self.assertEqual(cli.command_effect_from_args(mutate_args), "mutate")
+        natural_bridge_args = parser.parse_args(
+            [
+                "router-hook",
+                "auto-route",
+                "--prompt",
+                "DIP: через repo bridge read-only проверь AGENTS.md.",
+                "--json",
+            ]
+        )
+        self.assertEqual(cli.command_effect_from_args(natural_bridge_args), "mutate")
         proof_args = parser.parse_args(
             [
                 "router-hook",

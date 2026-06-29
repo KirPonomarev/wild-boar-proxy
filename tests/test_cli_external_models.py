@@ -81,6 +81,7 @@ def mocked_provider(
     malformed_models: bool = False,
     malformed_smoke: bool = False,
     smoke_payload: dict[str, object] | None = None,
+    smoke_payloads: list[dict[str, object]] | None = None,
 ) -> tuple[str, ThreadingHTTPServer]:
     class Handler(BaseHTTPRequestHandler):
         def _send_json(self, status_code: int, payload: dict[str, object]) -> None:
@@ -112,6 +113,7 @@ def mocked_provider(
 
         def do_POST(self) -> None:  # noqa: N802
             self.server.request_count += 1
+            self.server.post_count += 1  # type: ignore[attr-defined]
             if self.path != "/v1/chat/completions":
                 self._send_json(404, {"error": "not_found"})
                 return
@@ -125,9 +127,16 @@ def mocked_provider(
             raw_body = self.rfile.read(raw_length) if raw_length else b""
             if raw_body:
                 self.server.last_request_payload = json.loads(raw_body.decode("utf-8"))  # type: ignore[attr-defined]
+            selected_smoke_payload = smoke_payload
+            if smoke_payloads is not None:
+                payload_index = min(
+                    int(self.server.post_count) - 1,  # type: ignore[attr-defined]
+                    len(smoke_payloads) - 1,
+                )
+                selected_smoke_payload = smoke_payloads[payload_index]
             self._send_json(
                 200,
-                smoke_payload
+                selected_smoke_payload
                 or {
                     "id": "chatcmpl-test",
                     "choices": [
@@ -142,6 +151,7 @@ def mocked_provider(
     port = _free_port()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.request_count = 0  # type: ignore[attr-defined]
+    server.post_count = 0  # type: ignore[attr-defined]
     server.last_request_payload = None  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -1429,6 +1439,80 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertTrue(payload["data"]["positive_provider_proof_gate_satisfied"])
         self.assertEqual(request_count, 1)
         self.assertEqual(request_payload["max_tokens"], 96)
+        self.assertEqual(state_after, state_before)
+        self.assertEqual(evidence_after, evidence_before)
+
+    def test_live_format_check_retries_transient_empty_provider_content(self) -> None:
+        expected_text = "API_ONLY_RETRY_READY"
+        with mocked_provider(
+            smoke_payloads=[
+                {
+                    "id": "chatcmpl-live-format-empty",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": None},
+                        }
+                    ],
+                },
+                {
+                    "id": "chatcmpl-live-format-retry",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": expected_text,
+                            },
+                        }
+                    ],
+                },
+            ],
+        ) as (base_url, server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            state_before = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            evidence_before = sorted((self.external_dir / "evidence").glob("*"))
+            result = self.run_cli(
+                "external-models",
+                "live-format-check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+                "--prompt",
+                f"Return exactly: {expected_text}",
+                "--expected-text",
+                expected_text,
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+            state_after = (
+                (self.external_dir / "state.json").read_text(encoding="utf-8")
+                if (self.external_dir / "state.json").exists()
+                else ""
+            )
+            evidence_after = sorted((self.external_dir / "evidence").glob("*"))
+
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effect"], "probe")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["data"]["request_count"], 2)
+        self.assertEqual(payload["data"]["retry_count"], 1)
+        self.assertTrue(payload["data"]["expected_text_observed"])
+        self.assertEqual(payload["data"]["response_preview_bounded"], expected_text)
+        self.assertFalse(payload["data"]["state_written"])
+        self.assertFalse(payload["data"]["evidence_written"])
+        self.assertEqual(request_count, 2)
         self.assertEqual(state_after, state_before)
         self.assertEqual(evidence_after, evidence_before)
 

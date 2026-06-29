@@ -1878,10 +1878,10 @@ def _runtime_context_profile_targets_for_live_server(
     custom_profile_paths: RuntimePaths,
     owner_paths: RuntimePaths,
 ) -> tuple[Path, list[Path]]:
-    required_target = owner_paths.profile_dir
+    required_target = custom_profile_paths.profile_dir
     optional_targets: list[Path] = []
-    if custom_profile_paths.profile_dir != required_target:
-        optional_targets.append(custom_profile_paths.profile_dir)
+    if owner_paths.profile_dir != required_target:
+        optional_targets.append(owner_paths.profile_dir)
     return required_target, optional_targets
 
 
@@ -5625,7 +5625,7 @@ def _custom_native_free_text_prompt(
         [
             f"{primary_alias}: ты оркестратор. Проведи строго машинный native proof без свободного отчета.",
             f"{coding_alias}: ты API-lane coding-agent alias. Выполни только локальное создание proof JSON.",
-            "Не запускай и не называй обычный Codex sub-agent агентом DIP/API-lane.",
+            "Не запускай отдельного внутреннего исполнителя и не называй его агентом DIP/API-lane.",
             "Прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
             "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
             f"Создай UTF-8 JSON файл ровно по этому пути: {proof_path}",
@@ -5664,7 +5664,7 @@ def _custom_native_natural_dip_command_prompt(
             f"{primary_alias}, ты оркестратор. Дай короткую задачу агенту {coding_alias} и сверь его ответ.",
             f"{coding_alias}, работай как API-lane coding agent и верни в видимом ответе ровно этот текст: {expected_text}",
             "Это server-owned natural DIP command proof: команда похожа на обычную работу, но route/model authority остается только у WBP.",
-            "Не запускай и не называй обычный Codex sub-agent агентом DIP/API-lane.",
+            "Не запускай отдельного внутреннего исполнителя и не называй его агентом DIP/API-lane.",
             "Не используй локальную имитацию ответа DIP.",
             "Для машинного доказательства прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
             "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
@@ -9418,6 +9418,50 @@ def _custom_native_stable_bridge_prewarm_packet(
     }
 
 
+def _custom_native_stable_bridge_prewarm_restart_retry_admissible(
+    packet: dict[str, Any],
+) -> bool:
+    if packet.get("status") == "ok":
+        return False
+    if packet.get("prewarm_required") is not True:
+        return False
+    if packet.get("bridge_owner_current_process_proven") is not True:
+        return False
+    if str(packet.get("bridge_ownership_status") or "") != "current_process_owned":
+        return False
+    if (
+        str(packet.get("machine_error_code") or "")
+        != "CUSTOM_CODEX_STABLE_WBP_BRIDGE_SMOKE_FAILED"
+    ):
+        return False
+    trace = packet.get("bridge_trace_packet")
+    trace_packet = trace if isinstance(trace, dict) else {}
+    health = (
+        trace_packet.get("bridge_health_packet")
+        if isinstance(trace_packet.get("bridge_health_packet"), dict)
+        else {}
+    )
+    request_trace = (
+        trace_packet.get("bridge_request_trace_packet")
+        if isinstance(trace_packet.get("bridge_request_trace_packet"), dict)
+        else {}
+    )
+    recoverable_smoke_error = str(packet.get("smoke_error_class") or "") in {
+        "TimeoutError",
+        "URLError",
+        "OSError",
+    }
+    stale_bridge_trace = bool(
+        trace_packet.get("stale_launch_packet") is True
+        or str(trace_packet.get("bridge_machine_error_code") or "")
+        == "BRIDGE_PORT_NOT_OWNED"
+        or str(health.get("machine_error_code") or "") == "BRIDGE_PORT_NOT_OWNED"
+        or str(request_trace.get("machine_error_code") or "")
+        == "BRIDGE_PORT_NOT_OWNED"
+    )
+    return recoverable_smoke_error or stale_bridge_trace
+
+
 def _custom_native_chatgpt_plus_api_dispatch_proof_packet(
     *,
     last_launch_packet: dict[str, Any] | None,
@@ -11216,6 +11260,10 @@ def _custom_native_api_only_runtime_agent_bindings(
         agent_id="dip",
         lane=API_ROUTE_LANE,
         route_id=api_model_id,
+    ) or _first_agent_binding(
+        agent_bindings,
+        agent_id="dip",
+        lane=API_ROUTE_LANE,
     )
     primary_aliases = _binding_aliases(primary_source, ["Codex", "Agent 1", "1"])
     coding_aliases = _binding_aliases(coding_source, ["DIP", "Agent 2", "2"])
@@ -11287,6 +11335,33 @@ def _custom_native_api_only_runtime_binding_projection(
     }
 
 
+def _custom_native_runtime_rebind_primary_model(
+    bindings_packet: dict[str, Any],
+    *,
+    chatgpt_model_id: str,
+) -> dict[str, Any]:
+    if bindings_packet.get("status") != "ok" or not chatgpt_model_id:
+        return bindings_packet
+    rebound_bindings: list[dict[str, Any]] = []
+    changed = False
+    for raw_binding in bindings_packet.get("agent_bindings", []):
+        if not isinstance(raw_binding, dict):
+            continue
+        binding = dict(raw_binding)
+        if binding.get("lane") == PRIMARY_CHATGPT_LANE:
+            if binding.get("model_id") != chatgpt_model_id:
+                changed = True
+            binding["model_id"] = chatgpt_model_id
+        rebound_bindings.append(binding)
+    if not changed:
+        return bindings_packet
+    return {
+        **bindings_packet,
+        "agent_bindings": rebound_bindings,
+        "runtime_primary_model_rebound": True,
+    }
+
+
 def _custom_native_agent_runtime_context(
     *,
     execution_packet: dict[str, Any] | None,
@@ -11299,7 +11374,13 @@ def _custom_native_agent_runtime_context(
 ) -> dict[str, Any]:
     packet = execution_packet if isinstance(execution_packet, dict) else {}
     execution_mode = str(packet.get("execution_mode") or "legacy_model_id_launch")
-    api_model_id = str(packet.get("api_model_id") or route_model_id or "")
+    packet_api_model_id = str(packet.get("api_model_id") or "").strip()
+    route_bound_api_model_id = (
+        str(route_model_id or "").strip()
+        if execution_mode in {"api_only", "chatgpt_plus_api"}
+        else ""
+    )
+    api_model_id = str(packet_api_model_id or route_bound_api_model_id or "")
     chatgpt_model_id = str(packet.get("chatgpt_model_id") or launch_model_id or "")
     api_only_primary_executor = bool(execution_mode == "api_only" and api_model_id)
     stale_route_ids = sorted(
@@ -11419,10 +11500,15 @@ def _custom_native_agent_runtime_context(
                 primary_model_id=chatgpt_model_id,
                 api_route_id=api_model_id,
             ),
-            primary_model_ids=[chatgpt_model_id] if chatgpt_model_id else [],
+            primary_model_ids=[],
             route_records=effective_route_records,
             require_api_route_binding=execution_mode == "chatgpt_plus_api",
         )
+        if execution_mode in {"chatgpt_only", "chatgpt_plus_api"}:
+            bindings_packet = _custom_native_runtime_rebind_primary_model(
+                bindings_packet,
+                chatgpt_model_id=chatgpt_model_id,
+            )
         bindings_projection = {}
     if (
         execution_mode == "chatgpt_plus_api"
@@ -11454,6 +11540,13 @@ def _custom_native_agent_runtime_context(
             )
             if isinstance(binding, dict)
         ]
+        if execution_mode == "chatgpt_only":
+            runtime_agent_bindings = [
+                binding
+                for binding in runtime_agent_bindings
+                if binding.get("lane") == PRIMARY_CHATGPT_LANE
+                and binding.get("enabled") is True
+            ]
         if execution_mode == "chatgpt_plus_api" and api_model_id:
             for binding in runtime_agent_bindings:
                 if (
@@ -11830,6 +11923,7 @@ def _launch_custom_native_codex_packet(
             launch_model_id=model_id,
             route_model_id=route_model_id,
             bridge_endpoint=bridge_endpoint,
+            route_records=route_records,
             active_project_root=ROOT,
         ),
     )
@@ -17025,7 +17119,14 @@ def build_handler(
             "native_alias_context_read": True,
             "context_read_source": "profile_context_file",
             "context_path_redacted": True,
-            "context_required_profile_owner_path": True,
+            "context_required_profile_owner_path": (
+                runtime_context_required_profile_dir == owner_paths.profile_dir
+            ),
+            "context_required_profile_custom_path": (
+                runtime_context_required_profile_dir == custom_profile_paths.profile_dir
+            ),
+            "context_owner_profile_optional_path": owner_paths.profile_dir
+            in runtime_context_optional_profile_dirs,
             "context_optional_profile_write_count": optional_written_count,
         }
 
@@ -17381,7 +17482,10 @@ def build_handler(
             },
         )
 
-    if runtime_context_required_profile_dir != custom_profile_paths.profile_dir:
+    if (
+        runtime_context_required_profile_dir != custom_profile_paths.profile_dir
+        or runtime_context_optional_profile_dirs
+    ):
         try:
             _refresh_custom_agent_runtime_context_for_command_loop(
                 operator_status={},
@@ -18483,6 +18587,31 @@ def build_handler(
                     external_routes_packet=external_routes_packet,
                     native_bridge_lease=custom_native_bridge_lease,
                 )
+                if _custom_native_stable_bridge_prewarm_restart_retry_admissible(
+                    stable_bridge_prewarm
+                ):
+                    first_prewarm = stable_bridge_prewarm
+                    custom_native_bridge_lease.close()
+                    stable_bridge_prewarm = _custom_native_stable_bridge_prewarm_packet(
+                        preflight_packet,
+                        requested_model_id=requested_model_id,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                        external_routes_packet=external_routes_packet,
+                        native_bridge_lease=custom_native_bridge_lease,
+                    )
+                    preflight_packet[
+                        "stable_bridge_prewarm_recovery_retry_attempted"
+                    ] = True
+                    preflight_packet[
+                        "stable_bridge_prewarm_recovery_retry_reason"
+                    ] = "current_process_bridge_stale_or_timeout"
+                    preflight_packet[
+                        "stable_bridge_prewarm_recovery_first_packet"
+                    ] = first_prewarm
+                    preflight_packet[
+                        "stable_bridge_prewarm_recovery_retry_status"
+                    ] = str(stable_bridge_prewarm.get("status") or "")
                 preflight_packet["stable_bridge_prewarm_required"] = (
                     stable_bridge_prewarm.get("prewarm_required") is True
                 )
@@ -18506,6 +18635,30 @@ def build_handler(
                     )
                     packet["stable_bridge_prewarm_status"] = str(
                         stable_bridge_prewarm.get("status") or ""
+                    )
+                    packet["stable_bridge_prewarm_recovery_retry_attempted"] = (
+                        preflight_packet.get(
+                            "stable_bridge_prewarm_recovery_retry_attempted"
+                        )
+                        is True
+                    )
+                    packet["stable_bridge_prewarm_recovery_retry_reason"] = str(
+                        preflight_packet.get(
+                            "stable_bridge_prewarm_recovery_retry_reason"
+                        )
+                        or ""
+                    )
+                    packet["stable_bridge_prewarm_recovery_retry_status"] = str(
+                        preflight_packet.get(
+                            "stable_bridge_prewarm_recovery_retry_status"
+                        )
+                        or ""
+                    )
+                    packet["stable_bridge_prewarm_recovery_first_packet"] = (
+                        preflight_packet.get(
+                            "stable_bridge_prewarm_recovery_first_packet",
+                            {},
+                        )
                     )
                     packet["final_status"] = str(
                         stable_bridge_prewarm.get("final_status")
@@ -18814,6 +18967,26 @@ def build_handler(
             )
             packet["stable_bridge_prewarm_retry_status"] = str(
                 preflight_packet.get("stable_bridge_prewarm_retry_status") or ""
+            )
+            packet["stable_bridge_prewarm_recovery_retry_attempted"] = (
+                preflight_packet.get(
+                    "stable_bridge_prewarm_recovery_retry_attempted"
+                )
+                is True
+            )
+            packet["stable_bridge_prewarm_recovery_retry_reason"] = str(
+                preflight_packet.get("stable_bridge_prewarm_recovery_retry_reason")
+                or ""
+            )
+            packet["stable_bridge_prewarm_recovery_retry_status"] = str(
+                preflight_packet.get("stable_bridge_prewarm_recovery_retry_status")
+                or ""
+            )
+            packet["stable_bridge_prewarm_recovery_first_packet"] = (
+                preflight_packet.get(
+                    "stable_bridge_prewarm_recovery_first_packet",
+                    {},
+                )
             )
             packet["launch_stability_guard_checked"] = True
             packet["launch_blocked"] = packet.get("status") != "ok"

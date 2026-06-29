@@ -35,6 +35,7 @@ ROUTE_ALLOWED_FIELDS = frozenset(
         "transform_profile",
         "response_profile",
         "thinking",
+        "check_max_tokens",
     }
 )
 ROUTE_REQUIRED_FIELDS = frozenset(

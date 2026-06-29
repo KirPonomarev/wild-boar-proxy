@@ -29,8 +29,6 @@ from .runtime import RuntimePaths
 from .user_prompt_submit_hook_producer import (
     HOOK_CONFIG_OK,
     build_user_prompt_submit_readiness_packet,
-    expected_hook_trusted_hash,
-    hook_command_for_paths,
 )
 from .wbp_dip_tool import DEFAULT_MODEL, DEFAULT_SANDBOX, default_codex_bin
 
@@ -430,17 +428,12 @@ def build_real_custom_dip_operator_preflight_packet(
         secret_values=secret_values,
     )
     explicit_hook_hash = _safe_text(codex_hook_current_hash, limit=80)
-    hook_hash = (
-        explicit_hook_hash
-        if explicit_hook_hash
-        else ""
-        if probe_codex_app_server
-        else expected_hook_trusted_hash(hook_command_for_paths(paths))
-    )
+    probe_live_hook_state = bool(probe_codex_app_server or not explicit_hook_hash)
+    hook_hash = explicit_hook_hash if explicit_hook_hash else ""
     hook_readiness = build_user_prompt_submit_readiness_packet(
         paths=paths,
         codex_hook_current_hash=hook_hash,
-        probe_codex_app_server=probe_codex_app_server,
+        probe_codex_app_server=probe_live_hook_state,
     )
     codex_exe = _codex_executable(paths, codex_bin)
     repo_root = _repo_root_from_cwd(codex_cwd)

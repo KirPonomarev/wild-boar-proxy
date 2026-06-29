@@ -4298,10 +4298,14 @@ def build_auth_command_wrapper_script(
     auth_command_path: Path,
     python_bin: str = DEFAULT_AUTH_COMMAND_PYTHON,
 ) -> str:
+    owner_stable_config = (
+        Path.home() / ".codex-custom-cli" / "managed" / "stable-runtime-config.generated.yaml"
+    )
     return (
         "#!/bin/sh\n"
         f"export WBP_PROFILE_DIR={shlex.quote(str(profile_dir))}\n"
         f"export WBP_MANAGED_DIR={shlex.quote(str(profile_dir / 'managed'))}\n"
+        f'export WBP_STABLE_CONFIG="${{WBP_STABLE_CONFIG:-{shlex.quote(str(owner_stable_config))}}}"\n'
         f"exec {shlex.quote(python_bin)} {shlex.quote(str(auth_command_path.resolve()))}\n"
     )
 
@@ -4595,6 +4599,7 @@ def materialize_probe_profile(
     auth_command_path: Path,
     local_token: str,
     agent_runtime_context: Mapping[str, Any] | None = None,
+    extra_agent_runtime_context_paths: Sequence[Path] | None = None,
     validate_model_against_endpoint: bool = False,
 ) -> dict[str, Any]:
     model_availability_packet = (
@@ -4638,6 +4643,7 @@ def materialize_probe_profile(
         "agent_runtime_context_path": "",
         "agent_runtime_context_profile_relative_path": "",
         "agent_runtime_context_written": False,
+        "agent_runtime_context_extra_write_count": 0,
         "agent_runtime_context_sha256": "",
         "native_alias_context_written": False,
         "context_file_present": False,
@@ -4735,6 +4741,7 @@ def materialize_probe_profile(
     )
     agent_runtime_context_path = layout.profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
     agent_runtime_context_written = False
+    agent_runtime_context_extra_write_count = 0
     agent_runtime_context_sha256 = ""
     if agent_runtime_context is not None:
         agent_runtime_context_text = (
@@ -4745,6 +4752,18 @@ def materialize_probe_profile(
         agent_runtime_context_sha256 = hashlib.sha256(
             agent_runtime_context_text.encode("utf-8")
         ).hexdigest()
+        seen_context_paths = {str(agent_runtime_context_path)}
+        for extra_context_path in extra_agent_runtime_context_paths or []:
+            extra_path = Path(extra_context_path).expanduser()
+            key = str(extra_path)
+            if key in seen_context_paths:
+                continue
+            seen_context_paths.add(key)
+            try:
+                write_text_atomic(extra_path, agent_runtime_context_text)
+            except OSError:
+                continue
+            agent_runtime_context_extra_write_count += 1
     layout.launcher_path.chmod(0o755)
     return {
         **base_packet,
@@ -4764,6 +4783,7 @@ def materialize_probe_profile(
             AGENT_RUNTIME_CONTEXT_FILENAME if agent_runtime_context_written else ""
         ),
         "agent_runtime_context_written": agent_runtime_context_written,
+        "agent_runtime_context_extra_write_count": agent_runtime_context_extra_write_count,
         "agent_runtime_context_sha256": agent_runtime_context_sha256,
         "native_alias_context_written": agent_runtime_context_written,
         "context_file_present": agent_runtime_context_written,

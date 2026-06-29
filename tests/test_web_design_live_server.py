@@ -3235,7 +3235,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
             def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
                 self.assertIn("Planner", prompt)
                 self.assertIn("DIP", prompt)
-                self.assertIn("Codex sub-agent", prompt)
+                self.assertIn("отдельного внутреннего исполнителя", prompt)
+                self.assertNotIn("subagent", prompt.casefold())
+                self.assertNotIn("sub-agent", prompt.casefold())
                 proof_root.mkdir(parents=True, exist_ok=True)
                 (proof_root / f"{request_id}.json").write_text(
                     json.dumps(
@@ -3450,7 +3452,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 self.assertIn("Дай короткую задачу агенту DIP", prompt)
                 self.assertIn("API-lane coding agent", prompt)
                 self.assertIn("server-owned natural DIP command proof", prompt)
-                self.assertIn("Codex sub-agent", prompt)
+                self.assertIn("отдельного внутреннего исполнителя", prompt)
+                self.assertNotIn("subagent", prompt.casefold())
+                self.assertNotIn("sub-agent", prompt.casefold())
                 self.assertIn(expected_text, prompt)
                 self.assertNotIn("browser-authored prompt", prompt)
                 proof_root.mkdir(parents=True, exist_ok=True)
@@ -6129,6 +6133,115 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(context["deepseek_live_format_check_file_bridge"]["model"], route_id)
         self.assertFalse(context["secret_value_exposed"])
 
+    def test_custom_native_runtime_context_chatgpt_only_does_not_export_api_aliases(self) -> None:
+        execution_packet = {
+            "execution_mode": "chatgpt_only",
+            "chatgpt_model_id": "gpt-5.5",
+            "api_model_id": "",
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.CODEX_ACCOUNT_MODEL_LANE,
+                "model_id": "gpt-5.5",
+                "provider": "openai",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id="gpt-5.5",
+                    route_model_id="",
+                    bridge_endpoint="",
+                )
+
+        self.assertEqual(context["execution_mode"], "chatgpt_only")
+        self.assertEqual(context["primary_model_id"], "gpt-5.5")
+        self.assertEqual(context["coding_agent_model_id"], "")
+        self.assertFalse(context["api_primary_orchestrator_enabled"])
+        self.assertTrue(context["chatgpt_primary_orchestrator_enabled"])
+        self.assertIn("Codex", context["primary_aliases"])
+        self.assertEqual(context["coding_aliases"], [])
+        self.assertNotIn("DIP", context["alias_to_agent_id"])
+        self.assertEqual(context["agent_id_to_route"], {})
+        self.assertEqual(context["allowed_api_route_ids"], [])
+        self.assertFalse(context["deepseek_live_format_check_bridge"]["enabled"])
+        self.assertFalse(context["deepseek_live_format_check_file_bridge"]["enabled"])
+        self.assertFalse(context["secret_value_exposed"])
+
+    def test_custom_native_runtime_context_chatgpt_only_rebinds_persisted_primary_model(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-max"
+        execution_packet = {
+            "execution_mode": "chatgpt_only",
+            "chatgpt_model_id": "gpt-5.4-mini",
+            "api_model_id": "",
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.CODEX_ACCOUNT_MODEL_LANE,
+                "model_id": "gpt-5.4-mini",
+                "provider": "openai",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+            },
+        }
+        route_records = [
+            {
+                "route_id": route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=route_id,
+            )
+            bindings[0]["display_name"] = "Командир"
+            bindings[0]["aliases"] = ["Командир", "Codex", "Agent 1", "1"]
+            bindings[1]["display_name"] = "Кодер"
+            bindings[1]["aliases"] = ["Кодер", "DIP", "Agent 2", "2"]
+            write_packet = live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": bindings},
+                primary_model_ids=["gpt-5.5"],
+                route_records=route_records,
+                require_api_route_binding=True,
+            )
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id="gpt-5.4-mini",
+                    route_model_id="gpt-5.4-mini",
+                    bridge_endpoint="http://127.0.0.1:8318/v1",
+                    route_records=route_records,
+                )
+
+        self.assertEqual(write_packet["status"], "ok")
+        self.assertEqual(context["execution_mode"], "chatgpt_only")
+        self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertEqual(context["agent_binding_source"], "persisted_state")
+        self.assertEqual(context["primary_model_id"], "gpt-5.4-mini")
+        self.assertEqual(context["api_model_id"], "")
+        self.assertEqual(context["coding_agent_model_id"], "")
+        self.assertEqual(context["primary_aliases"], ["Командир", "Codex", "Agent 1", "1"])
+        self.assertEqual(context["alias_to_agent_id"]["Командир"], "codex")
+        self.assertEqual(context["agent_id_to_model"]["codex"], "gpt-5.4-mini")
+        self.assertEqual(context["coding_aliases"], [])
+        self.assertNotIn("Кодер", context["alias_to_agent_id"])
+        self.assertEqual(context["allowed_api_route_ids"], [])
+        self.assertTrue(context["alias_runtime_binding_present"])
+        self.assertFalse(context["alias_runtime_binding_proven"])
+        self.assertFalse(context["deepseek_live_format_check_bridge"]["enabled"])
+        self.assertFalse(context["secret_value_exposed"])
+
     def test_custom_native_runtime_context_api_only_exports_persisted_agent_aliases(self) -> None:
         route_id = "wbp-deepseek-v4-pro-max"
         execution_packet = {
@@ -6283,6 +6396,75 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(context["coding_aliases"], ["Макс Кодер", "Max API"])
         self.assertEqual(context["alias_to_agent_id"]["Макс Кодер"], "dip")
         self.assertNotIn("Старый Кодер", context["alias_to_agent_id"])
+        self.assertEqual(context["agent_id_to_route"]["dip"], active_route_id)
+        self.assertEqual(context["allowed_api_route_ids"], [active_route_id])
+        self.assertTrue(context["alias_runtime_binding_proven"])
+        self.assertFalse(context["browser_can_supply_route_authority"])
+        self.assertFalse(context["secret_value_exposed"])
+
+    def test_custom_native_runtime_context_api_only_preserves_dip_aliases_when_route_level_changes(self) -> None:
+        active_route_id = "wbp-deepseek-v4-pro-fast"
+        previous_route_id = "wbp-deepseek-v4-pro-max"
+        execution_packet = {
+            "execution_mode": "api_only",
+            "chatgpt_model_id": "",
+            "api_model_id": active_route_id,
+            "primary_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": active_route_id,
+                "provider": "deepseek",
+                "server_issued": True,
+            },
+            "coding_agent_model_slot": {
+                "status": "not_bound_for_mode",
+                "reason": "api_only_uses_primary_model_slot",
+            },
+        }
+        route_records = [
+            {
+                "route_id": active_route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+            {
+                "route_id": previous_route_id,
+                "provider": "deepseek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=previous_route_id,
+            )
+            bindings[1]["display_name"] = "Кодер"
+            bindings[1]["aliases"] = ["Кодер", "DIP", "Agent 2", "2"]
+            write_packet = live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": bindings},
+                primary_model_ids=["gpt-5.5"],
+                route_records=route_records,
+                require_api_route_binding=True,
+            )
+            with mock.patch.dict(os.environ, {"WBP_MANAGED_DIR": str(managed_dir)}, clear=False):
+                context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id=active_route_id,
+                    route_model_id=active_route_id,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    route_records=route_records,
+                )
+
+        self.assertEqual(write_packet["status"], "ok")
+        self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertEqual(context["coding_aliases"], ["Кодер", "DIP", "Agent 2", "2"])
+        self.assertEqual(context["alias_to_agent_id"]["Кодер"], "dip")
+        self.assertEqual(context["alias_to_agent_id"]["DIP"], "dip")
+        self.assertEqual(context["agent_id_to_route"]["codex"], active_route_id)
         self.assertEqual(context["agent_id_to_route"]["dip"], active_route_id)
         self.assertEqual(context["allowed_api_route_ids"], [active_route_id])
         self.assertTrue(context["alias_runtime_binding_proven"])
@@ -6877,10 +7059,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(snapshot["privacy"]["raw_command_packet_included"])
         self.assertEqual(snapshot["summary"]["routes_count"], 1)
         self.assertEqual(snapshot["summary"]["enabled_count"], 1)
-        self.assertEqual(snapshot["summary"]["attention_count"], 1)
-        self.assertEqual(snapshot["routes"][0]["status_label"], "Требует ключ")
+        self.assertEqual(snapshot["summary"]["attention_count"], 0)
+        self.assertEqual(snapshot["routes"][0]["status_label"], "Разрешён")
         self.assertEqual(snapshot["routes"][0]["secret_ref"], "OPENROUTER_API_KEY")
-        self.assertEqual(snapshot["routes"][0]["secret_status_label"], "missing")
+        self.assertEqual(snapshot["routes"][0]["secret_status_label"], "available")
         self.assertEqual(snapshot["routes"][0]["role_label"], "main route")
         self.assertTrue(snapshot["routes"][0]["primary"])
         serialized = json.dumps(snapshot)
@@ -7278,7 +7460,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         f"{base}/api/codex/custom/execution-mode-dry-run",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v3",
                             "api_reasoning_option_id": "catalog_default",
                         },
@@ -7363,7 +7545,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         post_json(
                             f"{authorized_base}/api/codex/custom/sessions",
                             {
-                                "primary_model_id": "gpt-5.3-codex",
+                                "primary_model_id": "gpt-5.5",
                                 "coding_agent_model_id": "wbp-deepseek-v3",
                             },
                         )
@@ -7533,7 +7715,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(session_created["session_created"])
         self.assertEqual(
             session_created["session"]["role_slots"]["primary_model_slot"]["model_id"],
-            "gpt-5.3-codex",
+            "gpt-5.5",
         )
         self.assertEqual(
             session_created["session"]["role_slots"]["coding_agent_model_slot"]["model_id"],
@@ -7558,7 +7740,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             [
                 {
                     "prompt": "Reply with exactly CHATGPT_LANE_OK.",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -8195,9 +8377,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     {
                         "id": "legacy-backend",
                         "label": "Legacy",
-                        "provider": "openai",
-                        "auth_ref": "/tmp/legacy.json",
                         "pool": "active",
+                        "status": "healthy",
+                        "manual_hold": False,
+                        "auth_ref": "/tmp/legacy.json",
+                        "fail_count": 0,
+                        "success_count": 1,
+                        "last_success": None,
+                        "last_error": "",
+                        "cooldown_until": None,
+                        "notes": "",
+                        "provider": "openai",
                     }
                 ],
             }
@@ -8286,6 +8476,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertGreater(len(legacy_import["result"]["changed_files"]), 0)
         self.assertEqual(imported_registry["stable_default_backend_id"], "legacy-backend")
         self.assertEqual(imported_state["selected_backend_ids"], ["legacy-backend"])
+        self.assertEqual(imported_state["effective_mode"], "stable")
+        self.assertFalse((profile_dir / "runtime-effective-mode.txt").exists())
+        self.assertNotIn(
+            str(profile_dir / "runtime-effective-mode.txt"),
+            legacy_import["result"]["changed_files"],
+        )
         self.assertFalse(metadata_after["actions"]["legacy_import"]["available"])
         self.assertEqual(
             metadata_after["actions"]["legacy_import"]["availability_state"],
@@ -8468,7 +8664,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
                         "version": 2,
                         "status": "healthy",
                         "effective_mode": "managed",
+                        "last_sync_at": "2026-05-07T00:00:00+00:00",
+                        "last_error": "",
                         "selected_backend_ids": [],
+                        "managed_port": 9999,
+                        "current_proxy_url": "http://127.0.0.1:10808",
+                        "stable_default_backend_id": "legacy-backend",
                     }
                 )
                 + "\n",
@@ -9292,8 +9493,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             self.assertEqual(len(temp_names), 1)
             self.assertTrue(temp_names[0].startswith(".wbp-tmp-"))
-            self.assertTrue(temp_names[0].endswith(f".{target.name}"))
-            self.assertNotIn(f".{target.name}.tmp", temp_names)
+            self.assertTrue(temp_names[0].endswith(f".{target.name}.tmp"))
+            self.assertFalse(Path(temp_names[0]).match("*.json"))
             self.assertFalse(target.with_name(f".{target.name}.tmp").exists())
             self.assertEqual(list(target.parent.glob(".wbp-tmp-*")), [])
 
@@ -12824,6 +13025,7 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 "profile_ready": False,
                 "routes_count": 1,
                 "observed_routes_count": 0,
+                "available_secret_refs": ["OPENROUTER_API_KEY", "DEEPSEEK_API_KEY"],
                 "adapter": {
                     "state": "stopped",
                     "lifecycle_mode": "synthetic",
@@ -12837,7 +13039,7 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 },
                 "local_auth": {
                     "token_ref": "managed_local_token",
-                    "token_present": False,
+                    "token_present": True,
                     "token_created_at_utc": None,
                 },
             },
@@ -13220,7 +13422,7 @@ class FakeOperatorSurfaceSession:
             "claim_gate": {"status": "blocked_by_policy_drift"},
             "models": {
                 "ok": True,
-                "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+                "model_ids": ["gpt-5.5", "gpt-5.4"],
                 "server_issued": True,
             },
             "control_surface": {
@@ -13234,7 +13436,7 @@ class FakeOperatorSurfaceSession:
         return {
             "ok": True,
             "captured_at_utc": "2026-05-23T00:00:00Z",
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
             "server_issued": True,
         }
 
@@ -13326,7 +13528,7 @@ class ExternalRouteFakeOperatorSurfaceSession(ReadyFakeOperatorSurfaceSession):
         payload = dict(super().status_payload())
         payload["models"] = {
             "ok": True,
-            "model_ids": ["gpt-5.3-codex", "wbp-deepseek-v3"],
+            "model_ids": ["gpt-5.5", "wbp-deepseek-v3"],
             "server_issued": True,
         }
         return payload
@@ -13335,7 +13537,7 @@ class ExternalRouteFakeOperatorSurfaceSession(ReadyFakeOperatorSurfaceSession):
         return {
             "ok": True,
             "captured_at_utc": "2026-05-23T00:00:00Z",
-            "model_ids": ["gpt-5.3-codex", "wbp-deepseek-v3"],
+            "model_ids": ["gpt-5.5", "wbp-deepseek-v3"],
             "server_issued": True,
         }
 
@@ -14160,7 +14362,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             try:
                 models = json.loads(fetch(f"{base}/api/operator/models"))
                 self.assertTrue(models["server_issued"])
-                self.assertEqual(models["model_ids"], ["gpt-5.3-codex", "gpt-5.4"])
+                self.assertEqual(models["model_ids"], ["gpt-5.5", "gpt-5.4"])
 
                 status = json.loads(fetch(f"{base}/api/operator/status"))
                 self.assertEqual(status["status"]["status"], "ok")
@@ -14172,7 +14374,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
                 result = json.loads(
                     post_json(
                         f"{base}/api/operator/run",
-                        {"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"},
+                        {"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.5"},
                     )
                 )
             finally:
@@ -14186,7 +14388,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
         self.assertTrue(result["refresh_packet"])
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.5"}],
         )
 
     def test_web_ingress_rejects_malformed_operator_post_before_runner(self) -> None:
@@ -14236,7 +14438,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
                 )
                 same_origin_status, same_origin_packet = post_body_response(
                     f"{base}/api/operator/run",
-                    b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}',
+                    b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.5"}',
                     headers={
                         "Content-Type": "application/json",
                         "Origin": f"http://127.0.0.1:{server.server_port}",
@@ -14303,7 +14505,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
         self.assertEqual(same_origin_packet["status"], "ok")
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.5"}],
         )
 
     def test_web_ingress_rejects_missing_or_invalid_web_post_tokens_before_runner(self) -> None:
@@ -14319,7 +14521,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
-            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.5"}'
             try:
                 token, csrf = _web_bootstrap_tokens(base)
                 no_token_status, no_token_packet = post_body_response(
@@ -14368,7 +14570,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             self.assertNotIn(csrf, packet_text)
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.5"}],
         )
 
     def test_web_ingress_rate_limits_valid_operator_posts_without_secret_leak(self) -> None:
@@ -14388,7 +14590,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
-            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.5"}'
             try:
                 token, csrf = _web_bootstrap_tokens(base)
                 statuses = [
@@ -14430,7 +14632,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
-            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.5"}'
             try:
                 statuses = [
                     post_body_response(f"{base}/api/operator/run?attempt={index}", body)[0]
@@ -14467,7 +14669,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
-            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.3-codex"}'
+            body = b'{"prompt":"Reply MAIN_WEB_OK.","model_id":"gpt-5.5"}'
             try:
                 bad_token_status, _bad_token_packet = post_body_response(
                     f"{base}/api/operator/run",
@@ -14548,7 +14750,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 dry_run = json.loads(post_json(f"{base}/api/codex/original/launch-dry-run", {}))
                 original_launch = json.loads(post_json(f"{base}/api/codex/original/launch", {}))
                 custom_dry_run = json.loads(post_json(f"{base}/api/codex/custom/launch-dry-run", {}))
-                custom_launch = json.loads(post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.3-codex"}))
+                custom_launch = json.loads(post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.5"}))
                 app_copy_dry_run = json.loads(
                     post_json(f"{base}/api/codex/app-copy/launch-dry-run", {})
                 )
@@ -14561,13 +14763,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/original/launch-dry-run",
-                        {"model_id": "gpt-5.3-codex", "route_id": "route", "CODEX_HOME": "/tmp/home"},
+                        {"model_id": "gpt-5.5", "route_id": "route", "CODEX_HOME": "/tmp/home"},
                     )
                 )
                 custom_rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/launch-dry-run",
-                        {"model": "gpt-5.3-codex", "route_id": "route", "codex_home": "/tmp/home"},
+                        {"model": "gpt-5.5", "route_id": "route", "codex_home": "/tmp/home"},
                     )
                 )
                 app_copy_rejected = json.loads(
@@ -14724,7 +14926,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 try:
                     original_launch = json.loads(post_json(f"{base}/api/codex/original/launch", {}))
                     custom_launch = json.loads(
-                        post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.3-codex"})
+                        post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.5"})
                     )
                     sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
                 finally:
@@ -14890,10 +15092,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
                     "models": {
-                        "model_ids": ["gpt-5.3-codex"],
+                        "model_ids": ["gpt-5.5"],
                         "server_issued": True,
                     },
                 },
@@ -14925,7 +15127,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/native-launch",
                         {
-                            "model_id": "gpt-5.3-codex",
+                            "model_id": "gpt-5.5",
                             "route_id": "wbp-route",
                             "profile_path": "/tmp/browser-profile",
                             "CODEX_HOME": "/tmp/browser-codex-home",
@@ -15000,10 +15202,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
                     "models": {
-                        "model_ids": ["gpt-5.3-codex"],
+                        "model_ids": ["gpt-5.5"],
                         "server_issued": True,
                     },
                 },
@@ -15040,7 +15242,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/native-launch",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "api_reasoning_option_id": "provider_declared_max",
                         },
@@ -15065,10 +15267,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(endpoint_packet["workbench_ready"])
         self.assertEqual(endpoint_packet["selection_packet"]["status"], "ok")
         self.assertEqual(endpoint_packet["execution_mode"], "chatgpt_only")
-        self.assertEqual(endpoint_packet["chatgpt_model_id"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["chatgpt_model_id"], "gpt-5.5")
         self.assertEqual(
             endpoint_packet["primary_model_slot"]["model_id"],
-            "gpt-5.3-codex",
+            "gpt-5.5",
         )
         self.assertTrue(endpoint_packet["route_packet_matches_selection_packet"])
         self.assertTrue(endpoint_packet["quick_start_launch_route_truth_proven_with_limits"])
@@ -15124,9 +15326,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ),
             mock.patch.object(
@@ -15190,7 +15392,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/native-launch",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "api_reasoning_option_id": "provider_declared_max",
                         },
@@ -15207,7 +15409,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         launch_native.assert_called_once()
         self.assertEqual(launch_native.call_args.kwargs["endpoint"], "http://127.0.0.1:8318/v1")
         self.assertEqual(endpoint_packet["execution_mode"], "chatgpt_only")
-        self.assertEqual(endpoint_packet["selected_model"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["selected_model"], "gpt-5.5")
         self.assertFalse(endpoint_packet["external_route_selected"])
         self.assertFalse(endpoint_packet["bridge_endpoint_configured"])
         self.assertFalse(endpoint_packet["route_selected"])
@@ -15260,9 +15462,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ),
             mock.patch.object(
@@ -15335,7 +15537,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/native-launch",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "api_reasoning_option_id": "provider_declared_max",
                         },
@@ -15360,12 +15562,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             launch_native.call_args.kwargs["endpoint"],
             "http://127.0.0.1:9543/v1",
         )
-        self.assertEqual(launch_native.call_args.kwargs["model"], "gpt-5.3-codex")
+        self.assertEqual(launch_native.call_args.kwargs["model"], "gpt-5.5")
         self.assertEqual(endpoint_packet["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(endpoint_packet["selected_model"], "gpt-5.3-codex")
-        self.assertEqual(endpoint_packet["launch_model_id"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["selected_model"], "gpt-5.5")
+        self.assertEqual(endpoint_packet["launch_model_id"], "gpt-5.5")
         self.assertEqual(endpoint_packet["route_model_id"], "wbp-deepseek-v4-pro-max")
-        self.assertEqual(endpoint_packet["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(endpoint_packet["primary_model_slot"]["model_id"], "gpt-5.5")
         self.assertEqual(
             endpoint_packet["coding_agent_model_slot"]["model_id"],
             "wbp-deepseek-v4-pro-max",
@@ -15436,7 +15638,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "chatgpt_plus_api",
                 {
                     "execution_mode": "chatgpt_plus_api",
-                    "chatgpt_model_id": "gpt-5.3-codex",
+                    "chatgpt_model_id": "gpt-5.5",
                     "api_model_id": "wbp-deepseek-v4-pro-max",
                     "api_reasoning_option_id": "provider_declared_max",
                 },
@@ -15454,10 +15656,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         live_server.OperatorSurfaceSession,
                         "status_payload",
                         return_value={
-                            "status": {"configured_model": "gpt-5.3-codex"},
+                            "status": {"configured_model": "gpt-5.5"},
                             "claim_gate": {"status": "ok"},
                             "models": {
-                                "model_ids": ["gpt-5.3-codex"],
+                                "model_ids": ["gpt-5.5"],
                                 "server_issued": True,
                             },
                         },
@@ -15590,10 +15792,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
                     "models": {
-                        "model_ids": ["gpt-5.3-codex"],
+                        "model_ids": ["gpt-5.5"],
                         "server_issued": True,
                     },
                 },
@@ -15733,9 +15935,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ),
             mock.patch.object(
@@ -15819,6 +16021,169 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         stable_preflight.assert_not_called()
         launch_native.assert_not_called()
 
+    def test_custom_native_launch_restarts_current_bridge_when_prewarm_stale_timeout_recovers(self) -> None:
+        route_id = "wbp-deepseek-v4-pro-fast"
+        native_packet = {
+            "schema_version": 1,
+            "captured_at_utc": "2026-05-30T00:00:00Z",
+            "mode_id": "codex_custom",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "owner_authorization_phrase_present": True,
+            "running_status": True,
+            "process_started": True,
+            "new_launch_started": True,
+            "native_window_observed": True,
+            "native_app_usable": True,
+            "real_codex_app_launched": True,
+            "current_codex_touched": False,
+            "original_codex_touched": False,
+            "asar_touched": False,
+            "browser_raw_backend_authority_widened": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        recoverable_prewarm_blocked = {
+            "schema_version": 1,
+            "packet_kind": "custom_native_stable_bridge_prewarm",
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_CODEX_STABLE_WBP_BRIDGE_SMOKE_FAILED",
+            "prewarm_required": True,
+            "bridge_endpoint": "http://127.0.0.1:9543/v1",
+            "selected_model": route_id,
+            "smoke_status": "blocked",
+            "smoke_http_status": 0,
+            "smoke_error_class": "TimeoutError",
+            "bridge_owner_current_process_proven": True,
+            "bridge_ownership_status": "current_process_owned",
+            "bridge_trace_packet": {
+                "stale_launch_packet": True,
+                "bridge_machine_error_code": "BRIDGE_PORT_NOT_OWNED",
+                "bridge_health_packet": {
+                    "machine_error_code": "BRIDGE_PORT_NOT_OWNED",
+                },
+                "bridge_request_trace_packet": {
+                    "machine_error_code": "BRIDGE_PORT_NOT_OWNED",
+                },
+            },
+            "final_status": "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PREWARM_NOT_PROVEN",
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+        }
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = routes_list_packet(
+            route_id,
+            enabled=True,
+        )
+
+        with (
+            mock.patch.object(
+                live_server.OperatorSurfaceSession,
+                "status_payload",
+                return_value={
+                    "status": {"configured_model": "gpt-5.5"},
+                    "claim_gate": {"status": "ok"},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "build_api_connections_readonly_snapshot",
+                return_value={
+                    "status": "ok",
+                    "source": "api_connections_readonly",
+                    "primary_truth_ok": True,
+                    "routes": [
+                        {
+                            "route_id": route_id,
+                            "display_name": "DeepSeek V4 Pro Fast",
+                            "provider": "deepseek",
+                            "upstream_model": "deepseek-v4-pro",
+                            "enabled": True,
+                            "secret_ref": "DEEPSEEK_API_KEY",
+                            "thinking": {"type": "disabled"},
+                        }
+                    ],
+                },
+            ),
+            mock.patch.object(
+                live_server,
+                "_custom_native_stable_bridge_prewarm_packet",
+                side_effect=[
+                    dict(recoverable_prewarm_blocked),
+                    self.stable_bridge_prewarm_ok_packet(),
+                ],
+            ) as bridge_prewarm,
+            mock.patch.object(
+                live_server,
+                "build_custom_codex_stable_bridge_preflight_packet",
+                return_value=self.stable_bridge_preflight_ok_packet(),
+            ) as stable_preflight,
+            mock.patch.object(
+                live_server,
+                "collect_codex_process_inventory",
+                return_value={
+                    "custom_process_count": 0,
+                    "default_process_count": 0,
+                    "custom_process_lines": [],
+                },
+            ),
+            mock.patch.object(live_server._CustomNativeBridgeLease, "close") as bridge_close,
+            mock.patch.object(
+                live_server._CustomNativeBridgeLease,
+                "ensure",
+                return_value="http://127.0.0.1:8319/v1",
+            ),
+            mock.patch.object(
+                live_server,
+                "launch_custom_native_app_packet",
+                return_value=dict(native_packet),
+            ) as launch_native,
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    action_phase=live_server.FULL_ACTION_PHASE,
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/native-launch",
+                        {
+                            "execution_mode": "api_only",
+                            "api_model_id": route_id,
+                            "api_reasoning_option_id": "provider_declared_fast",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["stable_bridge_prewarm_recovery_retry_attempted"])
+        self.assertEqual(
+            packet["stable_bridge_prewarm_recovery_retry_reason"],
+            "current_process_bridge_stale_or_timeout",
+        )
+        self.assertEqual(packet["stable_bridge_prewarm_recovery_retry_status"], "ok")
+        self.assertEqual(
+            packet["stable_bridge_prewarm_recovery_first_packet"]["machine_error_code"],
+            "CUSTOM_CODEX_STABLE_WBP_BRIDGE_SMOKE_FAILED",
+        )
+        self.assertEqual(bridge_prewarm.call_count, 2)
+        bridge_close.assert_called()
+        stable_preflight.assert_called_once()
+        launch_native.assert_called_once()
+
     def test_custom_native_launch_does_not_gate_chatgpt_only_on_stable_bridge_preflight(self) -> None:
         native_packet = {
             "schema_version": 1,
@@ -15847,9 +16212,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ),
             mock.patch.object(
@@ -15888,7 +16253,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/native-launch",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "api_reasoning_option_id": "provider_declared_max",
                         },
@@ -15958,9 +16323,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     live_server.OperatorSurfaceSession,
                     "status_payload",
                     return_value={
-                        "status": {"configured_model": "gpt-5.3-codex"},
+                        "status": {"configured_model": "gpt-5.5"},
                         "claim_gate": {"status": "ok"},
-                        "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                        "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                     },
                 ),
                 mock.patch.object(
@@ -16005,7 +16370,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     launch = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/native-launch",
-                            {"model_id": "gpt-5.3-codex"},
+                            {"model_id": "gpt-5.5"},
                         )
                     )
                     confirmed = json.loads(
@@ -16301,11 +16666,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "status_payload",
                 return_value={
                     "status": {
-                        "configured_model": "gpt-5.3-codex",
+                        "configured_model": "gpt-5.5",
                         "machine_error_code": "AUTH_UNAVAILABLE",
                     },
                     "claim_gate": {"status": "ok"},
-                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                    "models": {"visible_model_ids": ["gpt-5.5"]},
                 },
             ) as status_payload,
             mock.patch.object(
@@ -16403,11 +16768,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 "status_payload",
                 return_value={
                     "status": {
-                        "configured_model": "gpt-5.3-codex",
+                        "configured_model": "gpt-5.5",
                         "machine_error_code": "AUTH_UNAVAILABLE",
                     },
                     "claim_gate": {"status": "ok"},
-                    "models": {"visible_model_ids": ["gpt-5.3-codex"]},
+                    "models": {"visible_model_ids": ["gpt-5.5"]},
                 },
             ),
             mock.patch.object(
@@ -16546,9 +16911,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ) as status_payload,
             mock.patch.object(
@@ -20833,10 +21198,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     live_server.OperatorSurfaceSession,
                     "status_payload",
                     return_value={
-                        "status": {"configured_model": "gpt-5.3-codex"},
+                        "status": {"configured_model": "gpt-5.5"},
                         "claim_gate": {"status": "ok"},
                         "models": {
-                            "model_ids": ["gpt-5.3-codex"],
+                            "model_ids": ["gpt-5.5"],
                             "server_issued": True,
                         },
                     },
@@ -20876,13 +21241,13 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     first = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/native-launch",
-                            {"model_id": "gpt-5.3-codex"},
+                            {"model_id": "gpt-5.5"},
                         )
                     )
                     second = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/native-launch",
-                            {"model_id": "gpt-5.3-codex"},
+                            {"model_id": "gpt-5.5"},
                         )
                     )
                     packet = json.loads(
@@ -20939,9 +21304,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ),
             mock.patch.object(
@@ -20980,7 +21345,7 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/native-launch",
                         {
-                            "model_id": "gpt-5.3-codex",
+                            "model_id": "gpt-5.5",
                             "execution_mode": "api_only",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                         },
@@ -21302,9 +21667,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live_server.OperatorSurfaceSession,
                 "status_payload",
                 return_value={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
             ) as status_payload,
             mock.patch.object(
@@ -21409,9 +21774,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 },
                 owner_authorized=True,
                 operator_status={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
                 api_snapshot={
                     "status": "ok",
@@ -21607,15 +21972,15 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             packet = live_server._custom_native_launch_preflight_packet(
                 {
                     "execution_mode": "chatgpt_plus_api",
-                    "chatgpt_model_id": "gpt-5.3-codex",
+                    "chatgpt_model_id": "gpt-5.5",
                     "api_model_id": route_id,
                     "api_reasoning_option_id": "provider_declared_max",
                 },
                 owner_authorized=True,
                 operator_status={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
                 api_snapshot={
                     "status": "ok",
@@ -21651,10 +22016,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(packet["selected_model"], "gpt-5.3-codex")
-        self.assertEqual(packet["launch_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_model"], "gpt-5.5")
+        self.assertEqual(packet["launch_model_id"], "gpt-5.5")
         self.assertEqual(packet["route_model_id"], route_id)
-        self.assertEqual(packet["selection_packet"]["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["selection_packet"]["primary_model_slot"]["model_id"], "gpt-5.5")
         self.assertEqual(packet["selection_packet"]["coding_agent_model_slot"]["model_id"], route_id)
         self.assertTrue(packet["route_selected"])
         self.assertTrue(packet["bridge_required"])
@@ -21764,9 +22129,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 },
                 owner_authorized=True,
                 operator_status={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
                 api_snapshot={
                     "status": "ok",
@@ -21936,9 +22301,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 },
                 owner_authorized=True,
                 operator_status={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
                 api_snapshot={
                     "status": "ok",
@@ -22027,9 +22392,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 },
                 owner_authorized=True,
                 operator_status={
-                    "status": {"configured_model": "gpt-5.3-codex"},
+                    "status": {"configured_model": "gpt-5.5"},
                     "claim_gate": {"status": "ok"},
-                    "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
+                    "models": {"model_ids": ["gpt-5.5"], "server_issued": True},
                 },
                 api_snapshot={
                     "status": "ok",
@@ -24649,13 +25014,13 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
                 dry_run = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/model-dry-run",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"model_id": "gpt-5.5"},
                     )
                 )
                 rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/model-dry-run",
-                        {"model_id": "gpt-5.3-codex", "route_id": "route", "backend_id": "backend"},
+                        {"model_id": "gpt-5.5", "route_id": "route", "backend_id": "backend"},
                     )
                 )
             finally:
@@ -24666,7 +25031,7 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertEqual(registry["status"], "degraded")
         self.assertEqual(registry["machine_error_code"], "CLAIM_GATE_BLOCKED")
         self.assertTrue(registry["server_issued"])
-        self.assertEqual(registry["model_count"], 3)
+        self.assertEqual(registry["model_count"], 2)
         self.assertFalse(registry["route_or_backend_exposed"])
         self.assertEqual(registry["token_burn"], 0)
         self.assertFalse(registry["models_endpoint_called"])
@@ -24908,10 +25273,10 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
 
     def test_codex_custom_model_registry_keeps_readonly_catalog_free_of_live_native_probe(self) -> None:
         lattice = build_catalog_availability_lattice_packet(
-            catalog_packet={"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]},
+            catalog_packet={"models": [{"model_id": "gpt-5.5", "lane": "codex_native"}]},
             current_model_packets=[
                 build_model_direct_preflight_packet(
-                    model_id="gpt-5.3-codex",
+                    model_id="gpt-5.5",
                     source="current_live_native_probe",
                     listed=True,
                     selectable=True,
@@ -24943,7 +25308,7 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
                     dry_run = json.loads(
                         post_json(
                             f"{base}/api/codex/custom/model-dry-run",
-                            {"model_id": "gpt-5.3-codex"},
+                            {"model_id": "gpt-5.5"},
                         )
                     )
                 finally:
@@ -24951,7 +25316,7 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
                     thread.join(timeout=2)
                     server.server_close()
 
-        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.3-codex")
+        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.5")
         self.assertTrue(row["selection_enabled"])
         self.assertFalse(registry["live_api_checked"])
         self.assertFalse(registry["network_calls_made"])
@@ -25094,10 +25459,10 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
 
     def test_codex_custom_dual_lane_selector_keeps_readonly_catalog_free_of_live_native_probe(self) -> None:
         lattice = build_catalog_availability_lattice_packet(
-            catalog_packet={"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]},
+            catalog_packet={"models": [{"model_id": "gpt-5.5", "lane": "codex_native"}]},
             current_model_packets=[
                 build_model_direct_preflight_packet(
-                    model_id="gpt-5.3-codex",
+                    model_id="gpt-5.5",
                     source="current_live_native_probe",
                     listed=True,
                     selectable=True,
@@ -25131,7 +25496,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                     thread.join(timeout=2)
                     server.server_close()
 
-        row = next(entry for entry in selector["chatgpt_lane"]["models"] if entry["model_id"] == "gpt-5.3-codex")
+        row = next(entry for entry in selector["chatgpt_lane"]["models"] if entry["model_id"] == "gpt-5.5")
         self.assertTrue(row["selection_enabled"])
         self.assertFalse(selector["selector_runtime_readiness_claimed"])
         availability_lattice.assert_not_called()
@@ -25150,7 +25515,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/model-selector-dry-run",
                         {
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -25159,7 +25524,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/model-selector-dry-run",
                         {
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v3",
                             "route_id": "browser-route",
                             "provider": "deepseek",
@@ -25197,7 +25562,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["current_execution_path_scope"], "chatgpt_lane_only_in_this_contour")
         self.assertEqual(packet["current_execution_path_source"], "operator_reported_configured_model")
         self.assertEqual(packet["api_lane_scope"], "selection_intent_only_until_role_slot_session_contour")
-        self.assertEqual(packet["chatgpt_selection"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["chatgpt_selection"]["model_id"], "gpt-5.5")
         self.assertEqual(packet["api_selection"]["model_id"], "wbp-deepseek-v3")
         self.assertTrue(packet["chatgpt_model_selected_by_user"])
         self.assertTrue(packet["api_model_selected_by_user"])
@@ -25233,7 +25598,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/execution-mode-dry-run",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -25266,9 +25631,9 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
 
         self.assertEqual(chatgpt_api["status"], "ok")
         self.assertEqual(chatgpt_api["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(chatgpt_api["chatgpt_model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_api["chatgpt_model_id"], "gpt-5.5")
         self.assertEqual(chatgpt_api["primary_model_slot"]["lane"], "codex_account_lane")
-        self.assertEqual(chatgpt_api["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_api["primary_model_slot"]["model_id"], "gpt-5.5")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["lane"], "api_route_lane")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["model_id"], "wbp-deepseek-v3")
         self.assertTrue(chatgpt_api["dual_lane_slots_preserved"])
@@ -25514,7 +25879,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         status_data = payloads[("external-models", "status", "--json")]["data"]
         status_data["routes_count"] = 2
         status_data["observed_routes_count"] = 2
-        status_data["available_secret_refs"] = ["OPENROUTER_API_KEY"]
+        status_data["available_secret_refs"] = ["OPENROUTER_API_KEY", "DEEPSEEK_API_KEY"]
         status_data["observed_routes"] = {
             "wbp-deepseek-v3": {
                 "availability_state": "provider_auth_failed",
@@ -25598,7 +25963,11 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["api_route"]["route_status_code"], "validation_failed")
         self.assertEqual(packet["api_route"]["validation_label"], "validate failed")
         self.assertEqual(packet["api_route"]["validation_visual_state"], "red")
-        self.assertEqual(packet["model_selection_truth"]["status"], "ok")
+        self.assertEqual(packet["model_selection_truth"]["status"], "blocked")
+        self.assertEqual(
+            packet["model_selection_truth"]["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SELECTABLE",
+        )
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["silent_fallback_used"])
         self.assertFalse(packet["live_call_attempted"])
@@ -25740,7 +26109,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/quick-start/config-admission",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v3",
                             "api_reasoning_option_id": "catalog_default",
                         },
@@ -25898,7 +26267,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/quick-start/config-admission",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                         },
                     )
                 )
@@ -25946,7 +26315,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/quick-start/config-admission",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                         },
                     )
                 )
@@ -26019,7 +26388,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/native-launch",
                         {
                             "execution_mode": "chatgpt_only",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                         },
                     )
                 )
@@ -26117,7 +26486,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/chatgpt-plus-api-slot-truth",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "api_reasoning_option_id": "provider_declared_max",
                         },
@@ -26128,7 +26497,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/chatgpt-plus-api-slot-truth",
                         {
                             "execution_mode": "chatgpt_plus_api",
-                            "chatgpt_model_id": "gpt-5.3-codex",
+                            "chatgpt_model_id": "gpt-5.5",
                             "api_model_id": "wbp-deepseek-v4-pro-max",
                             "route_id": "browser-route",
                         },
@@ -26143,7 +26512,7 @@ class WebDesignCodexCustomDualLaneSelectorEndpointTests(unittest.TestCase):
         self.assertEqual(packet["final_status"], "CHATGPT_PLUS_API_SLOT_ROUTING_PROVEN_WITH_LIMITS")
         self.assertTrue(packet["slot_truth_proven"])
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.5")
         self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(packet["source"], "server_selection_truth")
         self.assertTrue(packet["server_selection_truth_used"])
@@ -27386,14 +27755,14 @@ class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
                 dry_run = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/account-smoke-dry-run",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"model_id": "gpt-5.5"},
                     )
                 )
                 rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/account-smoke-dry-run",
                         {
-                            "model_id": "gpt-5.3-codex",
+                            "model_id": "gpt-5.5",
                             "account_id": "acct-active",
                             "backend_id": "acct-active",
                             "route_id": "route",
@@ -27570,7 +27939,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 legacy_alias = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"model_id": "gpt-5.3-codex"},
+                        {"model_id": "gpt-5.5"},
                     )
                 )
                 listed = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
@@ -27625,7 +27994,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -27679,7 +28048,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(created["session"]["role_slot_binding_count"], 2)
         self.assertEqual(
             created["session"]["role_slots"]["primary_model_slot"]["model_id"],
-            "gpt-5.3-codex",
+            "gpt-5.5",
         )
         self.assertEqual(
             created["session"]["role_slots"]["coding_agent_model_slot"]["model_id"],
@@ -27911,7 +28280,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 ready = json.loads(
@@ -28090,7 +28459,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 rejected = json.loads(
@@ -28215,7 +28584,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 admitted = json.loads(
@@ -28310,7 +28679,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 no_candidate = json.loads(
@@ -29230,7 +29599,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "account_id": "acct-active",
                             "backend_id": "acct-active",
                             "route_id": "route",
@@ -29292,7 +29661,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 session_id = created["session"]["session_id"]
@@ -29382,7 +29751,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 session_id = created["session"]["session_id"]
@@ -29424,7 +29793,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(proof["requested_slot_explicit"])
         self.assertTrue(proof["requested_slot_defaulted_to_primary"])
         self.assertEqual(proof["wbp_runner_payload_slot_id"], "primary_model_slot")
-        self.assertEqual(proof["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+        self.assertEqual(proof["wbp_runner_payload_model_id"], "gpt-5.5")
         self.assertTrue(proof["wbp_runner_payload_slot_matches_requested"])
         self.assertTrue(proof["wbp_runner_payload_model_matches_slot"])
         self.assertTrue(proof["wbp_session_manager_slot_dispatch_proven"])
@@ -29445,7 +29814,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             [
                 {
                     "prompt": "Reply with exactly WBP_LIVE_OK.",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                     "slot_id_explicit": False,
                 }
@@ -29497,7 +29866,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-chat",
                         },
                     )
@@ -29571,7 +29940,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -29606,7 +29975,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(primary["current_execution_slot_id"], "primary_model_slot")
         self.assertEqual(primary["requested_slot_id"], "primary_model_slot")
         self.assertTrue(primary["requested_slot_explicit"])
-        self.assertEqual(primary["model_id"], "gpt-5.3-codex")
+        self.assertEqual(primary["model_id"], "gpt-5.5")
         self.assertEqual(primary["selected_source_provenance"], "backend_proven")
         self.assertEqual(primary["account_candidate_source"], "server_ranked_candidate")
         self.assertFalse(primary["account_selected_by_user"])
@@ -29643,7 +30012,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             [
                 {
                     "prompt": "Reply with exactly CHATGPT_LANE_OK.",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -29741,7 +30110,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-chat",
                         },
                     )
@@ -29865,7 +30234,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -29933,7 +30302,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -29964,7 +30333,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(packet["same_session_dispatch_proven"])
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertTrue(packet["coding_dispatch_proven"])
-        self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_model_id"], "gpt-5.5")
         self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_runner_payload_slot_id"], "primary_model_slot")
         self.assertEqual(packet["coding_runner_payload_slot_id"], "coding_agent_model_slot")
@@ -30005,7 +30374,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             [
                 {
                     "prompt": "Ответь одной строкой: WBP_MIXED_PRIMARY_SLOT_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -30052,7 +30421,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -30131,7 +30500,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             [
                 {
                     "prompt": "Alias activation check. Confirm orchestration intent for: Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -30175,7 +30544,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -30238,7 +30607,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/sessions",
                         {
-                            "primary_model_id": "gpt-5.3-codex",
+                            "primary_model_id": "gpt-5.5",
                             "coding_agent_model_id": "wbp-deepseek-v3",
                         },
                     )
@@ -31066,7 +31435,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
-                        {"primary_model_id": "gpt-5.3-codex"},
+                        {"primary_model_id": "gpt-5.5"},
                     )
                 )
                 session_id = created["session"]["session_id"]

@@ -35,12 +35,12 @@ def operator_status() -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.3-codex",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "passed"},
         "models": {
             "ok": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
             "server_issued": True,
         },
     }

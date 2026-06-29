@@ -29,7 +29,11 @@ from wild_boar_proxy.user_prompt_submit_hook_producer import (
     HOOK_READINESS_PACKET_KIND,
     hook_ledger_path,
 )
-from wild_boar_proxy.wbp_dip_tool import WBP_DIP_TOOL_OK, WBP_DIP_TOOL_PACKET_KIND
+from wild_boar_proxy.wbp_dip_tool import (
+    WBP_DIP_TOOL_OK,
+    WBP_DIP_TOOL_PACKET_KIND,
+    _exact_plain_reply_expected_text,
+)
 
 
 PROMPT = "Codex, дай задачу DIP: repeatable hook-origin dispatch proof."
@@ -481,6 +485,9 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["fresh_hook_ledgers_proven"])
             self.assertTrue(packet["prompt_digests_distinct"])
             self.assertTrue(packet["source_packet_hashes_present"])
+            self.assertFalse(packet["probe_codex_app_server_requested"])
+            self.assertTrue(packet["hook_readiness_probe_codex_app_server"])
+            self.assertTrue(packet["hook_readiness_probe_codex_app_server_auto_enabled"])
             first_run = packet["runs"][0]
             self.assertEqual(first_run["custom_codex_exec_returncode"], 0)
             self.assertFalse(first_run["custom_codex_terminal_output_recorded"])
@@ -546,6 +553,24 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet_contains_text(packet, PROMPT))
             self.assertFalse(packet_contains_text(packet, ROUTE_ID))
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+            self.assertTrue(getattr(self, "_last_readiness_kwargs"))
+            self.assertEqual(
+                getattr(self, "_last_readiness_kwargs")[0]["codex_hook_current_hash"],
+                "",
+            )
+            self.assertIs(
+                getattr(self, "_last_readiness_kwargs")[0]["probe_codex_app_server"],
+                True,
+            )
+            self.assertTrue(getattr(self, "_last_ledger_kwargs"))
+            self.assertEqual(
+                getattr(self, "_last_ledger_kwargs")[0]["codex_hook_current_hash"],
+                "",
+            )
+            self.assertIs(
+                getattr(self, "_last_ledger_kwargs")[0]["probe_codex_app_server"],
+                True,
+            )
             wbp_dip_argv = getattr(self, "_last_wbp_dip_argv")
             self.assertEqual(len(wbp_dip_argv), 2)
             self.assertTrue(all("--work-mode" in argv for argv in wbp_dip_argv))
@@ -878,6 +903,22 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["hook_readiness_probe_codex_app_server"])
             self.assertFalse(packet["hook_readiness_probe_codex_app_server_auto_enabled"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_effective_prompt_keeps_exact_reply_payload_clean(self) -> None:
+        effective = runner._effective_prompt(  # noqa: SLF001
+            "DIP: ответь ровно WBP_EXACT_REPLY_RUNNER_20260627",
+            1,
+            "abc123def4567890",
+        )
+
+        self.assertTrue(effective.startswith("Proof run marker:"))
+        self.assertTrue(
+            effective.endswith("DIP: ответь ровно WBP_EXACT_REPLY_RUNNER_20260627")
+        )
+        self.assertEqual(
+            _exact_plain_reply_expected_text(effective),
+            "WBP_EXACT_REPLY_RUNNER_20260627",
+        )
 
     def test_stale_hook_ledger_blocks_false_green(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

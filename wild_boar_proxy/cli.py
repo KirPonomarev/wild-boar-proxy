@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
+import threading
+import time
 from typing import Any
 
 from .approved_handoff import (
@@ -73,6 +76,7 @@ from .api_agent_direct_reply import (
     DEFAULT_DIRECT_REPLY_WORK_MODE,
     DIRECT_REPLY_REPO_BRIDGE_MODES,
     DIRECT_REPLY_WORK_MODES,
+    resolve_prompt_repo_bridge_mode,
     run_api_agent_direct_reply_command,
 )
 from .api_agent_auto_router import run_api_agent_auto_router_command
@@ -948,7 +952,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     router_hook_auto_route.add_argument("--timeout-seconds", type=float, default=60.0)
     router_hook_auto_route.add_argument("--proof-dir")
+    router_hook_auto_route.add_argument("--progress-stderr", action="store_true")
+    router_hook_auto_route.add_argument(
+        "--progress-stderr-interval",
+        type=float,
+        default=20.0,
+    )
     router_hook_auto_route.add_argument("--json", action="store_true", required=True)
+    router_hook_auto_route_output = router_hook_subparsers.add_parser("auto-route-output")
+    router_hook_auto_route_output.add_argument("--prompt")
+    router_hook_auto_route_output.add_argument(
+        "--prompt-file",
+        default="-",
+        help="Read the original prompt from this file, or '-' for stdin.",
+    )
+    router_hook_auto_route_output.add_argument("--runtime-context-file")
+    router_hook_auto_route_output.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_auto_route_output.add_argument("--active-project-root")
+    router_hook_auto_route_output.add_argument("--target-repo")
+    router_hook_auto_route_output.add_argument(
+        "--repo-bridge",
+        choices=sorted(DIRECT_REPLY_REPO_BRIDGE_MODES),
+        default=DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    )
+    router_hook_auto_route_output.add_argument(
+        "--work-mode",
+        choices=sorted(DIRECT_REPLY_WORK_MODES),
+        default=DEFAULT_DIRECT_REPLY_WORK_MODE,
+    )
+    router_hook_auto_route_output.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=60.0,
+    )
     router_hook_direct_reply = router_hook_subparsers.add_parser("direct-reply")
     router_hook_direct_reply.add_argument("--prompt", required=True)
     router_hook_direct_reply.add_argument("--runtime-context-file")
@@ -971,6 +1011,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     router_hook_direct_reply.add_argument("--timeout-seconds", type=float, default=60.0)
     router_hook_direct_reply.add_argument("--proof-dir")
+    router_hook_direct_reply.add_argument("--progress-stderr", action="store_true")
+    router_hook_direct_reply.add_argument(
+        "--progress-stderr-interval",
+        type=float,
+        default=20.0,
+    )
     router_hook_direct_reply.add_argument("--json", action="store_true", required=True)
     router_hook_handoff = router_hook_subparsers.add_parser("handoff")
     router_hook_handoff.add_argument("--prompt", required=True)
@@ -1975,6 +2021,72 @@ def emit_json(payload: dict[str, Any]) -> int:
     return int(payload["exit_code"])
 
 
+def _read_router_prompt_for_output(args: argparse.Namespace) -> str:
+    prompt = getattr(args, "prompt", None)
+    if prompt is not None:
+        return str(prompt)
+    prompt_file = str(getattr(args, "prompt_file", "-") or "-")
+    if prompt_file == "-":
+        text = sys.stdin.read()
+    else:
+        from pathlib import Path
+
+        text = Path(prompt_file).expanduser().read_text(encoding="utf-8")
+    return text[:-1] if text.endswith("\n") else text
+
+
+def _auto_route_visible_output(packet: dict[str, Any]) -> str:
+    direct_ok = (
+        packet.get("status") == "ok"
+        and packet.get("auto_router_proven") is True
+        and packet.get("direct_reply_proven") is True
+        and (
+            packet.get("exact_plain_reply_matched") is True
+            or packet.get("output_passthrough_required") is True
+            or packet.get("repo_bridge_evidence_response_proven") is True
+        )
+        and packet.get("output_text") is not None
+    )
+    if direct_ok:
+        return str(packet.get("output_text"))
+    if packet.get("status") == "ok" and packet.get("auto_router_proven") is True:
+        return "WBP_ROUTER_OUTPUT_NOT_AVAILABLE"
+    return str(packet.get("machine_error_code") or "WBP_ROUTER_OUTPUT_INVALID")
+
+
+@contextlib.contextmanager
+def _stderr_progress_heartbeat(
+    *,
+    enabled: bool,
+    label: str,
+    interval_seconds: float,
+):
+    if not enabled:
+        yield
+        return
+    stop = threading.Event()
+    safe_interval = max(0.001, float(interval_seconds or 20.0))
+    started = time.monotonic()
+
+    def emit(message: str) -> None:
+        sys.stderr.write(message + "\n")
+        sys.stderr.flush()
+
+    def run() -> None:
+        emit(f"WBP_ROUTER_PROGRESS {label} started")
+        while not stop.wait(safe_interval):
+            elapsed = int(time.monotonic() - started)
+            emit(f"WBP_ROUTER_PROGRESS {label} elapsed_seconds={elapsed}")
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.join(timeout=min(1.0, safe_interval))
+
+
 def command_effect_from_args(args: argparse.Namespace) -> str | None:
     command = getattr(args, "command", None)
     if command in {"status", "invariant-check"}:
@@ -2066,9 +2178,13 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     ):
         if getattr(args, "proof_dir", None):
             return EFFECT_MUTATE
+        repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+            prompt_text=getattr(args, "prompt", ""),
+            repo_bridge_mode=getattr(args, "repo_bridge", None),
+        )
         return (
             EFFECT_PROBE
-            if getattr(args, "repo_bridge", None) == "off"
+            if repo_bridge_mode == "off"
             else EFFECT_MUTATE
         )
     if (
@@ -2077,11 +2193,20 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
     ):
         if getattr(args, "proof_dir", None):
             return EFFECT_MUTATE
+        repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+            prompt_text=getattr(args, "prompt", ""),
+            repo_bridge_mode=getattr(args, "repo_bridge", None),
+        )
         return (
             EFFECT_PROBE
-            if getattr(args, "repo_bridge", None) == "off"
+            if repo_bridge_mode == "off"
             else EFFECT_MUTATE
         )
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "auto-route-output"
+    ):
+        return EFFECT_MUTATE
     if command == "router-hook" and getattr(args, "router_hook_command", None) in {
         "entry",
         "dispatch",
@@ -2764,8 +2889,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         if args.command == "router-hook" and args.router_hook_command == "auto-route":
-            return emit_json(
-                run_api_agent_auto_router_command(
+            with _stderr_progress_heartbeat(
+                enabled=args.progress_stderr,
+                label="auto-route",
+                interval_seconds=args.progress_stderr_interval,
+            ):
+                packet = run_api_agent_auto_router_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
@@ -2777,13 +2906,35 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     proof_dir=args.proof_dir,
                 )
+            return emit_json(packet)
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "auto-route-output"
+        ):
+            packet = run_api_agent_auto_router_command(
+                paths=paths,
+                prompt_text=_read_router_prompt_for_output(args),
+                runtime_context_file=args.runtime_context_file,
+                hook_surface_kind=args.hook_surface_kind,
+                active_project_root_arg=args.active_project_root,
+                target_repo_arg=args.target_repo,
+                repo_bridge_mode=args.repo_bridge,
+                work_mode=args.work_mode,
+                timeout_seconds=args.timeout_seconds,
+                proof_dir=None,
             )
+            sys.stdout.write(_auto_route_visible_output(packet) + "\n")
+            return 0
         if (
             args.command == "router-hook"
             and args.router_hook_command == "direct-reply"
         ):
-            return emit_json(
-                run_api_agent_direct_reply_command(
+            with _stderr_progress_heartbeat(
+                enabled=args.progress_stderr,
+                label="direct-reply",
+                interval_seconds=args.progress_stderr_interval,
+            ):
+                packet = run_api_agent_direct_reply_command(
                     paths=paths,
                     prompt_text=args.prompt,
                     runtime_context_file=args.runtime_context_file,
@@ -2795,7 +2946,7 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     proof_dir=args.proof_dir,
                 )
-            )
+            return emit_json(packet)
         if args.command == "router-hook" and args.router_hook_command == "handoff":
             return emit_json(
                 run_approved_handoff_command(

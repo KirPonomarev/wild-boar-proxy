@@ -126,6 +126,7 @@ CANONICAL_INTERNAL_MODEL_IDS = (
     "gpt-5.4-mini",
     "gpt-5.5",
 )
+CUSTOM_NATIVE_UI_PROVEN_MODEL_IDS = ("gpt-5.5",)
 PREFERRED_CHATGPT_SELECTOR_DEFAULT_MODEL_ID = "gpt-5.5"
 CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS = {
     "api_key",
@@ -693,6 +694,31 @@ def _model_entry(
         lane_classification.get("model_lane_classified") is True
         and lane_classification.get("model_lane_fallback_used") is not True
     )
+    non_interactive_codex_alias = (
+        lane == "codex_native"
+        and server_lane_explicit is not True
+        and model_id not in CANONICAL_INTERNAL_MODEL_IDS
+    )
+    native_model_not_ui_proven = (
+        lane == "codex_native"
+        and server_lane_explicit is not True
+        and model_id in CANONICAL_INTERNAL_MODEL_IDS
+        and model_id not in CUSTOM_NATIVE_UI_PROVEN_MODEL_IDS
+    )
+    if non_interactive_codex_alias or native_model_not_ui_proven:
+        lane_executable = False
+    disabled_reason_code = ""
+    disabled_reasons: list[str] = []
+    if not lane_executable:
+        if non_interactive_codex_alias:
+            disabled_reason_code = "NON_INTERACTIVE_CODEX_ALIAS"
+            disabled_reasons = ["codex_native_alias_not_interactive_model"]
+        elif native_model_not_ui_proven:
+            disabled_reason_code = "CUSTOM_NATIVE_UI_NOT_PROVEN"
+            disabled_reasons = ["custom_native_ui_response_not_proven"]
+        else:
+            disabled_reason_code = "HEURISTIC_ONLY_NOT_EXECUTABLE"
+            disabled_reasons = ["model_lane_not_server_classified"]
     return {
         "model_id": model_id,
         "label": model_id,
@@ -721,8 +747,8 @@ def _model_entry(
         "model_source_hint": source,
         "selection_enabled": lane_executable,
         "selection_state": "selectable" if lane_executable else "disabled",
-        "selection_disabled_reason_code": "" if lane_executable else "HEURISTIC_ONLY_NOT_EXECUTABLE",
-        "selection_disabled_reasons": [] if lane_executable else ["model_lane_not_server_classified"],
+        "selection_disabled_reason_code": disabled_reason_code,
+        "selection_disabled_reasons": disabled_reasons,
         "availability_claim_level": "listed_not_live_proven",
         "live_availability_proven": False,
         "account_health_proven": False,
@@ -797,11 +823,24 @@ def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[d
         entry = _model_entry(route_id)
         enabled = route.get("enabled") is True
         secret_ref_present = bool(str(route.get("secret_ref") or "").strip())
+        route_status_code = str(route.get("status_code") or "").strip()
+        validation_visual_state = str(route.get("validation_visual_state") or "").strip()
+        secret_status_label = str(route.get("secret_status_label") or "").strip()
         disabled_reasons: list[str] = []
         if not enabled:
             disabled_reasons.append("route_disabled")
         if not secret_ref_present:
             disabled_reasons.append("secret_ref_missing")
+        if secret_status_label == "missing":
+            disabled_reasons.append("secret_missing")
+        if route_status_code == "validation_failed" or validation_visual_state == "red":
+            disabled_reasons.append("route_validation_failed")
+        elif route_status_code == "check_attention":
+            disabled_reasons.append("route_check_attention")
+        elif route_status_code == "blocked":
+            disabled_reasons.append("route_blocked")
+        elif route_status_code == "integration_failure":
+            disabled_reasons.append("route_integration_failure")
         selection_enabled = not disabled_reasons
         provider = str(route.get("provider") or "").strip()
         label = str(route.get("display_name") or route.get("upstream_model") or route_id).strip()
@@ -1499,10 +1538,13 @@ def build_dual_lane_model_selection_ui_packet(
     api_default = _default_selector_model_id(api_entries)
     packet_status = "ok" if chatgpt_entries or api_entries or seed_entries else "blocked"
     machine_error_code = "OK" if packet_status == "ok" else "CUSTOM_SELECTOR_EMPTY"
+    chatgpt_default_resolution_status = str(
+        chatgpt_default_resolution.get("default_resolution_status") or ""
+    )
     if (
         packet_status == "ok"
         and chatgpt_entries
-        and chatgpt_default_resolution.get("default_resolution_status") == "degraded"
+        and chatgpt_default_resolution_status != "ok"
     ):
         packet_status = "degraded"
         machine_error_code = "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE"

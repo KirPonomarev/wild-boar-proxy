@@ -118,6 +118,8 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
                     "version": 2,
                     "status": "healthy",
                     "effective_mode": "stable",
+                    "last_sync_at": "",
+                    "current_proxy_url": "",
                     "stable_default_backend_id": "default-backend",
                     "selected_backend_ids": ["backend-a"],
                     "managed_port": 9999,
@@ -347,6 +349,98 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
             ),
         )
         return metadata_path
+
+    def test_healthcheck_prefers_local_token_command_over_legacy_auth_file(self) -> None:
+        (self.profile_dir / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": "stale-auth-file"}) + "\n",
+            encoding="utf-8",
+        )
+        self.paths.stable_runtime_generated_config_file.write_text(
+            'api-keys:\n  - "local-health-token"\n',
+            encoding="utf-8",
+        )
+        observed_tokens: list[str] = []
+
+        def fake_http_get_json(url: str, api_key: str) -> dict[str, Any]:
+            observed_tokens.append(api_key)
+            self.assertTrue(url.endswith("/models"))
+            return {"data": [{"id": "gpt-5.4"}]}
+
+        def fake_http_post_json(
+            url: str,
+            api_key: str,
+            payload: dict[str, Any],
+        ) -> dict[str, Any]:
+            observed_tokens.append(api_key)
+            self.assertTrue(url.endswith("/responses"))
+            self.assertEqual(payload["model"], "gpt-5.4")
+            return {"output_text": "OK"}
+
+        with (
+            mock.patch.object(runtime_mod, "socket_is_listening", return_value=True),
+            mock.patch.object(runtime_mod, "http_get_json", side_effect=fake_http_get_json),
+            mock.patch.object(runtime_mod, "http_post_json", side_effect=fake_http_post_json),
+            mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-02T00:00:00+00:00",
+            ),
+        ):
+            payload = runtime_mod.run_healthcheck(self.paths)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(observed_tokens, ["local-health-token", "local-health-token"])
+        self.assertEqual(payload["attestation"]["auth_source_kind"], "local_token_command")
+        self.assertFalse(payload["attestation"]["auth_material_recorded"])
+
+    def test_healthcheck_prefers_wbp_stable_config_env_token(self) -> None:
+        (self.profile_dir / "auth.json").write_text(
+            json.dumps({"OPENAI_API_KEY": "stale-auth-file"}) + "\n",
+            encoding="utf-8",
+        )
+        self.paths.stable_runtime_generated_config_file.write_text(
+            'api-keys:\n  - "stale-profile-token"\n',
+            encoding="utf-8",
+        )
+        owner_config = self.root / "owner-stable-config.generated.yaml"
+        owner_config.write_text(
+            'api-keys:\n  - "env-health-token"\n',
+            encoding="utf-8",
+        )
+        observed_tokens: list[str] = []
+
+        def fake_http_get_json(url: str, api_key: str) -> dict[str, Any]:
+            observed_tokens.append(api_key)
+            self.assertTrue(url.endswith("/models"))
+            return {"data": [{"id": "gpt-5.4"}]}
+
+        def fake_http_post_json(
+            url: str,
+            api_key: str,
+            payload: dict[str, Any],
+        ) -> dict[str, Any]:
+            observed_tokens.append(api_key)
+            self.assertTrue(url.endswith("/responses"))
+            self.assertEqual(payload["model"], "gpt-5.4")
+            return {"output_text": "OK"}
+
+        with (
+            mock.patch.dict(os.environ, {"WBP_STABLE_CONFIG": str(owner_config)}),
+            mock.patch.object(runtime_mod, "socket_is_listening", return_value=True),
+            mock.patch.object(runtime_mod, "http_get_json", side_effect=fake_http_get_json),
+            mock.patch.object(runtime_mod, "http_post_json", side_effect=fake_http_post_json),
+            mock.patch.object(
+                runtime_mod,
+                "now_iso",
+                return_value="2026-06-02T00:00:00+00:00",
+            ),
+        ):
+            payload = runtime_mod.run_healthcheck(self.paths)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(observed_tokens, ["env-health-token", "env-health-token"])
+        self.assertEqual(payload["attestation"]["auth_source_kind"], "wbp_stable_config_env")
+        self.assertFalse(payload["attestation"]["auth_material_recorded"])
 
     def test_healthcheck_probe_declares_probe_and_does_not_write_truth_files(self) -> None:
         before = self.truth_snapshot()

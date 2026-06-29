@@ -64,6 +64,18 @@ def _native_packet(
 
 
 class CustomCodexNativeResponseMatrixTests(TestCase):
+    def test_default_prompt_variants_use_strict_exact_answer_language(self) -> None:
+        variants = matrix.default_native_response_prompt_variants()
+        by_name = {variant.name: variant for variant in variants}
+
+        self.assertIn("repeat_exact", by_name)
+        repeat_template = by_name["repeat_exact"].template
+        self.assertIn("{expected_text}", repeat_template)
+        self.assertIn("exactly", repeat_template.lower())
+        self.assertIn("plain text", repeat_template.lower())
+        self.assertIn("Do not add quotes", repeat_template)
+        self.assertNotIn("Repeat exactly this line", repeat_template)
+
     def test_case_expected_text_preserves_handoff_digest_sized_prefix(self) -> None:
         handoff_digest = "c" * 64
         request_id = "ui-matrix-1-exact"

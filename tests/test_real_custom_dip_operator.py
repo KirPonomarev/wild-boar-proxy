@@ -420,10 +420,16 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             root = Path(temp_dir)
             paths = _paths(root)
             codex_bin = _codex_bin(root)
+            readiness_calls: list[dict[str, object]] = []
+
+            def fake_readiness(**kwargs: object) -> dict[str, object]:
+                readiness_calls.append(dict(kwargs))
+                return _readiness()
+
             with mock.patch.object(
                 operator,
                 "build_user_prompt_submit_readiness_packet",
-                return_value=_readiness(),
+                side_effect=fake_readiness,
             ):
                 packet = operator.run_real_custom_dip_operator_preflight_command(
                     paths=paths,
@@ -450,6 +456,9 @@ class RealCustomDipOperatorTests(unittest.TestCase):
             self.assertFalse(packet["work_mode_proven"])
             self.assertFalse(packet["proof_mode_admission_proven"])
             self.assertFalse(packet["product_ready"])
+            self.assertEqual(len(readiness_calls), 1)
+            self.assertEqual(readiness_calls[0]["codex_hook_current_hash"], "")
+            self.assertIs(readiness_calls[0]["probe_codex_app_server"], True)
             serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
             self.assertNotIn(PROMPT, serialized)
             self.assertNotIn(ROUTE_ID, serialized)

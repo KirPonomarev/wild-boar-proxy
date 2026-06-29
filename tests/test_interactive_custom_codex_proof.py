@@ -429,7 +429,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
 
     def test_cli_interactive_collect_emits_strict_json_packet(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             root = Path(temp_dir)
             paths = _paths(root)
             _write_profile(paths)

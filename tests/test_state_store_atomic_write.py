@@ -34,6 +34,19 @@ class StateStoreAtomicWriteTests(unittest.TestCase):
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["status"], "healthy")
         self.assertEqual(list(self.root.glob(".wbp-tmp-*")), [])
 
+    def test_write_json_can_emit_trailing_newline(self) -> None:
+        target = self.root / "supervisor-state.json"
+
+        state_store.write_json(
+            target,
+            {"schema_version": 2, "status": "healthy"},
+            expected_schema_version=2,
+            trailing_newline=True,
+        )
+
+        self.assertTrue(target.read_text(encoding="utf-8").endswith("\n"))
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["status"], "healthy")
+
     def test_write_uses_unique_temp_names_without_fixed_tmp_collision(self) -> None:
         target = self.root / "backend-registry.json"
         temp_names: list[str] = []
@@ -51,8 +64,8 @@ class StateStoreAtomicWriteTests(unittest.TestCase):
         self.assertEqual(len(temp_names), 2)
         self.assertEqual(len(set(temp_names)), 2)
         self.assertTrue(all(name.startswith(".wbp-tmp-") for name in temp_names))
-        self.assertTrue(all(name.endswith(".backend-registry.json") for name in temp_names))
-        self.assertNotIn(".backend-registry.json.tmp", temp_names)
+        self.assertTrue(all(name.endswith(".backend-registry.json.tmp") for name in temp_names))
+        self.assertTrue(all(not Path(name).match("*.json") for name in temp_names))
 
     def test_successful_write_publishes_with_os_replace(self) -> None:
         target = self.root / "supervisor-state.json"
@@ -75,7 +88,8 @@ class StateStoreAtomicWriteTests(unittest.TestCase):
         self.assertEqual(replaced_target, target)
         self.assertEqual(temp_path.parent, target.parent)
         self.assertTrue(temp_path.name.startswith(".wbp-tmp-"))
-        self.assertTrue(temp_path.name.endswith(".supervisor-state.json"))
+        self.assertTrue(temp_path.name.endswith(".supervisor-state.json.tmp"))
+        self.assertFalse(temp_path.match("*.json"))
         self.assertFalse(temp_path.exists())
         self.assertEqual(
             json.loads(target.read_text(encoding="utf-8"))["status"],

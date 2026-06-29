@@ -40,8 +40,6 @@ from .runtime import RuntimePaths, write_json_atomic
 from .user_prompt_submit_hook_producer import (
     HOOK_CONFIG_OK,
     build_user_prompt_submit_readiness_packet,
-    expected_hook_trusted_hash,
-    hook_command_for_paths,
     hook_ledger_path,
 )
 from .wbp_dip_hook_origin_proof import (
@@ -52,6 +50,7 @@ from .wbp_dip_tool import (
     DEFAULT_CODEX_JSONL_FILENAME,
     DEFAULT_MODEL,
     DEFAULT_SANDBOX,
+    _exact_plain_reply_requested,
     build_codex_exec_argv,
     default_codex_bin,
     _find_delegate_packet,
@@ -981,11 +980,13 @@ def _effective_prompt(base_prompt: str, run_index: int, run_session_id: str) -> 
         f"WBP_REAL_CUSTOM_DIP_PROOF_RUN_{run_index:02d}_"
         f"{_sha256_text(base_prompt)[:12]}_{run_session_id}"
     )
-    return (
-        f"{base_prompt} "
+    proof_suffix = (
         f"Proof run marker: {marker}. "
         "Answer shortly; do not expose route ids, secrets, or backend details."
     )
+    if _exact_plain_reply_requested(base_prompt):
+        return f"{proof_suffix} {base_prompt}"
+    return f"{base_prompt} {proof_suffix}"
 
 
 def _readiness_failures(readiness: Mapping[str, Any]) -> list[str]:
@@ -2200,21 +2201,15 @@ def run_real_custom_dip_proof_runner_command(
         except (OSError, TypeError, ValueError):
             artifact_failures.append("auth_session_readiness_write_failed")
     explicit_hook_hash = _safe_text(codex_hook_current_hash, limit=80)
+    # Default live proof runs to the app-server truth surface unless the operator
+    # intentionally pins the current hook hash.
     hook_readiness_probe_codex_app_server = bool(
-        probe_codex_app_server or (api_backed_gate_required and not explicit_hook_hash)
+        probe_codex_app_server or not explicit_hook_hash
     )
     hook_readiness_probe_codex_app_server_auto_enabled = bool(
-        api_backed_gate_required
-        and not probe_codex_app_server
-        and not explicit_hook_hash
+        not probe_codex_app_server and not explicit_hook_hash
     )
-    hook_hash = (
-        explicit_hook_hash
-        if explicit_hook_hash
-        else ""
-        if hook_readiness_probe_codex_app_server
-        else expected_hook_trusted_hash(hook_command_for_paths(paths))
-    )
+    hook_hash = explicit_hook_hash if explicit_hook_hash else ""
     readiness_packet = build_user_prompt_submit_readiness_packet(
         paths=paths,
         codex_hook_current_hash=hook_hash,

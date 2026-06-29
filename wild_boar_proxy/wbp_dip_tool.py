@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import argparse
+import fnmatch
 import hashlib
 import ipaddress
 import json
@@ -63,9 +64,11 @@ DEFAULT_LIVE_RESULT_TEXT_LIMIT = 2400
 FULL_WORK_LIVE_RESULT_TEXT_LIMIT = 64000
 DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS = 768
 FULL_WORK_MAX_OUTPUT_TOKENS = 32768
+DEFAULT_DIRECT_PROVIDER_MAX_ATTEMPTS = 3
 DEFAULT_REPO_BRIDGE_MODE = "auto"
 DEFAULT_REPO_BRIDGE_MAX_STEPS = 8
 FULL_WORK_REPO_BRIDGE_MAX_STEPS = 24
+FULL_WORK_CODE_MUTATION_MIN_TIMEOUT_SECONDS = 600.0
 DEFAULT_REPO_BRIDGE_FILE_TEXT_LIMIT = 12000
 DEFAULT_REPO_BRIDGE_CONTEXT_TEXT_LIMIT = 18000
 DEFAULT_REPO_BRIDGE_TOOL_RESULT_TEXT_LIMIT = 16000
@@ -85,6 +88,7 @@ WBP_DIP_TOOL_CODEX_EXEC_FAILED = "WBP_DIP_TOOL_CODEX_EXEC_FAILED"
 WBP_DIP_TOOL_DELEGATE_NOT_PROVEN = "WBP_DIP_TOOL_DELEGATE_NOT_PROVEN"
 WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT = "WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT"
 WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
+WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT = "WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
 WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
 WBP_DIP_TOOL_EXACT_REPLY_MISMATCH = "WBP_DIP_TOOL_EXACT_REPLY_MISMATCH"
@@ -101,8 +105,17 @@ WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING = (
     "WBP_DIP_TOOL_REPO_BRIDGE_FINAL_ANSWER_MISSING"
 )
 WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED = "WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED"
+WBP_DIP_TOOL_ACTION_BRIDGE_FAILED = "WBP_DIP_TOOL_ACTION_BRIDGE_FAILED"
 WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED = "WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED"
 WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN = "WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN"
+WBP_DIP_TOOL_CODE_VERIFICATION_FAILED = "WBP_DIP_TOOL_CODE_VERIFICATION_FAILED"
+WBP_DIP_TOOL_MUTATION_NOT_APPLIED = "WBP_DIP_TOOL_MUTATION_NOT_APPLIED"
+WBP_DIP_TOOL_MUTATION_VERIFICATION_NOT_RUN = (
+    "WBP_DIP_TOOL_MUTATION_VERIFICATION_NOT_RUN"
+)
+WBP_DIP_TOOL_REPO_TOOL_CLAIM_MISMATCH = (
+    "WBP_DIP_TOOL_REPO_TOOL_CLAIM_MISMATCH"
+)
 
 REPO_BRIDGE_MODES = ("auto", "on", "off")
 DIP_WORK_MODES = ("standard", "full")
@@ -136,6 +149,7 @@ ACTION_BRIDGE_TASK_KEYWORDS = (
     "run tests",
     "run pytest",
     "run unittest",
+    "make test-custom-stability",
     "execute command",
     "pytest",
     "unittest",
@@ -147,6 +161,31 @@ ACTION_BRIDGE_TASK_KEYWORDS = (
     "запусти тесты",
     "прогони тест",
     "прогони тесты",
+)
+AUTH_LISTENER_SMOKE_TASK_KEYWORDS = (
+    "auth command",
+    "auth_command",
+    "/v1/models",
+    "listener_status",
+    "профильный auth",
+    "проверь http://127.0.0.1",
+)
+MODEL_MATRIX_SMOKE_TASK_KEYWORDS = (
+    "/v1/responses",
+    "model matrix",
+    "model_matrix",
+    "model pool",
+    "models_count",
+    "model_ids",
+    "полный пул",
+    "все модели",
+    "модельный пул",
+)
+RUNTIME_HEALTHCHECK_SMOKE_TASK_KEYWORDS = (
+    "healthcheck --json",
+    "launch_readiness_status",
+    "gate_passed",
+    "liveness",
 )
 CODE_MUTATION_TASK_KEYWORDS = (
     "fix",
@@ -168,6 +207,125 @@ CODE_MUTATION_TASK_KEYWORDS = (
     "напиши",
     "патч",
 )
+READONLY_OVERRIDABLE_CODE_CREATION_KEYWORDS = (
+    "create",
+    "build",
+    "generate",
+    "scaffold",
+    "write",
+    "write code",
+    "создай",
+    "создать",
+    "напиши",
+    "написать",
+    "реализуй",
+    "реализовать",
+    "добавь",
+    "добавить",
+)
+NATURAL_CODE_MUTATION_VERBS = (
+    "create",
+    "build",
+    "generate",
+    "scaffold",
+    "write",
+)
+NATURAL_CODE_MUTATION_NOUNS = (
+    "python module",
+    "module",
+    "python file",
+    "script",
+    "parser",
+    "function",
+    "class",
+    "unit test",
+    "pytest test",
+    "tests",
+)
+FILE_ARTIFACT_MUTATION_TASK_KEYWORDS = (
+    "create file",
+    "create files",
+    "write file",
+    "write files",
+    "delete file",
+    "delete files",
+    "delete directory",
+    "delete directories",
+    "delete folder",
+    "delete folders",
+    "remove file",
+    "remove files",
+    "remove directory",
+    "remove directories",
+    "remove folder",
+    "remove folders",
+    "создай файл",
+    "создай файлы",
+    "создать файл",
+    "создать файлы",
+    "запиши файл",
+    "запиши файлы",
+    "удали файл",
+    "удали файлы",
+    "удали директорию",
+    "удали директории",
+    "удали папку",
+    "удали папки",
+    "удалить файл",
+    "удалить файлы",
+    "удалить директорию",
+    "удалить директории",
+    "удалить папку",
+    "удалить папки",
+)
+DELETE_FILE_TASK_KEYWORDS = (
+    "delete file",
+    "delete directory",
+    "delete folder",
+    "remove file",
+    "remove directory",
+    "remove folder",
+    "удали файл",
+    "удали директорию",
+    "удали папку",
+    "удалить файл",
+    "удалить директорию",
+    "удалить папку",
+)
+CODE_SPECIFIC_TASK_KEYWORDS = (
+    "fix",
+    "repair",
+    "implement",
+    "patch",
+    "edit",
+    "write code",
+    "change code",
+    "почини",
+    "чинить",
+    "исправь",
+    "исправить",
+    "реализуй",
+    "реализовать",
+    "доделай",
+    "патч",
+)
+CODE_MUTATION_PATH_SUFFIXES = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".css",
+    ".html",
+    ".sh",
+    ".rs",
+    ".go",
+    ".java",
+    ".rb",
+    ".swift",
+    ".kt",
+    ".sql",
+}
 CODE_MUTATION_NEGATED_PHRASES = (
     "do not edit",
     "do not change",
@@ -229,19 +387,51 @@ REPO_BRIDGE_PATH_PATTERN = re.compile(
     r"(?![A-Za-z0-9_./-])",
     re.IGNORECASE,
 )
+REPO_BRIDGE_DIRECTORY_PATH_PATTERN = re.compile(
+    r"(?:\b(?:directory|directories|folder|folders|dir)\b|"
+    r"\b(?:директори(?:ю|и|я)|папк(?:у|и|а))\b)"
+    r"\s+([A-Za-z0-9_./-]+)",
+    re.IGNORECASE,
+)
+MUTATION_BRIDGE_TOOLS = {
+    "apply_patch",
+    "delete_file",
+    "delete_tree",
+    "write_file",
+}
 ACTION_BRIDGE_TOOLS = {
     "propose_patch",
-    "apply_patch",
+    *MUTATION_BRIDGE_TOOLS,
     "run_tests",
     "run_command",
+    "listener_auth_smoke",
+    "listener_model_matrix_smoke",
+    "runtime_healthcheck_smoke",
+}
+BOOTSTRAP_FINAL_ANSWER_TOOLS = {
+    "listener_auth_smoke",
+    "listener_model_matrix_smoke",
+    "runtime_healthcheck_smoke",
+    "run_tests",
+    "write_file",
 }
 ACTION_ALLOWED_COMMAND_PREFIXES = (
     ("python3", "-m", "unittest"),
     ("python3", "-m", "pytest"),
     ("python3", "-m", "py_compile"),
+    ("make", "test-custom-stability"),
     ("git", "diff", "--check"),
     ("git", "diff", "--stat"),
     ("git", "status"),
+)
+ACTION_ALLOWED_COMMAND_PROFILE_IDS = (
+    "python3_module_unittest",
+    "python3_module_pytest",
+    "python3_module_py_compile",
+    "make_test_custom_stability",
+    "git_diff_check",
+    "git_diff_stat",
+    "git_status",
 )
 REPO_BRIDGE_CANONICAL_FILES = (
     "AGENTS.md",
@@ -340,6 +530,92 @@ def _bridge_timeout_seconds(
         default=requested,
     )
     return min(requested, configured)
+
+
+def _live_result_deadline(timeout_seconds: float, *, minimum: float = 1.0) -> float:
+    bounded = _safe_timeout_seconds(
+        timeout_seconds,
+        default=DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+        minimum=minimum,
+    )
+    return time.monotonic() + bounded
+
+
+def _effective_live_result_timeout_seconds(
+    timeout_seconds: float,
+    *,
+    dip_work_mode: str,
+    repo_bridge_required: bool,
+    code_mutation_required: bool,
+) -> float:
+    requested = _safe_timeout_seconds(
+        timeout_seconds,
+        default=DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+        minimum=1.0,
+    )
+    if (
+        dip_work_mode == "full"
+        and repo_bridge_required
+        and code_mutation_required
+    ):
+        return max(requested, FULL_WORK_CODE_MUTATION_MIN_TIMEOUT_SECONDS)
+    return requested
+
+
+def _remaining_live_result_timeout(deadline: float) -> float:
+    return max(deadline - time.monotonic(), 0.0)
+
+
+def _live_result_timeout_packet(
+    base: Mapping[str, Any],
+    *,
+    provider_called: bool,
+) -> dict[str, Any]:
+    return {
+        **dict(base),
+        "status": "error",
+        "machine_error_code": WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT,
+        "operator_action": "retry",
+        "provider_called": provider_called,
+        "result_available": False,
+        "result_text": "",
+        "result_text_sha256": "",
+        "result_text_length": 0,
+        "result_text_truncated": False,
+    }
+
+
+def _repo_bridge_timeout_packet(
+    base: Mapping[str, Any],
+    *,
+    provider_called: bool,
+    repo_fields: Mapping[str, Any],
+) -> dict[str, Any]:
+    packet = {
+        **_live_result_timeout_packet(base, provider_called=provider_called),
+        **dict(repo_fields),
+    }
+    if (
+        repo_fields.get("dip_code_mutation_required") is True
+        and repo_fields.get("dip_code_written") is True
+        and repo_fields.get("dip_code_verified") is not True
+    ):
+        packet["live_result_timeout_machine_error_code"] = (
+            WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT
+        )
+        packet["live_result_timeout_before_code_verification_closed"] = True
+        packet["machine_error_code"] = (
+            WBP_DIP_TOOL_CODE_VERIFICATION_FAILED
+            if repo_fields.get("dip_code_verification_failed") is True
+            else WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN
+        )
+        packet["operator_action"] = "retry"
+        packet["result_available"] = False
+        packet["result_text"] = ""
+        packet["result_text_sha256"] = ""
+        packet["result_text_length"] = 0
+        packet["result_text_truncated"] = False
+    return packet
 
 
 def _dip_work_mode_settings(work_mode: str) -> dict[str, int | str]:
@@ -471,6 +747,16 @@ def _apply_exact_plain_reply_gate(
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _command_allowlist_profile_digest() -> str:
+    return _sha256_text(
+        json.dumps(
+            list(ACTION_ALLOWED_COMMAND_PROFILE_IDS),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
 
 
 def _repair_stale_profile_config_model(profile_dir: Path, *, model: str) -> dict[str, Any]:
@@ -1032,7 +1318,18 @@ def _task_has_readonly_guard(task: str) -> bool:
     task_key = task.casefold()
     for phrase in SCOPED_NON_REPO_MUTATION_GUARD_PHRASES:
         task_key = task_key.replace(phrase, "")
-    return any(phrase in task_key for phrase in READONLY_TASK_GUARD_PHRASES)
+    for phrase in READONLY_TASK_GUARD_PHRASES:
+        phrase_key = phrase.casefold()
+        if phrase_key in {"read-only", "readonly"}:
+            if re.search(
+                rf"(?<![\w./-]){re.escape(phrase_key)}(?![\w./-])",
+                task_key,
+            ):
+                return True
+            continue
+        if phrase_key in task_key:
+            return True
+    return False
 
 
 def _task_path_candidates(task: str, *, limit: int = 4) -> list[str]:
@@ -1043,7 +1340,82 @@ def _task_path_candidates(task: str, *, limit: int = 4) -> list[str]:
             candidates.append(candidate)
         if len(candidates) >= limit:
             break
+    if len(candidates) < limit:
+        for match in REPO_BRIDGE_DIRECTORY_PATH_PATTERN.finditer(task):
+            candidate = match.group(1).strip("`'\".,:;()[]{}")
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+            if len(candidates) >= limit:
+                break
     return candidates
+
+
+def _file_write_text_from_task(task: str, *, path: str) -> str | None:
+    text = str(task or "")
+    path_index = text.find(path)
+    tail = text[path_index + len(path) :] if path_index >= 0 else text
+    match = re.search(
+        r"(?:\bwith\s+(?:text|content)\b|\bcontaining\b|"
+        r"\bthat\s+contains\b|с\s+(?:текстом|содержимым))\s*[:：]?\s+(.+)",
+        tail,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    raw_value = match.group(1)
+    terminator = re.search(
+        r"(?:,\s*(?:then|and\s+then|read|return|answer|show|verify)\b|"
+        r"\s+(?:then|and\s+then)\b|"
+        r",\s*(?:затем|потом|после\s+этого)\b|"
+        r"\s+(?:затем|потом)\b|"
+        r"\s+и\s+(?:прочитай|верни|ответь|выведи|проверь|покажи)\b)",
+        raw_value,
+        flags=re.IGNORECASE,
+    )
+    if terminator:
+        raw_value = raw_value[: terminator.start()]
+    value = raw_value.strip(" \t\r\n`'\".,;")
+    return value if value else None
+
+
+def _task_naturally_requests_code_mutation(*, task: str, task_key: str) -> bool:
+    if not _task_contains_keyword(task_key, NATURAL_CODE_MUTATION_VERBS):
+        return False
+    candidates = _task_path_candidates(task)
+    if any(
+        Path(candidate).suffix.casefold() in CODE_MUTATION_PATH_SUFFIXES
+        for candidate in candidates
+    ):
+        return True
+    return _task_contains_keyword(task_key, NATURAL_CODE_MUTATION_NOUNS)
+
+
+def _explicit_test_command_from_task(task: str) -> list[str]:
+    match = re.search(
+        r"(?<![\w./-])(?:python3\s+-m\s+(?:pytest|unittest)|make\s+test-custom-stability)\b",
+        task,
+        re.IGNORECASE,
+    )
+    if not match:
+        return []
+    command_text = task[match.start() :]
+    terminator = re.search(
+        r"(?:[.!?]\s*|\s+)"
+        r"(?:(?:если|когда)\b|(?:if|when)\b|"
+        r"(?:и\s+)?(?:ответь|верни|выведи|покажи|затем)|"
+        r"(?:and\s+)?(?:answer|return|show|then))\b",
+        command_text,
+        re.IGNORECASE,
+    )
+    if terminator:
+        command_text = command_text[: terminator.start()]
+    command_text = command_text.strip("`'\".,:;()[]{}\n ")
+    try:
+        argv = shlex.split(command_text)
+    except ValueError:
+        return []
+    allowed, _reason = _command_allowed(argv)
+    return argv if allowed else []
 
 
 def _repo_bridge_bootstrap_calls(
@@ -1054,6 +1426,80 @@ def _repo_bridge_bootstrap_calls(
 ) -> list[dict[str, Any]]:
     if not repo_bridge_required:
         return []
+    if action_bridge_required and _runtime_healthcheck_smoke_requested(task):
+        return [
+            {
+                "tool": "runtime_healthcheck_smoke",
+                "origin": "wbp_bootstrap",
+            }
+        ]
+    if action_bridge_required and _listener_model_matrix_smoke_requested(task):
+        return [
+            {
+                "tool": "listener_model_matrix_smoke",
+                "models_endpoint": _listener_models_endpoint_from_task(task),
+                "origin": "wbp_bootstrap",
+            }
+        ]
+    if action_bridge_required and _listener_auth_smoke_requested(task):
+        return [
+            {
+                "tool": "listener_auth_smoke",
+                "endpoint": _listener_models_endpoint_from_task(task),
+                "origin": "wbp_bootstrap",
+            }
+        ]
+    explicit_test_command = (
+        _explicit_test_command_from_task(task) if action_bridge_required else []
+    )
+    code_mutation_required = _code_mutation_requested(
+        task=task,
+        repo_bridge_required=repo_bridge_required,
+    )
+    if explicit_test_command and not code_mutation_required:
+        return [
+            {
+                "tool": "run_tests",
+                "args": explicit_test_command,
+                "origin": "wbp_bootstrap",
+            }
+        ]
+    if action_bridge_required and _create_or_write_file_requested(task):
+        for candidate in _task_path_candidates(task):
+            if _path_looks_like_code_mutation(candidate):
+                continue
+            write_text = _file_write_text_from_task(task, path=candidate)
+            if write_text is None:
+                continue
+            return [
+                {
+                    "tool": "write_file",
+                    "path": candidate,
+                    "text": write_text,
+                    "origin": "wbp_bootstrap",
+                },
+                {"tool": "read_file", "path": candidate, "origin": "wbp_bootstrap"},
+            ]
+    if action_bridge_required and _bootstrap_delete_file_requested(task):
+        for candidate in _task_path_candidates(task):
+            if _path_looks_like_code_mutation(candidate):
+                continue
+            if _delete_tree_requested(task):
+                return [
+                    {
+                        "tool": "delete_tree",
+                        "path": candidate,
+                        "origin": "wbp_bootstrap",
+                    }
+                ]
+            return [
+                {
+                    "tool": "delete_file",
+                    "path": candidate,
+                    "cleanup_empty_parent": _cleanup_empty_parent_requested(task),
+                    "origin": "wbp_bootstrap",
+                }
+            ]
     path_calls = [
         {"tool": "read_file", "path": candidate, "origin": "wbp_bootstrap"}
         for candidate in _task_path_candidates(task)
@@ -1080,27 +1526,189 @@ def _repo_bridge_requested(*, task: str, mode: str) -> bool:
             if keyword not in {"проверь", "run", "verify", "запусти"}
         )
         + CODE_MUTATION_TASK_KEYWORDS
+        + FILE_ARTIFACT_MUTATION_TASK_KEYWORDS
     )
-    return _task_contains_keyword(task_key, auto_keywords)
+    return bool(
+        _task_contains_keyword(task_key, auto_keywords)
+        or _task_naturally_requests_code_mutation(task=task, task_key=task_key)
+    )
 
 
 def _action_bridge_requested(*, task: str, repo_bridge_required: bool) -> bool:
     if not repo_bridge_required:
         return False
     task_key = task.casefold()
-    return _task_contains_keyword(task_key, ACTION_BRIDGE_TASK_KEYWORDS)
+    return bool(
+        _task_contains_keyword(task_key, ACTION_BRIDGE_TASK_KEYWORDS)
+        or _task_contains_keyword(task_key, MODEL_MATRIX_SMOKE_TASK_KEYWORDS)
+        or _task_contains_keyword(task_key, AUTH_LISTENER_SMOKE_TASK_KEYWORDS)
+        or _task_contains_keyword(task_key, RUNTIME_HEALTHCHECK_SMOKE_TASK_KEYWORDS)
+    )
 
 
-def _code_mutation_requested(*, task: str, repo_bridge_required: bool) -> bool:
+def _listener_model_matrix_smoke_requested(task: str) -> bool:
+    return _task_contains_keyword(
+        task.casefold(),
+        MODEL_MATRIX_SMOKE_TASK_KEYWORDS,
+    )
+
+
+def _listener_auth_smoke_requested(task: str) -> bool:
+    return _task_contains_keyword(
+        task.casefold(),
+        AUTH_LISTENER_SMOKE_TASK_KEYWORDS,
+    )
+
+
+def _runtime_healthcheck_smoke_requested(task: str) -> bool:
+    return _task_contains_keyword(
+        task.casefold(),
+        RUNTIME_HEALTHCHECK_SMOKE_TASK_KEYWORDS,
+    )
+
+
+def _delete_file_requested(task: str) -> bool:
+    return _task_contains_keyword(task.casefold(), DELETE_FILE_TASK_KEYWORDS)
+
+
+def _create_or_write_file_requested(task: str) -> bool:
+    task_key = task.casefold()
+    return _task_contains_keyword(
+        task_key,
+        (
+            "create file",
+            "write file",
+            "создай файл",
+            "создать файл",
+            "запиши файл",
+        ),
+    )
+
+
+def _bootstrap_delete_file_requested(task: str) -> bool:
+    return bool(_delete_file_requested(task) and not _create_or_write_file_requested(task))
+
+
+def _delete_tree_requested(task: str) -> bool:
+    task_key = task.casefold()
+    if (
+        "if directory" in task_key
+        or "if the directory" in task_key
+        or "if folder" in task_key
+        or "if the folder" in task_key
+        or "если директория" in task_key
+        or "если папка" in task_key
+    ):
+        return False
+    return bool(
+        "delete directory" in task_key
+        or "delete folder" in task_key
+        or "remove directory" in task_key
+        or "remove folder" in task_key
+        or "удали директорию" in task_key
+        or "удалить директорию" in task_key
+        or "удали папку" in task_key
+        or "удалить папку" in task_key
+    )
+
+
+def _cleanup_empty_parent_requested(task: str) -> bool:
+    task_key = task.casefold()
+    return bool(
+        "empty directory" in task_key
+        or "empty parent" in task_key
+        or "директория" in task_key
+        or "пустая" in task_key
+        or "пустой" in task_key
+    )
+
+
+def _listener_models_endpoint_from_task(task: str) -> str:
+    for match in re.finditer(r"https?://[^\s\"'<>]+", task):
+        candidate = match.group(0).rstrip(".,;)")
+        parsed = urlparse(candidate)
+        if (
+            parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            and parsed.path == "/v1/models"
+        ):
+            return candidate
+    return "http://127.0.0.1:8318/v1/models"
+
+
+def _path_looks_like_code_mutation(path: str) -> bool:
+    return Path(path).suffix.casefold() in CODE_MUTATION_PATH_SUFFIXES
+
+
+def _path_is_scratch_mutation_path(relative: str) -> bool:
+    return (
+        relative == "tmp"
+        or relative.startswith("tmp/")
+        or relative == ".tmp"
+        or relative.startswith(".tmp/")
+    )
+
+
+def _file_artifact_mutation_requested(
+    *, task: str, repo_bridge_required: bool
+) -> bool:
     if not repo_bridge_required:
         return False
     if _task_has_readonly_guard(task):
         return False
     task_key = task.casefold()
+    if not _task_contains_keyword(task_key, FILE_ARTIFACT_MUTATION_TASK_KEYWORDS):
+        return False
+    if _task_contains_keyword(task_key, CODE_SPECIFIC_TASK_KEYWORDS):
+        return False
+    candidates = _task_path_candidates(task)
+    if not candidates:
+        return False
+    return not any(_path_looks_like_code_mutation(candidate) for candidate in candidates)
+
+
+def _code_mutation_requested(*, task: str, repo_bridge_required: bool) -> bool:
+    if not repo_bridge_required:
+        return False
+    task_key = task.casefold()
     normalized_task_key = task_key
     for phrase in CODE_MUTATION_NEGATED_PHRASES:
         normalized_task_key = normalized_task_key.replace(phrase, "")
-    return _task_contains_keyword(normalized_task_key, CODE_MUTATION_TASK_KEYWORDS)
+    explicit_code_creation = bool(
+        _task_contains_keyword(
+            normalized_task_key,
+            READONLY_OVERRIDABLE_CODE_CREATION_KEYWORDS,
+        )
+        and any(
+            _path_looks_like_code_mutation(candidate)
+            for candidate in _task_path_candidates(task)
+        )
+    )
+    if _task_has_readonly_guard(task) and not explicit_code_creation:
+        return False
+    if _file_artifact_mutation_requested(
+        task=task,
+        repo_bridge_required=repo_bridge_required,
+    ):
+        return False
+    natural_code_mutation = _task_naturally_requests_code_mutation(
+        task=task,
+        task_key=normalized_task_key,
+    )
+    return bool(
+        _task_contains_keyword(normalized_task_key, CODE_MUTATION_TASK_KEYWORDS)
+        or natural_code_mutation
+    )
+
+
+def _repo_mutation_requested(*, task: str, repo_bridge_required: bool) -> bool:
+    return bool(
+        _code_mutation_requested(task=task, repo_bridge_required=repo_bridge_required)
+        or _file_artifact_mutation_requested(
+            task=task,
+            repo_bridge_required=repo_bridge_required,
+        )
+    )
 
 
 def _path_is_sensitive(relative_path: str) -> bool:
@@ -1219,11 +1827,13 @@ def _run_repo_process(
     *,
     repo_root: Path,
     timeout_seconds: float = 5.0,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[int, str]:
     try:
         completed = subprocess.run(
             list(argv),
             cwd=str(repo_root),
+            env=dict(env) if env is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -1271,7 +1881,450 @@ def _command_allowed(argv: Sequence[str]) -> tuple[bool, str]:
     return False, "command_not_allowlisted"
 
 
-def _run_action_command(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+def _resolve_action_command_argv(argv: Sequence[str]) -> list[str]:
+    resolved = list(argv)
+    if not resolved:
+        return resolved
+    if Path(resolved[0]).name == "python3":
+        resolved[0] = str(default_python_bin())
+    elif Path(resolved[0]).name == "make":
+        for candidate in (shutil.which("make"), "/usr/bin/make", "/opt/homebrew/bin/make"):
+            if candidate and Path(candidate).exists():
+                resolved[0] = candidate
+                break
+    return resolved
+
+
+def _action_command_env(argv: Sequence[str]) -> dict[str, str] | None:
+    if not argv or Path(argv[0]).name != "make":
+        return None
+    env = os.environ.copy()
+    runtime_python = str(default_python_bin())
+    env.setdefault(PYTHON_BIN_ENV, runtime_python)
+    env.setdefault("PYTHON", runtime_python)
+    env.setdefault("CUSTOM_STABILITY_PYTHON", runtime_python)
+    env["PATH"] = os.pathsep.join(
+        part
+        for part in (
+            str(Path(runtime_python).parent),
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            env.get("PATH", ""),
+        )
+        if part
+    )
+    return env
+
+
+def _listener_auth_smoke(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    endpoint = _safe_text(
+        call.get("endpoint") or "http://127.0.0.1:8318/v1/models",
+        limit=300,
+    )
+    parsed = urlparse(endpoint)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.path != "/v1/models"
+    ):
+        return {
+            "status": "error",
+            "machine_error_code": "listener_auth_smoke_endpoint_not_allowlisted",
+            "result_text": json.dumps(
+                {
+                    "auth_command_ok": False,
+                    "listener_status": None,
+                    "token_printed": False,
+                },
+                separators=(",", ":"),
+            ),
+            "command_exit_code": None,
+        }
+    env = os.environ.copy()
+    env.setdefault(
+        "WBP_STABLE_CONFIG",
+        str(RuntimePaths.from_roots(profile_dir=Path.home() / ".codex-custom-cli").stable_config),
+    )
+    try:
+        auth = subprocess.run(
+            [sys.executable, "wbp_codex_auth_command.py"],
+            cwd=str(repo_root),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {
+            "status": "error",
+            "machine_error_code": "listener_auth_command_exec_failed",
+            "result_text": json.dumps(
+                {
+                    "auth_command_ok": False,
+                    "listener_status": None,
+                    "token_printed": False,
+                },
+                separators=(",", ":"),
+            ),
+            "command_exit_code": None,
+        }
+    token = auth.stdout.strip()
+    auth_ok = auth.returncode == 0 and bool(token)
+    listener_status: int | None = None
+    model_ids: list[str] = []
+    status = "error"
+    machine_error_code = "listener_auth_command_failed"
+    if auth_ok:
+        try:
+            response = request_json(
+                url=endpoint,
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+                payload=None,
+                timeout_seconds=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            )
+            listener_status = response.status_code
+            if isinstance(response.payload, Mapping):
+                data = response.payload.get("data")
+                if isinstance(data, list):
+                    model_ids = [
+                        _safe_text(item.get("id"), limit=200)
+                        for item in data
+                        if isinstance(item, Mapping)
+                        and _safe_text(item.get("id"), limit=200)
+                    ]
+            status = "ok" if response.status_code == 200 else "error"
+            machine_error_code = "OK" if response.status_code == 200 else "listener_models_request_failed"
+        except RuntimeErrorInfo:
+            machine_error_code = "listener_models_request_failed"
+    result_text = json.dumps(
+        {
+            "auth_command_ok": auth_ok,
+            "listener_status": listener_status,
+            "model_ids": model_ids,
+            "models_count": len(model_ids) if listener_status == 200 else None,
+            "token_printed": False,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "result_text": result_text,
+        "command_exit_code": auth.returncode,
+        "command_sha256": _sha256_text("listener_auth_smoke"),
+        "command_recorded": False,
+    }
+
+
+def _response_output_text(payload: object) -> str:
+    if not isinstance(payload, Mapping):
+        return ""
+    direct = _safe_text(payload.get("output_text"), limit=1000)
+    if direct:
+        return direct
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return ""
+    parts: list[str] = []
+    for item in output:
+        if not isinstance(item, Mapping):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for content_item in content:
+            if not isinstance(content_item, Mapping):
+                continue
+            text = _safe_text(content_item.get("text"), limit=1000)
+            if text:
+                parts.append(text)
+    return "\n".join(parts)[:1000]
+
+
+def _text_response_candidate_model_id(model_id: str) -> bool:
+    key = model_id.casefold()
+    return not any(marker in key for marker in ("image", "dall-e", "tts", "whisper"))
+
+
+def _listener_model_matrix_smoke(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    models_endpoint = _safe_text(
+        call.get("models_endpoint") or "http://127.0.0.1:8318/v1/models",
+        limit=300,
+    )
+    responses_endpoint = _safe_text(
+        call.get("responses_endpoint") or "http://127.0.0.1:8318/v1/responses",
+        limit=300,
+    )
+    for endpoint, expected_path in (
+        (models_endpoint, "/v1/models"),
+        (responses_endpoint, "/v1/responses"),
+    ):
+        parsed = urlparse(endpoint)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or parsed.path != expected_path
+        ):
+            return {
+                "status": "error",
+                "machine_error_code": "listener_model_matrix_endpoint_not_allowlisted",
+                "result_text": json.dumps(
+                    {
+                        "auth_command_ok": False,
+                        "listener_status": None,
+                        "model_ids": [],
+                        "models_count": None,
+                        "responses_skipped_count": 0,
+                        "responses_checked_count": 0,
+                        "responses_passed_count": 0,
+                        "responses_failed_count": 0,
+                        "token_printed": False,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                "command_exit_code": None,
+            }
+    env = os.environ.copy()
+    env.setdefault(
+        "WBP_STABLE_CONFIG",
+        str(RuntimePaths.from_roots(profile_dir=Path.home() / ".codex-custom-cli").stable_config),
+    )
+    try:
+        auth = subprocess.run(
+            [sys.executable, "wbp_codex_auth_command.py"],
+            cwd=str(repo_root),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        auth = None
+    token = auth.stdout.strip() if auth is not None else ""
+    auth_ok = auth is not None and auth.returncode == 0 and bool(token)
+    model_ids: list[str] = []
+    listener_status: int | None = None
+    per_model: list[dict[str, Any]] = []
+    skipped_model_ids: list[str] = []
+    if auth_ok:
+        try:
+            models_response = request_json(
+                url=models_endpoint,
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+                payload=None,
+                timeout_seconds=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            )
+            listener_status = models_response.status_code
+            if isinstance(models_response.payload, Mapping):
+                data = models_response.payload.get("data")
+                if isinstance(data, list):
+                    model_ids = [
+                        _safe_text(item.get("id"), limit=200)
+                        for item in data
+                        if isinstance(item, Mapping)
+                        and _safe_text(item.get("id"), limit=200)
+                    ]
+        except RuntimeErrorInfo:
+            listener_status = None
+    if auth_ok and listener_status == 200:
+        for index, model_id in enumerate(model_ids, start=1):
+            if not _text_response_candidate_model_id(model_id):
+                skipped_model_ids.append(model_id)
+                per_model.append(
+                    {
+                        "model_id": model_id,
+                        "status": "skipped",
+                        "exact_match": None,
+                        "error_code": "",
+                        "skip_reason": "non_text_model_id",
+                        "output_text_recorded": False,
+                    }
+                )
+                continue
+            expected = f"WBP_MODEL_MATRIX_OK_{index}"
+            status_code: int | None = None
+            exact_match = False
+            error_code = ""
+            try:
+                response = request_json(
+                    url=responses_endpoint,
+                    method="POST",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    payload={
+                        "model": model_id,
+                        "input": f"Reply exactly {expected}",
+                        "stream": False,
+                        "max_output_tokens": 64,
+                    },
+                    timeout_seconds=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+                )
+                status_code = response.status_code
+                exact_match = _response_output_text(response.payload).strip() == expected
+                if status_code != 200:
+                    error_code = "http_status_not_200"
+                elif not exact_match:
+                    error_code = "exact_output_mismatch"
+            except RuntimeErrorInfo as exc:
+                error_code = _safe_text(
+                    getattr(exc, "machine_error_code", "") or "request_failed",
+                    limit=80,
+                )
+            per_model.append(
+                {
+                    "model_id": model_id,
+                    "status": status_code,
+                    "exact_match": exact_match,
+                    "error_code": error_code,
+                    "output_text_recorded": False,
+                }
+            )
+    checked_results = [item for item in per_model if item.get("status") != "skipped"]
+    passed = sum(1 for item in checked_results if item.get("exact_match") is True)
+    failed_results = [
+        item for item in checked_results if item.get("exact_match") is not True
+    ]
+    result_text = json.dumps(
+        {
+            "all_models_response_smoke_passed": bool(model_ids)
+            and passed == len(model_ids),
+            "all_text_response_smoke_passed": bool(checked_results)
+            and passed == len(checked_results),
+            "auth_command_ok": auth_ok,
+            "failed_model_ids": [
+                item["model_id"] for item in failed_results
+            ],
+            "listener_status": listener_status,
+            "model_ids": model_ids,
+            "models_count": len(model_ids) if listener_status == 200 else None,
+            "per_model": per_model,
+            "responses_checked_count": len(checked_results),
+            "responses_failed_count": len(failed_results),
+            "responses_passed_count": passed,
+            "responses_skipped_count": len(skipped_model_ids),
+            "response_texts_recorded": False,
+            "skipped_model_ids": skipped_model_ids,
+            "token_printed": False,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "status": "ok" if auth_ok and listener_status == 200 else "error",
+        "machine_error_code": (
+            "OK" if auth_ok and listener_status == 200 else "listener_model_matrix_failed"
+        ),
+        "result_text": result_text,
+        "command_exit_code": auth.returncode if auth is not None else None,
+        "command_sha256": _sha256_text("listener_model_matrix_smoke"),
+        "command_recorded": False,
+    }
+
+
+def _runtime_healthcheck_smoke(repo_root: Path, _call: Mapping[str, Any]) -> dict[str, Any]:
+    del repo_root
+    owner_profile = Path(
+        os.environ.get("WBP_PROFILE_DIR") or Path.home() / ".codex-custom-cli"
+    )
+    managed_dir = Path(os.environ.get("WBP_MANAGED_DIR") or owner_profile / "managed")
+    env = os.environ.copy()
+    env.update(
+        {
+            "WBP_PROFILE_DIR": str(owner_profile),
+            "WBP_MANAGED_DIR": str(managed_dir),
+        }
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "wild_boar_proxy", "healthcheck", "--json"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        result_text = json.dumps(
+            {
+                "status": "error",
+                "machine_error_code": "HEALTHCHECK_EXEC_FAILED",
+                "liveness": None,
+                "launch_readiness_status": None,
+                "gate_passed": None,
+                "endpoint": None,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return {
+            "status": "error",
+            "machine_error_code": "healthcheck_exec_failed",
+            "result_text": result_text,
+            "command_exit_code": None,
+            "command_sha256": _sha256_text("runtime_healthcheck_smoke"),
+            "command_recorded": False,
+        }
+    try:
+        packet = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        packet = {}
+    parsed_packet = isinstance(packet, Mapping)
+    launch_readiness = (
+        packet.get("launch_readiness")
+        if parsed_packet and isinstance(packet.get("launch_readiness"), Mapping)
+        else {}
+    )
+    compact = {
+        "status": _safe_text(packet.get("status") if parsed_packet else "error", limit=40),
+        "machine_error_code": _safe_text(
+            (packet.get("machine_error_code") if parsed_packet else None)
+            or "HEALTHCHECK_INVALID_OUTPUT",
+            limit=120,
+        ),
+        "liveness": _safe_text(packet.get("liveness") if parsed_packet else None, limit=80) or None,
+        "launch_readiness_status": _safe_text(
+            launch_readiness.get("status") if isinstance(launch_readiness, Mapping) else None,
+            limit=80,
+        )
+        or None,
+        "gate_passed": (
+            launch_readiness.get("gate_passed")
+            if isinstance(launch_readiness, Mapping)
+            and isinstance(launch_readiness.get("gate_passed"), bool)
+            else None
+        ),
+        "endpoint": _safe_text(packet.get("endpoint") if parsed_packet else None, limit=300) or None,
+    }
+    tool_status = "ok" if parsed_packet else "error"
+    return {
+        "status": tool_status,
+        "machine_error_code": "OK" if parsed_packet else compact["machine_error_code"],
+        "result_text": json.dumps(compact, separators=(",", ":"), sort_keys=True),
+        "command_exit_code": completed.returncode,
+        "command_sha256": _sha256_text("runtime_healthcheck_smoke"),
+        "command_recorded": False,
+    }
+
+
+def _run_action_command(
+    repo_root: Path,
+    call: Mapping[str, Any],
+    *,
+    timeout_seconds: float = DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
     argv = _command_from_call(call)
     allowed, reason = _command_allowed(argv)
     if not allowed:
@@ -1281,25 +2334,40 @@ def _run_action_command(repo_root: Path, call: Mapping[str, Any]) -> dict[str, A
             "result_text": "",
             "command_exit_code": None,
         }
+    resolved_argv = _resolve_action_command_argv(argv)
     code, output = _run_repo_process(
-        argv,
+        resolved_argv,
         repo_root=repo_root,
-        timeout_seconds=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+        timeout_seconds=_safe_timeout_seconds(
+            timeout_seconds,
+            default=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            minimum=1.0,
+            maximum=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+        ),
+        env=_action_command_env(argv),
     )
     return {
         "status": "ok" if code == 0 else "error",
         "machine_error_code": "OK" if code == 0 else "command_failed",
         "result_text": output,
         "command_exit_code": code,
-        "command_sha256": _sha256_text(json.dumps(list(argv), separators=(",", ":"))),
+        "command_used": shlex.join(argv),
+        "command_sha256": _sha256_text(
+            json.dumps(list(resolved_argv), separators=(",", ":"))
+        ),
         "command_recorded": False,
     }
 
 
-def _run_tests(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+def _run_tests(
+    repo_root: Path,
+    call: Mapping[str, Any],
+    *,
+    timeout_seconds: float = DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
     if not call.get("args") and not call.get("command"):
         call = {"args": ["python3", "-m", "unittest"]}
-    return _run_action_command(repo_root, call)
+    return _run_action_command(repo_root, call, timeout_seconds=timeout_seconds)
 
 
 def _patch_text_from_call(call: Mapping[str, Any]) -> str:
@@ -1329,6 +2397,31 @@ def _patch_paths(patch_text: str) -> list[str]:
     return paths
 
 
+def _patch_deleted_paths(patch_text: str) -> list[str]:
+    deleted: list[str] = []
+    current_path = ""
+    for line in patch_text.splitlines():
+        if line.startswith("diff --git "):
+            current_path = ""
+            parts = line.split()
+            if len(parts) >= 4:
+                candidate = parts[3]
+                if candidate.startswith("b/"):
+                    candidate = candidate[2:]
+                current_path = candidate.split("\t", 1)[0].strip()
+            continue
+        if line.startswith("deleted file mode") and current_path:
+            if current_path not in deleted:
+                deleted.append(current_path)
+            continue
+        if line.startswith("+++ "):
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2 and parts[1].strip() == "/dev/null" and current_path:
+                if current_path not in deleted:
+                    deleted.append(current_path)
+    return deleted
+
+
 def _patch_safety(repo_root: Path, patch_text: str) -> tuple[bool, str, list[str]]:
     if not patch_text.strip():
         return False, "patch_required", []
@@ -1346,8 +2439,66 @@ def _patch_safety(repo_root: Path, patch_text: str) -> tuple[bool, str, list[str
     return True, "ok", touched
 
 
+def _python_patch_syntax_check(repo_root: Path, touched: Sequence[str]) -> dict[str, Any]:
+    python_files = [
+        relative
+        for relative in touched
+        if relative.endswith(".py") and (repo_root / relative).is_file()
+    ]
+    if not python_files:
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "result_text": "",
+            "command_exit_code": 0,
+        }
+    try:
+        result = subprocess.run(
+            ["python3", "-m", "py_compile", *python_files],
+            cwd=str(repo_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "python_syntax_check_exec_failed",
+            "result_text": _safe_text(exc, limit=500),
+            "command_exit_code": None,
+        }
+    return {
+        "status": "ok" if result.returncode == 0 else "error",
+        "machine_error_code": (
+            "OK" if result.returncode == 0 else "python_syntax_check_failed"
+        ),
+        "result_text": _bounded_repo_text(result.stdout),
+        "command_exit_code": result.returncode,
+    }
+
+
+def _rollback_applied_patch(repo_root: Path, patch_text: str) -> bool:
+    try:
+        rollback = subprocess.run(
+            ["git", "apply", "-R", "-"],
+            cwd=str(repo_root),
+            input=patch_text,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return rollback.returncode == 0
+
+
 def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[str, Any]:
     safe, reason, touched = _patch_safety(repo_root, patch_text)
+    deleted = [path for path in _patch_deleted_paths(patch_text) if path in touched]
     patch_sha256 = _sha256_text(patch_text) if patch_text else ""
     if not safe:
         return {
@@ -1357,6 +2508,7 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
             "patch_sha256": patch_sha256,
             "patch_recorded": False,
             "touched_files": touched,
+            "deleted_files": deleted,
             "mutation_applied": False,
         }
     try:
@@ -1378,6 +2530,7 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
             "patch_sha256": patch_sha256,
             "patch_recorded": False,
             "touched_files": touched,
+            "deleted_files": deleted,
             "mutation_applied": False,
         }
     check_output = _bounded_repo_text(check.stdout)
@@ -1389,6 +2542,7 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
             "patch_sha256": patch_sha256,
             "patch_recorded": False,
             "touched_files": touched,
+            "deleted_files": deleted,
             "mutation_applied": False,
         }
     if not apply:
@@ -1399,6 +2553,7 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
             "patch_sha256": patch_sha256,
             "patch_recorded": False,
             "touched_files": touched,
+            "deleted_files": deleted,
             "mutation_applied": False,
         }
     try:
@@ -1420,9 +2575,36 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
             "patch_sha256": patch_sha256,
             "patch_recorded": False,
             "touched_files": touched,
+            "deleted_files": deleted,
             "mutation_applied": False,
         }
     output = _bounded_repo_text(applied.stdout)
+    if applied.returncode == 0:
+        syntax_check = _python_patch_syntax_check(repo_root, touched)
+        if syntax_check.get("status") != "ok":
+            rollback_applied = _rollback_applied_patch(repo_root, patch_text)
+            return {
+                "status": "error",
+                "machine_error_code": _safe_text(
+                    syntax_check.get("machine_error_code"),
+                    limit=120,
+                ),
+                "result_text": _bounded_repo_text(
+                    syntax_check.get("result_text")
+                    or "Python syntax check failed after patch apply."
+                ),
+                "patch_sha256": patch_sha256,
+                "patch_recorded": False,
+                "touched_files": touched,
+                "deleted_files": deleted,
+                "rollback_applied": rollback_applied,
+                "mutation_applied": not rollback_applied,
+            }
+    deleted_files_absent = bool(
+        applied.returncode == 0
+        and deleted
+        and all(not (repo_root / relative).exists() for relative in deleted)
+    )
     return {
         "status": "ok" if applied.returncode == 0 else "error",
         "machine_error_code": "OK" if applied.returncode == 0 else "patch_apply_failed",
@@ -1430,6 +2612,8 @@ def _git_apply_patch(repo_root: Path, patch_text: str, *, apply: bool) -> dict[s
         "patch_sha256": patch_sha256,
         "patch_recorded": False,
         "touched_files": touched,
+        "deleted_files": deleted,
+        "deleted_files_absent": deleted_files_absent,
         "mutation_applied": applied.returncode == 0,
     }
 
@@ -1500,6 +2684,321 @@ def _read_repo_file(repo_root: Path, raw_path: object) -> dict[str, Any]:
     }
 
 
+def _write_repo_file(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    path, relative, status = _repo_relative_path(repo_root, call.get("path"))
+    if status != "ok" or path is None:
+        return {
+            "status": "error",
+            "machine_error_code": status,
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "mutation_applied": False,
+        }
+    if relative == ".":
+        return {
+            "status": "error",
+            "machine_error_code": "write_file_path_required",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "mutation_applied": False,
+        }
+    code_write = _path_looks_like_code_mutation(relative)
+    scratch_code_write = code_write and _path_is_scratch_mutation_path(relative)
+    if code_write and not scratch_code_write:
+        return {
+            "status": "error",
+            "machine_error_code": "write_file_code_path_not_allowed",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [relative],
+            "mutation_applied": False,
+        }
+    if path.exists() and not path.is_file():
+        return {
+            "status": "error",
+            "machine_error_code": "write_file_target_not_file",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "mutation_applied": False,
+        }
+    text = str(call.get("text") or "")
+    old_bytes = b""
+    old_exists = path.exists()
+    if old_exists:
+        try:
+            old_bytes = path.read_bytes()
+        except OSError:
+            old_bytes = b""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        readback = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "write_file_failed",
+            "path": relative,
+            "result_text": _safe_text(exc, limit=500),
+            "touched_files": [relative],
+            "mutation_applied": False,
+        }
+    readback_ok = readback == text
+    if readback_ok and scratch_code_write and relative.endswith(".py"):
+        syntax_check = _python_patch_syntax_check(repo_root, [relative])
+        if syntax_check.get("status") != "ok":
+            rollback_applied = False
+            try:
+                if old_exists:
+                    path.write_bytes(old_bytes)
+                else:
+                    path.unlink(missing_ok=True)
+                rollback_applied = True
+            except OSError:
+                rollback_applied = False
+            return {
+                "status": "error",
+                "machine_error_code": _safe_text(
+                    syntax_check.get("machine_error_code"),
+                    limit=120,
+                ),
+                "path": relative,
+                "result_text": _bounded_repo_text(syntax_check.get("result_text")),
+                "result_text_sha256": _sha256_text(
+                    _bounded_repo_text(syntax_check.get("result_text"))
+                ),
+                "touched_files": [relative],
+                "mutation_applied": False,
+                "rollback_applied": rollback_applied,
+            }
+    result_text = json.dumps(
+        {
+            "status": "ok" if readback_ok else "error",
+            "changed_files": [relative],
+            "readback_ok": readback_ok,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "status": "ok" if readback_ok else "error",
+        "machine_error_code": "OK" if readback_ok else "write_file_readback_failed",
+        "path": relative,
+        "result_text": result_text,
+        "result_text_sha256": _sha256_text(result_text),
+        "touched_files": [relative],
+        "mutation_applied": readback_ok,
+    }
+
+
+def _delete_repo_file(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    path, relative, status = _repo_relative_path(repo_root, call.get("path"))
+    if status != "ok" or path is None:
+        return {
+            "status": "error",
+            "machine_error_code": status,
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    if relative == ".":
+        return {
+            "status": "error",
+            "machine_error_code": "delete_file_path_required",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    if not path.exists():
+        result_text = json.dumps(
+            {
+                "status": "ok",
+                "changed_files": [],
+                "cleanup_ok": True,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return {
+            "status": "ok",
+            "machine_error_code": "file_already_absent",
+            "path": relative,
+            "result_text": result_text,
+            "result_text_sha256": _sha256_text(result_text),
+            "touched_files": [],
+            "deleted_files": [relative],
+            "deleted_files_absent": True,
+            "mutation_applied": False,
+        }
+    if not path.is_file():
+        return {
+            "status": "error",
+            "machine_error_code": "delete_file_target_not_file",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    try:
+        path.unlink()
+    except OSError as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "delete_file_failed",
+            "path": relative,
+            "result_text": _safe_text(exc, limit=500),
+            "touched_files": [relative],
+            "deleted_files": [relative],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    parent_removed = False
+    if call.get("cleanup_empty_parent") is True:
+        root = repo_root.expanduser().resolve(strict=False)
+        parent = path.parent
+        if parent != root:
+            try:
+                parent.rmdir()
+                parent_removed = True
+            except OSError:
+                parent_removed = False
+    deleted_absent = not path.exists()
+    result_text = json.dumps(
+        {
+            "status": "ok" if deleted_absent else "error",
+            "changed_files": [relative],
+            "cleanup_ok": deleted_absent,
+            "empty_parent_removed": parent_removed,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "status": "ok" if deleted_absent else "error",
+        "machine_error_code": "OK" if deleted_absent else "delete_file_verify_failed",
+        "path": relative,
+        "result_text": result_text,
+        "result_text_sha256": _sha256_text(result_text),
+        "touched_files": [relative],
+        "deleted_files": [relative],
+        "deleted_files_absent": deleted_absent,
+        "mutation_applied": deleted_absent,
+    }
+
+
+def _delete_repo_tree(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
+    path, relative, status = _repo_relative_path(repo_root, call.get("path"))
+    if status != "ok" or path is None:
+        return {
+            "status": "error",
+            "machine_error_code": status,
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    if relative == ".":
+        return {
+            "status": "error",
+            "machine_error_code": "delete_tree_path_required",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    if not (relative == "tmp" or relative.startswith("tmp/")):
+        return {
+            "status": "error",
+            "machine_error_code": "delete_tree_path_not_allowed",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    if not path.exists():
+        result_text = json.dumps(
+            {"status": "ok", "changed_files": [], "cleanup_ok": True},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return {
+            "status": "ok",
+            "machine_error_code": "tree_already_absent",
+            "path": relative,
+            "result_text": result_text,
+            "result_text_sha256": _sha256_text(result_text),
+            "touched_files": [],
+            "deleted_files": [relative],
+            "deleted_files_absent": True,
+            "mutation_applied": False,
+        }
+    if not path.is_dir():
+        return {
+            "status": "error",
+            "machine_error_code": "delete_tree_target_not_directory",
+            "path": relative,
+            "result_text": "",
+            "touched_files": [],
+            "deleted_files": [],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    try:
+        shutil.rmtree(path)
+    except OSError as exc:
+        return {
+            "status": "error",
+            "machine_error_code": "delete_tree_failed",
+            "path": relative,
+            "result_text": _safe_text(exc, limit=500),
+            "touched_files": [relative],
+            "deleted_files": [relative],
+            "deleted_files_absent": False,
+            "mutation_applied": False,
+        }
+    deleted_absent = not path.exists()
+    result_text = json.dumps(
+        {
+            "status": "ok" if deleted_absent else "error",
+            "changed_files": [relative],
+            "cleanup_ok": deleted_absent,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return {
+        "status": "ok" if deleted_absent else "error",
+        "machine_error_code": "OK" if deleted_absent else "delete_tree_verify_failed",
+        "path": relative,
+        "result_text": result_text,
+        "result_text_sha256": _sha256_text(result_text),
+        "touched_files": [relative],
+        "deleted_files": [relative],
+        "deleted_files_absent": deleted_absent,
+        "mutation_applied": deleted_absent,
+    }
+
+
 def _search_repo(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
     pattern = _safe_text(call.get("pattern"), limit=300)
     if not pattern:
@@ -1508,12 +3007,38 @@ def _search_repo(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
             "machine_error_code": "pattern_required",
             "result_text": "",
         }
+    glob = _safe_text(call.get("glob"), limit=200)
     rg = shutil.which("rg")
     if not rg:
+        try:
+            regex = re.compile(pattern)
+        except re.error:
+            regex = re.compile(re.escape(pattern))
+        visible_lines: list[str] = []
+        root = repo_root.resolve(strict=False)
+        for relative in _repo_file_list(repo_root, limit=DEFAULT_REPO_BRIDGE_FILE_LIST_LIMIT):
+            if glob and not fnmatch.fnmatch(relative, glob):
+                continue
+            path = root / relative
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                if regex.search(line):
+                    visible_lines.append(f"{relative}:{line_no}:{line}")
+                    if len(visible_lines) >= DEFAULT_REPO_BRIDGE_SEARCH_LINE_LIMIT:
+                        break
+            if len(visible_lines) >= DEFAULT_REPO_BRIDGE_SEARCH_LINE_LIMIT:
+                break
+        text = "\n".join(visible_lines)
         return {
-            "status": "error",
-            "machine_error_code": "rg_not_available",
-            "result_text": "",
+            "status": "ok",
+            "machine_error_code": "OK",
+            "result_text": text,
+            "result_text_sha256": _sha256_text(text),
+            "result_line_count": len(visible_lines),
+            "result_truncated": len(visible_lines) >= DEFAULT_REPO_BRIDGE_SEARCH_LINE_LIMIT,
         }
     argv = [
         rg,
@@ -1524,7 +3049,6 @@ def _search_repo(repo_root: Path, call: Mapping[str, Any]) -> dict[str, Any]:
         "-g",
         "!__pycache__",
     ]
-    glob = _safe_text(call.get("glob"), limit=200)
     if glob:
         argv.extend(["-g", glob])
     argv.extend(["--", pattern])
@@ -1580,6 +3104,7 @@ def _build_repo_context_pack(
     *,
     action_tools_allowed: bool = True,
     mutation_tools_allowed: bool = True,
+    code_mutation_required: bool = False,
 ) -> dict[str, Any]:
     files = _repo_file_list(repo_root)
     status = _git_status_repo(repo_root)
@@ -1614,11 +3139,26 @@ def _build_repo_context_pack(
         "sensitive_paths_blocked": True,
         "action_tools_allowed": bool(action_tools_allowed),
         "mutations_allowed": bool(mutation_tools_allowed),
+        "code_mutation_required": bool(code_mutation_required),
+        "mutation_kind": (
+            "code"
+            if code_mutation_required
+            else ("file_artifact" if mutation_tools_allowed else "none")
+        ),
         "mutation_tools": (
-            ["propose_patch", "apply_patch"] if mutation_tools_allowed else []
+            ["propose_patch", "apply_patch", "write_file", "delete_file", "delete_tree"]
+            if mutation_tools_allowed
+            else []
         ),
         "command_tools": ["run_tests", "run_command"] if action_tools_allowed else [],
         "command_allowlist_recorded": False,
+        "command_allowlist_profile_recorded": bool(action_tools_allowed),
+        "command_allowlist_profile_ids": (
+            list(ACTION_ALLOWED_COMMAND_PROFILE_IDS) if action_tools_allowed else []
+        ),
+        "command_allowlist_profile_digest": (
+            _command_allowlist_profile_digest() if action_tools_allowed else ""
+        ),
     }
     return pack
 
@@ -1643,6 +3183,10 @@ def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
             [
                 '{"wbp_repo_tool_call":{"tool":"propose_patch","patch":"<unified diff>"}}',
                 '{"wbp_repo_tool_call":{"tool":"apply_patch","patch":"<unified diff>"}}',
+                '{"wbp_repo_tool_call":{"tool":"write_file","path":"tmp/example.txt","text":"OK"}}',
+                '{"wbp_repo_tool_call":{"tool":"write_file","path":"tmp/example_app/app.py","text":"print(\\"OK\\")\\n"}}',
+                '{"wbp_repo_tool_call":{"tool":"delete_file","path":"tmp/example.txt","cleanup_empty_parent":true}}',
+                '{"wbp_repo_tool_call":{"tool":"delete_tree","path":"tmp/example-dir"}}',
             ]
         )
     if command_tools_allowed:
@@ -1655,9 +3199,28 @@ def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
     policy_lines = [
         "For repository inspection/report tasks, request at least one repo tool before the final answer.",
     ]
-    if mutation_tools_allowed:
+    if command_tools_allowed:
         policy_lines.append(
-            "For implementation/fix/edit tasks, completion requires an apply_patch tool call that actually changes code followed by a successful run_tests or run_command verification; a final answer without both facts will be rejected by WBP."
+            "Command execution is not a general shell or network surface. The allowed command profiles are: "
+            + ", ".join(ACTION_ALLOWED_COMMAND_PROFILE_IDS)
+            + ". If the operator requests another command class, report command_not_allowlisted instead of inventing a fallback."
+        )
+    if mutation_tools_allowed and bool(context_pack.get("code_mutation_required")):
+        policy_lines.append(
+            "For implementation/fix/edit tasks, completion requires a tool call that actually changes code followed by a successful run_tests or run_command verification; a final answer without both facts will be rejected by WBP. Use apply_patch for product/repo source code. For scratch code under tmp/ or .tmp/ only, write_file is allowed and WBP performs Python syntax checking for .py writes."
+        )
+        policy_lines.append(
+            "For Python tests targeting files under non-package paths or path components containing punctuation such as '-', do not use dotted imports from that path; import by adding the target directory to sys.path or by importlib.util.spec_from_file_location. Generated Python code must be syntactically complete before verification."
+        )
+        policy_lines.append(
+            "For Python code mutations, verify syntax first with python3 -m py_compile on the changed .py files, then run the requested pytest or unittest command."
+        )
+        policy_lines.append(
+            "Every generated Python if/elif/else/try/except/finally/function/class block must contain a real body before verification; do not leave a bare colon, placeholder, or empty branch."
+        )
+    elif mutation_tools_allowed:
+        policy_lines.append(
+            "For explicit file/artifact mutation tasks, completion requires write_file, apply_patch, delete_file, or delete_tree evidence for the requested path followed by read_file of the changed file, delete_file/delete_tree absence proof, or a successful run_command verification; a final answer without mutation evidence and readback/verification will be rejected by WBP."
         )
     elif command_tools_allowed:
         policy_lines.append(
@@ -1665,7 +3228,7 @@ def _repo_bridge_prompt(context_pack: Mapping[str, Any]) -> str:
         )
     else:
         policy_lines.append(
-            "This task is read-only. Do not request propose_patch, apply_patch, run_tests, or run_command."
+            "This task is read-only. Do not request propose_patch, apply_patch, write_file, delete_file, run_tests, or run_command."
         )
     tool_examples_text = "\n".join(tool_examples)
     return (
@@ -1709,7 +3272,469 @@ def _extract_repo_tool_call(text: str) -> dict[str, Any]:
     return {}
 
 
-def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict[str, Any]:
+def _json_reply_requested(task: str) -> bool:
+    return "json" in task.casefold()
+
+
+def _compact_json_reply_text(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    if stripped.casefold().startswith("json:"):
+        stripped = stripped.split(":", 1)[1].strip()
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return text
+    return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+
+
+def _normalize_json_result_for_task(
+    result: Mapping[str, Any],
+    *,
+    task: str,
+) -> dict[str, Any]:
+    normalized = dict(result)
+    if not _json_reply_requested(task):
+        return normalized
+    if normalized.get("tool") == "run_tests":
+        compact_test_result = _compact_test_result_json(normalized)
+        if compact_test_result:
+            normalized["result_text"] = compact_test_result
+            normalized["result_text_sha256"] = _sha256_text(compact_test_result)
+            normalized["result_text_length"] = len(compact_test_result)
+            normalized["result_text_truncated"] = False
+            return normalized
+    text = str(normalized.get("result_text") or "")
+    if not text.strip():
+        return normalized
+    compact = _compact_json_reply_text(text)
+    if compact == text:
+        return normalized
+    normalized["result_text"] = compact
+    normalized["result_text_sha256"] = _sha256_text(compact)
+    normalized["result_text_length"] = len(compact)
+    normalized["result_text_truncated"] = False
+    return normalized
+
+
+def _last_int_match(pattern: str, text: str) -> int | None:
+    matches = re.findall(pattern, text, flags=re.IGNORECASE)
+    if not matches:
+        return None
+    try:
+        return int(matches[-1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _compact_test_result_json(result: Mapping[str, Any]) -> str:
+    text = str(result.get("result_text") or "")
+    if not text.strip():
+        return ""
+    passed_count = _last_int_match(r"\b(\d+)\s+passed\b", text)
+    subtests_count = _last_int_match(r"\b(\d+)\s+subtests?\s+passed\b", text)
+    payload = {
+        "status": "ok" if result.get("command_exit_code") == 0 else "failed",
+        "passed_count": passed_count,
+        "subtests_count": subtests_count or 0,
+        "command_used": _safe_text(result.get("command_used"), limit=300),
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _minimum_pytest_cases_requested(task: str) -> int:
+    text = str(task or "").casefold()
+    patterns = (
+        r"\bat\s+least\s+(\d+)\s+pytest\s+cases?\b",
+        r"\bat\s+least\s+(\d+)\s+tests?\b",
+        r"\bminimum\s+(\d+)\s+pytest\s+cases?\b",
+        r"\bminimum\s+(\d+)\s+tests?\b",
+        r"\bне\s+менее\s+(\d+)\s+(?:pytest\s+)?тест",
+        r"\bминимум\s+(\d+)\s+(?:pytest\s+)?тест",
+    )
+    matches: list[int] = []
+    for pattern in patterns:
+        for raw in re.findall(pattern, text, flags=re.IGNORECASE):
+            try:
+                matches.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+    return max(matches) if matches else 0
+
+
+def _latest_post_mutation_successful_verification_result(
+    tool_results: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    mutation_seen = False
+    latest: Mapping[str, Any] | None = None
+    for result in tool_results:
+        if (
+            result.get("tool") in ACTION_BRIDGE_TOOLS
+            and result.get("status") == "ok"
+            and result.get("mutation_applied") is True
+        ):
+            mutation_seen = True
+            latest = None
+            continue
+        if (
+            mutation_seen
+            and result.get("tool") in {"run_tests", "run_command"}
+            and result.get("status") == "ok"
+        ):
+            latest = result
+    return latest
+
+
+def _post_mutation_successful_verification_results(
+    tool_results: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    mutation_seen = False
+    results: list[Mapping[str, Any]] = []
+    for result in tool_results:
+        if (
+            result.get("tool") in ACTION_BRIDGE_TOOLS
+            and result.get("status") == "ok"
+            and result.get("mutation_applied") is True
+        ):
+            mutation_seen = True
+            results = []
+            continue
+        if (
+            mutation_seen
+            and result.get("tool") in {"run_tests", "run_command"}
+            and result.get("status") == "ok"
+        ):
+            results.append(result)
+    return results
+
+
+def _explicit_test_verification_result(
+    task: str,
+    tool_results: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    explicit_command = _explicit_test_command_from_task(task)
+    if not explicit_command:
+        return None
+    expected_command = shlex.join(explicit_command)
+    for result in reversed(_post_mutation_successful_verification_results(tool_results)):
+        if _safe_text(result.get("command_used"), limit=300) == expected_command:
+            return result
+    return None
+
+
+def _passed_count_from_verification_result(result: Mapping[str, Any] | None) -> int | None:
+    if result is None:
+        return None
+    compact = _compact_test_result_json(result)
+    try:
+        payload = json.loads(compact)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    value = payload.get("passed_count")
+    return value if isinstance(value, int) else None
+
+
+def _requested_json_marker(task: str) -> str:
+    text = str(task or "")
+    patterns = (
+        r"\bmarker\s+must\s+be\s+([A-Za-z0-9_<>.-]+)",
+        r"\bmarker\s+must\s+equal\s+([A-Za-z0-9_<>.-]+)",
+        r"\bmarker\s*[:=]\s*([A-Za-z0-9_<>.-]+)",
+        r"\bмаркер\s+должен\s+быть\s+([A-Za-z0-9_<>.-]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return _safe_text(match.group(1).rstrip(".!?;,:"), limit=120)
+    return ""
+
+
+def _requested_exact_json_payload(task: str) -> Mapping[str, Any] | None:
+    if not (_json_reply_requested(task) and _exact_plain_reply_requested(task)):
+        return None
+    expected = _exact_plain_reply_expected_text(task)
+    compact = _compact_json_reply_text(expected)
+    candidates = [compact, expected.strip()]
+    first_brace = expected.find("{")
+    if first_brace >= 0:
+        candidates.append(expected[first_brace:])
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            try:
+                parsed, _end = decoder.raw_decode(candidate)
+            except json.JSONDecodeError:
+                continue
+        if isinstance(parsed, Mapping):
+            return parsed
+    return None
+
+
+def _requested_exact_json_reply_from_evidence(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+    verification: Mapping[str, Any] | None = None,
+) -> str:
+    payload = _requested_exact_json_payload(task)
+    if payload is None:
+        return ""
+    status = payload.get("status")
+    if isinstance(status, str) and status.casefold() not in {"ok", "success"}:
+        return ""
+    changed_files = payload.get("changed_files")
+    verified_changed_files = [
+        _safe_text(path, limit=500)
+        for path in (
+            fields.get("dip_action_mutated_files")
+            if isinstance(fields.get("dip_action_mutated_files"), list)
+            else []
+        )
+    ]
+    if changed_files is not None:
+        if not isinstance(changed_files, list):
+            return ""
+        requested_changed_files = [
+            _safe_text(path, limit=500)
+            for path in changed_files
+            if isinstance(path, str)
+        ]
+        if requested_changed_files != changed_files:
+            return ""
+        if requested_changed_files != verified_changed_files:
+            return ""
+    if payload.get("readback_ok") is not None:
+        if (
+            payload.get("readback_ok") is not True
+            or fields.get("dip_mutation_readback_verified") is not True
+        ):
+            return ""
+    if payload.get("cleanup_ok") is not None:
+        if (
+            payload.get("cleanup_ok") is not True
+            or fields.get("dip_mutation_readback_verified") is not True
+        ):
+            return ""
+    if payload.get("passed_count") is not None:
+        if verification is None:
+            return ""
+        if payload.get("passed_count") != _passed_count_from_verification_result(verification):
+            return ""
+    if payload.get("command_used") is not None:
+        if verification is None:
+            return ""
+        if str(payload.get("command_used")) != _safe_text(
+            verification.get("command_used"),
+            limit=300,
+        ):
+            return ""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _repo_verified_json_reply_from_evidence(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+    tool_results: Sequence[Mapping[str, Any]],
+) -> str:
+    if not _json_reply_requested(task):
+        return ""
+    marker = _requested_json_marker(task)
+    payload: dict[str, Any] = {
+        "status": "ok",
+    }
+    if marker:
+        payload["marker"] = marker
+    if fields.get("dip_code_mutation_required") is not True:
+        if (
+            fields.get("dip_mutation_required") is not True
+            or fields.get("dip_mutation_readback_verified") is not True
+        ):
+            return ""
+        requested_exact = _requested_exact_json_reply_from_evidence(
+            task=task,
+            fields=fields,
+        )
+        if requested_exact:
+            return requested_exact
+        payload["changed_files"] = [
+            _safe_text(path, limit=500)
+            for path in (
+                fields.get("dip_action_mutated_files")
+                if isinstance(fields.get("dip_action_mutated_files"), list)
+                else []
+            )
+        ]
+        task_key = task.casefold()
+        if "readback_ok" in task_key:
+            payload["readback_ok"] = True
+        if "cleanup_ok" in task_key:
+            payload["cleanup_ok"] = True
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if fields.get("dip_code_verified") is not True:
+        return ""
+    explicit_test_command = _explicit_test_command_from_task(task)
+    verification = (
+        _explicit_test_verification_result(task, tool_results)
+        if explicit_test_command
+        else _latest_post_mutation_successful_verification_result(tool_results)
+    )
+    if verification is None:
+        return ""
+    passed_count = _passed_count_from_verification_result(verification)
+    minimum_count = _minimum_pytest_cases_requested(task)
+    if (
+        minimum_count
+        and (passed_count is None or passed_count < minimum_count)
+    ):
+        return ""
+    requested_exact = _requested_exact_json_reply_from_evidence(
+        task=task,
+        fields=fields,
+        verification=verification,
+    )
+    if requested_exact:
+        return requested_exact
+    payload["changed_files"] = [
+        _safe_text(path, limit=500)
+        for path in (
+            fields.get("dip_action_mutated_files")
+            if isinstance(fields.get("dip_action_mutated_files"), list)
+            else []
+        )
+    ]
+    payload["passed_count"] = passed_count
+    payload["command_used"] = _safe_text(
+        verification.get("command_used"),
+        limit=300,
+    )
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _repo_verified_plain_reply_from_evidence(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+    tool_results: Sequence[Mapping[str, Any]],
+) -> str:
+    if _json_reply_requested(task):
+        return ""
+    if fields.get("dip_code_mutation_required") is True:
+        if fields.get("dip_code_verified") is not True:
+            return ""
+        if _exact_plain_reply_requested(task):
+            expected_text = _exact_plain_reply_expected_text(task)
+            if expected_text:
+                return expected_text
+        return ""
+    if (
+        fields.get("dip_mutation_required") is not True
+        or fields.get("dip_mutation_readback_verified") is not True
+    ):
+        return ""
+    if _exact_plain_reply_requested(task):
+        expected_text = _exact_plain_reply_expected_text(task)
+        if expected_text:
+            return expected_text
+    changed_files = {
+        str(path)
+        for path in (
+            fields.get("dip_action_mutated_files")
+            if isinstance(fields.get("dip_action_mutated_files"), list)
+            else []
+        )
+    }
+    for result in reversed(list(tool_results)):
+        if (
+            result.get("tool") == "read_file"
+            and result.get("status") == "ok"
+            and str(result.get("path") or "") in changed_files
+        ):
+            return str(result.get("result_text") or "")
+    return ""
+
+
+def _repo_test_count_gate_prompt(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+    tool_results: Sequence[Mapping[str, Any]],
+) -> str:
+    explicit_test_command = _explicit_test_command_from_task(task)
+    minimum_count = _minimum_pytest_cases_requested(task)
+    if (
+        not explicit_test_command
+        and not minimum_count
+        or fields.get("dip_code_verified") is not True
+    ):
+        return ""
+    verification = (
+        _explicit_test_verification_result(task, tool_results)
+        if explicit_test_command
+        else _latest_post_mutation_successful_verification_result(tool_results)
+    )
+    if explicit_test_command and verification is None:
+        return (
+            "\n\nWBP REQUIRED REQUESTED TEST GATE: the code mutation has a "
+            "successful verification command, but the operator explicitly "
+            f"requested `{shlex.join(explicit_test_command)}`. Output exactly "
+            "one run_tests JSON tool call for that command now, no prose."
+        )
+    passed_count = _passed_count_from_verification_result(verification)
+    if not minimum_count:
+        return ""
+    if passed_count is not None and passed_count >= minimum_count:
+        return ""
+    observed = "unknown" if passed_count is None else str(passed_count)
+    return (
+        "\n\nWBP REQUIRED TEST COUNT GATE: the verification command passed, "
+        f"but the operator requested at least {minimum_count} pytest cases and "
+        f"only {observed} passed. Output exactly one "
+        "run_tests JSON tool call for the requested pytest command if it has not "
+        "run yet; otherwise output one apply_patch JSON tool call to add the "
+        "missing tests, then run the requested pytest command again."
+    )
+
+
+def _requested_test_verification_block_reason(
+    task: str,
+    tool_results: Sequence[Mapping[str, Any]],
+) -> str:
+    explicit_test_command = _explicit_test_command_from_task(task)
+    verification = (
+        _explicit_test_verification_result(task, tool_results)
+        if explicit_test_command
+        else _latest_post_mutation_successful_verification_result(tool_results)
+    )
+    if explicit_test_command and verification is None:
+        return "requested_test_command_not_run"
+    minimum_count = _minimum_pytest_cases_requested(task)
+    if not minimum_count:
+        return ""
+    passed_count = _passed_count_from_verification_result(verification)
+    if passed_count is None:
+        return "requested_pytest_passed_count_unavailable"
+    if passed_count < minimum_count:
+        return "requested_pytest_passed_count_too_low"
+    return ""
+
+
+def _execute_repo_tool_call(
+    call: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    timeout_seconds: float = DEFAULT_ACTION_COMMAND_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
     tool = _safe_text(call.get("tool"), limit=80)
     if tool == "read_file":
         result = _read_repo_file(repo_root, call.get("path"))
@@ -1731,10 +3756,22 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
             _patch_text_from_call(call),
             apply=True,
         )
+    elif tool == "write_file":
+        result = _write_repo_file(repo_root, call)
+    elif tool == "delete_file":
+        result = _delete_repo_file(repo_root, call)
+    elif tool == "delete_tree":
+        result = _delete_repo_tree(repo_root, call)
     elif tool == "run_tests":
-        result = _run_tests(repo_root, call)
+        result = _run_tests(repo_root, call, timeout_seconds=timeout_seconds)
     elif tool == "run_command":
-        result = _run_action_command(repo_root, call)
+        result = _run_action_command(repo_root, call, timeout_seconds=timeout_seconds)
+    elif tool == "listener_auth_smoke":
+        result = _listener_auth_smoke(repo_root, call)
+    elif tool == "listener_model_matrix_smoke":
+        result = _listener_model_matrix_smoke(repo_root, call)
+    elif tool == "runtime_healthcheck_smoke":
+        result = _runtime_healthcheck_smoke(repo_root, call)
     else:
         result = {
             "status": "error",
@@ -1766,10 +3803,21 @@ def _execute_repo_tool_call(call: Mapping[str, Any], *, repo_root: Path) -> dict
                 else []
             )
         ],
+        "deleted_files": [
+            _safe_text(item, limit=500)
+            for item in (
+                result.get("deleted_files")
+                if isinstance(result.get("deleted_files"), list)
+                else []
+            )
+        ],
+        "deleted_files_absent": result.get("deleted_files_absent") is True,
         "command_sha256": _safe_text(result.get("command_sha256"), limit=80),
         "command_recorded": False,
         "command_exit_code": result.get("command_exit_code"),
+        "command_used": _safe_text(result.get("command_used"), limit=300),
         "mutation_applied": result.get("mutation_applied") is True,
+        "rollback_applied": result.get("rollback_applied") is True,
         "raw_result_recorded": False,
         "repo_root_recorded": False,
         "mutated_files": [
@@ -1799,8 +3847,20 @@ def _repo_tool_result_prompt(tool_result: Mapping[str, Any]) -> str:
         "Use the evidence above. If more repository evidence is needed, output "
         "exactly one next wbp_repo_tool_call JSON object. If the task is a "
         "fix/implementation/edit task, do not answer finally until apply_patch "
-        "has succeeded and a verification command has succeeded. Otherwise "
+        "or scratch write_file has succeeded and a verification command has "
+        "succeeded. Otherwise "
         "answer the operator directly."
+    )
+
+
+def _repo_failed_code_verification_repair_prompt() -> str:
+    return (
+        "\n\nWBP CODE VERIFICATION REPAIR GATE: the latest post-mutation "
+        "verification command failed. Use the failure output above as evidence. "
+        "Do not answer finally yet. Output exactly one next wbp_repo_tool_call "
+        "JSON object, no prose. For product/repo source, repair with apply_patch. "
+        "For scratch code under tmp/ or .tmp/ only, repair with write_file. "
+        "After the repair mutation, run the relevant verification command again."
     )
 
 
@@ -1826,12 +3886,12 @@ def _repo_required_gate_prompt(fields: Mapping[str, Any]) -> str:
             "For fixes, read the target file if needed, then use apply_patch."
         )
     if (
-        fields.get("dip_code_mutation_required") is True
-        and fields.get("dip_code_written") is not True
+        fields.get("dip_mutation_required") is True
+        and fields.get("dip_mutation_written") is not True
     ):
         return (
-            "\n\nWBP REQUIRED CODE GATE: your previous answer cannot be accepted "
-            "because no patch was applied. Output exactly one apply_patch JSON "
+            "\n\nWBP REQUIRED MUTATION GATE: your previous answer cannot be accepted "
+            "because no requested repository mutation was applied. Output exactly one apply_patch JSON "
             "tool call now, no prose. Use a valid unified diff with diff --git, "
             "---, +++, and @@ hunk headers."
         )
@@ -1839,10 +3899,23 @@ def _repo_required_gate_prompt(fields: Mapping[str, Any]) -> str:
         fields.get("dip_code_mutation_required") is True
         and fields.get("dip_code_verified") is not True
     ):
+        if fields.get("dip_code_verification_failed") is True:
+            return _repo_failed_code_verification_repair_prompt()
         return (
             "\n\nWBP REQUIRED VERIFY GATE: the patch has applied, but the code task "
             "is not complete until verification succeeds. Output exactly one "
             "run_tests or run_command JSON tool call now, no prose."
+        )
+    if (
+        fields.get("dip_mutation_required") is True
+        and fields.get("dip_code_mutation_required") is not True
+        and fields.get("dip_mutation_verified") is not True
+    ):
+        return (
+            "\n\nWBP REQUIRED MUTATION VERIFY GATE: the requested file mutation "
+            "has applied, but the task is not complete until readback or "
+            "verification succeeds. Output exactly one read_file for the changed "
+            "file, run_tests, or run_command JSON tool call now, no prose."
         )
     return ""
 
@@ -1853,6 +3926,80 @@ def _repo_final_answer_gate_prompt() -> str:
         "Do not request another wbp_repo_tool_call. Answer the operator directly "
         "from the evidence already returned by WBP. If the evidence is not enough, "
         "state the exact limitation and blocker in prose."
+    )
+
+
+def _repo_tool_claim_mismatch(
+    result_text: object,
+    fields: Mapping[str, Any],
+) -> str:
+    try:
+        parsed = json.loads(str(result_text or ""))
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(parsed, Mapping) or "tool_used" not in parsed:
+        return ""
+    claimed = _safe_text(parsed.get("tool_used"), limit=80)
+    if not claimed:
+        return ""
+    actual_names = [
+        _safe_text(item, limit=80)
+        for item in (
+            list(fields.get("repo_bridge_tool_names") or [])
+            + list(fields.get("dip_action_tool_names") or [])
+        )
+        if _safe_text(item, limit=80)
+    ]
+    return "" if claimed in actual_names else claimed
+
+
+def _repo_tool_claim_gate_prompt(
+    result_text: object,
+    fields: Mapping[str, Any],
+) -> str:
+    claimed = _repo_tool_claim_mismatch(result_text, fields)
+    if not claimed:
+        return ""
+    actual_names = sorted(
+        {
+            _safe_text(item, limit=80)
+            for item in (
+                list(fields.get("repo_bridge_tool_names") or [])
+                + list(fields.get("dip_action_tool_names") or [])
+            )
+            if _safe_text(item, limit=80)
+        }
+    )
+    actual_text = ", ".join(actual_names) if actual_names else "none"
+    return (
+        "\n\nWBP TOOL CLAIM GATE: your final answer cannot be accepted because "
+        f"tool_used={claimed!r} does not match the actual WBP repo tool names "
+        f"observed in this turn: {actual_text}. Answer again from the same "
+        "evidence, using only an observed tool name when the JSON includes "
+        "tool_used. Do not request another wbp_repo_tool_call."
+    )
+
+
+def _bootstrap_final_answer_result(
+    tool_results: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    for result in tool_results:
+        if (
+            result.get("origin") == "wbp_bootstrap"
+            and result.get("tool") in BOOTSTRAP_FINAL_ANSWER_TOOLS
+            and result.get("status") == "ok"
+        ):
+            return result
+    return None
+
+
+def _bootstrap_final_answer_gate_prompt(result: Mapping[str, Any]) -> str:
+    return (
+        "\n\nWBP BOOTSTRAP RESULT COMPLETE: the bootstrap repo action "
+        f"{_safe_text(result.get('tool'), limit=80)} already succeeded and returned "
+        "the evidence needed for this operator request. Do not request another "
+        "wbp_repo_tool_call. Answer the operator directly from the latest WBP repo "
+        "tool result JSON, preserving the requested JSON shape when one was requested."
     )
 
 
@@ -1867,6 +4014,11 @@ def _repo_evidence_trace(tool_results: Sequence[Mapping[str, Any]]) -> list[dict
         mutated_files = (
             result.get("mutated_files")
             if isinstance(result.get("mutated_files"), list)
+            else []
+        )
+        deleted_files = (
+            result.get("deleted_files")
+            if isinstance(result.get("deleted_files"), list)
             else []
         )
         trace.append(
@@ -1890,10 +4042,15 @@ def _repo_evidence_trace(tool_results: Sequence[Mapping[str, Any]]) -> list[dict
                 "touched_files": [
                     _safe_text(item, limit=500) for item in touched_files
                 ],
+                "deleted_files": [
+                    _safe_text(item, limit=500) for item in deleted_files
+                ],
+                "deleted_files_absent": result.get("deleted_files_absent") is True,
                 "command_sha256": _safe_text(result.get("command_sha256"), limit=80),
                 "command_recorded": False,
                 "command_exit_code": result.get("command_exit_code"),
                 "mutation_applied": result.get("mutation_applied") is True,
+                "rollback_applied": result.get("rollback_applied") is True,
                 "mutated_files": [
                     _safe_text(item, limit=500) for item in mutated_files
                 ],
@@ -1903,16 +4060,49 @@ def _repo_evidence_trace(tool_results: Sequence[Mapping[str, Any]]) -> list[dict
     return trace
 
 
+def _post_mutation_failed_verification_results(
+    tool_results: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    failed_results: list[Mapping[str, Any]] = []
+    mutation_seen = False
+    for result in tool_results:
+        if (
+            result.get("tool") in ACTION_BRIDGE_TOOLS
+            and result.get("status") == "ok"
+            and result.get("mutation_applied") is True
+        ):
+            mutation_seen = True
+            failed_results = []
+            continue
+        if (
+            mutation_seen
+            and result.get("tool") in {"run_tests", "run_command"}
+            and result.get("status") != "ok"
+        ):
+            failed_results.append(result)
+        if (
+            mutation_seen
+            and result.get("tool") in {"run_tests", "run_command"}
+            and result.get("status") == "ok"
+        ):
+            failed_results = []
+    return failed_results
+
+
 def _repo_bridge_fields(
     *,
     required: bool,
     action_required: bool,
+    mutation_required: bool | None = None,
     code_mutation_required: bool,
     available: bool,
     context_pack: Mapping[str, Any] | None,
     tool_results: Sequence[Mapping[str, Any]],
     blocked: bool = False,
 ) -> dict[str, Any]:
+    effective_mutation_required = (
+        code_mutation_required if mutation_required is None else mutation_required
+    )
     successful_results = [
         result for result in tool_results if result.get("status") == "ok"
     ]
@@ -1928,6 +4118,11 @@ def _repo_bridge_fields(
     mutation_results = [
         result for result in action_results if result.get("mutation_applied") is True
     ]
+    patch_mutation_results = [
+        result
+        for result in mutation_results
+        if result.get("tool") == "apply_patch"
+    ]
     test_results = [
         result for result in action_results if result.get("tool") == "run_tests"
     ]
@@ -1935,7 +4130,10 @@ def _repo_bridge_fields(
         result for result in action_results if result.get("tool") == "run_command"
     ]
     post_mutation_verification_results: list[Mapping[str, Any]] = []
+    post_mutation_readback_results: list[Mapping[str, Any]] = []
     mutation_seen = False
+    mutated_paths_seen: set[str] = set()
+    deleted_paths_seen: set[str] = set()
     for result in tool_results:
         if (
             result.get("tool") in ACTION_BRIDGE_TOOLS
@@ -1943,6 +4141,26 @@ def _repo_bridge_fields(
             and result.get("mutation_applied") is True
         ):
             mutation_seen = True
+            post_mutation_verification_results = []
+            post_mutation_readback_results = []
+            mutated_paths_seen = set(
+                str(path)
+                for path in (
+                    result.get("mutated_files")
+                    if isinstance(result.get("mutated_files"), list)
+                    else []
+                )
+            )
+            deleted_paths_seen = set(
+                str(path)
+                for path in (
+                    result.get("deleted_files")
+                    if isinstance(result.get("deleted_files"), list)
+                    else []
+                )
+            )
+            if result.get("deleted_files_absent") is True:
+                post_mutation_readback_results.append(result)
             continue
         if (
             mutation_seen
@@ -1950,6 +4168,21 @@ def _repo_bridge_fields(
             and result.get("status") == "ok"
         ):
             post_mutation_verification_results.append(result)
+        if (
+            mutation_seen
+            and result.get("tool") == "read_file"
+            and result.get("status") == "ok"
+            and str(result.get("path") or "") in mutated_paths_seen
+        ):
+            post_mutation_readback_results.append(result)
+        if (
+            mutation_seen
+            and result.get("tool") == "read_file"
+            and result.get("status") == "error"
+            and result.get("machine_error_code") == "file_not_found"
+            and str(result.get("path") or "") in deleted_paths_seen
+        ):
+            post_mutation_readback_results.append(result)
     tool_result_digests = [
         _sha256_text(
             json.dumps(
@@ -1970,11 +4203,21 @@ def _repo_bridge_fields(
     ]
     evidence_trace = _repo_evidence_trace(tool_results)
     repo_tool_names = [_safe_text(result.get("tool"), limit=80) for result in tool_results]
+    bootstrap_tool_names = [
+        _safe_text(result.get("tool"), limit=80)
+        for result in bootstrap_results
+    ]
     action_tool_names = [
         _safe_text(result.get("tool"), limit=80)
         for result in action_results
     ]
-    mutation_allowed = bool(action_required or code_mutation_required)
+    mutation_verified = bool(
+        post_mutation_verification_results or post_mutation_readback_results
+    )
+    failed_post_mutation_verification_results = (
+        _post_mutation_failed_verification_results(tool_results)
+    )
+    mutation_allowed = bool(effective_mutation_required)
     readonly = bool(required and not mutation_allowed)
     return {
         "dip_repo_direct_access": False,
@@ -1983,7 +4226,8 @@ def _repo_bridge_fields(
         "dip_repo_tool_bridge_used": bool(successful_results),
         "dip_action_bridge_required": action_required,
         "dip_action_bridge_available": available,
-        "dip_action_bridge_used": bool(successful_action_results),
+        "dip_action_bridge_used": bool(action_results),
+        "dip_action_bridge_succeeded": bool(successful_action_results),
         "dip_action_tool_call_count": len(action_results),
         "dip_action_successful_tool_call_count": len(successful_action_results),
         "dip_action_mutation_applied": bool(mutation_results),
@@ -1992,12 +4236,24 @@ def _repo_bridge_fields(
         "dip_action_patch_proposed": any(
             result.get("tool") == "propose_patch" for result in action_results
         ),
-        "dip_action_patch_applied": bool(mutation_results),
+        "dip_action_patch_applied": bool(patch_mutation_results),
+        "dip_mutation_required": effective_mutation_required,
+        "dip_mutation_written": bool(mutation_results),
+        "dip_mutation_verified": mutation_verified,
+        "dip_mutation_readback_verified": bool(post_mutation_readback_results),
         "dip_code_mutation_required": code_mutation_required,
-        "dip_code_written": bool(mutation_results),
-        "dip_code_patch_applied": bool(mutation_results),
+        "dip_code_written": bool(code_mutation_required and mutation_results),
+        "dip_code_patch_applied": bool(code_mutation_required and patch_mutation_results),
         "dip_code_verification_required": code_mutation_required,
         "dip_code_verified": bool(post_mutation_verification_results),
+        "dip_code_verification_failed": bool(
+            code_mutation_required and failed_post_mutation_verification_results
+        ),
+        "dip_code_failed_verification_count": (
+            len(failed_post_mutation_verification_results)
+            if code_mutation_required
+            else 0
+        ),
         "dip_action_mutated_files": sorted(
             {
                 str(path)
@@ -2025,6 +4281,7 @@ def _repo_bridge_fields(
         "repo_bridge_tool_call_count": len(tool_results),
         "repo_bridge_successful_tool_call_count": len(successful_results),
         "repo_bridge_tool_names": repo_tool_names,
+        "repo_bridge_bootstrap_tool_names": bootstrap_tool_names,
         "dip_action_tool_names": action_tool_names,
         "repo_bridge_tool_result_sha256s": tool_result_digests,
         "repo_bridge_raw_tool_results_recorded": False,
@@ -2145,18 +4402,22 @@ def _runtime_http_bridge_result(
         configured_timeout=bridge.get("timeout_seconds"),
         default=DEFAULT_BRIDGE_TIMEOUT_SECONDS,
     )
+    deadline = _live_result_deadline(bridge_timeout_seconds, minimum=0.001)
     permission_style_failure = False
     for url in urls:
         url_text = _safe_text(url, limit=500)
         if not url_text:
             continue
+        remaining = _remaining_live_result_timeout(deadline)
+        if remaining <= 0:
+            break
         try:
             response = request_json(
                 url=url_text,
                 method=method,
                 headers={},
                 payload=base_payload,
-                timeout_seconds=bridge_timeout_seconds,
+                timeout_seconds=min(bridge_timeout_seconds, remaining),
             )
         except RuntimeErrorInfo as exc:
             message = str(getattr(exc, "message", "") or exc)
@@ -2332,6 +4593,9 @@ def _direct_provider_live_result(
     result_text_limit: int = DEFAULT_LIVE_RESULT_TEXT_LIMIT,
 ) -> dict[str, Any]:
     result_base = dict(base)
+    max_attempts = DEFAULT_DIRECT_PROVIDER_MAX_ATTEMPTS
+    last_result_base = result_base
+    deadline = _live_result_deadline(timeout_seconds, minimum=0.001)
     try:
         paths = ExternalModelsPaths.from_env()
         route = find_route(load_routes_file(paths.routes_file), route_id)
@@ -2342,28 +4606,65 @@ def _direct_provider_live_result(
             user_prompt=prompt,
         )
         _set_request_output_budget(request_payload, output_token_limit)
-        response = request_json(
-            url=_completion_url(route),
-            method="POST",
-            headers=headers,
-            payload=request_payload,
-            timeout_seconds=timeout_seconds,
-        )
-        result_base["provider_called"] = True
-        result_base["latency_ms"] = response.latency_ms
-        if response.status_code in (401, 403):
-            result_base["machine_error_code"] = errors.PROVIDER_AUTH_FAILED
-            result_base["operator_action"] = "user_action"
-            result_base["upstream_status_code"] = response.status_code
-            return result_base
-        if response.status_code != 200:
-            result_base["machine_error_code"] = errors.INVALID_UPSTREAM_RESPONSE
-            result_base["upstream_status_code"] = response.status_code
-            return result_base
-        response_text, response_metadata = transforms.extract_check_response(
-            route,
-            response.payload,
-        )
+        response_text = ""
+        response_metadata: dict[str, Any] = {}
+        for attempt in range(1, max_attempts + 1):
+            remaining = _remaining_live_result_timeout(deadline)
+            if remaining <= 0:
+                return _live_result_timeout_packet(
+                    last_result_base,
+                    provider_called=attempt > 1,
+                )
+            attempt_base = {
+                **result_base,
+                "provider_called": True,
+                "direct_provider_attempt_count": attempt,
+                "direct_provider_retry_count": attempt - 1,
+                "direct_provider_retry_policy": "transient_invalid_upstream_only",
+            }
+            response = request_json(
+                url=_completion_url(route),
+                method="POST",
+                headers=headers,
+                payload=request_payload,
+                timeout_seconds=remaining,
+            )
+            attempt_base["latency_ms"] = response.latency_ms
+            if response.status_code in (401, 403):
+                attempt_base["machine_error_code"] = errors.PROVIDER_AUTH_FAILED
+                attempt_base["operator_action"] = "user_action"
+                attempt_base["upstream_status_code"] = response.status_code
+                return attempt_base
+            if response.status_code != 200:
+                attempt_base["machine_error_code"] = errors.INVALID_UPSTREAM_RESPONSE
+                attempt_base["upstream_status_code"] = response.status_code
+                last_result_base = attempt_base
+                continue
+            try:
+                response_text, response_metadata = transforms.extract_check_response(
+                    route,
+                    response.payload,
+                )
+            except RuntimeErrorInfo as exc:
+                attempt_base["machine_error_code"] = _safe_text(
+                    exc.machine_error_code,
+                    limit=120,
+                )
+                attempt_base["operator_action"] = _safe_text(
+                    exc.operator_action,
+                    limit=120,
+                )
+                last_result_base = attempt_base
+                if exc.machine_error_code != errors.INVALID_UPSTREAM_RESPONSE:
+                    return attempt_base
+                continue
+            if response_text:
+                result_base = attempt_base
+                break
+            attempt_base["machine_error_code"] = errors.INVALID_UPSTREAM_RESPONSE
+            last_result_base = attempt_base
+        else:
+            return last_result_base
     except RuntimeErrorInfo as exc:
         result_base["machine_error_code"] = _safe_text(exc.machine_error_code, limit=120)
         result_base["operator_action"] = _safe_text(exc.operator_action, limit=120)
@@ -2407,6 +4708,7 @@ def _live_result_turn(
     skip_file_bridge: bool = False,
 ) -> dict[str, Any]:
     turn_base = dict(base)
+    deadline = _live_result_deadline(timeout_seconds, minimum=0.001)
     http_bridge_configured = _is_enabled_mapping(
         context.get("deepseek_live_format_check_bridge")
     )
@@ -2418,27 +4720,32 @@ def _live_result_turn(
     )
     turn_base["file_bridge_attempted"] = False
     turn_base["file_bridge_skipped"] = bool(skip_file_bridge)
+    remaining = _remaining_live_result_timeout(deadline)
+    if remaining <= 0:
+        return _live_result_timeout_packet(turn_base, provider_called=False)
     http_bridge_result, permission_style_bridge_failure = _runtime_http_bridge_result(
         context=context,
         prompt=prompt,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=remaining,
         output_token_limit=output_token_limit,
         result_text_limit=result_text_limit,
     )
     if http_bridge_result is not None:
         return {**turn_base, **http_bridge_result}
-    file_bridge_should_attempt = (
-        file_bridge_configured
-        and not skip_file_bridge
-        and permission_style_bridge_failure
-    )
+    remaining = _remaining_live_result_timeout(deadline)
+    if remaining <= 0:
+        return _live_result_timeout_packet(
+            turn_base,
+            provider_called=http_bridge_configured,
+        )
+    file_bridge_should_attempt = file_bridge_configured and not skip_file_bridge
     if file_bridge_should_attempt:
         turn_base["file_bridge_attempted"] = True
         turn_base["file_bridge_skipped"] = False
         file_bridge_result = _runtime_file_bridge_result(
             context=context,
             prompt=prompt,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=remaining,
             output_token_limit=output_token_limit,
             result_text_limit=result_text_limit,
         )
@@ -2448,11 +4755,17 @@ def _live_result_turn(
         turn_base["file_bridge_skipped"] = True
     if permission_style_bridge_failure:
         turn_base["machine_error_code"] = errors.PROVIDER_NETWORK_FAILED
+    remaining = _remaining_live_result_timeout(deadline)
+    if remaining <= 0:
+        return _live_result_timeout_packet(
+            turn_base,
+            provider_called=http_bridge_configured or file_bridge_should_attempt,
+        )
     return _direct_provider_live_result(
         route_id=route_id,
         prompt=prompt,
         base=turn_base,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=remaining,
         output_token_limit=output_token_limit,
         result_text_limit=result_text_limit,
     )
@@ -2496,11 +4809,15 @@ def request_live_result(
         task=task,
         repo_bridge_required=repo_bridge_required,
     )
+    repo_mutation_required = _repo_mutation_requested(
+        task=task,
+        repo_bridge_required=repo_bridge_required,
+    )
     action_bridge_required = _action_bridge_requested(
         task=task,
         repo_bridge_required=repo_bridge_required,
     )
-    action_bridge_required = bool(action_bridge_required or code_mutation_required)
+    action_bridge_required = bool(action_bridge_required or repo_mutation_required)
     active_project_root, active_project_root_fields = active_project_root_metadata(
         repo_root,
         source=target_repo_source,
@@ -2517,17 +4834,30 @@ def request_live_result(
         _build_repo_context_pack(
             active_project_root,
             action_tools_allowed=action_bridge_required,
-            mutation_tools_allowed=code_mutation_required,
+            mutation_tools_allowed=repo_mutation_required,
+            code_mutation_required=code_mutation_required,
         )
         if repo_bridge_required
         and repo_bridge_available
         and active_project_root is not None
         else None
     )
+    requested_timeout_seconds = _safe_timeout_seconds(
+        timeout_seconds,
+        default=DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS,
+        minimum=1.0,
+    )
+    effective_timeout_seconds = _effective_live_result_timeout_seconds(
+        timeout_seconds,
+        dip_work_mode=effective_work_mode,
+        repo_bridge_required=repo_bridge_required,
+        code_mutation_required=code_mutation_required,
+    )
     repo_tool_results: list[dict[str, Any]] = []
     repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
         action_required=action_bridge_required,
+        mutation_required=repo_mutation_required,
         code_mutation_required=code_mutation_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
@@ -2557,8 +4887,13 @@ def request_live_result(
         "dip_full_work_mode": effective_work_mode == "full",
         "live_result_text_limit": live_result_text_limit,
         "live_result_output_token_limit": output_token_limit,
+        "live_result_requested_timeout_seconds": requested_timeout_seconds,
+        "live_result_effective_timeout_seconds": effective_timeout_seconds,
+        "live_result_timeout_floor_applied": (
+            effective_timeout_seconds > requested_timeout_seconds
+        ),
         "exact_plain_reply_fast_path": exact_plain_reply,
-        "exact_plain_reply_file_bridge_skipped": exact_plain_reply,
+        "exact_plain_reply_file_bridge_skipped": False,
         "repo_bridge_max_steps": repo_bridge_max_steps,
         **active_project_root_fields,
         **target_repo_fields,
@@ -2573,6 +4908,7 @@ def request_live_result(
             "machine_error_code": WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
             "operator_action": "retry",
         }
+    request_deadline = _live_result_deadline(effective_timeout_seconds)
 
     prompt = (
         _exact_plain_reply_prompt(exact_reply_text)
@@ -2585,16 +4921,20 @@ def request_live_result(
         )
     )
     if not repo_bridge_required:
+        remaining = _remaining_live_result_timeout(request_deadline)
+        if remaining <= 0:
+            return _live_result_timeout_packet(base, provider_called=False)
         result = _live_result_turn(
             context=context,
             route_id=route_id,
             prompt=prompt,
             base=base,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=remaining,
             output_token_limit=output_token_limit,
             result_text_limit=live_result_text_limit,
-            skip_file_bridge=exact_plain_reply,
+            skip_file_bridge=False,
         )
+        result = _normalize_json_result_for_task(result, task=task)
         if exact_plain_reply:
             return _apply_exact_plain_reply_gate(
                 result,
@@ -2610,34 +4950,116 @@ def request_live_result(
             repo_bridge_required=repo_bridge_required,
             action_bridge_required=action_bridge_required,
         ):
+            remaining = _remaining_live_result_timeout(request_deadline)
+            if remaining <= 0:
+                return _repo_bridge_timeout_packet(
+                    base,
+                    provider_called=False,
+                    repo_fields=_repo_bridge_fields(
+                        required=repo_bridge_required,
+                        action_required=action_bridge_required,
+                        mutation_required=repo_mutation_required,
+                        code_mutation_required=code_mutation_required,
+                        available=repo_bridge_available,
+                        context_pack=repo_context_pack,
+                        tool_results=repo_tool_results,
+                    ),
+                )
             tool_result = _execute_repo_tool_call(
                 bootstrap_call,
                 repo_root=active_project_root,
+                timeout_seconds=remaining,
             )
             repo_tool_results.append(tool_result)
             conversation_prompt += _repo_tool_result_prompt(tool_result)
+        bootstrap_final_result = _bootstrap_final_answer_result(repo_tool_results)
+        if bootstrap_final_result is not None:
+            conversation_prompt += _bootstrap_final_answer_gate_prompt(
+                bootstrap_final_result
+            )
+        bootstrap_repo_fields = _repo_bridge_fields(
+            required=repo_bridge_required,
+            action_required=action_bridge_required,
+            mutation_required=repo_mutation_required,
+            code_mutation_required=code_mutation_required,
+            available=repo_bridge_available,
+            context_pack=repo_context_pack,
+            tool_results=repo_tool_results,
+        )
+        verified_json_reply = _repo_verified_json_reply_from_evidence(
+            task=task,
+            fields=bootstrap_repo_fields,
+            tool_results=repo_tool_results,
+        )
+        verified_plain_reply = _repo_verified_plain_reply_from_evidence(
+            task=task,
+            fields=bootstrap_repo_fields,
+            tool_results=repo_tool_results,
+        )
+        verified_reply = verified_json_reply or verified_plain_reply
+        if verified_reply:
+            return {
+                **base,
+                **bootstrap_repo_fields,
+                "status": "ok",
+                "machine_error_code": WBP_DIP_TOOL_OK,
+                "operator_action": "none",
+                "provider_called": False,
+                "result_available": True,
+                "source": "repo_bridge_verified_evidence",
+                "result_text": verified_reply,
+                "result_text_sha256": _sha256_text(verified_reply),
+                "result_text_length": len(verified_reply),
+                "result_text_truncated": False,
+                "repo_bridge_final_answer_synthesized": True,
+                "local_imitation_used": False,
+                "fallback_used": False,
+            }
     last_result: dict[str, Any] = {}
     for _step in range(repo_bridge_max_steps + 1):
-        last_result = _live_result_turn(
-            context=context,
-            route_id=route_id,
-            prompt=conversation_prompt,
-            base=base,
-            timeout_seconds=timeout_seconds,
-            output_token_limit=output_token_limit,
-            result_text_limit=live_result_text_limit,
-        )
-        if last_result.get("status") != "ok":
-            return {
-                **last_result,
-                **_repo_bridge_fields(
+        remaining = _remaining_live_result_timeout(request_deadline)
+        if remaining <= 0:
+            return _repo_bridge_timeout_packet(
+                base,
+                provider_called=last_result.get("provider_called") is True,
+                repo_fields=_repo_bridge_fields(
                     required=repo_bridge_required,
                     action_required=action_bridge_required,
+                    mutation_required=repo_mutation_required,
                     code_mutation_required=code_mutation_required,
                     available=repo_bridge_available,
                     context_pack=repo_context_pack,
                     tool_results=repo_tool_results,
                 ),
+            )
+        last_result = _live_result_turn(
+            context=context,
+            route_id=route_id,
+            prompt=conversation_prompt,
+            base=base,
+            timeout_seconds=remaining,
+            output_token_limit=output_token_limit,
+            result_text_limit=live_result_text_limit,
+        )
+        if last_result.get("status") != "ok":
+            current_repo_fields = _repo_bridge_fields(
+                required=repo_bridge_required,
+                action_required=action_bridge_required,
+                mutation_required=repo_mutation_required,
+                code_mutation_required=code_mutation_required,
+                available=repo_bridge_available,
+                context_pack=repo_context_pack,
+                tool_results=repo_tool_results,
+            )
+            if last_result.get("machine_error_code") == WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT:
+                return _repo_bridge_timeout_packet(
+                    base,
+                    provider_called=last_result.get("provider_called") is True,
+                    repo_fields=current_repo_fields,
+                )
+            return {
+                **last_result,
+                **current_repo_fields,
             }
         tool_call = (
             _extract_repo_tool_call(str(last_result.get("result_text") or ""))
@@ -2648,6 +5070,7 @@ def request_live_result(
             current_repo_fields = _repo_bridge_fields(
                 required=repo_bridge_required,
                 action_required=action_bridge_required,
+                mutation_required=repo_mutation_required,
                 code_mutation_required=code_mutation_required,
                 available=repo_bridge_available,
                 context_pack=repo_context_pack,
@@ -2657,9 +5080,24 @@ def request_live_result(
             if gate_prompt and _step < repo_bridge_max_steps:
                 conversation_prompt += gate_prompt
                 continue
+            tool_claim_gate_prompt = _repo_tool_claim_gate_prompt(
+                last_result.get("result_text"),
+                current_repo_fields,
+            )
+            if tool_claim_gate_prompt and _step < repo_bridge_max_steps:
+                conversation_prompt += tool_claim_gate_prompt
+                continue
+            break
+        bootstrap_final_result = _bootstrap_final_answer_result(repo_tool_results)
+        if bootstrap_final_result is not None:
+            if _step < repo_bridge_max_steps:
+                conversation_prompt += _bootstrap_final_answer_gate_prompt(
+                    bootstrap_final_result
+                )
+                continue
             break
         tool_name = _safe_text(tool_call.get("tool"), limit=80)
-        if tool_name == "apply_patch" and not code_mutation_required:
+        if tool_name in MUTATION_BRIDGE_TOOLS and not repo_mutation_required:
             tool_result = {
                 "schema_version": 1,
                 "tool": tool_name,
@@ -2704,11 +5142,102 @@ def request_live_result(
                 "mutated_files": [],
             }
         else:
+            remaining = _remaining_live_result_timeout(request_deadline)
+            if remaining <= 0:
+                return _repo_bridge_timeout_packet(
+                    base,
+                    provider_called=last_result.get("provider_called") is True,
+                    repo_fields=_repo_bridge_fields(
+                        required=repo_bridge_required,
+                        action_required=action_bridge_required,
+                        mutation_required=repo_mutation_required,
+                        code_mutation_required=code_mutation_required,
+                        available=repo_bridge_available,
+                        context_pack=repo_context_pack,
+                        tool_results=repo_tool_results,
+                    ),
+                )
             tool_result = _execute_repo_tool_call(
                 tool_call,
                 repo_root=active_project_root,
+                timeout_seconds=remaining,
             )
         repo_tool_results.append(tool_result)
+        if code_mutation_required and _post_mutation_failed_verification_results(
+            repo_tool_results
+        ):
+            failed_repo_fields = _repo_bridge_fields(
+                required=repo_bridge_required,
+                action_required=action_bridge_required,
+                mutation_required=repo_mutation_required,
+                code_mutation_required=code_mutation_required,
+                available=repo_bridge_available,
+                context_pack=repo_context_pack,
+                tool_results=repo_tool_results,
+            )
+            if _step < repo_bridge_max_steps:
+                conversation_prompt += _repo_tool_result_prompt(tool_result)
+                conversation_prompt += _repo_failed_code_verification_repair_prompt()
+                continue
+            return {
+                **base,
+                **failed_repo_fields,
+                "status": "error",
+                "machine_error_code": WBP_DIP_TOOL_CODE_VERIFICATION_FAILED,
+                "operator_action": "retry",
+                "provider_called": last_result.get("provider_called") is True,
+                "result_available": False,
+                "result_text": "",
+                "result_text_sha256": "",
+                "result_text_length": 0,
+                "result_text_truncated": False,
+            }
+        current_repo_fields = _repo_bridge_fields(
+            required=repo_bridge_required,
+            action_required=action_bridge_required,
+            mutation_required=repo_mutation_required,
+            code_mutation_required=code_mutation_required,
+            available=repo_bridge_available,
+            context_pack=repo_context_pack,
+            tool_results=repo_tool_results,
+        )
+        verified_json_reply = _repo_verified_json_reply_from_evidence(
+            task=task,
+            fields=current_repo_fields,
+            tool_results=repo_tool_results,
+        )
+        verified_plain_reply = _repo_verified_plain_reply_from_evidence(
+            task=task,
+            fields=current_repo_fields,
+            tool_results=repo_tool_results,
+        )
+        verified_reply = verified_json_reply or verified_plain_reply
+        if verified_reply:
+            return {
+                **last_result,
+                **current_repo_fields,
+                "status": "ok",
+                "machine_error_code": WBP_DIP_TOOL_OK,
+                "operator_action": "none",
+                "source": "repo_bridge_verified_evidence",
+                "result_available": True,
+                "result_text": verified_reply,
+                "result_text_sha256": _sha256_text(verified_reply),
+                "result_text_length": len(verified_reply),
+                "result_text_truncated": False,
+                "repo_bridge_final_answer_synthesized": True,
+                "local_imitation_used": False,
+                "fallback_used": False,
+            }
+        test_count_gate = _repo_test_count_gate_prompt(
+            task=task,
+            fields=current_repo_fields,
+            tool_results=repo_tool_results,
+        )
+        if test_count_gate and _step < repo_bridge_max_steps:
+            conversation_prompt += _repo_tool_result_prompt(tool_result)
+            conversation_prompt += test_count_gate
+            continue
         conversation_prompt += _repo_tool_result_prompt(tool_result)
 
     if (
@@ -2720,26 +5249,50 @@ def request_live_result(
             str(last_result.get("result_text") or "")
         )
         if pending_tool_call:
+            remaining = _remaining_live_result_timeout(request_deadline)
+            if remaining <= 0:
+                final_repo_fields = _repo_bridge_fields(
+                    required=repo_bridge_required,
+                    action_required=action_bridge_required,
+                    mutation_required=repo_mutation_required,
+                    code_mutation_required=code_mutation_required,
+                    available=repo_bridge_available,
+                    context_pack=repo_context_pack,
+                    tool_results=repo_tool_results,
+                )
+                return _repo_bridge_timeout_packet(
+                    base,
+                    provider_called=last_result.get("provider_called") is True,
+                    repo_fields=final_repo_fields,
+                )
             final_prompt = conversation_prompt + _repo_final_answer_gate_prompt()
             final_result = _live_result_turn(
                 context=context,
                 route_id=route_id,
                 prompt=final_prompt,
                 base=base,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=remaining,
                 output_token_limit=output_token_limit,
                 result_text_limit=live_result_text_limit,
             )
             final_repo_fields = _repo_bridge_fields(
                 required=repo_bridge_required,
                 action_required=action_bridge_required,
+                mutation_required=repo_mutation_required,
                 code_mutation_required=code_mutation_required,
                 available=repo_bridge_available,
                 context_pack=repo_context_pack,
                 tool_results=repo_tool_results,
             )
             if final_result.get("status") != "ok":
+                if final_result.get("machine_error_code") == WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT:
+                    return _repo_bridge_timeout_packet(
+                        base,
+                        provider_called=final_result.get("provider_called") is True,
+                        repo_fields=final_repo_fields,
+                    )
                 return {**final_result, **final_repo_fields}
+            final_result = _normalize_json_result_for_task(final_result, task=task)
             if not _extract_repo_tool_call(str(final_result.get("result_text") or "")):
                 last_result = final_result
             else:
@@ -2760,6 +5313,7 @@ def request_live_result(
     final_repo_fields = _repo_bridge_fields(
         required=repo_bridge_required,
         action_required=action_bridge_required,
+        mutation_required=repo_mutation_required,
         code_mutation_required=code_mutation_required,
         available=repo_bridge_available,
         context_pack=repo_context_pack,
@@ -2778,7 +5332,7 @@ def request_live_result(
         }
     if (
         action_bridge_required
-        and final_repo_fields["dip_action_successful_tool_call_count"] < 1
+        and final_repo_fields["dip_action_tool_call_count"] < 1
     ):
         return {
             **base,
@@ -2787,15 +5341,43 @@ def request_live_result(
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
-    if code_mutation_required and final_repo_fields["dip_code_written"] is not True:
+    if (
+        action_bridge_required
+        and final_repo_fields["dip_action_successful_tool_call_count"] < 1
+    ):
         return {
             **base,
             **final_repo_fields,
-            "machine_error_code": WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED,
+            "machine_error_code": WBP_DIP_TOOL_ACTION_BRIDGE_FAILED,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+        }
+    if repo_mutation_required and final_repo_fields["dip_mutation_written"] is not True:
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": (
+                WBP_DIP_TOOL_CODE_MUTATION_NOT_APPLIED
+                if code_mutation_required
+                else WBP_DIP_TOOL_MUTATION_NOT_APPLIED
+            ),
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
     if code_mutation_required and final_repo_fields["dip_code_verified"] is not True:
+        if final_repo_fields.get("dip_code_verification_failed") is True:
+            return {
+                **base,
+                **final_repo_fields,
+                "machine_error_code": WBP_DIP_TOOL_CODE_VERIFICATION_FAILED,
+                "operator_action": "retry",
+                "provider_called": last_result.get("provider_called") is True,
+                "result_available": False,
+                "result_text": "",
+                "result_text_sha256": "",
+                "result_text_length": 0,
+                "result_text_truncated": False,
+            }
         return {
             **base,
             **final_repo_fields,
@@ -2803,6 +5385,57 @@ def request_live_result(
             "operator_action": "retry",
             "provider_called": last_result.get("provider_called") is True,
         }
+    requested_test_block_reason = (
+        _requested_test_verification_block_reason(task, repo_tool_results)
+        if code_mutation_required
+        else ""
+    )
+    if requested_test_block_reason:
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_CODE_VERIFICATION_NOT_RUN,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+            "result_available": False,
+            "result_text": "",
+            "result_text_sha256": "",
+            "result_text_length": 0,
+            "result_text_truncated": False,
+            "requested_test_verification_block_reason": requested_test_block_reason,
+        }
+    if (
+        repo_mutation_required
+        and not code_mutation_required
+        and final_repo_fields["dip_mutation_verified"] is not True
+    ):
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_MUTATION_VERIFICATION_NOT_RUN,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+        }
+    claimed_tool_mismatch = _repo_tool_claim_mismatch(
+        last_result.get("result_text"),
+        final_repo_fields,
+    )
+    if claimed_tool_mismatch:
+        return {
+            **base,
+            **final_repo_fields,
+            "machine_error_code": WBP_DIP_TOOL_REPO_TOOL_CLAIM_MISMATCH,
+            "operator_action": "retry",
+            "provider_called": last_result.get("provider_called") is True,
+            "result_available": False,
+            "result_text": "",
+            "result_text_sha256": "",
+            "result_text_length": 0,
+            "result_text_truncated": False,
+            "claimed_tool_used_sha256": _sha256_text(claimed_tool_mismatch),
+            "claimed_tool_used_recorded": False,
+        }
+    last_result = _normalize_json_result_for_task(last_result, task=task)
     return {**last_result, **final_repo_fields}
 
 
@@ -2840,6 +5473,7 @@ def _safe_evidence_trace(value: object) -> list[dict[str, Any]]:
                 "command_recorded": False,
                 "command_exit_code": item.get("command_exit_code"),
                 "mutation_applied": item.get("mutation_applied") is True,
+                "rollback_applied": item.get("rollback_applied") is True,
                 "mutated_files": [
                     _safe_text(path, limit=500) for path in mutated_files
                 ],
@@ -3227,6 +5861,9 @@ def build_wbp_dip_tool_packet(
         "dip_action_bridge_used": (
             live_result_data.get("dip_action_bridge_used") is True
         ),
+        "dip_action_bridge_succeeded": (
+            live_result_data.get("dip_action_bridge_succeeded") is True
+        ),
         "dip_action_tool_call_count": int(
             live_result_data.get("dip_action_tool_call_count") or 0
         ),
@@ -3244,6 +5881,18 @@ def build_wbp_dip_tool_packet(
         "dip_action_patch_applied": (
             live_result_data.get("dip_action_patch_applied") is True
         ),
+        "dip_mutation_required": (
+            live_result_data.get("dip_mutation_required") is True
+        ),
+        "dip_mutation_written": (
+            live_result_data.get("dip_mutation_written") is True
+        ),
+        "dip_mutation_verified": (
+            live_result_data.get("dip_mutation_verified") is True
+        ),
+        "dip_mutation_readback_verified": (
+            live_result_data.get("dip_mutation_readback_verified") is True
+        ),
         "dip_code_mutation_required": (
             live_result_data.get("dip_code_mutation_required") is True
         ),
@@ -3255,6 +5904,12 @@ def build_wbp_dip_tool_packet(
             live_result_data.get("dip_code_verification_required") is True
         ),
         "dip_code_verified": live_result_data.get("dip_code_verified") is True,
+        "dip_code_verification_failed": (
+            live_result_data.get("dip_code_verification_failed") is True
+        ),
+        "dip_code_failed_verification_count": int(
+            live_result_data.get("dip_code_failed_verification_count") or 0
+        ),
         "dip_action_mutated_files": [
             _safe_text(item, limit=500)
             for item in (
@@ -3661,6 +6316,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "WBP_MANAGED_DIR": str(profile_dir / "managed"),
             "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
         }
+    )
+    env.setdefault(
+        "WBP_STABLE_CONFIG",
+        str(RuntimePaths.from_roots(profile_dir=profile_dir).stable_config),
     )
     if not env.get("OPENAI_API_KEY"):
         codex_exec_openai_api_key = _codex_exec_openai_api_key(profile_dir)

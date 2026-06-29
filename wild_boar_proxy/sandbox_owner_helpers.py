@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import state_store
 from .process_runner import PROCESS_OK, PROCESS_TIMEOUT, run_bounded_process
 from .runtime import (
     RuntimePaths,
@@ -27,6 +28,201 @@ SCHEMA_VERSION = 2
 SANDBOX_LOGIN_PROCESS_TIMEOUT_SECONDS = 120.0
 SANDBOX_LOGIN_PROCESS_OUTPUT_CAP_BYTES = 64 * 1024
 SANDBOX_LOGIN_TIMEOUT_EXIT_CODE = 124
+DEFAULT_POOL_POLICY = {"active_target": 0, "active_min": 0, "reserve_target": 0}
+DEFAULT_MANAGED_PORT = 8320
+
+
+def _require_string_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+    allow_empty: bool = False,
+) -> None:
+    value = payload.get(field_name)
+    if not isinstance(value, str):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    if not allow_empty and not value.strip():
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_present_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    if field_name not in payload:
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_int_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    value = payload.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_list_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> None:
+    value = payload.get(field_name)
+    if not isinstance(value, list):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+
+
+def _require_dict_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    surface_name: str,
+) -> dict[str, Any]:
+    value = payload.get(field_name)
+    if not isinstance(value, dict):
+        raise state_store.StateStoreError(
+            f"{surface_name} field {field_name} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    return value
+
+
+def _validate_backend_entry(entry: object, *, index: int) -> None:
+    if not isinstance(entry, dict):
+        raise state_store.StateStoreError(
+            f"backend-registry.json backend entry {index} is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    surface_name = f"backend-registry.json.backends[{index}]"
+    _require_string_field(entry, "id", surface_name=surface_name)
+    _require_string_field(entry, "label", surface_name=surface_name)
+    _require_string_field(entry, "pool", surface_name=surface_name)
+    _require_string_field(entry, "status", surface_name=surface_name)
+    _require_string_field(entry, "auth_ref", surface_name=surface_name)
+    _require_string_field(
+        entry,
+        "last_error",
+        surface_name=surface_name,
+        allow_empty=True,
+    )
+    _require_string_field(
+        entry,
+        "notes",
+        surface_name=surface_name,
+        allow_empty=True,
+    )
+    _require_int_field(entry, "fail_count", surface_name=surface_name)
+    _require_int_field(entry, "success_count", surface_name=surface_name)
+    if not isinstance(entry.get("manual_hold"), bool):
+        raise state_store.StateStoreError(
+            f"{surface_name} field manual_hold is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_present_field(entry, "last_success", surface_name=surface_name)
+    _require_present_field(entry, "cooldown_until", surface_name=surface_name)
+
+
+def _validate_registry_payload(payload: dict[str, Any]) -> None:
+    if "version" not in payload:
+        raise state_store.StateStoreError(
+            "backend-registry.json field version is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_string_field(
+        payload,
+        "updated_at",
+        surface_name="backend-registry.json",
+    )
+    _require_string_field(
+        payload,
+        "stable_default_backend_id",
+        surface_name="backend-registry.json",
+        allow_empty=True,
+    )
+    backends = payload.get("backends")
+    if not isinstance(backends, list):
+        raise state_store.StateStoreError(
+            "backend-registry.json field backends is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    for index, backend in enumerate(backends):
+        _validate_backend_entry(backend, index=index)
+    pool_policy = _require_dict_field(
+        payload,
+        "pool_policy",
+        surface_name="backend-registry.json",
+    )
+    for field_name in ("active_min", "active_target", "reserve_target"):
+        _require_int_field(
+            pool_policy,
+            field_name,
+            surface_name="backend-registry.json.pool_policy",
+        )
+
+
+def _validate_state_payload(payload: dict[str, Any]) -> None:
+    if "version" not in payload:
+        raise state_store.StateStoreError(
+            "supervisor-state.json field version is missing or invalid.",
+            machine_error_code=state_store.STATE_PAYLOAD_INVALID,
+        )
+    _require_string_field(payload, "status", surface_name="supervisor-state.json")
+    _require_string_field(
+        payload,
+        "effective_mode",
+        surface_name="supervisor-state.json",
+    )
+    _require_string_field(
+        payload,
+        "last_sync_at",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_string_field(
+        payload,
+        "last_error",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_list_field(
+        payload,
+        "selected_backend_ids",
+        surface_name="supervisor-state.json",
+    )
+    _require_int_field(payload, "managed_port", surface_name="supervisor-state.json")
+    _require_string_field(
+        payload,
+        "current_proxy_url",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
+    _require_string_field(
+        payload,
+        "stable_default_backend_id",
+        surface_name="supervisor-state.json",
+        allow_empty=True,
+    )
 
 
 def load_registry(paths: RuntimePaths) -> dict[str, Any]:
@@ -34,9 +230,7 @@ def load_registry(paths: RuntimePaths) -> dict[str, Any]:
     data.setdefault("version", SCHEMA_VERSION)
     data.setdefault("schema_version", SCHEMA_VERSION)
     data.setdefault("backends", [])
-    data.setdefault(
-        "pool_policy", {"active_target": 0, "active_min": 0, "reserve_target": 0}
-    )
+    data.setdefault("pool_policy", dict(DEFAULT_POOL_POLICY))
     return data
 
 
@@ -44,7 +238,15 @@ def save_registry(paths: RuntimePaths, data: dict[str, Any]) -> None:
     data["version"] = SCHEMA_VERSION
     data["schema_version"] = SCHEMA_VERSION
     data["updated_at"] = now_iso()
-    write_json_atomic(paths.registry_file, data)
+    data.setdefault("stable_default_backend_id", "")
+    data.setdefault("backends", [])
+    data.setdefault("pool_policy", dict(DEFAULT_POOL_POLICY))
+    state_store.write_json(
+        paths.registry_file,
+        data,
+        expected_schema_version=SCHEMA_VERSION,
+        validator=_validate_registry_payload,
+    )
 
 
 def load_state(paths: RuntimePaths) -> dict[str, Any]:
@@ -57,7 +259,14 @@ def load_state(paths: RuntimePaths) -> dict[str, Any]:
 
 
 def save_state(paths: RuntimePaths, data: dict[str, Any]) -> None:
-    write_json_atomic(paths.state_file, data)
+    data["version"] = SCHEMA_VERSION
+    data["schema_version"] = SCHEMA_VERSION
+    state_store.write_json(
+        paths.state_file,
+        data,
+        expected_schema_version=SCHEMA_VERSION,
+        validator=_validate_state_payload,
+    )
 
 
 def slugify(value: str) -> str:
@@ -399,7 +608,6 @@ def sync_state_counts_from_registry(
 def cmd_accounts_status(paths: RuntimePaths, _args: argparse.Namespace) -> int:
     registry = load_registry(paths)
     state = sync_state_counts_from_registry(registry, load_state(paths))
-    save_state(paths, state)
     print("Managed summary")
     print(f"  schema_version: {registry.get('schema_version')}")
     print(f"  stable_default_backend_id: {registry.get('stable_default_backend_id', '')}")
@@ -627,8 +835,8 @@ def cmd_onboard(paths: RuntimePaths, args: argparse.Namespace) -> int:
 def cmd_sync(paths: RuntimePaths, args: argparse.Namespace) -> int:
     registry = load_registry(paths)
     state = load_state(paths)
-    state.setdefault("schema_version", SCHEMA_VERSION)
-    state.setdefault("version", SCHEMA_VERSION)
+    state["schema_version"] = SCHEMA_VERSION
+    state["version"] = SCHEMA_VERSION
     state["effective_mode"] = "stable"
     state["stable_default_backend_id"] = str(
         registry.get("stable_default_backend_id", "")
@@ -638,6 +846,7 @@ def cmd_sync(paths: RuntimePaths, args: argparse.Namespace) -> int:
     state["current_proxy_url"] = ""
     state["last_sync_at"] = now_iso()
     state["selected_backend_ids"] = get_launch_capable_backend_ids(registry)
+    state["managed_port"] = DEFAULT_MANAGED_PORT
     sync_state_counts_from_registry(registry, state)
     save_state(paths, state)
     write_text_atomic(paths.runtime_effective_mode_file, "stable")

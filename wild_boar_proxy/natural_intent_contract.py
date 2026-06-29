@@ -58,6 +58,9 @@ ALIAS_MATCH_STATUS_NONE = "ALIAS_MATCH_NONE"
 ALIAS_MATCH_STATUS_AMBIGUOUS = "ALIAS_MATCH_AMBIGUOUS"
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_LEADING_ADDRESS_RE = re.compile(
+    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：]\s*"
+)
 
 
 def _safe_text(value: object, *, limit: int = 256) -> str:
@@ -83,6 +86,27 @@ def _alias_key(value: object) -> str:
 
 def _normalized_prompt_text(prompt_text: object) -> str:
     return _safe_text(prompt_text, limit=8192)
+
+
+def _leading_address_label(prompt_text: object) -> str:
+    match = _LEADING_ADDRESS_RE.match(str(prompt_text or ""))
+    return _safe_text(match.group(1), limit=80) if match else ""
+
+
+def _explicit_delegate_address_label(prompt_text: object) -> str:
+    text = str(prompt_text or "")
+    delegate_match = re.search(r"\bdelegate_to_dip\b", text, flags=re.IGNORECASE)
+    if not delegate_match:
+        return ""
+    prefix = text[: delegate_match.start()]
+    if ":" in prefix or "：" in prefix:
+        return ""
+    match = re.search(
+        r"\bdelegate_to_dip\b.*?\bfor\s+([A-Za-zА-Яа-яЁё0-9 _.-]{1,80})\s*[:：]",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _safe_text(match.group(1), limit=80) if match else ""
 
 
 def _prompt_digest(normalized_prompt: str) -> str:
@@ -324,6 +348,87 @@ def parse_natural_alias_intent(
         }
 
     projection = _context_alias_projection(context)
+    explicit_delegate_label = _explicit_delegate_address_label(prompt_text)
+    explicit_delegate_key = _alias_key(explicit_delegate_label)
+    if explicit_delegate_key:
+        alias_to_agent_id = projection.get("alias_to_agent_id")
+        agent_id_to_lane = projection.get("agent_id_to_lane")
+        alias_display = projection.get("alias_display")
+        if not isinstance(alias_to_agent_id, Mapping):
+            alias_to_agent_id = {}
+        if not isinstance(agent_id_to_lane, Mapping):
+            agent_id_to_lane = {}
+        if not isinstance(alias_display, Mapping):
+            alias_display = {}
+        explicit_agent_id = _safe_text(
+            alias_to_agent_id.get(explicit_delegate_key),
+            limit=64,
+        )
+        if explicit_agent_id:
+            lane = _safe_text(agent_id_to_lane.get(explicit_agent_id), limit=32)
+            return base | {
+                "parser_status": PARSER_STATUS_MATCHED,
+                "alias_match_status": ALIAS_MATCH_STATUS_EXACT,
+                "parser_alias_match_count": 1,
+                "parser_agent_match_count": 1,
+                "parser_api_alias_match_count": 1 if lane == API_ROUTE_LANE else 0,
+                "parser_primary_alias_match_count": (
+                    1 if lane == PRIMARY_CHATGPT_LANE else 0
+                ),
+                "parser_primary_address_present": lane == PRIMARY_CHATGPT_LANE,
+                "parser_api_target_present": lane == API_ROUTE_LANE,
+                "parser_selected_alias_from_runtime_context": True,
+                "parser_target_selection_rule": (
+                    "explicit_delegate_tool_instruction_alias"
+                ),
+                "alias_candidate": _safe_text(
+                    alias_display.get(explicit_delegate_key) or explicit_delegate_label,
+                    limit=80,
+                ),
+            }
+        return base | {
+            "parser_status": PARSER_STATUS_NO_ALIAS,
+            "alias_match_status": ALIAS_MATCH_STATUS_NONE,
+            "parser_blocking_reasons": ["explicit_delegate_alias_not_bound"],
+        }
+    leading_label = _leading_address_label(prompt_text)
+    leading_key = _alias_key(leading_label)
+    leading_agent_id = ""
+    if leading_key:
+        alias_to_agent_id = projection.get("alias_to_agent_id")
+        if isinstance(alias_to_agent_id, Mapping):
+            leading_agent_id = _safe_text(alias_to_agent_id.get(leading_key), limit=64)
+        if leading_agent_id:
+            agent_id_to_lane = projection.get("agent_id_to_lane")
+            alias_display = projection.get("alias_display")
+            if not isinstance(agent_id_to_lane, Mapping):
+                agent_id_to_lane = {}
+            if not isinstance(alias_display, Mapping):
+                alias_display = {}
+            lane = _safe_text(agent_id_to_lane.get(leading_agent_id), limit=32)
+            return base | {
+                "parser_status": PARSER_STATUS_MATCHED,
+                "alias_match_status": ALIAS_MATCH_STATUS_EXACT,
+                "parser_alias_match_count": 1,
+                "parser_agent_match_count": 1,
+                "parser_api_alias_match_count": 1 if lane == API_ROUTE_LANE else 0,
+                "parser_primary_alias_match_count": (
+                    1 if lane == PRIMARY_CHATGPT_LANE else 0
+                ),
+                "parser_primary_address_present": lane == PRIMARY_CHATGPT_LANE,
+                "parser_api_target_present": lane == API_ROUTE_LANE,
+                "parser_selected_alias_from_runtime_context": True,
+                "parser_target_selection_rule": "leading_address_alias",
+                "alias_candidate": _safe_text(
+                    alias_display.get(leading_key) or leading_label,
+                    limit=80,
+                ),
+            }
+        return base | {
+            "parser_status": PARSER_STATUS_NO_ALIAS,
+            "alias_match_status": ALIAS_MATCH_STATUS_NONE,
+            "parser_blocking_reasons": ["leading_alias_not_bound"],
+        }
     occurrences, overlapping_conflict = _natural_alias_occurrences(
         normalized_prompt,
         projection,

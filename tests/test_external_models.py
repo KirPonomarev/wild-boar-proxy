@@ -158,6 +158,18 @@ class ExternalModelContractTests(unittest.TestCase):
             "openai_chat_developer_to_system",
         )
 
+    def test_validate_route_schema_accepts_bounded_check_max_tokens(self) -> None:
+        validated = routes.validate_route_schema(sample_route() | {"check_max_tokens": 256})
+        self.assertEqual(validated["check_max_tokens"], 256)
+
+        for invalid_value in (0, -1, 32769, True, "256"):
+            with self.subTest(invalid_value=invalid_value):
+                with self.assertRaises(RuntimeErrorInfo) as ctx:
+                    routes.validate_route_schema(
+                        sample_route() | {"check_max_tokens": invalid_value}
+                    )
+                self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+
     def test_validate_route_schema_accepts_deepseek_thinking_policy_only_for_deepseek(self) -> None:
         deepseek = sample_route() | {
             "provider": "deepseek",
@@ -193,6 +205,12 @@ class ExternalModelContractTests(unittest.TestCase):
         self.assertEqual(
             request_payload["max_tokens"], transforms.CHECK_REQUEST_COMPLETION_BUDGET
         )
+
+        override_payload, _metadata = transforms.build_check_request(
+            sample_route() | {"check_max_tokens": 256},
+            user_prompt="ping",
+        )
+        self.assertEqual(override_payload["max_tokens"], 256)
 
         developer_payload, _metadata = transforms.build_check_request(
             sample_route() | {"transform_profile": "openai_chat_system_to_developer"},
@@ -266,6 +284,12 @@ class ExternalModelContractTests(unittest.TestCase):
             transforms.CHECK_REQUEST_COMPLETION_BUDGET,
         )
         self.assertTrue(disabled_metadata["api_parameter_sent"])
+
+    def test_extract_check_response_rejects_null_chat_message_content(self) -> None:
+        payload = {"choices": [{"message": {"content": None}}]}
+        with self.assertRaises(RuntimeErrorInfo) as ctx:
+            transforms.extract_check_response(sample_route(), payload)
+        self.assertEqual(ctx.exception.machine_error_code, "invalid_upstream_response")
 
     def test_paths_from_env_uses_isolated_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -345,8 +369,8 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertEqual(len(temp_names), 2)
             self.assertEqual(len(set(temp_names)), 2)
             self.assertTrue(all(name.startswith(".wbp-tmp-") for name in temp_names))
-            self.assertTrue(all(name.endswith(".state.json") for name in temp_names))
-            self.assertNotIn(".state.json.tmp", temp_names)
+            self.assertTrue(all(name.endswith(".state.json.tmp") for name in temp_names))
+            self.assertNotIn(".state.json", temp_names)
             self.assertEqual(list(root.glob(".wbp-tmp-*")), [])
 
     def test_atomic_write_json_fsyncs_file_and_parent_directory(self) -> None:

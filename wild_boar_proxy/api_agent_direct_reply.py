@@ -36,7 +36,11 @@ from .wbp_dip_tool import (
     DIP_WORK_MODES,
     REPO_BRIDGE_MODES,
     WBP_DIP_TOOL_OK,
+    _action_bridge_requested,
+    _code_mutation_requested,
     _repo_bridge_requested,
+    _repo_mutation_requested,
+    _task_path_candidates,
     request_live_result,
 )
 
@@ -62,6 +66,42 @@ LiveResultRunner = Callable[..., Mapping[str, Any]]
 
 def _safe_text(value: object, *, limit: int = 4096) -> str:
     return str(value or "").replace("\r", " ").replace("\n", " ").strip()[:limit]
+
+
+def _safe_text_list(value: object, *, limit: int = 80) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_safe_text(item, limit=limit) for item in value]
+
+
+def _safe_evidence_trace(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    trace: list[dict[str, Any]] = []
+    for index, item in enumerate(value[:50], start=1):
+        if not isinstance(item, Mapping):
+            continue
+        trace.append(
+            {
+                "step": int(item.get("step") or index),
+                "tool": _safe_text(item.get("tool"), limit=80),
+                "origin": _safe_text(item.get("origin"), limit=80),
+                "status": _safe_text(item.get("status"), limit=40),
+                "machine_error_code": _safe_text(
+                    item.get("machine_error_code"),
+                    limit=120,
+                ),
+                "command_exit_code": item.get("command_exit_code"),
+                "result_text_sha256": _safe_text(
+                    item.get("result_text_sha256"),
+                    limit=80,
+                ),
+                "result_text_truncated": item.get("result_text_truncated") is True,
+                "mutation_applied": item.get("mutation_applied") is True,
+                "rollback_applied": item.get("rollback_applied") is True,
+            }
+        )
+    return trace
 
 
 def _sha256_text(value: str) -> str:
@@ -129,6 +169,129 @@ def _normalize_repo_bridge_mode(value: object) -> str:
     return mode if mode in REPO_BRIDGE_MODES else DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE
 
 
+def prompt_explicitly_requests_repo_bridge(prompt_text: object) -> bool:
+    prompt_key = _safe_text(prompt_text, limit=4096).casefold()
+    prompt_key = prompt_key.replace("_", " ").replace("-", " ")
+    prompt_key = " ".join(prompt_key.split())
+    return any(
+        marker in prompt_key
+        for marker in {
+            "repo bridge",
+            "repository bridge",
+            "repo tool bridge",
+            "tool bridge",
+            "action bridge",
+            "репо bridge",
+            "репо бридж",
+            "репозиторный bridge",
+            "репозиторный бридж",
+            "мост репо",
+            "мост репозитория",
+        }
+    )
+
+
+_NATURAL_REPO_INSPECTION_KEYWORDS = (
+    "check",
+    "inspect",
+    "read",
+    "find",
+    "list",
+    "verify",
+    "exists",
+    "проверь",
+    "прочитай",
+    "изучи",
+    "найди",
+    "покажи",
+    "существует",
+)
+
+_NATURAL_REPO_CONTEXT_MARKERS = (
+    "repo",
+    "repository",
+    "codebase",
+    "project root",
+    "active project root",
+    "current project",
+    "репо",
+    "репозитори",
+    "проект",
+)
+
+
+def prompt_naturally_requests_repo_bridge(prompt_text: object) -> bool:
+    prompt = str(prompt_text or "")
+    if not prompt.strip():
+        return False
+    if prompt_explicitly_requests_repo_bridge(prompt):
+        return True
+    repo_auto_required = _repo_bridge_requested(task=prompt, mode="auto")
+    if not repo_auto_required:
+        return False
+    if _action_bridge_requested(
+        task=prompt,
+        repo_bridge_required=repo_auto_required,
+    ):
+        return True
+    if _repo_mutation_requested(
+        task=prompt,
+        repo_bridge_required=repo_auto_required,
+    ):
+        return True
+    prompt_key = prompt.casefold()
+    inspection_requested = any(
+        keyword.casefold() in prompt_key
+        for keyword in _NATURAL_REPO_INSPECTION_KEYWORDS
+    )
+    repo_context_declared = any(
+        marker.casefold() in prompt_key
+        for marker in _NATURAL_REPO_CONTEXT_MARKERS
+    )
+    return bool(
+        inspection_requested
+        and (repo_context_declared or _task_path_candidates(prompt))
+    )
+
+
+def resolve_prompt_repo_bridge_mode(*, prompt_text: object, repo_bridge_mode: object) -> str:
+    safe_mode = _normalize_repo_bridge_mode(repo_bridge_mode)
+    if safe_mode == "off" and prompt_naturally_requests_repo_bridge(prompt_text):
+        return "on"
+    return safe_mode
+
+
+def resolve_prompt_work_mode(
+    *,
+    prompt_text: object,
+    work_mode: object,
+    repo_bridge_mode: object,
+) -> str:
+    safe_mode = _normalize_work_mode(work_mode)
+    if safe_mode == "full":
+        return safe_mode
+    prompt = str(prompt_text or "")
+    safe_repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+        prompt_text=prompt,
+        repo_bridge_mode=repo_bridge_mode,
+    )
+    repo_bridge_required = _repo_bridge_requested(
+        task=prompt,
+        mode=safe_repo_bridge_mode,
+    )
+    if _action_bridge_requested(
+        task=prompt,
+        repo_bridge_required=repo_bridge_required,
+    ):
+        return "full"
+    if _repo_mutation_requested(
+        task=prompt,
+        repo_bridge_required=repo_bridge_required,
+    ):
+        return "full"
+    return safe_mode
+
+
 def _looks_like_final_repo_tool_call(text: str) -> bool:
     stripped = str(text or "").strip()
     if not stripped:
@@ -166,6 +329,19 @@ def _result_text(live_result: Mapping[str, Any]) -> str:
     return str(live_result.get("result_text") or "").strip()
 
 
+def _repo_bridge_verified_evidence_reply(live_result: Mapping[str, Any]) -> bool:
+    return bool(
+        live_result.get("source") == "repo_bridge_verified_evidence"
+        and live_result.get("repo_bridge_final_answer_synthesized") is True
+        and live_result.get("result_available") is True
+        and _result_text(live_result)
+        and live_result.get("fallback_used") is False
+        and live_result.get("local_imitation_used") is False
+        and live_result.get("raw_backend_details_exposed") is False
+        and live_result.get("secret_value_exposed") is False
+    )
+
+
 def _safe_mutated_file_paths(raw_paths: object) -> tuple[list[str], bool]:
     if not isinstance(raw_paths, list):
         return [], False
@@ -200,6 +376,7 @@ def _base_blocking_reasons(
     if dispatch_packet.get("dispatch_proven") is not True:
         reasons.append("controlled_api_dispatch_not_proven")
     if live_result:
+        repo_bridge_evidence_reply = _repo_bridge_verified_evidence_reply(live_result)
         if live_result.get("status") != "ok":
             reasons.append(
                 str(
@@ -207,7 +384,10 @@ def _base_blocking_reasons(
                     or API_AGENT_DIRECT_REPLY_UNAVAILABLE
                 )
             )
-        if live_result.get("provider_called") is not True:
+        if (
+            live_result.get("provider_called") is not True
+            and not repo_bridge_evidence_reply
+        ):
             reasons.append("api_agent_provider_not_called")
         if live_result.get("result_available") is not True:
             reasons.append("api_agent_result_unavailable")
@@ -243,11 +423,33 @@ def build_api_agent_direct_reply_packet(
     live_result_runner: LiveResultRunner | None = None,
 ) -> dict[str, Any]:
     prompt = str(prompt_text or "")
-    safe_work_mode = _normalize_work_mode(work_mode)
-    safe_repo_bridge_mode = _normalize_repo_bridge_mode(repo_bridge_mode)
+    safe_repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+        prompt_text=prompt,
+        repo_bridge_mode=repo_bridge_mode,
+    )
+    safe_work_mode = resolve_prompt_work_mode(
+        prompt_text=prompt,
+        work_mode=work_mode,
+        repo_bridge_mode=safe_repo_bridge_mode,
+    )
     repo_bridge_required = _repo_bridge_requested(
         task=prompt,
         mode=safe_repo_bridge_mode,
+    )
+    repo_mutation_required = _repo_mutation_requested(
+        task=prompt,
+        repo_bridge_required=repo_bridge_required,
+    )
+    code_mutation_required = _code_mutation_requested(
+        task=prompt,
+        repo_bridge_required=repo_bridge_required,
+    )
+    action_bridge_required = bool(
+        _action_bridge_requested(
+            task=prompt,
+            repo_bridge_required=repo_bridge_required,
+        )
+        or repo_mutation_required
     )
     command_effect = (
         EFFECT_PROBE if safe_repo_bridge_mode == "off" else EFFECT_MUTATE
@@ -346,6 +548,7 @@ def build_api_agent_direct_reply_packet(
 
     target_repo_fields = target_repo_fields_from_active_project_root(active_root_fields)
     reply_text_recorded = bool(reply_text and not final_tool_call)
+    repo_bridge_evidence_reply = _repo_bridge_verified_evidence_reply(live_result)
     file_mutation_attempted = bool(
         live_result.get("dip_action_mutation_applied") is True
         or live_result.get("dip_code_written") is True
@@ -365,6 +568,7 @@ def build_api_agent_direct_reply_packet(
             and live_result.get("result_available") is True
             and reply_text_recorded
         ),
+        "repo_bridge_evidence_response_proven": repo_bridge_evidence_reply,
         "final_answer_was_repo_tool_call": final_tool_call,
         "fallback_used": _as_bool(live_result.get("fallback_used")),
         "local_imitation_used": _as_bool(live_result.get("local_imitation_used")),
@@ -484,6 +688,7 @@ def build_api_agent_direct_reply_packet(
             and live_result.get("result_available") is True
             and reply_text
         ),
+        "repo_bridge_evidence_response_proven": repo_bridge_evidence_reply,
         "direct_provider_auth_proven": _as_bool(
             live_result.get("direct_provider_auth_proven")
         ),
@@ -539,7 +744,8 @@ def build_api_agent_direct_reply_packet(
         "dip_full_work_mode": _as_bool(live_result.get("dip_full_work_mode"))
         or safe_work_mode == "full",
         "repo_bridge_mode": safe_repo_bridge_mode,
-        "repo_bridge_required": _live_result_bool(
+        "repo_bridge_required": bool(repo_bridge_required)
+        or _live_result_bool(
             live_result,
             "repo_bridge_required",
             "dip_repo_tool_bridge_required",
@@ -554,7 +760,8 @@ def build_api_agent_direct_reply_packet(
             "repo_bridge_used",
             "dip_repo_tool_bridge_used",
         ),
-        "dip_repo_tool_bridge_required": _live_result_bool(
+        "dip_repo_tool_bridge_required": bool(repo_bridge_required)
+        or _live_result_bool(
             live_result,
             "dip_repo_tool_bridge_required",
             "repo_bridge_required",
@@ -595,21 +802,49 @@ def build_api_agent_direct_reply_packet(
         "repo_bridge_successful_tool_call_count": int(
             live_result.get("repo_bridge_successful_tool_call_count") or 0
         ),
+        "repo_bridge_tool_names": _safe_text_list(
+            live_result.get("repo_bridge_tool_names")
+        ),
+        "repo_bridge_bootstrap_tool_names": _safe_text_list(
+            live_result.get("repo_bridge_bootstrap_tool_names")
+        ),
+        "dip_evidence_trace_available": _as_bool(
+            live_result.get("dip_evidence_trace_available")
+        ),
+        "dip_evidence_trace_recorded": _as_bool(
+            live_result.get("dip_evidence_trace_recorded")
+        ),
+        "dip_evidence_trace_count": int(
+            live_result.get("dip_evidence_trace_count") or 0
+        ),
+        "dip_evidence_trace": _safe_evidence_trace(
+            live_result.get("dip_evidence_trace")
+        ),
+        "dip_evidence_trace_raw_output_recorded": _as_bool(
+            live_result.get("dip_evidence_trace_raw_output_recorded")
+        ),
         "repo_bridge_raw_tool_results_recorded": _as_bool(
             live_result.get("repo_bridge_raw_tool_results_recorded")
         ),
-        "dip_action_bridge_required": _as_bool(
+        "dip_action_bridge_required": bool(action_bridge_required)
+        or _as_bool(
             live_result.get("dip_action_bridge_required")
         ),
         "dip_action_bridge_available": _as_bool(
             live_result.get("dip_action_bridge_available")
         ),
         "dip_action_bridge_used": _as_bool(live_result.get("dip_action_bridge_used")),
+        "dip_action_bridge_succeeded": _as_bool(
+            live_result.get("dip_action_bridge_succeeded")
+        ),
         "dip_action_tool_call_count": int(
             live_result.get("dip_action_tool_call_count") or 0
         ),
         "dip_action_successful_tool_call_count": int(
             live_result.get("dip_action_successful_tool_call_count") or 0
+        ),
+        "dip_action_tool_names": _safe_text_list(
+            live_result.get("dip_action_tool_names")
         ),
         "dip_action_mutation_applied": _as_bool(
             live_result.get("dip_action_mutation_applied")
@@ -624,17 +859,25 @@ def build_api_agent_direct_reply_packet(
         "dip_action_patch_applied": _as_bool(
             live_result.get("dip_action_patch_applied")
         ),
-        "dip_code_mutation_required": _as_bool(
+        "dip_code_mutation_required": bool(code_mutation_required)
+        or _as_bool(
             live_result.get("dip_code_mutation_required")
         ),
         "dip_code_written": _as_bool(live_result.get("dip_code_written")),
         "dip_code_patch_applied": _as_bool(
             live_result.get("dip_code_patch_applied")
         ),
-        "dip_code_verification_required": _as_bool(
+        "dip_code_verification_required": bool(code_mutation_required)
+        or _as_bool(
             live_result.get("dip_code_verification_required")
         ),
         "dip_code_verified": _as_bool(live_result.get("dip_code_verified")),
+        "dip_code_verification_failed": _as_bool(
+            live_result.get("dip_code_verification_failed")
+        ),
+        "dip_code_failed_verification_count": int(
+            live_result.get("dip_code_failed_verification_count") or 0
+        ),
         "dip_action_mutated_files": mutated_files,
         "repo_bridge_final_answer_required": _live_result_bool(
             live_result,
@@ -642,6 +885,9 @@ def build_api_agent_direct_reply_packet(
             "dip_repo_tool_bridge_required",
         ),
         "repo_bridge_final_answer_received": bool(reply_text_recorded),
+        "repo_bridge_final_answer_synthesized": _as_bool(
+            live_result.get("repo_bridge_final_answer_synthesized")
+        ),
         "live_result_text_limit": int(live_result.get("live_result_text_limit") or 0),
         "live_result_output_token_limit": int(
             live_result.get("live_result_output_token_limit") or 0

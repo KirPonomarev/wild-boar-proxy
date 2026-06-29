@@ -229,6 +229,7 @@ def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
         "transform_profile": route.get("transform_profile"),
         "response_profile": route.get("response_profile"),
         "thinking": route.get("thinking"),
+        "check_max_tokens": route.get("check_max_tokens"),
     }
 
 

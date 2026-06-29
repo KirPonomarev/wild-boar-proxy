@@ -41,7 +41,10 @@ def default_native_response_prompt_variants() -> list[NativeResponsePromptVarian
         ),
         NativeResponsePromptVariant(
             name="repeat_exact",
-            template="Repeat exactly this line:\n{expected_text}",
+            template=(
+                "Return exactly the next line as plain text. Do not add quotes, "
+                "markdown, commentary, or any other characters:\n{expected_text}"
+            ),
         ),
         NativeResponsePromptVariant(
             name="plain_text_only",

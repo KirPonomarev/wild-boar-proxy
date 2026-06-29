@@ -233,7 +233,7 @@ class CustomNativeRuntimeContextManagedDirTests(unittest.TestCase):
             str(legacy_managed / "backend-registry.json"),
         )
 
-    def test_build_handler_materializes_owner_runtime_context_when_owner_paths_differ(self) -> None:
+    def test_build_handler_materializes_custom_runtime_context_when_owner_paths_differ(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             custom_profile = (
@@ -341,6 +341,20 @@ class CustomNativeRuntimeContextManagedDirTests(unittest.TestCase):
 
             owner_context_path = legacy_profile / "wbp-agent-runtime-context.json"
             custom_context_path = custom_profile / "wbp-agent-runtime-context.json"
+            required_target, optional_targets = (
+                live_server._runtime_context_profile_targets_for_live_server(
+                    custom_profile_paths=live_server.RuntimePaths.from_roots(
+                        profile_dir=custom_profile,
+                        managed_dir=custom_managed,
+                    ),
+                    owner_paths=live_server.RuntimePaths.from_roots(
+                        profile_dir=legacy_profile,
+                        managed_dir=legacy_managed,
+                    ),
+                )
+            )
+            self.assertEqual(required_target, custom_profile)
+            self.assertEqual(optional_targets, [legacy_profile])
             self.assertTrue(owner_context_path.exists())
             self.assertTrue(custom_context_path.exists())
             owner_context = json.loads(owner_context_path.read_text(encoding="utf-8"))

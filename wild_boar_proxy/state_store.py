@@ -118,7 +118,7 @@ def _atomic_write_bytes(path: Path, data: bytes, *, mode: int | None = None) -> 
         fd, temp_path = tempfile.mkstemp(
             dir=target.parent,
             prefix=".wbp-tmp-",
-            suffix=f".{target.name}",
+            suffix=f".{target.name}.tmp",
         )
         with os.fdopen(fd, "wb") as file_obj:
             fd = -1
@@ -185,11 +185,15 @@ def write_json(
     *,
     expected_schema_version: int | None = None,
     validator: Callable[[dict[str, Any]], object] | None = None,
+    trailing_newline: bool = False,
 ) -> StateStoreWriteResult:
     payload = _ensure_json_object(payload)
     schema_version = _schema_version(payload, expected_schema_version)
     _validate_payload(payload, validator)
-    data = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    data_text = json.dumps(payload, indent=2, ensure_ascii=False)
+    if trailing_newline:
+        data_text = f"{data_text}\n"
+    data = data_text.encode("utf-8")
     _atomic_write_bytes(Path(path), data)
     return StateStoreWriteResult(
         target=str(path),

@@ -26,6 +26,9 @@ from .state import (
 )
 
 
+TRANSIENT_RESPONSE_MAX_ATTEMPTS = 3
+
+
 def _direct_provider_proof_fields(*, direct_provider_response_observed: bool) -> dict[str, Any]:
     return {
         "direct_provider_auth_proven": bool(direct_provider_response_observed),
@@ -92,6 +95,42 @@ def _models_url(route: dict[str, Any]) -> str:
 
 def _completion_url(route: dict[str, Any]) -> str:
     return str(route["base_url"]).rstrip("/") + str(route["endpoint_path"])
+
+
+def _request_completion_check_response(
+    *,
+    route: dict[str, Any],
+    headers: dict[str, str],
+    request_payload: dict[str, Any],
+) -> tuple[Any, str | None, dict[str, Any] | None, int]:
+    last_error: RuntimeErrorInfo | None = None
+    for attempt in range(1, TRANSIENT_RESPONSE_MAX_ATTEMPTS + 1):
+        response = request_json(
+            url=_completion_url(route),
+            method="POST",
+            headers=headers,
+            payload=request_payload,
+        )
+        if response.status_code != 200:
+            return response, None, None, attempt
+        try:
+            response_text, response_metadata = transforms.extract_check_response(
+                route, response.payload
+            )
+            return response, response_text, response_metadata, attempt
+        except RuntimeErrorInfo as exc:
+            if exc.machine_error_code != errors.INVALID_UPSTREAM_RESPONSE:
+                raise
+            last_error = exc
+            if attempt >= TRANSIENT_RESPONSE_MAX_ATTEMPTS:
+                raise
+    if last_error is not None:
+        raise last_error
+    raise RuntimeErrorInfo(
+        "Provider returned an invalid smoke-check response.",
+        machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
+        operator_action="retry",
+    )
 
 
 def _load_runtime_context_from_env() -> dict[str, Any]:
@@ -627,11 +666,12 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
         request_payload, request_metadata = transforms.build_check_request(
             route, user_prompt="ping"
         )
-        response = request_json(
-            url=_completion_url(route),
-            method="POST",
-            headers=headers,
-            payload=request_payload,
+        response, _response_text, response_metadata, request_count = (
+            _request_completion_check_response(
+                route=route,
+                headers=headers,
+                request_payload=request_payload,
+            )
         )
         if response.status_code in (401, 403):
             raise RuntimeErrorInfo(
@@ -646,7 +686,8 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
                 operator_action="retry",
             )
         payload = response.payload
-        _response_text, response_metadata = transforms.extract_check_response(route, payload)
+        if response_metadata is None:
+            _response_text, response_metadata = transforms.extract_check_response(route, payload)
         observed_at = contracts.utc_now_iso()
         state_path = _update_route_observation(
             paths=paths,
@@ -675,6 +716,8 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "cost_class": route["cost_class"],
             "latency_ms": response.latency_ms,
             "verification_scope": "route_provider_only",
+            "request_count": request_count,
+            "retry_count": request_count - 1,
         }
         result.update(request_metadata)
         result.update(
@@ -704,7 +747,8 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "fallback_chain": [route["route_id"]],
             "evidence_path": str(evidence_path),
             "latency_ms": response.latency_ms,
-            "request_count": 1,
+            "request_count": request_count,
+            "retry_count": request_count - 1,
             "runtime_context_bridge_used": False,
             "runtime_context_file_bridge_used": False,
             "bridge_or_file_bridge_used": False,
@@ -855,11 +899,12 @@ def check_route_provider_once_no_write(
     request_payload, request_metadata = transforms.build_check_request(
         route, user_prompt=user_prompt
     )
-    response = request_json(
-        url=_completion_url(route),
-        method="POST",
-        headers=headers,
-        payload=request_payload,
+    response, response_text, response_metadata, request_count = (
+        _request_completion_check_response(
+            route=route,
+            headers=headers,
+            request_payload=request_payload,
+        )
     )
     if response.status_code in (401, 403):
         error = RuntimeErrorInfo(
@@ -903,7 +948,8 @@ def check_route_provider_once_no_write(
             **_direct_provider_proof_fields(direct_provider_response_observed=False),
         }
         raise error
-    response_text, response_metadata = transforms.extract_check_response(route, response.payload)
+    if response_text is None or response_metadata is None:
+        response_text, response_metadata = transforms.extract_check_response(route, response.payload)
     return {
         "check_kind": "api_only_live_route_format",
         "network_dependent": True,
@@ -916,8 +962,8 @@ def check_route_provider_once_no_write(
         "fallback_chain": [route["route_id"]],
         "cost_class": route["cost_class"],
         "latency_ms": response.latency_ms,
-        "request_count": 1,
-        "retry_count": 0,
+        "request_count": request_count,
+        "retry_count": request_count - 1,
         "parallel_fanout_attempted": False,
         "expected_text": expected_text,
         "expected_text_observed": expected_text in response_text,

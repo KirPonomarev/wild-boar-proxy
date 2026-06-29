@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import socket
@@ -23,6 +24,8 @@ from typing import Any
 
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
 from .core import packets
+from .custom_agent_bindings import API_ROUTE_LANE, PRIMARY_CHATGPT_LANE
+from .natural_intent_contract import PARSER_STATUS_MATCHED, parse_natural_alias_intent
 from .real_custom_codex_hook_proof import (
     ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
     ORIGIN_STATE_SYNTHETIC_HOOK_FLOW,
@@ -38,6 +41,7 @@ from .router_hook_entry import (
     runtime_context_path,
 )
 from .runtime import RuntimePaths, write_executable_text_atomic, write_json_atomic, write_text_atomic
+from .wbp_dip_tool import _exact_plain_reply_requested
 
 
 HOOK_INSTALL_PACKET_KIND = "wbp_user_prompt_submit_hook_install"
@@ -69,6 +73,9 @@ HOOK_STATUS_MESSAGE = "WBP routing ledger"
 HOOK_TIMEOUT_SECONDS = 30
 CODEX_APP_SERVER_BIN_ENV = "WBP_CODEX_APP_SERVER_BIN"
 CODEX_BIN_ENV = "WBP_CODEX_BIN"
+_LEADING_ADDRESS_RE = re.compile(
+    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s*"
+)
 
 
 def _sha256_text(value: str) -> str:
@@ -423,7 +430,7 @@ def build_hook_script_text(
             f"--trusted-hook-config-sha256 {hook_hash} "
             f"--loaded-hook-config-sha256 {hook_hash} "
             f"--origin-state {ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN} "
-            "--quiet",
+            "--hook-output",
         ]
     )
 
@@ -1253,6 +1260,234 @@ def _producer_state(*, event_name: str, turn_id: str, origin_state: str) -> str:
     return HOOK_STATE_RAN_SYNTHETIC
 
 
+def _leading_address_label(prompt_text: str) -> str:
+    match = _LEADING_ADDRESS_RE.match(prompt_text)
+    return _safe_text(match.group(1), limit=80) if match else ""
+
+
+def _leading_label_looks_like_addressed_alias(label: str) -> bool:
+    normalized = _safe_text(label, limit=80).casefold()
+    if not normalized:
+        return False
+    parts = normalized.split()
+    if len(parts) == 1:
+        return True
+    return parts[0] in {
+        "agent",
+        "агент",
+        "api",
+        "gpt",
+        "codex",
+        "dip",
+        "deepseek",
+    }
+
+
+def _runtime_aliases(runtime_context: Mapping[str, Any]) -> set[str]:
+    aliases: set[str] = set()
+    alias_map = runtime_context.get("alias_to_agent_id")
+    if isinstance(alias_map, Mapping):
+        aliases.update(_safe_text(alias, limit=80) for alias in alias_map)
+    bindings = runtime_context.get("agent_bindings")
+    if isinstance(bindings, list):
+        for binding in bindings:
+            if not isinstance(binding, Mapping):
+                continue
+            raw_aliases = binding.get("aliases")
+            if isinstance(raw_aliases, list):
+                aliases.update(_safe_text(alias, limit=80) for alias in raw_aliases)
+            aliases.add(_safe_text(binding.get("display_name"), limit=80))
+    return {alias.casefold() for alias in aliases if alias}
+
+
+def _runtime_alias_lane(runtime_context: Mapping[str, Any], label: str) -> str:
+    normalized = _safe_text(label, limit=80).casefold()
+    if not normalized:
+        return ""
+    alias_to_agent_id = runtime_context.get("alias_to_agent_id")
+    agent_id = ""
+    if isinstance(alias_to_agent_id, Mapping):
+        for alias, candidate_agent_id in alias_to_agent_id.items():
+            if _safe_text(alias, limit=80).casefold() == normalized:
+                agent_id = _safe_text(candidate_agent_id, limit=80).casefold()
+                break
+    bindings = runtime_context.get("agent_bindings")
+    if agent_id and isinstance(bindings, list):
+        for binding in bindings:
+            if not isinstance(binding, Mapping):
+                continue
+            if _safe_text(binding.get("agent_id"), limit=80).casefold() == agent_id:
+                return _safe_text(binding.get("lane"), limit=80)
+    return ""
+
+
+def _user_prompt_submit_context_kind(
+    *,
+    prompt_text: str,
+    runtime_context: Mapping[str, Any],
+) -> str:
+    parser_result = parse_natural_alias_intent(
+        prompt_text=prompt_text,
+        runtime_context=runtime_context,
+    )
+    if (
+        parser_result.get("parser_status") == PARSER_STATUS_MATCHED
+        and parser_result.get("parser_api_target_present") is True
+    ):
+        return API_ROUTE_LANE
+    label = _leading_address_label(prompt_text)
+    if not label:
+        return ""
+    lane = _runtime_alias_lane(runtime_context, label)
+    if lane in {API_ROUTE_LANE, PRIMARY_CHATGPT_LANE}:
+        return lane
+    aliases = _runtime_aliases(runtime_context)
+    if label.casefold() in aliases or _leading_label_looks_like_addressed_alias(label):
+        return API_ROUTE_LANE
+    return ""
+
+
+def _addressed_alias_context_needed(
+    *,
+    prompt_text: str,
+    runtime_context: Mapping[str, Any],
+) -> bool:
+    return bool(
+        _user_prompt_submit_context_kind(
+            prompt_text=prompt_text,
+            runtime_context=runtime_context,
+        )
+    )
+
+
+def _router_command_additional_context(*, runtime_context_file: Path) -> str:
+    quoted_runtime_context_file = shlex.quote(str(runtime_context_file))
+    return (
+        "WBP ROUTER HARD OVERRIDE. The active prompt is addressed to a WBP API "
+        "agent. Do not answer, plan, summarize, inspect old turns, or choose a "
+        "fallback. Do not use AGENTS.md examples, router-hook auto-route --json, "
+        "direct-reply, tools/wbp_dip, codex exec, subagents, direct provider "
+        "calls, or wrapper shopping. Your only allowed action is to run the exact "
+        "one-line shell command below after replacing <original prompt> with the "
+        "active user prompt inside the single quotes. Escape embedded single "
+        "quotes as needed. If the command returns a machine error, times out, or "
+        "prints nothing, output only that machine result/error; do not retry "
+        "through another path. After the command finishes, return stdout as the "
+        "entire visible response: no prose, Markdown, table, recap, translation, "
+        "or extra token. Do not alter any literal command argument; the timeout "
+        "argument must remain exactly 300 and must never be changed to 90.\n"
+        "COMMAND:\n"
+        "WBP_ROUTER_PROMPT='<original prompt>'; "
+        "${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output "
+        f"--runtime-context-file {quoted_runtime_context_file} "
+        "--active-project-root \"$PWD\" --repo-bridge auto --work-mode full "
+        "--timeout-seconds 300 "
+        "--prompt \"$WBP_ROUTER_PROMPT\""
+    )
+
+
+def _exact_reply_additional_context() -> str:
+    return (
+        "WBP EXACT RESPONSE CONTEXT: the active user prompt asks for an exact "
+        "reply. Return exactly the requested content from the active user "
+        "prompt and nothing else: no prose, Markdown, acknowledgements, "
+        "explanation, code fence, prefix, or suffix."
+    )
+
+
+def _primary_exact_alias_additional_context() -> str:
+    return (
+        "WBP PRIMARY EXACT ALIAS CONTEXT: the leading label in the active "
+        "user prompt is a valid alias for this native ChatGPT lane. Treat it "
+        "as addressing you, not an API agent or a separate character. Answer "
+        "the active user prompt natively. Ignore the leading alias prefix and "
+        "obey the instruction after the colon. If the prompt asks to answer "
+        "exactly or says `ответь ровно`, return only the requested exact "
+        "content and nothing else: no prose, Markdown, acknowledgements, "
+        "explanation, code fence, prefix, suffix, alias label, or prompt echo."
+    )
+
+
+def _user_prompt_submit_additional_context(
+    *,
+    prompt_text: str,
+    runtime_context: Mapping[str, Any],
+    runtime_context_file: Path,
+) -> str:
+    context_kind = _user_prompt_submit_context_kind(
+        prompt_text=prompt_text,
+        runtime_context=runtime_context,
+    )
+    if not context_kind:
+        if _exact_plain_reply_requested(prompt_text):
+            return _exact_reply_additional_context()
+        return ""
+    if context_kind == PRIMARY_CHATGPT_LANE:
+        if _exact_plain_reply_requested(prompt_text):
+            return _primary_exact_alias_additional_context()
+        return (
+            "WBP PRIMARY ALIAS CONTEXT: this UserPromptSubmit hook observed a "
+            "prompt addressed to a primary ChatGPT alias from the Wild Boar "
+            "Proxy runtime context. The leading label names the native ChatGPT "
+            "lane, not an API agent. Answer the active user prompt natively in "
+            "this Custom Codex turn. Do not call router-hook, direct-reply, "
+            "tools/wbp_dip, ordinary subagents, fallback wrappers, or direct "
+            "provider APIs. Do not output unknown-alias machine codes. If the "
+            "user asks for an exact reply, return exactly the requested content "
+            "and nothing else."
+        )
+    return _router_command_additional_context(
+        runtime_context_file=runtime_context_file,
+    )
+
+
+def _safe_hook_additional_context(value: object, *, limit: int = 4000) -> str:
+    return str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()[:limit]
+
+
+def build_user_prompt_submit_hook_output(packet: Mapping[str, Any]) -> dict[str, Any]:
+    context = _safe_hook_additional_context(
+        packet.get("hook_additional_context"),
+        limit=4000,
+    )
+    if not context:
+        return {}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        }
+    }
+
+
+def build_user_prompt_submit_hook_output_for_event(
+    *,
+    event: Mapping[str, Any],
+    paths: RuntimePaths,
+    runtime_context_file: str | None = None,
+) -> dict[str, Any]:
+    prompt = event.get("prompt")
+    prompt_text = prompt if isinstance(prompt, str) else ""
+    if not prompt_text:
+        return {}
+    context_path = runtime_context_path(
+        paths=paths,
+        runtime_context_file=runtime_context_file,
+    )
+    runtime_context, context_metadata = load_runtime_context_packet(context_path)
+    if (
+        context_metadata.get("runtime_context_file_read") is not True
+        or context_metadata.get("runtime_context_file_valid_json") is not True
+    ):
+        return {}
+    context = _user_prompt_submit_additional_context(
+        prompt_text=prompt_text,
+        runtime_context=runtime_context,
+        runtime_context_file=context_path,
+    )
+    return build_user_prompt_submit_hook_output({"hook_additional_context": context})
+
+
 def build_user_prompt_submit_run_packet(
     *,
     event: Mapping[str, Any],
@@ -1311,6 +1546,15 @@ def build_user_prompt_submit_run_packet(
     ok = not blocking_reasons
     effective_origin_state = (
         origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW
+    )
+    hook_additional_context = (
+        _user_prompt_submit_additional_context(
+            prompt_text=prompt_text,
+            runtime_context=runtime_context,
+            runtime_context_file=context_path,
+        )
+        if ok
+        else ""
     )
     producer_state = _producer_state(
         event_name=event_name,
@@ -1466,6 +1710,11 @@ def build_user_prompt_submit_run_packet(
         "provider_response_text_recorded": False,
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
+        "hook_additional_context_available": bool(hook_additional_context),
+        "hook_additional_context_recorded": False,
+        "hook_additional_context_sha256": (
+            _sha256_text(hook_additional_context) if hook_additional_context else ""
+        ),
         "fallback_used": False,
         "local_imitation_used": False,
         "product_ready": False,
@@ -1533,6 +1782,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     run_hook.add_argument("--json", action="store_true")
     run_hook.add_argument("--quiet", action="store_true")
+    run_hook.add_argument("--hook-output", action="store_true")
 
     args = parser.parse_args(list(argv) if argv is not None else None)
     paths = RuntimePaths.from_env()
@@ -1548,7 +1798,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             origin_state=args.origin_state,
             event_metadata=metadata,
         )
-        if args.json and not args.quiet:
+        if args.hook_output:
+            hook_output = (
+                build_user_prompt_submit_hook_output_for_event(
+                    event=event,
+                    paths=paths,
+                    runtime_context_file=args.runtime_context_file,
+                )
+                if packet.get("status") == "ok"
+                else {}
+            )
+            if hook_output:
+                sys.stdout.write(json.dumps(hook_output, ensure_ascii=True) + "\n")
+        elif args.json and not args.quiet:
             sys.stdout.write(json.dumps(packet, ensure_ascii=True) + "\n")
         return int(packet["exit_code"])
     return 1

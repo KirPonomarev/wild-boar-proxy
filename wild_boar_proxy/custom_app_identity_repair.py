@@ -32,6 +32,19 @@ CUSTOM_APP_IDENTITY_INVALID = "WBP_CUSTOM_APP_IDENTITY_REPAIR_INVALID"
 
 DESIRED_CUSTOM_BUNDLE_ID = "com.wildboarproxy.codex.wbpclean"
 DESIRED_CUSTOM_BUNDLE_NAME = "Codex WBP Clean"
+SPARKLE_UPDATE_FEED_INFO_PLIST_KEYS = (
+    "SUFeedURL",
+    "SUFeedURLForBeta",
+    "SUFeedURLForFinal",
+    "SUFeedURLForInternal",
+    "SUAppcastURL",
+)
+SPARKLE_DISABLED_INFO_PLIST_DEFAULTS = {
+    "SUEnableAutomaticChecks": False,
+    "SUAutomaticallyUpdate": False,
+    "SUAllowsAutomaticUpdates": False,
+    "SUAutomaticallyDownloadUpdates": False,
+}
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -203,6 +216,10 @@ def _identity_values(plist: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _present_plist_keys(plist: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    return sorted(key for key in keys if key in plist)
+
+
 def build_custom_app_identity_repair_packet(
     *,
     paths: RuntimePaths,
@@ -266,6 +283,19 @@ def build_custom_app_identity_repair_packet(
     desired_plist["CFBundleName"] = desired_bundle_name
     desired_plist["CFBundleDisplayName"] = desired_bundle_name
     desired_plist["CFBundleExecutable"] = custom_identity["bundle_executable"] or "Codex"
+    sparkle_feed_keys_before = _present_plist_keys(
+        custom_plist,
+        SPARKLE_UPDATE_FEED_INFO_PLIST_KEYS,
+    )
+    sparkle_disabled_default_keys_before = _present_plist_keys(
+        custom_plist,
+        tuple(SPARKLE_DISABLED_INFO_PLIST_DEFAULTS),
+    )
+    for key in SPARKLE_UPDATE_FEED_INFO_PLIST_KEYS:
+        desired_plist.pop(key, None)
+    for key, value in SPARKLE_DISABLED_INFO_PLIST_DEFAULTS.items():
+        if sparkle_feed_keys_before or sparkle_disabled_default_keys_before:
+            desired_plist[key] = value
 
     identity_changes_needed = {
         "CFBundleIdentifier": custom_identity["bundle_id"] != desired_bundle_id,
@@ -274,8 +304,20 @@ def build_custom_app_identity_repair_packet(
             custom_identity["bundle_display_name"] != desired_bundle_name
         ),
     }
+    sparkle_disable_changes_needed = {
+        key: bool(sparkle_feed_keys_before or sparkle_disabled_default_keys_before)
+        and custom_plist.get(key) is not value
+        for key, value in SPARKLE_DISABLED_INFO_PLIST_DEFAULTS.items()
+    }
+    sparkle_changes_needed = bool(sparkle_feed_keys_before) or any(
+        sparkle_disable_changes_needed.values()
+    )
     codesign_repair_needed = not custom_codesign_valid_before
-    repair_needed = any(identity_changes_needed.values()) or codesign_repair_needed
+    repair_needed = (
+        any(identity_changes_needed.values())
+        or sparkle_changes_needed
+        or codesign_repair_needed
+    )
 
     admission_failures: list[str] = []
     if stock_read_error:
@@ -321,7 +363,7 @@ def build_custom_app_identity_repair_packet(
             _atomic_write_bytes(backup_path, original_bytes)
             backup_written = True
             changed_files.append(str(backup_path))
-            if any(identity_changes_needed.values()):
+            if any(identity_changes_needed.values()) or sparkle_changes_needed:
                 _write_plist_atomic(custom_plist_path, desired_plist)
                 plist_written = True
                 changed_files.append(str(custom_plist_path))
@@ -351,6 +393,22 @@ def build_custom_app_identity_repair_packet(
 
     post_custom_plist, post_read_error = _read_plist(custom_plist_path)
     post_identity = _identity_values(post_custom_plist)
+    sparkle_feed_keys_after = _present_plist_keys(
+        post_custom_plist,
+        SPARKLE_UPDATE_FEED_INFO_PLIST_KEYS,
+    )
+    sparkle_disabled_info_plist_defaults_after = {
+        key: post_custom_plist.get(key)
+        for key in SPARKLE_DISABLED_INFO_PLIST_DEFAULTS
+        if key in post_custom_plist
+    }
+    sparkle_info_plist_auto_update_disabled_after = (
+        not sparkle_feed_keys_after
+        and all(
+            post_custom_plist.get(key) is value
+            for key, value in SPARKLE_DISABLED_INFO_PLIST_DEFAULTS.items()
+        )
+    )
     binary_hash_matches_stock_after = bool(
         stock_bin_hash and stock_bin_hash == _file_sha256(custom_bin)
     )
@@ -447,6 +505,22 @@ def build_custom_app_identity_repair_packet(
         "stock_app_mutated": False,
         "custom_app_identity_distinct_after": identity_distinct_after,
         "identity_changes_needed": identity_changes_needed,
+        "sparkle_update_feed_info_plist_keys_before": sparkle_feed_keys_before,
+        "sparkle_update_feed_info_plist_keys_after": sparkle_feed_keys_after,
+        "sparkle_disabled_info_plist_default_keys_before": (
+            sparkle_disabled_default_keys_before
+        ),
+        "sparkle_update_feed_removed": bool(
+            sparkle_feed_keys_before and not sparkle_feed_keys_after
+        ),
+        "sparkle_disable_changes_needed": sparkle_disable_changes_needed,
+        "sparkle_changes_needed": sparkle_changes_needed,
+        "sparkle_disabled_info_plist_defaults_after": (
+            sparkle_disabled_info_plist_defaults_after
+        ),
+        "sparkle_info_plist_auto_update_disabled_after": (
+            sparkle_info_plist_auto_update_disabled_after
+        ),
         "codesign_repair_needed": codesign_repair_needed,
         "repair_needed": repair_needed,
         "repair_ready": repair_ready,

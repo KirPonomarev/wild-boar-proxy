@@ -240,6 +240,47 @@ class NaturalIntentContractTests(unittest.TestCase):
         _assert_no_dispatch(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_parser_accepts_explicit_delegate_tool_instruction_alias(self) -> None:
+        packet = _parser_packet(
+            prompt=(
+                "Call the WBP MCP tool delegate_to_dip for DIP: "
+                "докажи dispatch admission."
+            )
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_MATCHED)
+        self.assertEqual(packet["alias_match_status"], contract.ALIAS_MATCH_STATUS_EXACT)
+        self.assertEqual(
+            packet["parser_target_selection_rule"],
+            "explicit_delegate_tool_instruction_alias",
+        )
+        self.assertEqual(packet["alias_candidate"], "DIP")
+        self.assertEqual(packet["slot_candidate"], "dip")
+        self.assertTrue(packet["parser_api_target_present"])
+        self.assertEqual(packet["intent_status"], contract.INTENT_PASS)
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_parser_rejects_unknown_leading_alias_even_with_delegate_instruction(
+        self,
+    ) -> None:
+        packet = _parser_packet(
+            prompt=(
+                "DIPP:Call the WBP MCP tool delegate_to_dip for DIP: "
+                "докажи dispatch admission."
+            )
+        )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], contract.NO_ALIAS_DETECTED)
+        self.assertEqual(packet["parser_status"], contract.PARSER_STATUS_NO_ALIAS)
+        self.assertFalse(packet["alias_candidate_present"])
+        self.assertIn("leading_alias_not_bound", packet["parser_blocking_reasons"])
+        _assert_no_dispatch(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
     def test_parser_unknown_or_missing_alias_fails_closed_without_candidate_guessing(self) -> None:
         for prompt in (
             "Просто составь план без второго агента.",

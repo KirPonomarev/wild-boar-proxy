@@ -65,7 +65,9 @@ WINDOW_SMOKE_PHRASES = (
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
 DEFAULT_API_ROUTE_ADDRESS_ALIASES = ("DIP", "Agent 2", "2")
-_LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s+", re.UNICODE)
+DEFAULT_PRIMARY_ROUTE_ADDRESS_ALIASES = ("Codex", "Agent 1", "1")
+API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS = "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS"
+_LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s*", re.UNICODE)
 
 
 def default_runtime_config_path() -> Path:
@@ -764,6 +766,45 @@ def _responses_payload_user_prompt_texts(payload: dict[str, Any]) -> list[str]:
 def _leading_address_alias(prompt_text: str) -> str:
     match = _LEADING_ADDRESS_RE.match(prompt_text or "")
     return str(match.group(1) or "").strip() if match else ""
+
+
+def _agent_like_unknown_address_label(label: str, known_aliases: set[str]) -> bool:
+    normalized = str(label or "").strip().casefold()
+    if not normalized or normalized in known_aliases:
+        return False
+    parts = normalized.split()
+    if len(parts) == 1:
+        if re.fullmatch(r"[a-z][a-z0-9_.-]{0,31}", normalized):
+            return True
+        return normalized in {"агент", "дип"}
+    return parts[0] in {
+        "agent",
+        "агент",
+        "api",
+        "gpt",
+        "codex",
+        "dip",
+        "deepseek",
+        "worker",
+    }
+
+
+def _unknown_addressed_alias_payload() -> dict[str, Any]:
+    return {
+        "error": {
+            "message": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+            "type": "unknown_addressed_alias",
+            "code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+            "bridge_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        },
+        "machine_error_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        "bridge_machine_error_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        "auto_router_fail_closed": True,
+        "auto_router_unknown_alias_blocked": True,
+        "provider_called": False,
+        "downstream_called": False,
+        "secret_value_recorded": False,
+    }
 
 
 def _response_payload_text_fragments(value: Any) -> list[str]:
@@ -2134,6 +2175,11 @@ class HybridOpenAICompatAdapter:
             for alias in (api_route_aliases or DEFAULT_API_ROUTE_ADDRESS_ALIASES)
             if str(alias).strip()
         }
+        self._primary_route_aliases = {
+            str(alias).strip().casefold()
+            for alias in DEFAULT_PRIMARY_ROUTE_ADDRESS_ALIASES
+            if str(alias).strip()
+        }
         for route in routes:
             if not isinstance(route, dict):
                 continue
@@ -2398,6 +2444,32 @@ class HybridOpenAICompatAdapter:
                 headers.get("Accept") or ""
             )
             prompt_hash, smoke_match = _prompt_trace_hash_and_smoke_match(request_payload)
+            leading_alias = ""
+            for prompt_text in reversed(_responses_payload_user_prompt_texts(request_payload)):
+                leading_alias = _leading_address_alias(prompt_text)
+                if leading_alias:
+                    break
+            known_address_aliases = self._api_route_aliases | self._primary_route_aliases
+            if _agent_like_unknown_address_label(leading_alias, known_address_aliases):
+                payload = _unknown_addressed_alias_payload()
+                response_body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+                self._record_downstream_trace(
+                    status=400,
+                    path=normalized_path,
+                    requested_model=requested_model,
+                    prompt_hash=prompt_hash,
+                    smoke_match=smoke_match,
+                    stream_requested=wants_stream,
+                    response_body=response_body,
+                    extra_fields={
+                        "downstream_called": False,
+                        "chatgpt_route_used": False,
+                        "api_alias_unknown_blocked": True,
+                        "auto_router_fail_closed": True,
+                        "auto_router_unknown_alias_blocked": True,
+                    },
+                )
+                return 400, {"Content-Type": "application/json"}, response_body
             route_adapter = self._route_adapters.get(requested_model)
             original_requested_model = requested_model
             forced_route_used = False

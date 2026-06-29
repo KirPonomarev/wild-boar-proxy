@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -23,6 +24,8 @@ from .api_agent_direct_reply import (
     DIRECT_REPLY_WORK_MODES,
     LiveResultRunner,
     build_api_agent_direct_reply_packet,
+    resolve_prompt_repo_bridge_mode,
+    resolve_prompt_work_mode,
 )
 from .command_effects import EFFECT_MUTATE, EFFECT_PROBE
 from .core import packets
@@ -51,6 +54,10 @@ from .runtime_dispatch_mode_truth import (
     ORCHESTRATOR_CHATGPT,
     dispatch_mode_truth_fields,
 )
+from .wbp_dip_tool import (
+    _exact_plain_reply_expected_text,
+    _exact_plain_reply_requested,
+)
 
 
 API_AGENT_AUTO_ROUTER_PACKET_KIND = "wbp_api_agent_auto_router"
@@ -68,12 +75,48 @@ AUTO_ROUTER_DECISION_GPT_PASSTHROUGH = "gpt_passthrough"
 AUTO_ROUTER_DECISION_BLOCKED = "blocked"
 
 _LEADING_ADDRESS_RE = re.compile(
-    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s+"
+    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s*"
 )
 
 
 def _safe_text(value: object, *, limit: int = 4096) -> str:
     return str(value or "").replace("\r", " ").replace("\n", " ").strip()[:limit]
+
+
+def _safe_text_list(value: object, *, limit: int = 80) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_safe_text(item, limit=limit) for item in value]
+
+
+def _safe_evidence_trace(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    trace: list[dict[str, Any]] = []
+    for index, item in enumerate(value[:50], start=1):
+        if not isinstance(item, Mapping):
+            continue
+        trace.append(
+            {
+                "step": int(item.get("step") or index),
+                "tool": _safe_text(item.get("tool"), limit=80),
+                "origin": _safe_text(item.get("origin"), limit=80),
+                "status": _safe_text(item.get("status"), limit=40),
+                "machine_error_code": _safe_text(
+                    item.get("machine_error_code"),
+                    limit=120,
+                ),
+                "command_exit_code": item.get("command_exit_code"),
+                "result_text_sha256": _safe_text(
+                    item.get("result_text_sha256"),
+                    limit=80,
+                ),
+                "result_text_truncated": item.get("result_text_truncated") is True,
+                "mutation_applied": item.get("mutation_applied") is True,
+                "rollback_applied": item.get("rollback_applied") is True,
+            }
+        )
+    return trace
 
 
 def _sha256_text(value: str) -> str:
@@ -140,6 +183,7 @@ def _safe_reply_proof_summary(value: object) -> dict[str, Any]:
         "api_agent_provider_called",
         "api_agent_response_observed",
         "provider_response_proven",
+        "repo_bridge_evidence_response_proven",
         "final_answer_was_repo_tool_call",
         "fallback_used",
         "local_imitation_used",
@@ -230,6 +274,9 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         "api_agent_response_observed": _as_bool(
             packet.get("api_agent_response_observed")
         ),
+        "repo_bridge_evidence_response_proven": _as_bool(
+            packet.get("repo_bridge_evidence_response_proven")
+        ),
         "direct_provider_response_observed": _as_bool(
             packet.get("direct_provider_response_observed")
         ),
@@ -313,6 +360,27 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         "repo_bridge_successful_tool_call_count": int(
             packet.get("repo_bridge_successful_tool_call_count") or 0
         ),
+        "repo_bridge_tool_names": _safe_text_list(
+            packet.get("repo_bridge_tool_names")
+        ),
+        "repo_bridge_bootstrap_tool_names": _safe_text_list(
+            packet.get("repo_bridge_bootstrap_tool_names")
+        ),
+        "dip_evidence_trace_available": _as_bool(
+            packet.get("dip_evidence_trace_available")
+        ),
+        "dip_evidence_trace_recorded": _as_bool(
+            packet.get("dip_evidence_trace_recorded")
+        ),
+        "dip_evidence_trace_count": int(
+            packet.get("dip_evidence_trace_count") or 0
+        ),
+        "dip_evidence_trace": _safe_evidence_trace(
+            packet.get("dip_evidence_trace")
+        ),
+        "dip_evidence_trace_raw_output_recorded": _as_bool(
+            packet.get("dip_evidence_trace_raw_output_recorded")
+        ),
         "repo_bridge_raw_tool_results_recorded": _as_bool(
             packet.get("repo_bridge_raw_tool_results_recorded")
         ),
@@ -323,11 +391,17 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
             packet.get("dip_action_bridge_available")
         ),
         "dip_action_bridge_used": _as_bool(packet.get("dip_action_bridge_used")),
+        "dip_action_bridge_succeeded": _as_bool(
+            packet.get("dip_action_bridge_succeeded")
+        ),
         "dip_action_tool_call_count": int(
             packet.get("dip_action_tool_call_count") or 0
         ),
         "dip_action_successful_tool_call_count": int(
             packet.get("dip_action_successful_tool_call_count") or 0
+        ),
+        "dip_action_tool_names": _safe_text_list(
+            packet.get("dip_action_tool_names")
         ),
         "dip_action_mutation_applied": _as_bool(
             packet.get("dip_action_mutation_applied")
@@ -349,6 +423,12 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
             packet.get("dip_code_verification_required")
         ),
         "dip_code_verified": _as_bool(packet.get("dip_code_verified")),
+        "dip_code_verification_failed": _as_bool(
+            packet.get("dip_code_verification_failed")
+        ),
+        "dip_code_failed_verification_count": int(
+            packet.get("dip_code_failed_verification_count") or 0
+        ),
         "dip_action_mutated_files": [
             _safe_text(path, limit=500)
             for path in (
@@ -357,6 +437,9 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
                 else []
             )
         ],
+        "repo_bridge_final_answer_synthesized": _as_bool(
+            packet.get("repo_bridge_final_answer_synthesized")
+        ),
         "file_mutation_attempted": _as_bool(packet.get("file_mutation_attempted")),
         "changed_files": [
             _safe_text(path, limit=500)
@@ -375,6 +458,65 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _json_output_passthrough_requested(prompt_text: object) -> bool:
+    prompt_key = _safe_text(prompt_text, limit=4096).casefold()
+    prompt_key = prompt_key.replace("_", " ").replace("-", " ")
+    prompt_key = " ".join(prompt_key.split())
+    exact_markers = {
+        "ответь ровно",
+        "ответь только",
+        "верни ровно",
+        "верни только",
+        "output exactly",
+        "reply exactly",
+        "return exactly",
+        "only json",
+        "json only",
+    }
+    return "json" in prompt_key and any(marker in prompt_key for marker in exact_markers)
+
+
+def _valid_json_text(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(parsed, (dict, list))
+
+
+def _output_passthrough_fields(
+    *,
+    prompt_text: object,
+    direct_reply_ok: bool,
+    direct_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    reply_text = _safe_text(direct_summary.get("reply_text"), limit=65536)
+    exact_plain = _as_bool(direct_summary.get("exact_plain_reply_matched"))
+    exact_json = (
+        _json_output_passthrough_requested(prompt_text)
+        and _valid_json_text(reply_text)
+    )
+    required = bool(direct_reply_ok and (exact_plain or exact_json))
+    kind = ""
+    text_for_digest = reply_text
+    if direct_reply_ok and exact_plain:
+        kind = "exact_plain_reply"
+    elif direct_reply_ok and exact_json:
+        kind = "exact_json_reply"
+    return {
+        "output_passthrough_required": required,
+        "output_passthrough_kind": kind,
+        "output_passthrough_text_available": bool(required and text_for_digest),
+        "output_passthrough_text_sha256": (
+            _sha256_text(text_for_digest) if required and text_for_digest else ""
+        ),
+        "output_passthrough_text_recorded": False,
+    }
+
+
 def build_api_agent_auto_router_packet(
     *,
     prompt_text: object,
@@ -390,15 +532,22 @@ def build_api_agent_auto_router_packet(
     live_result_runner: LiveResultRunner | None = None,
 ) -> dict[str, Any]:
     prompt = str(prompt_text or "")
-    repo_bridge = (
-        repo_bridge_mode
-        if repo_bridge_mode in DIRECT_REPLY_REPO_BRIDGE_MODES
-        else DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE
+    repo_bridge = resolve_prompt_repo_bridge_mode(
+        prompt_text=prompt,
+        repo_bridge_mode=(
+            repo_bridge_mode
+            if repo_bridge_mode in DIRECT_REPLY_REPO_BRIDGE_MODES
+            else DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE
+        ),
     )
-    work = (
-        work_mode
-        if work_mode in DIRECT_REPLY_WORK_MODES
-        else DEFAULT_DIRECT_REPLY_WORK_MODE
+    work = resolve_prompt_work_mode(
+        prompt_text=prompt,
+        work_mode=(
+            work_mode
+            if work_mode in DIRECT_REPLY_WORK_MODES
+            else DEFAULT_DIRECT_REPLY_WORK_MODE
+        ),
+        repo_bridge_mode=repo_bridge,
     )
     parser_packet = build_natural_intent_parser_packet(
         prompt_text=prompt,
@@ -498,6 +647,12 @@ def build_api_agent_auto_router_packet(
     route_bound_dispatch_proven = bool(
         direct_reply_ok and direct_summary["route_bound_dispatch_proven"]
     )
+    primary_exact_reply_requested = bool(
+        gpt_lane_selected
+        and lane == "primary_chatgpt"
+        and _exact_plain_reply_requested(prompt)
+    )
+    primary_exact_reply_visible_output = False
     wrapper_bypassed = bool(api_direct_selected)
     execution_mode = (
         DISPATCH_MODE_API_ONLY if api_direct_selected else DISPATCH_MODE_CHATGPT_ONLY
@@ -590,6 +745,10 @@ def build_api_agent_auto_router_packet(
         ),
         "parser_packet_kind": _safe_text(parser_packet.get("packet_kind"), limit=80),
         "parser_status": _safe_text(parser_packet.get("parser_status"), limit=80),
+        "parser_target_selection_rule": _safe_text(
+            parser_packet.get("parser_target_selection_rule"),
+            limit=80,
+        ),
         "parser_machine_error_code": parser_code,
         "parser_alias_match_count": int(
             parser_packet.get("parser_alias_match_count") or 0
@@ -651,7 +810,19 @@ def build_api_agent_auto_router_packet(
             if api_direct_selected
             else "api_agent_auto_router_to_gpt_lane"
         ),
-        "output_text": direct_summary["reply_text"] if direct_reply_ok else "",
+        "output_text": (
+            direct_summary["reply_text"] if direct_reply_ok else ""
+        ),
+        "primary_exact_plain_reply_requested": primary_exact_reply_requested,
+        "primary_exact_plain_reply_visible_output": primary_exact_reply_visible_output,
+        "primary_exact_plain_reply_text_available": False,
+        "primary_exact_plain_reply_text_sha256": "",
+        "primary_exact_plain_reply_text_recorded": False,
+        **_output_passthrough_fields(
+            prompt_text=prompt,
+            direct_reply_ok=direct_reply_ok,
+            direct_summary=direct_summary,
+        ),
         **direct_summary,
         "requested_repo_bridge_mode": repo_bridge,
         "requested_work_mode": work,

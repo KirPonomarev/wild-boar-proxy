@@ -46,22 +46,27 @@ def _paths(root: Path) -> RuntimePaths:
     )
 
 
-def _write_app(root: Path, name: str, *, bundle_id: str) -> Path:
+def _write_app(
+    root: Path,
+    name: str,
+    *,
+    bundle_id: str,
+    plist_extra: dict[str, object] | None = None,
+) -> Path:
     app = root / name
     (app / "Contents" / "MacOS").mkdir(parents=True)
     (app / "Contents" / "Resources").mkdir(parents=True)
     (app / "Contents" / "MacOS" / "Codex").write_bytes(b"same-binary")
     (app / "Contents" / "Resources" / "app.asar").write_bytes(b"same-asar")
     with (app / "Contents" / "Info.plist").open("wb") as handle:
-        plistlib.dump(
-            {
-                "CFBundleIdentifier": bundle_id,
-                "CFBundleName": "Codex",
-                "CFBundleDisplayName": "Codex",
-                "CFBundleExecutable": "Codex",
-            },
-            handle,
-        )
+        payload: dict[str, object] = {
+            "CFBundleIdentifier": bundle_id,
+            "CFBundleName": "Codex",
+            "CFBundleDisplayName": "Codex",
+            "CFBundleExecutable": "Codex",
+        }
+        payload.update(plist_extra or {})
+        plistlib.dump(payload, handle)
     return app
 
 
@@ -140,6 +145,9 @@ class CustomAppIdentityRepairTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertTrue(packet["identity_repaired"])
+        self.assertFalse(packet["sparkle_changes_needed"])
+        self.assertEqual(packet["sparkle_update_feed_info_plist_keys_before"], [])
+        self.assertEqual(packet["sparkle_update_feed_info_plist_keys_after"], [])
         self.assertTrue(packet["custom_app_identity_distinct_after"])
         self.assertEqual(
             custom_after["CFBundleIdentifier"],
@@ -164,6 +172,118 @@ class CustomAppIdentityRepairTests(unittest.TestCase):
         self.assertFalse(packet["api_lane_called"])
         self.assertFalse(packet["dispatch_attempted"])
         self.assertFalse(packet["product_ready"])
+        self.assertEqual(verify.call_count, 2)
+        self.assertEqual(sign.call_count, 1)
+        self.assertTrue(any("Info.plist" in item for item in packet["changed_files"]))
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_dry_run_reports_sparkle_feed_repair_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            paths, stock, _custom = _fixture(Path(tmp_dir))
+            custom = _write_app(
+                Path(tmp_dir),
+                "Codex WBP Clean Sparkle.app",
+                bundle_id=repair.DESIRED_CUSTOM_BUNDLE_ID,
+                plist_extra={
+                    "CFBundleName": repair.DESIRED_CUSTOM_BUNDLE_NAME,
+                    "CFBundleDisplayName": repair.DESIRED_CUSTOM_BUNDLE_NAME,
+                    "SUFeedURL": "https://updates.example.invalid/appcast.xml",
+                    "SUAutomaticallyDownloadUpdates": True,
+                },
+            )
+            before = (custom / "Contents" / "Info.plist").read_bytes()
+
+            with mock.patch(
+                "wild_boar_proxy.custom_app_identity_repair._codesign_verify",
+                return_value=(True, 0, "valid"),
+            ):
+                packet = repair.build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=False,
+                    stock_app_path=str(stock),
+                    custom_app_path=str(custom),
+                )
+            after = (custom / "Contents" / "Info.plist").read_bytes()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            repair.CUSTOM_APP_IDENTITY_READY,
+        )
+        self.assertTrue(packet["repair_needed"])
+        self.assertTrue(packet["repair_ready"])
+        self.assertTrue(packet["sparkle_changes_needed"])
+        self.assertEqual(
+            packet["sparkle_update_feed_info_plist_keys_before"],
+            ["SUFeedURL"],
+        )
+        self.assertEqual(
+            packet["sparkle_update_feed_info_plist_keys_after"],
+            ["SUFeedURL"],
+        )
+        self.assertFalse(packet["sparkle_info_plist_auto_update_disabled_after"])
+        self.assertFalse(packet["mutation_attempted"])
+        self.assertEqual(before, after)
+        self.assertEqual(packet["changed_files"], [])
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_apply_removes_sparkle_feed_and_disables_update_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            paths, stock, _custom = _fixture(Path(tmp_dir))
+            custom = _write_app(
+                Path(tmp_dir),
+                "Codex WBP Clean Sparkle.app",
+                bundle_id=repair.DESIRED_CUSTOM_BUNDLE_ID,
+                plist_extra={
+                    "CFBundleName": repair.DESIRED_CUSTOM_BUNDLE_NAME,
+                    "CFBundleDisplayName": repair.DESIRED_CUSTOM_BUNDLE_NAME,
+                    "SUFeedURL": "https://updates.example.invalid/appcast.xml",
+                    "SUFeedURLForBeta": "https://updates.example.invalid/beta.xml",
+                    "SUPublicEDKey": "public-key-is-not-a-feed",
+                    "SUEnableAutomaticChecks": True,
+                    "SUAutomaticallyUpdate": True,
+                    "SUAllowsAutomaticUpdates": True,
+                    "SUAutomaticallyDownloadUpdates": True,
+                },
+            )
+
+            with (
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_verify",
+                    side_effect=[(True, 0, "valid"), (True, 0, "valid")],
+                ) as verify,
+                mock.patch(
+                    "wild_boar_proxy.custom_app_identity_repair._codesign_ad_hoc",
+                    return_value=(True, 0, "signed"),
+                ) as sign,
+            ):
+                packet = repair.build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=True,
+                    stock_app_path=str(stock),
+                    custom_app_path=str(custom),
+                )
+            custom_after = _read_plist(custom)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], repair.CUSTOM_APP_IDENTITY_OK)
+        self.assertTrue(packet["sparkle_changes_needed"])
+        self.assertEqual(
+            packet["sparkle_update_feed_info_plist_keys_before"],
+            ["SUFeedURL", "SUFeedURLForBeta"],
+        )
+        self.assertEqual(packet["sparkle_update_feed_info_plist_keys_after"], [])
+        self.assertTrue(packet["sparkle_update_feed_removed"])
+        self.assertTrue(packet["sparkle_info_plist_auto_update_disabled_after"])
+        self.assertNotIn("SUFeedURL", custom_after)
+        self.assertNotIn("SUFeedURLForBeta", custom_after)
+        self.assertEqual(custom_after["SUPublicEDKey"], "public-key-is-not-a-feed")
+        for key in repair.SPARKLE_DISABLED_INFO_PLIST_DEFAULTS:
+            self.assertIs(custom_after[key], False)
+        self.assertTrue(packet["backup_written"])
+        self.assertTrue(packet["plist_written"])
+        self.assertTrue(packet["codesign_attempted"])
+        self.assertTrue(packet["codesign_ok"])
         self.assertEqual(verify.call_count, 2)
         self.assertEqual(sign.call_count, 1)
         self.assertTrue(any("Info.plist" in item for item in packet["changed_files"]))

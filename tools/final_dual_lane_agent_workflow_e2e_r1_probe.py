@@ -44,7 +44,7 @@ from wild_boar_proxy.native_filesystem_probe import (  # noqa: E402
 )
 
 
-PRIMARY_MODEL_ID = "gpt-5.3-codex"
+PRIMARY_MODEL_ID = "gpt-5.5"
 CODING_AGENT_MODEL_ID = "wbp-web-primary-openrouter"
 PROFILE_ID = "wbp-custom-main"
 
