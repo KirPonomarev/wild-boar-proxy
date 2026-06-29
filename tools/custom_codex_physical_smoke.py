@@ -174,13 +174,6 @@ def prove_cdp_owner(
     pids = _listening_pids_for_port(port)
     proof["candidate_pid_count"] = len(pids)
     proof["candidate_pid_sha256"] = sha256_text(",".join(str(pid) for pid in pids))
-    if len(pids) != 1:
-        proof["owner_block_reason"] = "cdp_listener_pid_not_unique"
-        return proof
-    pid = pids[0]
-    command = _process_command(pid)
-    proof["cdp_owner_pid"] = pid
-    proof["owner_process_command_sha256"] = sha256_text(command)
     expected_user_data_arg = f"--user-data-dir={user_data_dir.resolve(strict=False)}"
     required_markers = (
         "Codex WBP Clean.app/Contents/MacOS/Codex",
@@ -188,6 +181,21 @@ def prove_cdp_owner(
         f"--remote-debugging-port={port}",
         expected_user_data_arg,
     )
+    owner_candidates: list[tuple[int, str]] = []
+    for pid in pids:
+        command = _process_command(pid)
+        if all(marker in command for marker in required_markers):
+            owner_candidates.append((pid, command))
+    proof["owner_candidate_pid_count"] = len(owner_candidates)
+    proof["owner_candidate_pid_sha256"] = sha256_text(
+        ",".join(str(pid) for pid, _command in owner_candidates)
+    )
+    if len(owner_candidates) != 1:
+        proof["owner_block_reason"] = "cdp_owner_process_not_unique"
+        return proof
+    pid, command = owner_candidates[0]
+    proof["cdp_owner_pid"] = pid
+    proof["owner_process_command_sha256"] = sha256_text(command)
     missing = [marker for marker in required_markers if marker not in command]
     if missing:
         proof["owner_block_reason"] = "cdp_listener_command_mismatch"

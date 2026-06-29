@@ -6,11 +6,49 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import custom_codex_physical_smoke as smoke
 
 
 class CustomCodexPhysicalSmokeTests(unittest.TestCase):
+    def test_owner_proof_accepts_single_main_process_with_shared_helper_fd(self) -> None:
+        profile_dir = Path("/tmp/wbp-profile")
+        user_data_dir = profile_dir / "electron-user-data"
+        resolved_user_data_dir = user_data_dir.resolve(strict=False)
+        main_command = (
+            "/Users/example/Applications/Codex WBP Clean.app/Contents/MacOS/Codex "
+            "--remote-debugging-address=127.0.0.1 "
+            "--remote-debugging-port=9223 "
+            f"--user-data-dir={resolved_user_data_dir}"
+        )
+        commands = {
+            100: main_command,
+            200: "/Users/example/.codex/computer-use/SkyComputerUseService",
+        }
+
+        with mock.patch.object(
+            smoke,
+            "_listening_pids_for_port",
+            return_value=[100, 200],
+        ), mock.patch.object(
+            smoke,
+            "_process_command",
+            side_effect=lambda pid: commands[int(pid)],
+        ):
+            proof = smoke.prove_cdp_owner(
+                cdp_url="http://127.0.0.1:9223",
+                profile_dir=profile_dir,
+                user_data_dir=user_data_dir,
+                allow_unbound_cdp=False,
+            )
+
+        self.assertEqual(proof["status"], "ok")
+        self.assertTrue(proof["cdp_owner_proven"])
+        self.assertEqual(proof["candidate_pid_count"], 2)
+        self.assertEqual(proof["owner_candidate_pid_count"], 1)
+        self.assertEqual(proof["cdp_owner_pid"], 100)
+
     def test_packet_does_not_record_screenshot_path_by_default(self) -> None:
         prompt = "DIP: answer exactly WBP_PHYSICAL_PACKET_OK"
         expected = "WBP_PHYSICAL_PACKET_OK"

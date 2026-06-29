@@ -1177,6 +1177,168 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "WBP_MUTATION_OK\n")
         self.assertNotIn("WBP_ROUTER_OUTPUT_NOT_AVAILABLE", stdout.getvalue())
 
+    def test_cli_auto_route_output_prints_repo_bridge_readonly_evidence_reply(
+        self,
+    ) -> None:
+        expected = "WBP_REPO_READ_EXACT_OK"
+        prompt = (
+            "DIP: через repo bridge read-only проверь CANON.md "
+            f"и ответь ровно {expected}"
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def live_result(**kwargs: object) -> dict[str, object]:
+                work_mode = str(kwargs.get("dip_work_mode") or "standard")
+                full = work_mode == "full"
+                return _live_result(
+                    expected,
+                    dip_work_mode=work_mode,
+                    dip_full_work_mode=full,
+                    live_result_text_limit=64000 if full else 2400,
+                    live_result_output_token_limit=32768 if full else 768,
+                    source="repo_bridge_verified_evidence",
+                    provider_called=False,
+                    direct_provider_response_observed=False,
+                    provider_auth_ok=False,
+                    positive_provider_proof_gate_satisfied=False,
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                    repo_bridge_readonly=True,
+                    repo_bridge_mutation_allowed=False,
+                    repo_bridge_mutation_controlled=False,
+                    repo_bridge_bootstrap_used=True,
+                    repo_bridge_bootstrap_tool_call_count=1,
+                    repo_bridge_tool_call_count=1,
+                    repo_bridge_successful_tool_call_count=1,
+                    repo_bridge_tool_names=["read_file"],
+                    repo_bridge_bootstrap_tool_names=["read_file"],
+                    repo_bridge_final_answer_synthesized=True,
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), f"{expected}\n")
+        self.assertNotIn("WBP_ROUTER_OUTPUT_NOT_AVAILABLE", stdout.getvalue())
+
+    def test_cli_auto_route_output_blocks_repo_bridge_provider_exact_without_strong_proof(
+        self,
+    ) -> None:
+        expected = "WBP_REPO_PROVIDER_WEAK_EXACT"
+        prompt = (
+            "DIP: через repo bridge read-only проверь репозиторий "
+            f"и ответь ровно {expected}"
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            def live_result(**kwargs: object) -> dict[str, object]:
+                work_mode = str(kwargs.get("dip_work_mode") or "standard")
+                full = work_mode == "full"
+                return _live_result(
+                    expected,
+                    dip_work_mode=work_mode,
+                    dip_full_work_mode=full,
+                    live_result_text_limit=64000 if full else 2400,
+                    live_result_output_token_limit=32768 if full else 768,
+                    repo_bridge_required=True,
+                    repo_bridge_available=True,
+                    repo_bridge_used=True,
+                    repo_bridge_readonly=True,
+                    repo_bridge_mutation_allowed=False,
+                    repo_bridge_mutation_controlled=False,
+                    repo_bridge_bootstrap_used=True,
+                    repo_bridge_bootstrap_tool_call_count=1,
+                    repo_bridge_tool_call_count=1,
+                    repo_bridge_successful_tool_call_count=1,
+                    repo_bridge_tool_names=["list_files"],
+                    repo_bridge_bootstrap_tool_names=["list_files"],
+                    repo_bridge_final_answer_synthesized=False,
+                    exact_plain_reply_matched=True,
+                    exact_plain_reply_expected_text_sha256=auto._sha256_text(expected),
+                    exact_plain_reply_expected_text_recorded=False,
+                    exact_plain_reply_observed_text_sha256=auto._sha256_text(expected),
+                    exact_plain_reply_observed_text_recorded=False,
+                    direct_provider_response_observed=False,
+                    positive_provider_proof_gate_satisfied=False,
+                )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_ROUTER_OUTPUT_NOT_AVAILABLE\n")
+        self.assertNotIn(expected, stdout.getvalue())
+
     def test_cli_auto_route_output_blocks_non_exact_direct_reply_text(self) -> None:
         prompt = "Builder: через repo bridge read-only проверь CANON.md и верни короткий статус"
         with tempfile.TemporaryDirectory() as raw_root:

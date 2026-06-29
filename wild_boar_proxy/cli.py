@@ -2036,12 +2036,21 @@ def _read_router_prompt_for_output(args: argparse.Namespace) -> str:
 
 
 def _auto_route_visible_output(packet: dict[str, Any]) -> str:
+    exact_plain_visible = packet.get("exact_plain_reply_matched") is True
+    if exact_plain_visible and packet.get("repo_bridge_used") is True:
+        exact_plain_visible = bool(
+            packet.get("repo_bridge_evidence_response_proven") is True
+            or (
+                packet.get("direct_provider_response_observed") is True
+                and packet.get("positive_provider_proof_gate_satisfied") is True
+            )
+        )
     direct_ok = (
         packet.get("status") == "ok"
         and packet.get("auto_router_proven") is True
         and packet.get("direct_reply_proven") is True
         and (
-            packet.get("exact_plain_reply_matched") is True
+            exact_plain_visible
             or packet.get("output_passthrough_required") is True
             or packet.get("repo_bridge_evidence_response_proven") is True
         )

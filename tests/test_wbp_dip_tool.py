@@ -48,6 +48,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     _command_from_call,
     _dip_work_mode_settings,
     _execute_repo_tool_call,
+    _exact_plain_reply_expected_text,
     _explicit_test_command_from_task,
     _effective_live_result_timeout_seconds,
     _file_write_text_from_task,
@@ -65,6 +66,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     _repo_bridge_requested,
     _repo_bridge_prompt,
     _repo_mutation_requested,
+    _requested_test_verification_block_reason,
     _resolve_action_command_argv,
     _run_tests,
     _search_repo,
@@ -2345,7 +2347,7 @@ index 0000000..1111111
                 profile_dir=profile,
                 repo_root=repo,
                 repo_bridge_mode="auto",
-                timeout_seconds=0.01,
+                timeout_seconds=3.0,
             )
 
         self.assertEqual(result["status"], "error")
@@ -2716,6 +2718,150 @@ index 0000000..1111111
         self.assertFalse(result["repo_bridge_mutation_allowed"])
         self.assertFalse(result["repo_bridge_mutation_controlled"])
         self.assertEqual(request_json_mock.call_count, 2)
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._live_result_turn")
+    def test_request_live_result_repo_bridge_readonly_synthesizes_exact_from_evidence(
+        self,
+        live_result_turn_mock: mock.Mock,
+    ) -> None:
+        expected = "WBP_REPO_READ_EXACT_OK"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (repo / "CANON.md").write_text("canon\n", encoding="utf-8")
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: через repo bridge read-only проверь, что CANON.md "
+                    f"существует, и ответь ровно {expected}"
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=1.0,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["result_text"], expected)
+        self.assertEqual(result["source"], "repo_bridge_verified_evidence")
+        self.assertTrue(result["repo_bridge_final_answer_synthesized"])
+        self.assertEqual(result["repo_bridge_tool_names"], ["read_file"])
+        self.assertEqual(result["repo_bridge_successful_tool_call_count"], 1)
+        self.assertFalse(result["provider_called"])
+        live_result_turn_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._live_result_turn")
+    def test_request_live_result_repo_bridge_synthesizes_outside_root_policy_exact(
+        self,
+        live_result_turn_mock: mock.Mock,
+    ) -> None:
+        expected = "WBP_REPO_OUTSIDE_ROOT_BLOCK_OK"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: через repo bridge read-only оцени, разрешена ли "
+                    "запись за пределами active project root. Не создавай файлы. "
+                    f"Если outside repo write запрещена и active project root "
+                    f"обязателен, ответь ровно {expected}, иначе WBP_FAIL"
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=1.0,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["result_text"], expected)
+        self.assertEqual(result["source"], "repo_bridge_verified_evidence")
+        self.assertTrue(result["repo_bridge_final_answer_synthesized"])
+        self.assertTrue(result["repo_bridge_readonly"])
+        self.assertFalse(result["repo_bridge_mutation_allowed"])
+        self.assertFalse(result["provider_called"])
+        live_result_turn_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._live_result_turn")
+    def test_request_live_result_repo_bridge_provider_exact_without_strong_proof_is_not_gated(
+        self,
+        live_result_turn_mock: mock.Mock,
+    ) -> None:
+        expected = "WBP_REPO_READ_EXACT_OK"
+        live_result_turn_mock.return_value = _live_result(
+            result_text=expected,
+            result_text_sha256=_sha256_text(expected),
+            result_text_length=len(expected),
+            direct_provider_response_observed=False,
+            positive_provider_proof_gate_satisfied=False,
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            repo = root / "repo"
+            profile.mkdir()
+            repo.mkdir()
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: через repo bridge read-only проверь репозиторий "
+                    f"существует, и ответь ровно {expected}"
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                repo_root=repo,
+                repo_bridge_mode="on",
+                timeout_seconds=1.0,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], WBP_DIP_TOOL_OK)
+        self.assertEqual(result["result_text"], expected)
+        self.assertFalse(result.get("exact_plain_reply_matched", False))
+        self.assertFalse(result["positive_provider_proof_gate_satisfied"])
+        self.assertEqual(result["repo_bridge_tool_names"], ["list_files"])
+        self.assertEqual(result["repo_bridge_successful_tool_call_count"], 1)
+        self.assertTrue(result["provider_called"])
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
@@ -7035,6 +7181,38 @@ index 0000000..89c82ad
             ),
             90.0,
         )
+        self.assertEqual(
+            _effective_live_result_timeout_seconds(
+                0.01,
+                dip_work_mode="default",
+                repo_bridge_required=True,
+                code_mutation_required=True,
+            ),
+            10.0,
+        )
+        self.assertEqual(
+            _effective_live_result_timeout_seconds(
+                0.01,
+                dip_work_mode="default",
+                repo_bridge_required=True,
+                code_mutation_required=False,
+            ),
+            1.0,
+        )
+
+    def test_exact_plain_reply_parser_stops_before_human_else_branch(self) -> None:
+        self.assertEqual(
+            _exact_plain_reply_expected_text(
+                "DIP: Если команда успешна, ответь ровно WBP_OK, иначе WBP_FAIL"
+            ),
+            "WBP_OK",
+        )
+        self.assertEqual(
+            _exact_plain_reply_expected_text(
+                "DIP: If the command passes, answer exactly WBP_OK, otherwise WBP_FAIL"
+            ),
+            "WBP_OK",
+        )
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
@@ -7173,6 +7351,48 @@ index 0000000..89c82ad
         self.assertEqual(
             _explicit_test_command_from_task(task),
             ["python3", "-m", "pytest", "tmp/demo/test_solver.py", "-q"],
+        )
+
+    def test_explicit_pytest_command_stops_before_after_success_sentence(self) -> None:
+        task = (
+            "DIP: через repo bridge напиши код мини-приложения в "
+            "tmp/wbp-ultrahard-app. Запусти python3 -m pytest "
+            "tmp/wbp-ultrahard-app -q. После успешных тестов ответь "
+            "ровно WBP_ULTRAHARD_CODE_OK."
+        )
+
+        self.assertEqual(
+            _explicit_test_command_from_task(task),
+            ["python3", "-m", "pytest", "tmp/wbp-ultrahard-app", "-q"],
+        )
+
+    def test_requested_pytest_blocks_unrelated_post_mutation_verification(
+        self,
+    ) -> None:
+        task = (
+            "DIP: через repo bridge напиши код мини-приложения в "
+            "tmp/wbp-ultrahard-app. Запусти python3 -m pytest "
+            "tmp/wbp-ultrahard-app -q. После успешных тестов ответь "
+            "ровно WBP_ULTRAHARD_CODE_OK."
+        )
+        tool_results = [
+            {
+                "tool": "write_file",
+                "status": "ok",
+                "mutation_applied": True,
+                "mutated_files": ["tmp/wbp-ultrahard-app/taskflow/graph.py"],
+            },
+            {
+                "tool": "run_command",
+                "status": "ok",
+                "command_used": "python3 -m taskflow plan sample.yml",
+                "result_text": "Project duration: 3\n",
+            },
+        ]
+
+        self.assertEqual(
+            _requested_test_verification_block_reason(task, tool_results),
+            "requested_test_command_not_run",
         )
 
     def test_repo_bridge_prompt_warns_against_dotted_imports_for_punctuated_paths(

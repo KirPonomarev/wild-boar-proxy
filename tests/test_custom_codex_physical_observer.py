@@ -64,6 +64,24 @@ class CustomCodexPhysicalObserverTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "ok")
         self.assertTrue(packet["output_after_worked_contains_expected_text"])
+        self.assertTrue(packet["output_after_worked_exact_expected_text"])
+
+    def test_api_exact_rejects_expected_token_with_extra_condition_text(self) -> None:
+        packet = observe_visible_output(
+            before_text="",
+            after_text=(
+                "Builder: если ok, ответь ровно TOKEN, иначе FAIL\n"
+                "Работал на протяжении 2s\n\nTOKEN, иначе FAIL"
+            ),
+            prompt="Builder: если ok, ответь ровно TOKEN, иначе FAIL",
+            expected_text="TOKEN",
+            mode="api",
+        ).as_packet()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED")
+        self.assertTrue(packet["output_after_worked_contains_expected_text"])
+        self.assertFalse(packet["output_after_worked_exact_expected_text"])
 
     def test_multiline_prompt_split_into_recommendations_is_blocked(self) -> None:
         packet = observe_visible_output(

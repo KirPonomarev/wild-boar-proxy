@@ -124,6 +124,14 @@ class RuntimeAtomicWriteTests(unittest.TestCase):
         self.assertEqual(published_modes, [0o755])
         self.assertEqual(target.stat().st_mode & 0o777, 0o755)
 
+    def test_write_bytes_atomic_delegates_to_state_store(self) -> None:
+        target = self.root / "runtime-secret.bin"
+
+        with mock.patch.object(runtime_mod.state_store, "write_bytes") as write_bytes:
+            runtime_mod.write_bytes_atomic(target, b"\x00secret", mode=0o600)
+
+        write_bytes.assert_called_once_with(target, b"\x00secret", mode=0o600)
+
     def test_restore_path_state_uses_unique_state_store_temp_names(self) -> None:
         target = self.root / "supervisor-state.json"
         temp_names: list[str] = []

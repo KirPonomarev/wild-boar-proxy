@@ -216,3 +216,18 @@ def write_text(
         changed_files=(str(path),),
         schema_version=None,
     )
+
+
+def write_bytes(
+    path: Path,
+    value: bytes,
+    *,
+    mode: int | None = None,
+) -> StateStoreWriteResult:
+    _atomic_write_bytes(Path(path), bytes(value), mode=mode)
+    return StateStoreWriteResult(
+        target=str(path),
+        committed=True,
+        changed_files=(str(path),),
+        schema_version=None,
+    )

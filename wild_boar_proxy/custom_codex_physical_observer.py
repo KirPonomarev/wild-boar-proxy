@@ -23,6 +23,7 @@ class VisibleOutputObservation:
     required_count_delta: int
     prompt_contains_expected_text: bool
     output_after_worked_contains_expected_text: bool
+    output_after_worked_exact_expected_text: bool
     run_active: bool
     queued_recommendations_observed: bool
 
@@ -41,6 +42,9 @@ class VisibleOutputObservation:
             "prompt_contains_expected_text": self.prompt_contains_expected_text,
             "output_after_worked_contains_expected_text": (
                 self.output_after_worked_contains_expected_text
+            ),
+            "output_after_worked_exact_expected_text": (
+                self.output_after_worked_exact_expected_text
             ),
             "run_active": self.run_active,
             "queued_recommendations_observed": self.queued_recommendations_observed,
@@ -75,6 +79,13 @@ def output_after_worked_segment(delta_text: str) -> str:
     return delta_text[position:]
 
 
+def segment_has_exact_expected_line(segment: str, expected_text: str) -> bool:
+    expected = str(expected_text or "").strip()
+    if not expected:
+        return False
+    return any(line.strip() == expected for line in str(segment or "").splitlines())
+
+
 def observe_visible_output(
     *,
     before_text: str,
@@ -92,6 +103,11 @@ def observe_visible_output(
     delta_text = visible_text_delta(before_text, after_text)
     after_worked = output_after_worked_segment(delta_text)
     after_worked_contains_expected = expected_text in after_worked
+    after_worked_exact_expected = segment_has_exact_expected_line(
+        after_worked,
+        expected_text,
+    )
+    delta_exact_expected = segment_has_exact_expected_line(delta_text, expected_text)
     queued_recommendations_observed = "Отправить как рекомендацию" in delta_text
 
     prompt_echo_only = bool(prompt_contains_expected and delta_count == 1)
@@ -100,7 +116,7 @@ def observe_visible_output(
         and prompt_contains_expected
         and delta_count >= required_delta
         and "WBP_ROUTER_PROMPT" in delta_text
-        and not after_worked_contains_expected
+        and not after_worked_exact_expected
     )
 
     if run_active:
@@ -117,21 +133,22 @@ def observe_visible_output(
             required_count_delta=required_delta,
             prompt_contains_expected_text=prompt_contains_expected,
             output_after_worked_contains_expected_text=after_worked_contains_expected,
+            output_after_worked_exact_expected_text=after_worked_exact_expected,
             run_active=True,
             queued_recommendations_observed=queued_recommendations_observed,
         )
 
     if mode == "api":
-        ok = after_worked_contains_expected
+        ok = after_worked_exact_expected
     elif mode == "native":
-        ok = delta_count >= required_delta and not queued_recommendations_observed
+        ok = delta_exact_expected and not queued_recommendations_observed
     elif mode == "fail_closed":
-        ok = delta_count >= required_delta
+        ok = delta_exact_expected
     else:
         ok = (
-            after_worked_contains_expected
+            after_worked_exact_expected
             if "WBP_ROUTER_PROMPT" in delta_text
-            else delta_count >= required_delta and not queued_recommendations_observed
+            else delta_exact_expected and not queued_recommendations_observed
         )
 
     if ok:
@@ -158,6 +175,7 @@ def observe_visible_output(
         required_count_delta=required_delta,
         prompt_contains_expected_text=prompt_contains_expected,
         output_after_worked_contains_expected_text=after_worked_contains_expected,
+        output_after_worked_exact_expected_text=after_worked_exact_expected,
         run_active=False,
         queued_recommendations_observed=queued_recommendations_observed,
     )

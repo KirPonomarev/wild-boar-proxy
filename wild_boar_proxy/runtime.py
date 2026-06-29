@@ -702,53 +702,8 @@ def write_text_atomic(path: Path, value: str, *, mode: int | None = None) -> Non
     state_store.write_text(path, value + "\n", mode=mode)
 
 
-def _fsync_parent_best_effort(parent: Path) -> None:
-    try:
-        parent_fd = os.open(parent, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        try:
-            os.fsync(parent_fd)
-        except OSError:
-            return
-    finally:
-        os.close(parent_fd)
-
-
 def write_bytes_atomic(path: Path, value: bytes, *, mode: int | None = None) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = ""
-    fd = -1
-    try:
-        fd, temp_path = tempfile.mkstemp(
-            dir=target.parent,
-            prefix=".wbp-tmp-",
-            suffix=f".{target.name}",
-        )
-        with os.fdopen(fd, "wb") as file_obj:
-            fd = -1
-            file_obj.write(value)
-            file_obj.flush()
-            if mode is not None:
-                os.fchmod(file_obj.fileno(), mode)
-            os.fsync(file_obj.fileno())
-        os.replace(temp_path, target)
-        temp_path = ""
-        _fsync_parent_best_effort(target.parent)
-    except OSError:
-        if fd >= 0:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-        if temp_path:
-            try:
-                Path(temp_path).unlink(missing_ok=True)
-            except OSError:
-                pass
-        raise
+    state_store.write_bytes(path, value, mode=mode)
 
 
 def write_executable_text_atomic(path: Path, value: str) -> None:

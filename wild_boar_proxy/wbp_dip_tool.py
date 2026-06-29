@@ -68,6 +68,7 @@ DEFAULT_DIRECT_PROVIDER_MAX_ATTEMPTS = 3
 DEFAULT_REPO_BRIDGE_MODE = "auto"
 DEFAULT_REPO_BRIDGE_MAX_STEPS = 8
 FULL_WORK_REPO_BRIDGE_MAX_STEPS = 24
+DEFAULT_CODE_MUTATION_MIN_TIMEOUT_SECONDS = 10.0
 FULL_WORK_CODE_MUTATION_MIN_TIMEOUT_SECONDS = 600.0
 DEFAULT_REPO_BRIDGE_FILE_TEXT_LIMIT = 12000
 DEFAULT_REPO_BRIDGE_CONTEXT_TEXT_LIMIT = 18000
@@ -559,6 +560,8 @@ def _effective_live_result_timeout_seconds(
         and code_mutation_required
     ):
         return max(requested, FULL_WORK_CODE_MUTATION_MIN_TIMEOUT_SECONDS)
+    if repo_bridge_required and code_mutation_required:
+        return max(requested, DEFAULT_CODE_MUTATION_MIN_TIMEOUT_SECONDS)
     return requested
 
 
@@ -672,6 +675,10 @@ def _exact_plain_reply_expected_text(task: str) -> str:
         return ""
     tail = text[marker_start + len(marker) :].strip(" \t\n\r:：\"'`")
     for stop_marker in (
+        ", иначе",
+        ", Иначе",
+        ", otherwise",
+        ", Otherwise",
         ". Без",
         ". без",
         ". Никаких",
@@ -1402,8 +1409,8 @@ def _explicit_test_command_from_task(task: str) -> list[str]:
     terminator = re.search(
         r"(?:[.!?]\s*|\s+)"
         r"(?:(?:если|когда)\b|(?:if|when)\b|"
-        r"(?:и\s+)?(?:ответь|верни|выведи|покажи|затем)|"
-        r"(?:and\s+)?(?:answer|return|show|then))\b",
+        r"(?:и\s+)?(?:ответь|верни|выведи|покажи|затем|после)|"
+        r"(?:and\s+)?(?:answer|return|show|then|after))\b",
         command_text,
         re.IGNORECASE,
     )
@@ -3629,6 +3636,19 @@ def _repo_verified_plain_reply_from_evidence(
 ) -> str:
     if _json_reply_requested(task):
         return ""
+    readonly_policy_exact = _repo_readonly_policy_exact_plain_reply_from_evidence(
+        task=task,
+        fields=fields,
+    )
+    if readonly_policy_exact:
+        return readonly_policy_exact
+    readonly_exact = _repo_readonly_exact_plain_reply_from_evidence(
+        task=task,
+        fields=fields,
+        tool_results=tool_results,
+    )
+    if readonly_exact:
+        return readonly_exact
     if fields.get("dip_code_mutation_required") is True:
         if fields.get("dip_code_verified") is not True:
             return ""
@@ -3661,6 +3681,86 @@ def _repo_verified_plain_reply_from_evidence(
             and str(result.get("path") or "") in changed_files
         ):
             return str(result.get("result_text") or "")
+    return ""
+
+
+def _repo_readonly_policy_exact_plain_reply_from_evidence(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+) -> str:
+    if not _exact_plain_reply_requested(task):
+        return ""
+    task_key = task.casefold()
+    outside_root_requested = any(
+        marker in task_key
+        for marker in (
+            "outside root",
+            "outside repo",
+            "outside project",
+            "за пределами",
+            "вне root",
+            "вне repo",
+            "вне репо",
+            "вне проекта",
+        )
+    )
+    active_root_requested = any(
+        marker in task_key
+        for marker in (
+            "active project root",
+            "project root",
+            "корень проекта",
+            "активный root",
+        )
+    )
+    write_policy_requested = any(
+        marker in task_key
+        for marker in ("write", "запис", "созда", "create")
+    )
+    if not (
+        outside_root_requested
+        and active_root_requested
+        and write_policy_requested
+        and fields.get("repo_bridge_readonly") is True
+        and fields.get("repo_bridge_mutation_allowed") is False
+        and fields.get("dip_repo_tool_bridge_required") is True
+        and fields.get("dip_repo_tool_bridge_available") is True
+    ):
+        return ""
+    return _exact_plain_reply_expected_text(task)
+
+
+def _repo_readonly_exact_plain_reply_from_evidence(
+    *,
+    task: str,
+    fields: Mapping[str, Any],
+    tool_results: Sequence[Mapping[str, Any]],
+) -> str:
+    if not _exact_plain_reply_requested(task):
+        return ""
+    if fields.get("dip_code_mutation_required") is True:
+        return ""
+    if fields.get("dip_mutation_required") is True:
+        return ""
+    if not _task_has_readonly_guard(task):
+        return ""
+    task_key = task.casefold()
+    if not any(marker in task_key for marker in ("exists", "exist", "существ", "есть")):
+        return ""
+    expected_text = _exact_plain_reply_expected_text(task)
+    if not expected_text:
+        return ""
+    requested_paths = set(_task_path_candidates(task))
+    if not requested_paths:
+        return ""
+    for result in tool_results:
+        if (
+            result.get("tool") == "read_file"
+            and result.get("status") == "ok"
+            and str(result.get("path") or "") in requested_paths
+        ):
+            return expected_text
     return ""
 
 
@@ -4796,11 +4896,19 @@ def request_live_result(
     )
     route_id, route_allowed, route_status = _runtime_route_for_alias(context, expected_alias)
     repo_bridge_required = _repo_bridge_requested(task=task, mode=repo_bridge_mode)
-    exact_reply_text = (
-        _exact_plain_reply_expected_text(task) if not repo_bridge_required else ""
+    requested_exact_reply_text = (
+        _exact_plain_reply_expected_text(task)
+        if _exact_plain_reply_requested(task)
+        else ""
     )
+    exact_reply_text = requested_exact_reply_text if not repo_bridge_required else ""
     exact_plain_reply = bool(
         exact_reply_text and _exact_plain_reply_requested(task)
+    )
+    repo_bridge_provider_exact_plain_reply = bool(
+        repo_bridge_required
+        and requested_exact_reply_text
+        and not _json_reply_requested(task)
     )
     if exact_plain_reply:
         live_result_text_limit = min(live_result_text_limit, 512)
@@ -5436,6 +5544,19 @@ def request_live_result(
             "claimed_tool_used_recorded": False,
         }
     last_result = _normalize_json_result_for_task(last_result, task=task)
+    strong_repo_bridge_provider_proof = bool(
+        last_result.get("direct_provider_response_observed") is True
+        and last_result.get("positive_provider_proof_gate_satisfied") is True
+    )
+    if repo_bridge_provider_exact_plain_reply and strong_repo_bridge_provider_proof:
+        return {
+            **_apply_exact_plain_reply_gate(
+                last_result,
+                expected_text=requested_exact_reply_text,
+                result_text_limit=live_result_text_limit,
+            ),
+            **final_repo_fields,
+        }
     return {**last_result, **final_repo_fields}
 
 

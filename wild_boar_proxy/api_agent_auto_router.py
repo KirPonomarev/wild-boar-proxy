@@ -487,6 +487,19 @@ def _valid_json_text(value: object) -> bool:
     return isinstance(parsed, (dict, list))
 
 
+def _exact_plain_visible_output_allowed(packet: Mapping[str, Any]) -> bool:
+    if not _as_bool(packet.get("exact_plain_reply_matched")):
+        return False
+    if not _as_bool(packet.get("repo_bridge_used")):
+        return True
+    if _as_bool(packet.get("repo_bridge_evidence_response_proven")):
+        return True
+    return bool(
+        _as_bool(packet.get("direct_provider_response_observed"))
+        and _as_bool(packet.get("positive_provider_proof_gate_satisfied"))
+    )
+
+
 def _output_passthrough_fields(
     *,
     prompt_text: object,
@@ -494,7 +507,7 @@ def _output_passthrough_fields(
     direct_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     reply_text = _safe_text(direct_summary.get("reply_text"), limit=65536)
-    exact_plain = _as_bool(direct_summary.get("exact_plain_reply_matched"))
+    exact_plain = _exact_plain_visible_output_allowed(direct_summary)
     exact_json = (
         _json_output_passthrough_requested(prompt_text)
         and _valid_json_text(reply_text)

@@ -664,6 +664,19 @@ class ExternalModelContractTests(unittest.TestCase):
                 target.read_text(encoding="utf-8"), "OPENROUTER_API_KEY=test-key\n"
             )
 
+    def test_secret_write_uses_hardened_state_store_text_entrypoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "secrets.env"
+
+            with mock.patch.object(state_mod.state_store, "write_text") as write_text:
+                state_mod.write_secrets_file_text(
+                    target, "OPENROUTER_API_KEY=test-key\n"
+                )
+
+            write_text.assert_called_once_with(
+                target, "OPENROUTER_API_KEY=test-key\n", mode=0o600
+            )
+
     def test_failed_secret_write_cleans_temp_and_keeps_original(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

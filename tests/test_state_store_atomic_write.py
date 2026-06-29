@@ -143,6 +143,17 @@ class StateStoreAtomicWriteTests(unittest.TestCase):
         self.assertEqual(target.read_text(encoding="utf-8"), "stable")
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
+    def test_write_bytes_supports_binary_payload_and_mode(self) -> None:
+        target = self.root / "runtime-secret.bin"
+
+        result = state_store.write_bytes(target, b"\x00stable\xff", mode=0o600)
+
+        self.assertTrue(result.committed)
+        self.assertEqual(result.changed_files, (str(target),))
+        self.assertEqual(result.schema_version, None)
+        self.assertEqual(target.read_bytes(), b"\x00stable\xff")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+
     def test_parent_directory_fsync_is_attempted_best_effort(self) -> None:
         target = self.root / "runtime-effective-mode.txt"
         real_open = state_store.os.open

@@ -76,6 +76,7 @@ from wild_boar_proxy.custom_agent_bindings import (
     project_agent_bindings_for_runtime_context,
     read_agent_bindings_packet,
     resolve_alias_binding,
+    validate_agent_bindings,
     write_agent_bindings_packet,
 )
 from wild_boar_proxy.custom_paste_bridge import (
@@ -383,7 +384,14 @@ CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_CODE = "CUSTOM_CODEX_OPERATOR_STATUS_TIMEOU
 VISIBLE_HISTORY_CONFIRMATION_MAX_AGE_SECONDS = 10 * 60
 CUSTOM_MIXED_TRACE_MAX_AGE_SECONDS = 10 * 60
 CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS = 2 * 60
-CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID = "wbp-deepseek-chat"
+CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_ID = "wbp-deepseek-chat"
+CUSTOM_GPT_PLUS_API_OPENROUTER_FALLBACK_ROUTE_ID = "wbp-web-primary-openrouter"
+CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID = CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_ID
+CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_FALLBACK_IDS = (
+    CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_ID,
+    CUSTOM_GPT_PLUS_API_OPENROUTER_FALLBACK_ROUTE_ID,
+)
+CUSTOM_GPT_PLUS_API_CODING_PROVIDER_IDS = ("openrouter", "deepseek")
 CUSTOM_GPT_PLUS_API_ACCEPTANCE_EXPECTED_TEXT = "WBP_CHATGPT_PLUS_API_ACCEPTANCE_OK"
 DEEPSEEK_V4_PRO_REASONING_ROUTE_SPECS: tuple[tuple[str, str, dict[str, str]], ...] = (
     ("fast", "wbp-deepseek-v4-pro-fast", {"type": "disabled"}),
@@ -2538,9 +2546,32 @@ def _custom_agent_default_api_route_id(
     route_records: list[dict[str, Any]],
 ) -> str:
     route_ids = [str(route.get("route_id") or "").strip() for route in route_records]
-    if CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID in route_ids:
-        return CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID
-    return route_ids[0] if route_ids else CUSTOM_GPT_PLUS_API_ACCEPTANCE_ROUTE_ID
+    for preferred_route_id in CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_FALLBACK_IDS:
+        if preferred_route_id in route_ids:
+            return preferred_route_id
+    return route_ids[0] if route_ids else CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_ID
+
+
+def _custom_gpt_plus_api_provider_id(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _custom_gpt_plus_api_provider_blocking_reason(
+    *,
+    route_id: str,
+    provider: str,
+) -> str:
+    normalized_provider = _custom_gpt_plus_api_provider_id(provider)
+    normalized_route = str(route_id or "").strip().lower()
+    if not normalized_provider:
+        return "coding_provider_missing"
+    if normalized_provider not in CUSTOM_GPT_PLUS_API_CODING_PROVIDER_IDS:
+        return "coding_provider_not_supported"
+    if "deepseek" in normalized_route and normalized_provider != "deepseek":
+        return "coding_provider_route_mismatch"
+    if "openrouter" in normalized_route and normalized_provider != "openrouter":
+        return "coding_provider_route_mismatch"
+    return ""
 
 
 def _json_object_or_empty(raw_bytes: bytes) -> dict[str, Any]:
@@ -3420,7 +3451,27 @@ def _custom_native_validate_acceptance_response(
     )
     requested_model = str(response_packet.get("requested_model") or "")
     response_model = str(response_packet.get("model") or "")
-    provider = str(response_packet.get("provider") or "").lower()
+    provider = _custom_gpt_plus_api_provider_id(response_packet.get("provider"))
+    route_providers = (
+        agent_runtime_context.get("route_providers")
+        if isinstance(agent_runtime_context.get("route_providers"), dict)
+        else {}
+    )
+    coding_slot = (
+        agent_runtime_context.get("coding_agent_model_slot")
+        if isinstance(agent_runtime_context.get("coding_agent_model_slot"), dict)
+        else {}
+    )
+    expected_provider = _custom_gpt_plus_api_provider_id(route_providers.get(route_id))
+    if (
+        not expected_provider
+        and str(coding_slot.get("model_id") or "") == route_id
+    ):
+        expected_provider = _custom_gpt_plus_api_provider_id(coding_slot.get("provider"))
+    if not expected_provider and "deepseek" in route_id.lower():
+        expected_provider = "deepseek"
+    if not expected_provider and "openrouter" in route_id.lower():
+        expected_provider = "openrouter"
     reasoning_packet = (
         agent_runtime_context.get("api_reasoning_option_packet")
         if isinstance(agent_runtime_context.get("api_reasoning_option_packet"), dict)
@@ -3477,8 +3528,16 @@ def _custom_native_validate_acceptance_response(
         blocking_reasons.append("response_machine_error_code_not_ok")
     if str(response_packet.get("output_text") or "") != expected_text:
         blocking_reasons.append("output_text_mismatch")
-    if provider != "deepseek":
-        blocking_reasons.append("provider_not_deepseek")
+    provider_blocking_reason = _custom_gpt_plus_api_provider_blocking_reason(
+        route_id=route_id,
+        provider=expected_provider,
+    )
+    if provider_blocking_reason:
+        blocking_reasons.append(provider_blocking_reason)
+    if not expected_provider:
+        blocking_reasons.append("expected_provider_missing")
+    elif provider != expected_provider:
+        blocking_reasons.append("provider_mismatch")
     if requested_model != route_id:
         blocking_reasons.append("requested_model_mismatch")
     if response_model and response_model != route_id:
@@ -3507,6 +3566,7 @@ def _custom_native_validate_acceptance_response(
         ),
         "requested_model": requested_model,
         "provider": provider,
+        "expected_provider": expected_provider,
         "response_age_seconds": response_age_seconds,
         "freshness_window_seconds": CUSTOM_GPT_PLUS_API_ACCEPTANCE_MAX_AGE_SECONDS,
         "api_reasoning_option_id": reasoning_option_id,
@@ -11362,6 +11422,81 @@ def _custom_native_runtime_rebind_primary_model(
     }
 
 
+def _custom_native_runtime_rebind_api_route_packet(
+    bindings_packet: dict[str, Any],
+    *,
+    bindings_state_path: Path,
+    api_model_id: str,
+    primary_model_ids: list[str] | tuple[str, ...] | set[str] = (),
+    route_records: list[dict[str, Any]] | None = None,
+    require_api_route_binding: bool = False,
+) -> dict[str, Any]:
+    api_model_id = str(api_model_id or "").strip()
+    if (
+        bindings_packet.get("status") == "ok"
+        or not api_model_id
+        or bindings_packet.get("source") != "persisted_state"
+        or bindings_packet.get("state_file_present") is not True
+    ):
+        return bindings_packet
+    blocking_reasons = [
+        str(reason)
+        for reason in bindings_packet.get("blocking_reasons", [])
+        if str(reason)
+    ]
+    route_only_reasons = {
+        reason
+        for reason in blocking_reasons
+        if re.fullmatch(
+            r"binding_\d+_route_id_(not_server_issued|disabled|stale)",
+            reason,
+        )
+    }
+    if not route_only_reasons or len(route_only_reasons) != len(blocking_reasons):
+        return bindings_packet
+    try:
+        document_payload = json.loads(bindings_state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return bindings_packet
+    if not isinstance(document_payload, dict):
+        return bindings_packet
+    raw_bindings = document_payload.get("agent_bindings")
+    if not isinstance(raw_bindings, list):
+        return bindings_packet
+    rebound_bindings: list[Any] = []
+    rebound_count = 0
+    for raw_binding in raw_bindings:
+        if not isinstance(raw_binding, dict):
+            rebound_bindings.append(raw_binding)
+            continue
+        binding = dict(raw_binding)
+        if binding.get("lane") == API_ROUTE_LANE and binding.get("enabled") is not False:
+            if binding.get("route_id") != api_model_id:
+                rebound_count += 1
+            binding["route_id"] = api_model_id
+        rebound_bindings.append(binding)
+    if rebound_count < 1:
+        return bindings_packet
+    rebound_packet = validate_agent_bindings(
+        rebound_bindings,
+        primary_model_ids=primary_model_ids,
+        route_records=route_records,
+        require_api_route_binding=require_api_route_binding,
+    )
+    if rebound_packet.get("status") != "ok":
+        return bindings_packet
+    return {
+        **rebound_packet,
+        "source": "persisted_state",
+        "state_file_present": True,
+        "state_path_redacted": True,
+        "runtime_api_route_rebound": True,
+        "runtime_api_route_rebound_count": rebound_count,
+        "runtime_api_route_rebound_from_blocking_reasons": blocking_reasons,
+        "runtime_api_route_rebound_to": api_model_id,
+    }
+
+
 def _custom_native_agent_runtime_context(
     *,
     execution_packet: dict[str, Any] | None,
@@ -11459,6 +11594,14 @@ def _custom_native_agent_runtime_context(
             route_records=effective_route_records,
             require_api_route_binding=True,
         )
+        bindings_packet = _custom_native_runtime_rebind_api_route_packet(
+            bindings_packet,
+            bindings_state_path=bindings_state_path,
+            api_model_id=api_model_id,
+            primary_model_ids=[],
+            route_records=effective_route_records,
+            require_api_route_binding=True,
+        )
         runtime_agent_bindings = (
             _custom_native_api_only_runtime_agent_bindings(
                 [
@@ -11504,6 +11647,14 @@ def _custom_native_agent_runtime_context(
             route_records=effective_route_records,
             require_api_route_binding=execution_mode == "chatgpt_plus_api",
         )
+        bindings_packet = _custom_native_runtime_rebind_api_route_packet(
+            bindings_packet,
+            bindings_state_path=bindings_state_path,
+            api_model_id=api_model_id,
+            primary_model_ids=[],
+            route_records=effective_route_records,
+            require_api_route_binding=execution_mode == "chatgpt_plus_api",
+        )
         if execution_mode in {"chatgpt_only", "chatgpt_plus_api"}:
             bindings_packet = _custom_native_runtime_rebind_primary_model(
                 bindings_packet,
@@ -11514,17 +11665,22 @@ def _custom_native_agent_runtime_context(
         execution_mode == "chatgpt_plus_api"
         and api_model_id
         and coding_provider
-        and coding_provider.lower() != "deepseek"
+        and (
+            provider_blocking_reason := _custom_gpt_plus_api_provider_blocking_reason(
+                route_id=api_model_id,
+                provider=coding_provider,
+            )
+        )
     ):
         bindings_packet = {
             **bindings_packet,
             "status": "blocked",
             "machine_error_code": "CUSTOM_AGENT_BINDINGS_PROVIDER_MISMATCH",
-            "human_message": "Custom Codex ChatGPT+API bindings require a DeepSeek coding provider.",
+            "human_message": "Custom Codex ChatGPT+API bindings require a server-supported coding provider matching the selected API route.",
             "agent_bindings": [],
             "blocking_reasons": [
                 *list(bindings_packet.get("blocking_reasons") or []),
-                "coding_provider_not_deepseek",
+                provider_blocking_reason,
             ],
             "alias_to_agent_id": {},
             "agent_id_to_route": {},
@@ -11614,6 +11770,20 @@ def _custom_native_agent_runtime_context(
         "agent_bindings_machine_error_code": str(
             bindings_packet.get("machine_error_code") or ""
         ),
+        "runtime_api_route_rebound": bindings_packet.get("runtime_api_route_rebound") is True,
+        "runtime_api_route_rebound_count": int(
+            bindings_packet.get("runtime_api_route_rebound_count") or 0
+        ),
+        "runtime_api_route_rebound_to": str(
+            bindings_packet.get("runtime_api_route_rebound_to") or ""
+        ),
+        "runtime_api_route_rebound_from_blocking_reasons": [
+            str(reason)
+            for reason in bindings_packet.get(
+                "runtime_api_route_rebound_from_blocking_reasons",
+                [],
+            )
+        ],
         "agent_binding_truth_source": bindings_projection.get(
             "agent_binding_truth_source"
         ),
@@ -11659,6 +11829,7 @@ def _custom_native_agent_runtime_context(
         "route_model_id": route_model_id,
         "allowed_api_route_ids": allowed_api_route_ids,
         "forbidden_stale_route_ids": forbidden_stale_route_ids,
+        "route_providers": bindings_projection.get("route_providers", {}),
         "manual_probe_expected_text": manual_probe_expected_text,
         "deepseek_live_format_check_bridge": {
             "enabled": local_bridge_enabled,
@@ -13258,6 +13429,11 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     primary_slot_bound = primary_slot.get("status") == "bound"
     coding_slot_bound = coding_slot.get("status") == "bound"
+    coding_provider = _custom_gpt_plus_api_provider_id(coding_slot.get("provider"))
+    coding_provider_blocking_reason = _custom_gpt_plus_api_provider_blocking_reason(
+        route_id=coding_model_id,
+        provider=coding_provider,
+    )
     slot_binding_blocking_reasons: list[str] = []
     if launch_context_missing:
         slot_binding_blocking_reasons.append("launch_context_missing")
@@ -13288,8 +13464,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             slot_binding_blocking_reasons.append("coding_slot_not_bound")
         if coding_slot.get("lane") != API_ROUTE_MODEL_LANE:
             slot_binding_blocking_reasons.append("coding_slot_lane_mismatch")
-        if str(coding_slot.get("provider") or "") != "deepseek":
-            slot_binding_blocking_reasons.append("coding_provider_not_deepseek")
+        if coding_provider_blocking_reason:
+            slot_binding_blocking_reasons.append(coding_provider_blocking_reason)
         if not coding_model_id:
             slot_binding_blocking_reasons.append("coding_model_missing")
         if coding_slot.get("server_issued") is not True:
@@ -13319,7 +13495,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         ),
         {},
     )
-    deepseek_record = next(
+    coder_record = next(
         (
             record
             for record in reversed(records)
@@ -13327,7 +13503,8 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             and record.get("path") == "/v1/responses"
             and record_matches_launch(record)
             and record.get("provider_called") is True
-            and str(record.get("provider_id") or "") == "deepseek"
+            and _custom_gpt_plus_api_provider_id(record.get("provider_id"))
+            == coding_provider
             and str(record.get("effective_route_model") or record.get("requested_model") or "")
             == coding_model_id
             and record.get("fallback_used") is False
@@ -13335,6 +13512,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         ),
         {},
     )
+    deepseek_record = coder_record if coding_provider == "deepseek" else {}
     primary_replaced_by_api_record = next(
         (
             record
@@ -13354,7 +13532,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         {},
     )
     prompt_seen = bool(slot_binding_proven and prompt_record)
-    coder_dispatch_proven = bool(slot_binding_proven and deepseek_record)
+    coder_dispatch_proven = bool(slot_binding_proven and coder_record)
     chatgpt_replaced_by_api = bool(
         slot_binding_proven
         and not prompt_seen
@@ -13365,19 +13543,19 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         slot_binding_proven
         and not prompt_seen
         and coder_dispatch_proven
-        and deepseek_record
-        and str(deepseek_record.get("requested_model") or "") == coding_model_id
+        and coder_record
+        and str(coder_record.get("requested_model") or "") == coding_model_id
         and str(
-            deepseek_record.get("effective_route_model")
-            or deepseek_record.get("requested_model")
+            coder_record.get("effective_route_model")
+            or coder_record.get("requested_model")
             or ""
         )
         == coding_model_id
-        and deepseek_record.get("provider_called") is True
-        and deepseek_record.get("chatgpt_route_used") is False
-        and deepseek_record.get("fallback_used") is False
-        and deepseek_record.get("raw_prompt_recorded") is not True
-        and deepseek_record.get("secret_value_recorded") is not True
+        and coder_record.get("provider_called") is True
+        and coder_record.get("chatgpt_route_used") is False
+        and coder_record.get("fallback_used") is False
+        and coder_record.get("raw_prompt_recorded") is not True
+        and coder_record.get("secret_value_recorded") is not True
     )
     native_mixed_prompt_trace_unsupported = bool(
         chatgpt_replaced_by_api or api_route_dispatched_without_primary
@@ -13388,7 +13566,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         prompt_record and record_matches_launch(prompt_record)
     )
     coder_trace_id_matches_launch = bool(
-        deepseek_record and record_matches_launch(deepseek_record)
+        coder_record and record_matches_launch(coder_record)
     )
     primary_replacement_trace_id_matches_launch = bool(
         primary_replaced_by_api_record
@@ -13396,7 +13574,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     trace_launch_packet_matches = bool(
         prompt_record
-        and deepseek_record
+        and coder_record
         and primary_trace_id_matches_launch
         and coder_trace_id_matches_launch
     )
@@ -13417,9 +13595,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
     )
     coder_work_result_proven = bool(
         coder_dispatch_proven
-        and deepseek_record.get("response_seen") is True
-        and deepseek_record.get("known_smoke_phrase_matched") is True
-        and int(deepseek_record.get("upstream_status") or 0) == 200
+        and coder_record.get("response_seen") is True
+        and coder_record.get("known_smoke_phrase_matched") is True
+        and int(coder_record.get("upstream_status") or 0) == 200
     )
     full_success = bool(
         prompt_seen
@@ -13477,9 +13655,9 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
             else "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher"
         )
     elif prompt_seen and coder_dispatch_proven and not coder_work_result_proven:
-        machine_error_code = "DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
-        final_status = "KNOWN_BLOCKER_DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
-        next_action = "rerun_native_dispatch_proof_or_inspect_deepseek_response_contract"
+        machine_error_code = "API_CODER_WORK_RESULT_NOT_PROVEN"
+        final_status = "KNOWN_BLOCKER_API_CODER_WORK_RESULT_NOT_PROVEN"
+        next_action = "rerun_native_dispatch_proof_or_inspect_api_coder_response_contract"
     else:
         machine_error_code = "CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
         final_status = "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
@@ -13599,14 +13777,14 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
                 else "KNOWN_BLOCKER_CHATGPT_PLUS_API_PROMPT_NOT_SEEN"
             ),
             "coder_dispatch": (
-                "DEEPSEEK_CODER_SLOT_DISPATCH_PROVEN"
+                "API_CODER_SLOT_DISPATCH_PROVEN"
                 if coder_dispatch_proven
                 else "KNOWN_BLOCKER_CHATGPT_PLUS_API_CODER_SLOT_NOT_DISPATCHED"
             ),
             "coder_work_result": (
-                "DEEPSEEK_CODER_WORK_RESULT_PROVEN_WITH_LIMITS"
+                "API_CODER_WORK_RESULT_PROVEN_WITH_LIMITS"
                 if coder_work_result_proven
-                else "KNOWN_BLOCKER_DEEPSEEK_CODER_WORK_RESULT_NOT_PROVEN"
+                else "KNOWN_BLOCKER_API_CODER_WORK_RESULT_NOT_PROVEN"
             ),
         },
         "launch_proven": launch_proven,
@@ -13668,8 +13846,12 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "prompt_seen": prompt_seen,
         "chatgpt_route_observed": prompt_seen,
         "chatgpt_primary_route_observed": prompt_seen,
-        "deepseek_route_observed": coder_dispatch_proven,
-        "deepseek_coding_route_observed": coder_dispatch_proven,
+        "api_coder_route_observed": coder_dispatch_proven,
+        "api_coding_route_observed": coder_dispatch_proven,
+        "deepseek_route_observed": coder_dispatch_proven and coding_provider == "deepseek",
+        "deepseek_coding_route_observed": (
+            coder_dispatch_proven and coding_provider == "deepseek"
+        ),
         "chatgpt_replaced_by_api": chatgpt_replaced_by_api,
         "primary_replaced_by_api_route": chatgpt_replaced_by_api,
         "primary_replacement_record_seen": bool(primary_replaced_by_api_record),
@@ -13712,7 +13894,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "unsupported_evidence": {
             "primary_prompt_record_seen": bool(prompt_record),
             "primary_trace_id_matches_launch": primary_trace_id_matches_launch,
-            "coder_record_seen": bool(deepseek_record),
+            "coder_record_seen": bool(coder_record),
             "coder_trace_id_matches_launch": coder_trace_id_matches_launch,
             "api_route_dispatched_without_primary": api_route_dispatched_without_primary,
             "primary_replaced_by_api_route": chatgpt_replaced_by_api,
@@ -13728,7 +13910,7 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "primary_model_id": primary_model_id,
         "coding_agent_model_id": coding_model_id,
         "primary_provider": "chatgpt",
-        "coding_slot_provider": str(coding_slot.get("provider") or ""),
+        "coding_slot_provider": coding_provider,
         "coding_slot_model": coding_model_id,
         "request_count": max(int(trace.get("request_count") or 0), len(records)),
         "chatgpt_prompt_record_seen": bool(prompt_record),
@@ -13745,11 +13927,14 @@ def build_custom_codex_chatgpt_plus_api_coder_trace_packet(
         "deepseek_record_seen": bool(deepseek_record),
         "deepseek_requested_model": str(deepseek_record.get("requested_model") or ""),
         "deepseek_effective_route_model": str(deepseek_record.get("effective_route_model") or ""),
-        "provider_called": deepseek_record.get("provider_called") is True,
-        "provider_id": str(deepseek_record.get("provider_id") or ""),
-        "upstream_model": str(deepseek_record.get("upstream_model") or ""),
-        "upstream_status": int(deepseek_record.get("upstream_status") or 0),
-        "known_smoke_phrase_matched": deepseek_record.get("known_smoke_phrase_matched") is True,
+        "coder_record_seen": bool(coder_record),
+        "coder_requested_model": str(coder_record.get("requested_model") or ""),
+        "coder_effective_route_model": str(coder_record.get("effective_route_model") or ""),
+        "provider_called": coder_record.get("provider_called") is True,
+        "provider_id": str(coder_record.get("provider_id") or ""),
+        "upstream_model": str(coder_record.get("upstream_model") or ""),
+        "upstream_status": int(coder_record.get("upstream_status") or 0),
+        "known_smoke_phrase_matched": coder_record.get("known_smoke_phrase_matched") is True,
         "fallback_used": fallback_seen,
         "api_only_mode": execution_mode == "api_only",
         "api_only_mode_used": execution_mode == "api_only",
