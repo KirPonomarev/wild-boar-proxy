@@ -1351,6 +1351,98 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(len(runtime_truth), 1)
         self.assertLess(messages.index(runtime_truth[0]), len(messages) - 1)
 
+    def test_external_route_responses_adapter_does_not_route_codex_desktop_file_envelope(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        captured: dict[str, object] = {}
+
+        def fake_request_json(**kwargs: object):
+            captured.update(kwargs)
+
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "WBP_DESIGN_PROMPT_UPSTREAM_OK",
+                            }
+                        }
+                    ],
+                    "usage": {"total_tokens": 12},
+                }
+
+            return FakeResponse()
+
+        service_context = "\n".join(
+            [
+                "# AGENTS.md instructions for /Volumes/Work/wild-boar-proxy",
+                "DIP: stale example inside repository instructions, not active request.",
+            ]
+        )
+        active_request = "\n".join(
+            [
+                "# Files mentioned by the user:",
+                "",
+                "## Приложение пользователя.png: /Users/me/Downloads/app.png",
+                "",
+                "## My request for Codex:",
+                "нужно переосмыслить дизайн этого экрана приложения",
+                "<image name=[Image #1] path=\"/Users/me/Downloads/app.png\">",
+            ]
+        )
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json) as upstream,
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": service_context}],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": active_request}],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": _auth_header("sk-local-runtime"),
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(payload["output_text"], "WBP_DESIGN_PROMPT_UPSTREAM_OK")
+        self.assertNotEqual(payload["output_text"], "FAIL_ALIAS_CONTEXT_MISSING")
+        upstream.assert_called_once()
+        messages = captured["payload"]["messages"]
+        self.assertEqual(messages[-1]["role"], "user")
+        self.assertIn("# Files mentioned by the user:", messages[-1]["content"])
+        self.assertIn("нужно переосмыслить дизайн", messages[-1]["content"])
+
     def test_external_route_responses_adapter_streams_response_completed_for_streaming_clients(self) -> None:
         route = {
             "route_id": "wbp-web-primary-openrouter",

@@ -90,7 +90,13 @@ REQUEST_ADMISSION_ERROR_CODES = {
     API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
     WBP_CONTEXT_BUDGET_EXCEEDED,
 }
-_LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s*", re.UNICODE)
+_LEADING_ADDRESS_RE = re.compile(
+    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s*",
+    re.UNICODE,
+)
+_CODEX_DESKTOP_REQUEST_MARKER_RE = re.compile(
+    r"(?im)^[ \t]*(?:#+[ \t]*)?My request for Codex\s*[:：][ \t]*$"
+)
 
 
 def default_runtime_config_path() -> Path:
@@ -782,8 +788,16 @@ def _responses_payload_user_prompt_texts(payload: dict[str, Any]) -> list[str]:
         role = str(message.get("role") or "").strip().lower()
         content = message.get("content")
         if role == "user" and isinstance(content, str) and content.strip():
-            texts.append(content.strip())
+            texts.append(_active_prompt_for_alias_routing(content.strip()))
     return texts
+
+
+def _active_prompt_for_alias_routing(prompt_text: str) -> str:
+    text = str(prompt_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    markers = list(_CODEX_DESKTOP_REQUEST_MARKER_RE.finditer(text))
+    if not markers:
+        return prompt_text
+    return text[markers[-1].end() :].lstrip()
 
 
 def _leading_address_alias(prompt_text: str) -> str:
@@ -1062,7 +1076,7 @@ def _latest_addressed_user_prompt(messages: list[dict[str, Any]]) -> str:
     for message in reversed(messages):
         if str(message.get("role") or "") != "user":
             continue
-        text = _message_text(message).strip()
+        text = _active_prompt_for_alias_routing(_message_text(message).strip())
         if text and _leading_address_alias(text):
             return text
     return ""
