@@ -34,6 +34,14 @@ def _run_collect(*command: str) -> int:
 
 
 class MakefileTestFastContractTests(unittest.TestCase):
+    def test_test_fast_includes_release_acceptance_gate_regressions(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+        self.assertIn("test-fast: test-core", makefile)
+        self.assertIn("tests/test_gpt_api_dip_acceptance_gate.py", makefile)
+        self.assertIn("tests/test_gpt_api_dip_product_ready_gate.py", makefile)
+        self.assertIn("tests/test_e2e_mode_matrix.py", makefile)
+
     def test_make_test_fast_collects_real_material_subset_of_full_suite(self) -> None:
         fast_count = _run_collect(
             "make",

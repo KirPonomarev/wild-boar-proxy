@@ -28,6 +28,9 @@ CORE_TESTS = \
 	tests/test_invariant_false_green.py \
 	tests/test_runtime_identity_false_green.py \
 	tests/test_runtime_atomic_write.py \
+	tests/test_gpt_api_dip_acceptance_gate.py \
+	tests/test_gpt_api_dip_product_ready_gate.py \
+	tests/test_e2e_mode_matrix.py \
 	tests/test_read_compatibility_snapshots.py \
 	tests/test_repair_adjacent_packet_shape_snapshots.py \
 	tests/test_read_effect_no_write.py \
