@@ -6273,6 +6273,310 @@ sandbox.runQuickStartCustomLaunchAction().then(() => {
         if result.returncode != 0:
             self.fail(result.stderr or result.stdout)
 
+    def test_custom_launch_recovers_stable_bridge_conflict_and_retries_once(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.src = "";
+    this.alt = "";
+    this.value = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  querySelector() {
+    return this.lastElementChild || null;
+  }
+  setAttribute(name, value) {
+    this[name] = value;
+    if (name === "disabled") {
+      this.disabled = true;
+    }
+  }
+  removeAttribute(name) {
+    delete this[name];
+    if (name === "disabled") {
+      this.disabled = false;
+    }
+  }
+  addEventListener() {}
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node(id);
+  }
+  return nodes[id];
+}
+node("quickStartExecutionModeSelect").value = "api_only";
+node("quickStartChatModelSelect").value = "gpt-5.5";
+node("quickStartApiModelSelect").value = "wbp-deepseek-chat";
+node("quickStartApiReasoningOptionSelect").value = "normal";
+
+const urls = [];
+const bodies = [];
+let nativeLaunchCalls = 0;
+let recoveryApplyBody = null;
+
+const admitted = {
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "QUICK_START_CONFIG_ADMISSION_PROVEN_WITH_LIMITS",
+  execution_mode: "api_only",
+  chatgpt_model: { status: "not_required", model_id: "" },
+  api_model: { status: "admitted", model_id: "wbp-deepseek-chat" },
+  api_reasoning: { status: "accepted", option_id: "normal" },
+  api_route: { status: "admitted", route_reference: "server-owned-api-route" },
+  launch_admission: "admitted",
+  dry_server_truth_only: true,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false,
+  next_action: "native_launch_preflight"
+};
+
+const preflight = {
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "CUSTOM_NATIVE_LAUNCH_PREFLIGHT_ADMITTED",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  route_model_id: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  owner_authorization_phrase_present: true,
+  bridge_required: true,
+  bridge_alive: false,
+  bridge_status: "not_started_or_down",
+  custom_process_observed: false,
+  window_status: "not_found",
+  config_status: "admitted",
+  next_action: "native_launch"
+};
+
+const blockedLaunch = {
+  status: "blocked",
+  machine_error_code: "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE",
+  final_status: "STOP_AND_DIAGNOSE_STABLE_BRIDGE_PORT_CONFLICT",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  launch_model_id: "wbp-deepseek-chat",
+  route_model_id: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  launch_claim_scope: "custom_native_app_window_launch_only",
+  running_status: false,
+  process_started: false,
+  native_window_observed: false,
+  native_app_usable: false,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false,
+  next_action: "stop_and_diagnose_stable_wbp_bridge_port_conflict"
+};
+
+const recoveredLaunch = {
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "CUSTOM_CODEX_NATIVE_LAUNCH_PROVEN_WITH_LIMITS",
+  execution_mode: "api_only",
+  selected_model: "wbp-deepseek-chat",
+  launch_model_id: "wbp-deepseek-chat",
+  route_model_id: "wbp-deepseek-chat",
+  api_model_id: "wbp-deepseek-chat",
+  running_status: true,
+  isolated_home: true,
+  isolated_codex_home: true,
+  isolated_profile_dir: true,
+  server_issued_model_list: true,
+  wbp_endpoint_configured: true,
+  browser_route_injection: false,
+  browser_backend_injection: false,
+  current_codex_touched: false,
+  process_started: true,
+  expected_custom_identity_observed: true,
+  native_window_observed: true,
+  native_app_usable: true,
+  real_codex_app_launched: true,
+  bridge_alive: true,
+  stable_custom_codex_wbp_bridge_final_status: "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS",
+  launch_claim_scope: "custom_native_app_window_launch_only",
+  launch_packet_is_truth_source: true,
+  quick_start_launch_route_truth_proven_with_limits: true,
+  route_packet_matches_selection_packet: true,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false,
+  next_action: "none"
+};
+
+const recoveryPreflight = {
+  status: "ok",
+  machine_error_code: "OK",
+  packet_kind: "custom_native_stable_bridge_recovery_preflight",
+  recovery_apply_admissible: true,
+  bridge_port: 50555,
+  target_pid: 4242,
+  bridge_ownership_status: "wbp_stale_or_other_instance",
+  target_process_wbp_proven: true,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false
+};
+
+const recoveryApply = {
+  status: "ok",
+  machine_error_code: "OK",
+  final_status: "STABLE_BRIDGE_RECOVERY_APPLIED_CURRENT_PROCESS_OWNS_BRIDGE",
+  current_process_bound_after_recovery: true,
+  bridge_process_kill_attempted: true,
+  port_released: true,
+  raw_backend_details_exposed: false,
+  secret_value_exposed: false
+};
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    querySelector() { return { dataset: { source: "fixture", screen: "quick-start" } }; },
+    querySelectorAll() { return []; },
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start" },
+    history: { replaceState() {} },
+    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController,
+  fetch(url, options = {}) {
+    urls.push(url);
+    if (options.body) {
+      bodies.push({ url, body: JSON.parse(options.body) });
+    }
+    if (url === "api/codex/custom/quick-start/config-admission") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(admitted) });
+    }
+    if (url === "api/codex/custom/native-launch-preflight") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(preflight) });
+    }
+    if (url === "api/codex/custom/native-launch") {
+      nativeLaunchCalls += 1;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(nativeLaunchCalls === 1 ? blockedLaunch : recoveredLaunch)
+      });
+    }
+    if (url === "api/codex/custom/stable-bridge-recovery/preflight") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(recoveryPreflight) });
+    }
+    if (url === "api/codex/custom/stable-bridge-recovery/apply") {
+      recoveryApplyBody = JSON.parse(options.body);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(recoveryApply) });
+    }
+    if (url === "api/codex/custom/live-bridge-stability") {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        status: "ok",
+        machine_error_code: "OK",
+        bridge_status: "BRIDGE_READY",
+        execution_mode: "api_only",
+        api_model_id: "wbp-deepseek-chat",
+        bridge_alive: true,
+        port_alive: true,
+        fallback_used: false,
+        raw_backend_details_exposed: false,
+        secret_value_exposed: false,
+        next_action: "none"
+      }) });
+    }
+    throw new Error(`unexpected fetch url ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.runCodexCustomLaunch().then(() => {
+  const expectedUrls = [
+    "api/codex/custom/quick-start/config-admission",
+    "api/codex/custom/native-launch-preflight",
+    "api/codex/custom/native-launch",
+    "api/codex/custom/stable-bridge-recovery/preflight",
+    "api/codex/custom/stable-bridge-recovery/apply",
+    "api/codex/custom/native-launch"
+  ];
+  if (JSON.stringify(urls) !== JSON.stringify(expectedUrls)) {
+    throw new Error(`unexpected urls ${JSON.stringify(urls)}`);
+  }
+  if (nativeLaunchCalls !== 2) {
+    throw new Error(`expected one retry, got ${nativeLaunchCalls}`);
+  }
+  const expectedApply = {
+    expected_bridge_port: 50555,
+    expected_listener_pid: 4242,
+    expected_bridge_ownership_status: "wbp_stale_or_other_instance",
+    bind_after_release: true
+  };
+  if (JSON.stringify(recoveryApplyBody) !== JSON.stringify(expectedApply)) {
+    throw new Error(`unexpected recovery body ${JSON.stringify(recoveryApplyBody)}`);
+  }
+  const rendered = JSON.parse(nodes.codexLaunchDryRunResponse.textContent);
+  if (rendered.status !== "ok" || rendered.machine_error_code !== "OK") {
+    throw new Error(`launch did not recover: ${nodes.codexLaunchDryRunResponse.textContent}`);
+  }
+  if (rendered.stable_bridge_recovery_retry_attempted !== true) {
+    throw new Error(`recovery retry not rendered: ${nodes.codexLaunchDryRunResponse.textContent}`);
+  }
+  if (rendered.stable_bridge_recovery_machine_error_code !== "OK") {
+    throw new Error(`recovery machine code not rendered: ${nodes.codexLaunchDryRunResponse.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            self.fail(result.stderr or result.stdout)
+
     def test_quick_start_mixed_launch_action_runs_command_loop_when_admitted(self) -> None:
         script = r"""
 const fs = require("fs");

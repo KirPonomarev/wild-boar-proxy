@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -350,6 +351,15 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             )
             self.assertTrue(producer.hooks_json_path(paths).exists())
             self.assertTrue(producer.hook_script_path(paths).exists())
+            hooks_document = json.loads(
+                producer.hooks_json_path(paths).read_text(encoding="utf-8")
+            )
+            self.assertIn("UserPromptSubmit", hooks_document["hooks"])
+            self.assertIn("PreToolUse", hooks_document["hooks"])
+            self.assertEqual(
+                hooks_document["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+                hooks_document["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
+            )
             self.assertTrue(os.access(producer.hook_script_path(paths), os.X_OK))
             self.assertEqual(
                 set(packet["changed_files"]),
@@ -378,6 +388,8 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertTrue(packet["hook_command_path_resolves"])
             self.assertTrue(packet["hook_script_executable"])
             self.assertTrue(packet["hook_config_digest_bound"])
+            self.assertTrue(packet["pre_tool_use_hook_config_present"])
+            self.assertTrue(packet["pre_tool_use_hook_config_digest_bound"])
             self.assertTrue(packet["hook_trust_requirement_declared"])
             self.assertFalse(packet["hook_trusted"])
             self.assertIn("hook_trust_review_required", packet["blocking_reasons"])
@@ -836,10 +848,11 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertIn("must remain exactly 300", context)
             self.assertIn("must never be changed to 90", context)
             self.assertIn("WBP_ROUTER_PROMPT='<original prompt>'", context)
-            self.assertIn('--prompt "$WBP_ROUTER_PROMPT"', context)
-            self.assertNotIn("--prompt-file -", context)
+            self.assertIn("printf '%s\\n' \"$WBP_ROUTER_PROMPT\" |", context)
+            self.assertIn("--prompt-file -", context)
+            self.assertNotIn('--prompt "$WBP_ROUTER_PROMPT"', context)
             self.assertNotIn("WBP_ROUTER_PROMPT_EOF", context)
-            self.assertIn("replacing <original prompt>", context)
+            self.assertIn("Copy COMMAND literally except replacing <original prompt>", context)
             self.assertIn("--runtime-context-file", context)
             self.assertIn(
                 str(paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME),
@@ -849,12 +862,21 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertIn("--repo-bridge auto", context)
             self.assertIn("--work-mode full", context)
             self.assertIn("ROUTER HARD OVERRIDE", context)
-            self.assertIn("Your only allowed action", context)
+            self.assertIn("deterministic router handoff", context)
+            self.assertIn("say nothing before running the command", context)
+            self.assertIn("run exactly one shell command", context)
+            self.assertIn("must keep --prompt-file -", context)
+            self.assertIn("must not contain --prompt", context)
+            self.assertIn("Do not replace WBP_ROUTER_PROOF_DIR with mktemp", context)
             self.assertIn("Do not use AGENTS.md examples", context)
+            self.assertIn("Do not retry", context)
+            self.assertIn("mkdir", context)
+            self.assertIn("python3 -c", context)
+            self.assertIn("mktemp", context)
             self.assertIn("wrapper shopping", context)
-            self.assertIn("do not retry through another path", context)
-            self.assertIn("return stdout as the entire visible response", context)
-            self.assertIn("no prose", context)
+            self.assertIn("WBP_ROUTER_COMMAND_NOT_EXECUTED", context)
+            self.assertIn("return only stdout", context)
+            self.assertIn("No prose", context)
             self.assertIn("extra token", context)
             self.assertNotIn(prompt, result.stdout)
             self.assertNotIn(ROUTE_ID, result.stdout)
@@ -867,11 +889,187 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
                 origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
                 event_metadata={"hook_event_stdin_read": True},
             )
+            self.assertTrue(packet["pre_tool_use_guard_required"])
+            self.assertTrue(packet["pre_tool_use_guard_written"])
+            self.assertTrue(producer.pre_tool_use_guard_path(paths).exists())
             self.assertTrue(packet["hook_additional_context_available"])
             self.assertFalse(packet["hook_additional_context_recorded"])
             self.assertNotIn("hook_additional_context", packet)
             self.assertRegex(str(packet["hook_additional_context_sha256"]), r"^[0-9a-f]{64}$")
             _assert_no_prompt_route_or_secret(self, packet, prompt=prompt)
+
+    def test_pre_tool_use_guard_blocks_noncanonical_command_and_allows_router_output(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+            canonical_command = (
+                "WBP_ROUTER_PROMPT='DIP: answer exactly WBP_GUARD_OK'; "
+                "WBP_ROUTER_PROOF_DIR=\"$WBP_PROFILE_DIR/tmp/user-prompt-submit-router-proof\"; "
+                "printf '%s\\n' \"$WBP_ROUTER_PROMPT\" | "
+                "python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file {shlex.quote(str(context_file))} "
+                "--active-project-root \"$PWD\" --repo-bridge auto "
+                "--work-mode full --timeout-seconds 300 "
+                "--proof-dir \"$WBP_ROUTER_PROOF_DIR\" --prompt-file -"
+            )
+            producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt="DIP: answer exactly WBP_GUARD_OK"),
+                paths=paths,
+                ledger_file=root / "ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+
+            blocked = producer.build_pre_tool_use_guard_packet(
+                event={
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "shell",
+                    "input": {"cmd": "python3 -c 'print(123)'"},
+                },
+                paths=paths,
+            )
+            blocked_output = producer.build_user_prompt_submit_hook_output(blocked)
+            allowed = producer.build_pre_tool_use_guard_packet(
+                event={
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "shell",
+                    "input": {
+                        "cmd": canonical_command
+                    },
+                },
+                paths=paths,
+            )
+
+            self.assertEqual(blocked["status"], "error")
+            self.assertEqual(blocked["machine_error_code"], producer.PRE_TOOL_USE_GUARD_BLOCKED)
+            self.assertEqual(blocked["pre_tool_use_decision"], "block")
+            self.assertEqual(blocked_output["decision"], "block")
+            self.assertIn("reason", blocked_output)
+            self.assertEqual(allowed["status"], "ok")
+            self.assertEqual(allowed["pre_tool_use_decision"], "allow")
+            self.assertEqual(producer.build_user_prompt_submit_hook_output(allowed), {})
+            self.assertFalse(blocked["raw_command_recorded"])
+            self.assertFalse(allowed["raw_command_recorded"])
+            self.assertEqual(packets.inspect_command_packet_semantics(blocked), [])
+            self.assertEqual(packets.inspect_command_packet_semantics(allowed), [])
+
+    def test_pre_tool_use_guard_blocks_router_output_command_with_wrong_bound_inputs_or_tail(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            prompt = "DIP: answer exactly WBP_GUARD_OK"
+            producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt=prompt),
+                paths=paths,
+                ledger_file=root / "ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+
+            def command(
+                *,
+                prompt_value: str = prompt,
+                context_path: Path = context_file,
+                proof_dir: str = "$WBP_PROFILE_DIR/tmp/user-prompt-submit-router-proof",
+                tail: str = "",
+            ) -> str:
+                return (
+                    f"WBP_ROUTER_PROMPT='{prompt_value}'; "
+                    f"WBP_ROUTER_PROOF_DIR=\"{proof_dir}\"; "
+                    "printf '%s\\n' \"$WBP_ROUTER_PROMPT\" | "
+                    "python3 -m wild_boar_proxy router-hook auto-route-output "
+                    f"--runtime-context-file {shlex.quote(str(context_path))} "
+                    "--active-project-root \"$PWD\" --repo-bridge auto "
+                    "--work-mode full --timeout-seconds 300 "
+                    "--proof-dir \"$WBP_ROUTER_PROOF_DIR\" --prompt-file -"
+                    f"{tail}"
+                )
+
+            wrong_context = root / "wrong-context.json"
+            wrong_context.write_text(
+                json.dumps(_runtime_context(allowed_routes=["wbp-other"])) + "\n",
+                encoding="utf-8",
+            )
+            cases = {
+                "wrong_prompt": command(prompt_value="DIP: answer exactly WBP_FAKE_OK"),
+                "wrong_runtime_context": command(context_path=wrong_context),
+                "wrong_proof_dir": command(proof_dir="$WBP_PROFILE_DIR/tmp/wrong-proof"),
+                "prefix_side_effect": "touch /tmp/wbp-guard-leak; " + command(),
+                "middle_side_effect": command().replace(
+                    "; WBP_ROUTER_PROOF_DIR=",
+                    "; touch /tmp/wbp-guard-leak; WBP_ROUTER_PROOF_DIR=",
+                    1,
+                ),
+                "tail_command": command(tail="; echo WBP_FAKE_OK"),
+            }
+            for name, cmd in cases.items():
+                with self.subTest(name=name):
+                    packet = producer.build_pre_tool_use_guard_packet(
+                        event={
+                            "hook_event_name": "PreToolUse",
+                            "tool_name": "shell",
+                            "input": {"cmd": cmd},
+                        },
+                        paths=paths,
+                    )
+                    self.assertEqual(packet["status"], "error")
+                    self.assertEqual(
+                        packet["machine_error_code"],
+                        producer.PRE_TOOL_USE_GUARD_BLOCKED,
+                    )
+                    self.assertEqual(packet["pre_tool_use_decision"], "block")
+                    self.assertFalse(packet["raw_command_recorded"])
+                    self.assertFalse(packet["secret_value_exposed"])
+                    self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_primary_prompt_clears_pre_tool_use_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt="DIP: answer exactly WBP_GUARD_OK"),
+                paths=paths,
+                ledger_file=root / "ledger-a.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            self.assertTrue(producer.pre_tool_use_guard_path(paths).exists())
+
+            cleared = producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt="Codex: answer exactly WBP_PRIMARY_OK", turn_id="turn-hook-2"),
+                paths=paths,
+                ledger_file=root / "ledger-b.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+
+            self.assertEqual(cleared["status"], "ok")
+            self.assertTrue(cleared["pre_tool_use_guard_cleared"])
+            self.assertFalse(cleared["pre_tool_use_guard_required"])
+            self.assertFalse(producer.pre_tool_use_guard_path(paths).exists())
 
     def test_additional_context_handles_primary_api_and_parser_api_targets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -917,8 +1115,10 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
         self.assertIn("Answer the active user prompt natively", codex_context)
         self.assertIn("WBP PRIMARY EXACT ALIAS CONTEXT", codex_exact_context)
         self.assertIn("native ChatGPT lane", codex_exact_context)
-        self.assertIn("Ignore the leading alias prefix", codex_exact_context)
-        self.assertIn("return only the requested exact content", codex_exact_context)
+        self.assertIn("ignore previous turns", codex_exact_context)
+        self.assertIn("ignore the leading alias prefix", codex_exact_context)
+        self.assertIn("Return only the requested exact content", codex_exact_context)
+        self.assertIn("Do not explain WBP", codex_exact_context)
         self.assertNotIn("router-hook auto-route-output", codex_exact_context)
         self.assertIn("WBP PRIMARY EXACT ALIAS CONTEXT", agent1_exact_context)
         self.assertIn("native ChatGPT lane", agent1_exact_context)
@@ -926,7 +1126,8 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
         self.assertIn("WBP ROUTER HARD OVERRIDE", dip_context)
         self.assertIn("router-hook auto-route-output", dip_context)
         self.assertIn("router-hook auto-route-output", codex_to_dip_context)
-        self.assertIn('--prompt "$WBP_ROUTER_PROMPT"', codex_to_dip_context)
+        self.assertIn("--prompt-file -", codex_to_dip_context)
+        self.assertNotIn('--prompt "$WBP_ROUTER_PROMPT"', codex_to_dip_context)
         self.assertNotIn("Codex, дай задачу DIP", codex_to_dip_context)
         self.assertIn("WBP EXACT RESPONSE CONTEXT", plain_exact_context)
         self.assertIn("Return exactly the requested content", plain_exact_context)
@@ -991,8 +1192,8 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
 
         self.assertIn("router-hook auto-route-output", builder_context)
         self.assertIn("router-hook auto-route-output", build_agent_context)
-        self.assertIn('--prompt "$WBP_ROUTER_PROMPT"', builder_context)
-        self.assertNotIn("--prompt-file -", builder_context)
+        self.assertIn("--prompt-file -", builder_context)
+        self.assertNotIn('--prompt "$WBP_ROUTER_PROMPT"', builder_context)
         self.assertIn("WBP PRIMARY EXACT ALIAS CONTEXT", primary_phrase_context)
         self.assertIn("native ChatGPT lane", primary_phrase_context)
         self.assertNotIn("router-hook auto-route-output", primary_phrase_context)

@@ -27,7 +27,22 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
+from wild_boar_proxy.api_agent_auto_router import build_api_agent_auto_router_packet
+from wild_boar_proxy.api_agent_direct_reply import resolve_prompt_repo_bridge_mode
+from wild_boar_proxy.router_hook_entry import (
+    HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    load_runtime_context_packet,
+)
+from wild_boar_proxy.natural_intent_contract import (
+    FAIL_ALIAS_CONTEXT_MISSING,
+    SOURCE_SURFACE_DECLARED_CUSTOM_CODEX_FLOW,
+    build_natural_intent_parser_packet,
+)
 from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
+from wild_boar_proxy.wbp_dip_tool import (
+    _exact_plain_reply_expected_text,
+    _exact_plain_reply_requested,
+)
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
@@ -927,6 +942,234 @@ def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, An
             messages.append({"role": role, "content": "\n".join(parts)})
     flush_pending_tool_calls()
     return messages
+
+
+_RUNTIME_CONTEXT_FILE_ARG_RE = re.compile(
+    r"--runtime-context-file\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"
+)
+
+
+def _message_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
+def _latest_addressed_user_prompt(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if str(message.get("role") or "") != "user":
+            continue
+        text = _message_text(message).strip()
+        if text and _leading_address_alias(text):
+            return text
+    return ""
+
+
+def _runtime_context_file_from_messages(messages: list[dict[str, Any]]) -> Path | None:
+    for message in reversed(messages):
+        if str(message.get("role") or "").strip().casefold() not in {
+            "developer",
+            "system",
+        }:
+            continue
+        text = _message_text(message)
+        if not text:
+            continue
+        match = _RUNTIME_CONTEXT_FILE_ARG_RE.search(text)
+        if match is not None:
+            raw_path = next(
+                (group for group in match.groups() if group and group.strip()),
+                "",
+            )
+            if raw_path:
+                return Path(raw_path).expanduser()
+    for env_name in ("WBP_PROFILE_DIR", "CODEX_HOME"):
+        root = os.environ.get(env_name)
+        if root:
+            candidate = Path(root).expanduser() / "wbp-agent-runtime-context.json"
+            if candidate.is_file():
+                return candidate
+    managed_dir = os.environ.get("WBP_MANAGED_DIR")
+    if managed_dir:
+        candidate = (
+            Path(managed_dir).expanduser().parent / "wbp-agent-runtime-context.json"
+        )
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _provider_side_active_project_root() -> tuple[Path | None, str]:
+    for env_name in ("WBP_ACTIVE_PROJECT_ROOT", "WBP_REPO_ROOT"):
+        value = os.environ.get(env_name)
+        if value:
+            return Path(value).expanduser(), f"{env_name.lower()}_env"
+    try:
+        return Path.cwd(), "process_cwd"
+    except OSError:
+        return None, "missing"
+
+
+def _provider_side_exact_plain_reply_payload(
+    *,
+    prompt: str,
+    route_id: str,
+    runtime_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not _exact_plain_reply_requested(prompt):
+        return None
+    if resolve_prompt_repo_bridge_mode(prompt_text=prompt, repo_bridge_mode="off") != "off":
+        return None
+    parser_packet = build_natural_intent_parser_packet(
+        prompt_text=prompt,
+        runtime_context=runtime_context,
+        source_surface=SOURCE_SURFACE_DECLARED_CUSTOM_CODEX_FLOW,
+        secret_values=[prompt],
+    )
+    if (
+        parser_packet.get("status") != "ok"
+        or parser_packet.get("lane_candidate") != "api_route"
+        or parser_packet.get("route_id_allowed") is not True
+    ):
+        return None
+    expected_text = _exact_plain_reply_expected_text(prompt)
+    if not expected_text:
+        return None
+    payload = _responses_result_payload(expected_text, route_id)
+    payload.update(
+        {
+            "wbp_provider_side_auto_router": True,
+            "wbp_provider_side_exact_plain_reply_passthrough": True,
+            "auto_router_status": "ok",
+            "auto_router_machine_error_code": "OK",
+            "auto_router_decision": "api_direct_exact_passthrough",
+            "auto_router_proven": True,
+            "auto_router_fail_closed": False,
+            "auto_router_unknown_alias_blocked": False,
+            "api_route_selected": True,
+            "gpt_passthrough_to_native_chat": False,
+            "route_bound_dispatch_proven": True,
+            "repo_bridge_used": False,
+            "provider_called": False,
+            "network_dependent": False,
+            "not_intelligence_proof": True,
+            "intelligence_measured": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "secret_value_exposed": False,
+            "raw_backend_details_exposed": False,
+        }
+    )
+    return payload
+
+
+def _provider_side_auto_router_payload(
+    *,
+    messages: list[dict[str, Any]],
+    route_id: str,
+) -> dict[str, Any] | None:
+    prompt = _latest_addressed_user_prompt(messages)
+    if not prompt:
+        return None
+    context_path = _runtime_context_file_from_messages(messages)
+    if context_path is None:
+        payload = _responses_result_payload(FAIL_ALIAS_CONTEXT_MISSING, route_id)
+        payload.update(
+            {
+                "wbp_provider_side_auto_router": True,
+                "auto_router_proven": False,
+                "auto_router_fail_closed": True,
+                "auto_router_machine_error_code": FAIL_ALIAS_CONTEXT_MISSING,
+                "raw_prompt_recorded": False,
+                "secret_value_exposed": False,
+                "raw_backend_details_exposed": False,
+            }
+        )
+        return payload
+    context, metadata = load_runtime_context_packet(context_path)
+    exact_payload = _provider_side_exact_plain_reply_payload(
+        prompt=prompt,
+        route_id=route_id,
+        runtime_context=context,
+    )
+    if exact_payload is not None:
+        return exact_payload
+    active_root, active_root_source = _provider_side_active_project_root()
+    packet = build_api_agent_auto_router_packet(
+        prompt_text=prompt,
+        runtime_context=context,
+        context_file_metadata=metadata,
+        profile_dir=context_path.parent,
+        active_project_root=active_root,
+        active_project_root_source=active_root_source,
+        hook_surface_kind=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+        repo_bridge_mode="auto",
+        work_mode="full",
+        timeout_seconds=300.0,
+    )
+    text = ""
+    if packet.get("status") == "ok" and packet.get("auto_router_proven") is True:
+        if (
+            packet.get("api_route_selected") is True
+            and packet.get("output_text")
+            and (
+                packet.get("exact_plain_reply_matched") is True
+                or packet.get("output_passthrough_required") is True
+                or packet.get("repo_bridge_evidence_response_proven") is True
+            )
+        ):
+            text = str(packet.get("output_text") or "")
+        elif packet.get("gpt_passthrough_to_native_chat") is True:
+            return None
+    elif packet.get("auto_router_unknown_alias_blocked") is True:
+        text = API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS
+    elif packet.get("machine_error_code"):
+        text = str(packet.get("machine_error_code") or "")
+    if not text:
+        return None
+    payload = _responses_result_payload(text, route_id)
+    payload.update(
+        {
+            "wbp_provider_side_auto_router": True,
+            "auto_router_status": str(packet.get("status") or ""),
+            "auto_router_machine_error_code": str(packet.get("machine_error_code") or ""),
+            "auto_router_decision": str(packet.get("auto_router_decision") or ""),
+            "auto_router_proven": packet.get("auto_router_proven") is True,
+            "auto_router_fail_closed": packet.get("auto_router_fail_closed") is True,
+            "auto_router_unknown_alias_blocked": (
+                packet.get("auto_router_unknown_alias_blocked") is True
+            ),
+            "api_route_selected": packet.get("api_route_selected") is True,
+            "gpt_passthrough_to_native_chat": (
+                packet.get("gpt_passthrough_to_native_chat") is True
+            ),
+            "route_bound_dispatch_proven": (
+                packet.get("route_bound_dispatch_proven") is True
+            ),
+            "repo_bridge_used": packet.get("repo_bridge_used") is True,
+            "fallback_used": packet.get("fallback_used") is True,
+            "local_imitation_used": packet.get("local_imitation_used") is True,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "secret_value_exposed": packet.get("secret_value_exposed") is True,
+            "raw_backend_details_exposed": (
+                packet.get("raw_backend_details_exposed") is True
+            ),
+        }
+    )
+    return payload
 
 
 def _with_external_route_runtime_truth(
@@ -1986,6 +2229,17 @@ class ExternalRouteResponsesAdapter:
             payload = {"error": {"message": "responses input did not contain prompt text", "type": "invalid_request_error"}}
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 400, {"Content-Type": "application/json"}, body_bytes
+        wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(headers.get("Accept") or "")
+        provider_side_auto_router_payload = _provider_side_auto_router_payload(
+            messages=messages,
+            route_id=route_id,
+        )
+        if provider_side_auto_router_payload is not None:
+            if wants_stream:
+                body_bytes = _responses_stream_body(provider_side_auto_router_payload)
+                return 200, {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}, body_bytes
+            body_bytes = json.dumps(provider_side_auto_router_payload, ensure_ascii=True).encode("utf-8")
+            return 200, {"Content-Type": "application/json"}, body_bytes
         messages = _with_external_route_runtime_truth(messages, self.route)
         requested_max_tokens = int(request_payload.get("max_output_tokens") or 256)
         thinking_metadata = transforms.route_thinking_metadata(self.route)
@@ -2083,7 +2337,6 @@ class ExternalRouteResponsesAdapter:
         if dropped_tool_types:
             payload["wbp_route_tool_policy"] = "unsupported_codex_tools_dropped_for_text_only"
             payload["dropped_responses_tool_types"] = dropped_tool_types
-        wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(headers.get("Accept") or "")
         if wants_stream:
             body_bytes = _responses_stream_body(payload)
             return 200, {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}, body_bytes

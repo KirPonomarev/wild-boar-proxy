@@ -39,15 +39,19 @@ def _env(paths) -> dict[str, str]:
 
 
 def _write_codex_trust_state(paths) -> None:
-    trust_key = producer.hook_trust_key_for_paths(paths)
     with paths.config_toml.open("a", encoding="utf-8") as handle:
-        handle.write(
-            "\n[hooks.state."
-            + json.dumps(trust_key)
-            + "]\ntrusted_hash = "
-            + json.dumps(TEST_CODEX_CURRENT_HASH)
-            + "\n"
-        )
+        for event_name in producer.REQUIRED_HOOK_EVENT_NAMES:
+            trust_key = producer.hook_trust_key_for_paths(
+                paths,
+                event_name=event_name,
+            )
+            handle.write(
+                "\n[hooks.state."
+                + json.dumps(trust_key)
+                + "]\ntrusted_hash = "
+                + json.dumps(TEST_CODEX_CURRENT_HASH)
+                + "\n"
+            )
 
 
 def _run_hook(

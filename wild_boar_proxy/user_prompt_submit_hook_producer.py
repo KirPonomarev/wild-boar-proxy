@@ -65,12 +65,22 @@ HOOK_CURRENT_HASH_UNAVAILABLE = "WBP_USER_PROMPT_SUBMIT_HOOK_CURRENT_HASH_UNAVAI
 HOOK_EVENT_INVALID = "WBP_USER_PROMPT_SUBMIT_HOOK_EVENT_INVALID"
 HOOK_RUNTIME_CONTEXT_INVALID = "WBP_USER_PROMPT_SUBMIT_RUNTIME_CONTEXT_INVALID"
 HOOK_TRUST_REPAIR_BLOCKED = "WBP_USER_PROMPT_SUBMIT_HOOK_TRUST_REPAIR_BLOCKED"
+PRE_TOOL_USE_GUARD_BLOCKED = "WBP_PRE_TOOL_USE_ROUTER_GUARD_BLOCKED"
 
+USER_PROMPT_SUBMIT_EVENT_NAME = "UserPromptSubmit"
+PRE_TOOL_USE_EVENT_NAME = "PreToolUse"
+HOOK_EVENT_TRUST_KEYS = {
+    USER_PROMPT_SUBMIT_EVENT_NAME: "user_prompt_submit",
+    PRE_TOOL_USE_EVENT_NAME: "pre_tool_use",
+}
+REQUIRED_HOOK_EVENT_NAMES = (USER_PROMPT_SUBMIT_EVENT_NAME, PRE_TOOL_USE_EVENT_NAME)
 HOOKS_JSON_FILENAME = "hooks.json"
 HOOK_SCRIPT_RELATIVE_PATH = "wbp-hooks/user_prompt_submit_hook.sh"
 HOOK_LEDGER_RELATIVE_PATH = "managed/router-hook/user-prompt-submit-ledger.json"
+PRE_TOOL_USE_GUARD_RELATIVE_PATH = "managed/router-hook/pre-tool-use-api-alias-guard.json"
 HOOK_STATUS_MESSAGE = "WBP routing ledger"
 HOOK_TIMEOUT_SECONDS = 30
+PRE_TOOL_USE_GUARD_TTL_SECONDS = 900
 CODEX_APP_SERVER_BIN_ENV = "WBP_CODEX_APP_SERVER_BIN"
 CODEX_BIN_ENV = "WBP_CODEX_BIN"
 _LEADING_ADDRESS_RE = re.compile(
@@ -130,6 +140,10 @@ def hook_ledger_path(paths: RuntimePaths) -> Path:
     return paths.profile_dir / HOOK_LEDGER_RELATIVE_PATH
 
 
+def pre_tool_use_guard_path(paths: RuntimePaths) -> Path:
+    return paths.profile_dir / PRE_TOOL_USE_GUARD_RELATIVE_PATH
+
+
 def hook_command_for_paths(paths: RuntimePaths) -> str:
     return f"/bin/sh {shlex.quote(str(hook_script_path(paths)))}"
 
@@ -147,8 +161,13 @@ def hook_definition_digest(command: str) -> str:
     return _canonical_json_digest(build_hook_definition(command))
 
 
-def hook_trust_key_for_paths(paths: RuntimePaths) -> str:
-    return f"{hooks_json_path(paths)}:user_prompt_submit:0:0"
+def hook_trust_key_for_paths(
+    paths: RuntimePaths,
+    *,
+    event_name: str = USER_PROMPT_SUBMIT_EVENT_NAME,
+) -> str:
+    event_key = HOOK_EVENT_TRUST_KEYS.get(event_name, "")
+    return f"{hooks_json_path(paths)}:{event_key}:0:0" if event_key else ""
 
 
 def expected_hook_trusted_hash(command: str) -> str:
@@ -460,7 +479,7 @@ def _read_hooks_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     return dict(parsed), metadata
 
 
-def _is_wbp_user_prompt_hook_group(group: object) -> bool:
+def _is_wbp_hook_group(group: object) -> bool:
     if not isinstance(group, Mapping):
         return False
     handlers = group.get("hooks")
@@ -486,16 +505,17 @@ def merge_wbp_hook_definition(
     if not isinstance(hooks, Mapping):
         hooks = {}
     merged_hooks = dict(hooks)
-    existing_groups = merged_hooks.get("UserPromptSubmit")
-    if not isinstance(existing_groups, list):
-        existing_groups = []
-    kept_groups = [
-        group
-        for group in existing_groups
-        if not _is_wbp_user_prompt_hook_group(group)
-    ]
-    kept_groups.append({"hooks": [build_hook_definition(command)]})
-    merged_hooks["UserPromptSubmit"] = kept_groups
+    for event_name in REQUIRED_HOOK_EVENT_NAMES:
+        existing_groups = merged_hooks.get(event_name)
+        if not isinstance(existing_groups, list):
+            existing_groups = []
+        kept_groups = [
+            group
+            for group in existing_groups
+            if not _is_wbp_hook_group(group)
+        ]
+        kept_groups.append({"hooks": [build_hook_definition(command)]})
+        merged_hooks[event_name] = kept_groups
     document["hooks"] = merged_hooks
     return document
 
@@ -535,6 +555,7 @@ def _codex_hook_trust_state(
     hooks_document: Mapping[str, Any],
     command: str,
     codex_hook_current_hash: str,
+    event_name: str = USER_PROMPT_SUBMIT_EVENT_NAME,
 ) -> dict[str, Any]:
     current_hash = _valid_prefixed_sha256(codex_hook_current_hash)
     metadata: dict[str, Any] = {
@@ -558,8 +579,11 @@ def _codex_hook_trust_state(
     metadata["codex_hook_trust_state_present"] = True
 
     hook_groups = hooks_document.get("hooks")
-    event_groups = hook_groups.get("UserPromptSubmit") if isinstance(hook_groups, Mapping) else None
+    event_groups = hook_groups.get(event_name) if isinstance(hook_groups, Mapping) else None
     if not isinstance(event_groups, list):
+        return metadata
+    event_key = HOOK_EVENT_TRUST_KEYS.get(event_name, "")
+    if not event_key:
         return metadata
     for group_index, group in enumerate(event_groups):
         if not isinstance(group, Mapping):
@@ -572,7 +596,7 @@ def _codex_hook_trust_state(
                 continue
             if _safe_text(handler.get("command"), limit=2000) != command:
                 continue
-            trust_key = f"{hooks_json}:user_prompt_submit:{group_index}:{hook_index}"
+            trust_key = f"{hooks_json}:{event_key}:{group_index}:{hook_index}"
             trust_entry = state.get(trust_key)
             if not isinstance(trust_entry, Mapping):
                 continue
@@ -622,11 +646,16 @@ def _append_exact_hook_trust_state(config_text: str, *, trust_key: str, trusted_
     return (base + "\n\n" if base else "") + trust_section
 
 
-def _find_hook_definition(document: Mapping[str, Any], *, command: str) -> dict[str, Any]:
+def _find_hook_definition(
+    document: Mapping[str, Any],
+    *,
+    command: str,
+    event_name: str = USER_PROMPT_SUBMIT_EVENT_NAME,
+) -> dict[str, Any]:
     hooks = document.get("hooks")
     if not isinstance(hooks, Mapping):
         return {}
-    groups = hooks.get("UserPromptSubmit")
+    groups = hooks.get(event_name)
     if not isinstance(groups, list):
         return {}
     for group in groups:
@@ -722,7 +751,15 @@ def build_user_prompt_submit_readiness_packet(
     expected_digest = hook_definition_digest(command)
     document, hooks_metadata = _read_hooks_json(hooks_json_path(paths))
     hooks_disabled, config_metadata = _features_hooks_disabled(paths.config_toml)
-    hook_definition = _find_hook_definition(document, command=command)
+    hook_definitions = {
+        event_name: _find_hook_definition(
+            document,
+            command=command,
+            event_name=event_name,
+        )
+        for event_name in REQUIRED_HOOK_EVENT_NAMES
+    }
+    hook_definition = hook_definitions[USER_PROMPT_SUBMIT_EVENT_NAME]
     current_hash_metadata = (
         {
             "codex_hook_current_hash_probe_attempted": False,
@@ -760,6 +797,17 @@ def build_user_prompt_submit_readiness_packet(
         codex_hook_current_hash=str(
             current_hash_metadata.get("codex_hook_current_hash", "")
         ),
+        event_name=USER_PROMPT_SUBMIT_EVENT_NAME,
+    )
+    pre_tool_use_trust_metadata = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+        codex_hook_current_hash=str(
+            current_hash_metadata.get("codex_hook_current_hash", "")
+        ),
+        event_name=PRE_TOOL_USE_EVENT_NAME,
     )
     current_hash_source = str(
         current_hash_metadata.get("codex_hook_current_hash_source", "")
@@ -771,14 +819,28 @@ def build_user_prompt_submit_readiness_packet(
         current_hash_source == "codex_app_server_hooks_list"
     )
     app_server_trust_status_trusted = app_server_trust_status == "trusted"
-    loaded_digest = (
-        _canonical_json_digest(hook_definition) if hook_definition else ""
+    loaded_digest = _canonical_json_digest(hook_definition) if hook_definition else ""
+    pre_tool_use_hook_definition = hook_definitions[PRE_TOOL_USE_EVENT_NAME]
+    pre_tool_use_loaded_digest = (
+        _canonical_json_digest(pre_tool_use_hook_definition)
+        if pre_tool_use_hook_definition
+        else ""
     )
     script = hook_script_path(paths)
     script_present = script.exists()
     script_executable = bool(script_present and os.access(script, os.X_OK))
-    hook_config_present = bool(hooks_metadata["hooks_json_present"] and hook_definition)
-    digest_bound = bool(loaded_digest and loaded_digest == expected_digest)
+    hook_config_present = bool(
+        hooks_metadata["hooks_json_present"]
+        and all(hook_definitions[event_name] for event_name in REQUIRED_HOOK_EVENT_NAMES)
+    )
+    digest_bound = bool(
+        all(
+            _canonical_json_digest(hook_definitions[event_name]) == expected_digest
+            for event_name in REQUIRED_HOOK_EVENT_NAMES
+            if hook_definitions[event_name]
+        )
+        and all(hook_definitions[event_name] for event_name in REQUIRED_HOOK_EVENT_NAMES)
+    )
 
     blocking_reasons: list[str] = []
     if hooks_disabled:
@@ -789,8 +851,12 @@ def build_user_prompt_submit_readiness_packet(
         blocking_reasons.append("hooks_json_invalid")
     if not hook_definition:
         blocking_reasons.append("user_prompt_submit_hook_definition_missing")
-    if hook_definition and not digest_bound:
+    if not pre_tool_use_hook_definition:
+        blocking_reasons.append("pre_tool_use_hook_definition_missing")
+    if hook_definition and loaded_digest != expected_digest:
         blocking_reasons.append("hook_config_digest_mismatch")
+    if pre_tool_use_hook_definition and pre_tool_use_loaded_digest != expected_digest:
+        blocking_reasons.append("pre_tool_use_hook_config_digest_mismatch")
     if not script_present:
         blocking_reasons.append("hook_script_missing")
     elif not script_executable:
@@ -798,8 +864,12 @@ def build_user_prompt_submit_readiness_packet(
     hook_trusted_by_profile_state = (
         trust_metadata["codex_hook_trusted_by_profile_state"] is True
     )
+    pre_tool_use_hook_trusted_by_profile_state = (
+        pre_tool_use_trust_metadata["codex_hook_trusted_by_profile_state"] is True
+    )
     hook_trusted = bool(
         hook_trusted_by_profile_state
+        and pre_tool_use_hook_trusted_by_profile_state
         and (
             not app_server_trust_status_required
             or app_server_trust_status_trusted
@@ -841,6 +911,15 @@ def build_user_prompt_submit_readiness_packet(
         "packet_kind": HOOK_READINESS_PACKET_KIND,
         "hook_event_name": "UserPromptSubmit",
         "hook_config_present": hook_config_present,
+        "required_hook_events": list(REQUIRED_HOOK_EVENT_NAMES),
+        "required_hook_events_present": bool(hook_config_present),
+        "pre_tool_use_hook_config_present": bool(pre_tool_use_hook_definition),
+        "pre_tool_use_expected_hook_definition_sha256": expected_digest,
+        "pre_tool_use_loaded_hook_definition_sha256": pre_tool_use_loaded_digest,
+        "pre_tool_use_hook_config_digest_bound": (
+            bool(pre_tool_use_loaded_digest)
+            and pre_tool_use_loaded_digest == expected_digest
+        ),
         "hook_enabled": not hooks_disabled,
         "hook_command_path_resolves": script_present,
         "hook_script_executable": script_executable,
@@ -852,6 +931,10 @@ def build_user_prompt_submit_readiness_packet(
         "codex_hook_app_server_trust_status_required": app_server_trust_status_required,
         "codex_hook_app_server_trust_status_trusted": app_server_trust_status_trusted,
         "hook_trusted": hook_trusted,
+        "pre_tool_use_hook_trusted_by_profile_state": (
+            pre_tool_use_hook_trusted_by_profile_state
+        ),
+        "pre_tool_use_hook_trusted": pre_tool_use_hook_trusted_by_profile_state,
         "hook_requires_manual_review": bool(
             hook_config_present and current_hash_available and not hook_trusted
         ),
@@ -932,12 +1015,29 @@ def build_user_prompt_submit_trust_repair_packet(
     )
     expected_trusted_hash = str(current_hash_metadata.get("codex_hook_current_hash", ""))
     document, hooks_metadata = _read_hooks_json(hooks_json_path(paths))
-    hook_definition = _find_hook_definition(document, command=command)
+    hook_definitions = {
+        event_name: _find_hook_definition(
+            document,
+            command=command,
+            event_name=event_name,
+        )
+        for event_name in REQUIRED_HOOK_EVENT_NAMES
+    }
+    hook_definition = hook_definitions[USER_PROMPT_SUBMIT_EVENT_NAME]
     loaded_digest = _canonical_json_digest(hook_definition) if hook_definition else ""
+    pre_tool_use_hook_definition = hook_definitions[PRE_TOOL_USE_EVENT_NAME]
+    pre_tool_use_loaded_digest = (
+        _canonical_json_digest(pre_tool_use_hook_definition)
+        if pre_tool_use_hook_definition
+        else ""
+    )
     script = hook_script_path(paths)
     script_present = script.exists()
     script_executable = bool(script_present and os.access(script, os.X_OK))
-    trust_key = hook_trust_key_for_paths(paths)
+    trust_keys = {
+        event_name: hook_trust_key_for_paths(paths, event_name=event_name)
+        for event_name in REQUIRED_HOOK_EVENT_NAMES
+    }
 
     precondition_failures: list[str] = []
     if not hooks_metadata["hooks_json_present"]:
@@ -946,8 +1046,12 @@ def build_user_prompt_submit_trust_repair_packet(
         precondition_failures.append("hooks_json_invalid")
     if not hook_definition:
         precondition_failures.append("user_prompt_submit_hook_definition_missing")
+    if not pre_tool_use_hook_definition:
+        precondition_failures.append("pre_tool_use_hook_definition_missing")
     if hook_definition and loaded_digest != expected_digest:
         precondition_failures.append("hook_config_digest_mismatch")
+    if pre_tool_use_hook_definition and pre_tool_use_loaded_digest != expected_digest:
+        precondition_failures.append("pre_tool_use_hook_config_digest_mismatch")
     if not script_present:
         precondition_failures.append("hook_script_missing")
     elif not script_executable:
@@ -961,8 +1065,20 @@ def build_user_prompt_submit_trust_repair_packet(
         hooks_document=document,
         command=command,
         codex_hook_current_hash=expected_trusted_hash,
+        event_name=USER_PROMPT_SUBMIT_EVENT_NAME,
     )
-    already_trusted = before_trust["codex_hook_trusted_by_profile_state"] is True
+    pre_tool_use_before_trust = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+        codex_hook_current_hash=expected_trusted_hash,
+        event_name=PRE_TOOL_USE_EVENT_NAME,
+    )
+    already_trusted = (
+        before_trust["codex_hook_trusted_by_profile_state"] is True
+        and pre_tool_use_before_trust["codex_hook_trusted_by_profile_state"] is True
+    )
     changed_files: list[str] = []
     repair_error = ""
     state_written = False
@@ -973,11 +1089,13 @@ def build_user_prompt_submit_trust_repair_packet(
                 if paths.config_toml.exists()
                 else ""
             )
-            repaired_text = _append_exact_hook_trust_state(
-                existing_text,
-                trust_key=trust_key,
-                trusted_hash=expected_trusted_hash,
-            )
+            repaired_text = existing_text
+            for trust_key in trust_keys.values():
+                repaired_text = _append_exact_hook_trust_state(
+                    repaired_text,
+                    trust_key=trust_key,
+                    trusted_hash=expected_trusted_hash,
+                )
             write_text_atomic(paths.config_toml, repaired_text)
             changed_files = [str(paths.config_toml)]
             state_written = True
@@ -990,8 +1108,20 @@ def build_user_prompt_submit_trust_repair_packet(
         hooks_document=document,
         command=command,
         codex_hook_current_hash=expected_trusted_hash,
+        event_name=USER_PROMPT_SUBMIT_EVENT_NAME,
     )
-    repaired_or_already = after_trust["codex_hook_trusted_by_profile_state"] is True
+    pre_tool_use_after_trust = _codex_hook_trust_state(
+        config_toml=paths.config_toml,
+        hooks_json=hooks_json_path(paths),
+        hooks_document=document,
+        command=command,
+        codex_hook_current_hash=expected_trusted_hash,
+        event_name=PRE_TOOL_USE_EVENT_NAME,
+    )
+    repaired_or_already = (
+        after_trust["codex_hook_trusted_by_profile_state"] is True
+        and pre_tool_use_after_trust["codex_hook_trusted_by_profile_state"] is True
+    )
     blocking_reasons = sorted(
         set(
             precondition_failures
@@ -1009,11 +1139,22 @@ def build_user_prompt_submit_trust_repair_packet(
         "hook_trust_repair_apply": bool(apply),
         "hook_trust_repair_planned": True,
         "hook_config_present": bool(hooks_metadata["hooks_json_present"] and hook_definition),
+        "required_hook_events": list(REQUIRED_HOOK_EVENT_NAMES),
+        "required_hook_events_present": bool(
+            hooks_metadata["hooks_json_present"]
+            and all(hook_definitions[event_name] for event_name in REQUIRED_HOOK_EVENT_NAMES)
+        ),
+        "pre_tool_use_hook_config_present": bool(pre_tool_use_hook_definition),
         "hook_command_path_resolves": script_present,
         "hook_script_executable": script_executable,
         "expected_hook_definition_sha256": expected_digest,
         "loaded_hook_definition_sha256": loaded_digest,
+        "pre_tool_use_loaded_hook_definition_sha256": pre_tool_use_loaded_digest,
         "hook_config_digest_bound": bool(loaded_digest and loaded_digest == expected_digest),
+        "pre_tool_use_hook_config_digest_bound": (
+            bool(pre_tool_use_loaded_digest)
+            and pre_tool_use_loaded_digest == expected_digest
+        ),
         "expected_hook_trusted_hash_sha256": expected_trusted_hash.removeprefix("sha256:"),
         "codex_hook_trust_state_present_before": before_trust["codex_hook_trust_state_present"],
         "codex_hook_trust_state_matches_hook_slot_before": before_trust[
@@ -1029,6 +1170,9 @@ def build_user_prompt_submit_trust_repair_packet(
             "codex_hook_trusted_hash_matches_current_hash"
         ],
         "codex_hook_trusted_before_repair": already_trusted,
+        "pre_tool_use_hook_trusted_before_repair": (
+            pre_tool_use_before_trust["codex_hook_trusted_by_profile_state"] is True
+        ),
         "codex_hook_trust_state_present_after": after_trust["codex_hook_trust_state_present"],
         "codex_hook_trust_state_matches_hook_slot_after": after_trust[
             "codex_hook_trust_state_matches_hook_slot"
@@ -1043,6 +1187,9 @@ def build_user_prompt_submit_trust_repair_packet(
             "codex_hook_trusted_hash_matches_current_hash"
         ],
         "codex_hook_trusted_after_repair": repaired_or_already,
+        "pre_tool_use_hook_trusted_after_repair": (
+            pre_tool_use_after_trust["codex_hook_trusted_by_profile_state"] is True
+        ),
         "hook_trusted": repaired_or_already,
         "state_written": state_written,
         "changed_files": changed_files,
@@ -1252,10 +1399,10 @@ def _hook_parent_process_observation() -> dict[str, Any]:
 
 def _producer_state(*, event_name: str, turn_id: str, origin_state: str) -> str:
     if origin_state == ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN:
-        if event_name == "UserPromptSubmit" and turn_id:
+        if event_name == USER_PROMPT_SUBMIT_EVENT_NAME and turn_id:
             return HOOK_STATE_RAN_CUSTOM_CODEX_PROVEN
         return HOOK_STATE_RAN_CODEX_UNPROVEN
-    if event_name == "UserPromptSubmit":
+    if event_name == USER_PROMPT_SUBMIT_EVENT_NAME:
         return HOOK_STATE_RAN_CODEX_UNPROVEN
     return HOOK_STATE_RAN_SYNTHETIC
 
@@ -1347,6 +1494,275 @@ def _user_prompt_submit_context_kind(
     return ""
 
 
+def _read_pre_tool_use_guard(paths: RuntimePaths) -> tuple[dict[str, Any], dict[str, Any]]:
+    path = pre_tool_use_guard_path(paths)
+    metadata: dict[str, Any] = {
+        "pre_tool_use_guard_present": path.exists(),
+        "pre_tool_use_guard_read": False,
+        "pre_tool_use_guard_valid_json": False,
+        "pre_tool_use_guard_active": False,
+        "pre_tool_use_guard_expired": False,
+        "pre_tool_use_guard_path_recorded": False,
+    }
+    if not path.exists():
+        return {}, metadata
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}, metadata
+    metadata["pre_tool_use_guard_read"] = True
+    if not isinstance(parsed, Mapping):
+        return {}, metadata
+    packet = dict(parsed)
+    metadata["pre_tool_use_guard_valid_json"] = True
+    expires_at = packet.get("expires_at_epoch_seconds")
+    if isinstance(expires_at, (int, float)) and expires_at < time.time():
+        metadata["pre_tool_use_guard_expired"] = True
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        return {}, metadata
+    metadata["pre_tool_use_guard_active"] = True
+    return packet, metadata
+
+
+def _clear_pre_tool_use_guard(paths: RuntimePaths) -> bool:
+    try:
+        pre_tool_use_guard_path(paths).unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+
+def _write_pre_tool_use_guard(
+    *,
+    paths: RuntimePaths,
+    prompt_text: str,
+    runtime_context: Mapping[str, Any],
+    turn_id: str,
+    session_id: str,
+) -> bool:
+    guard = {
+        "schema_version": 1,
+        "packet_kind": "wbp_pre_tool_use_api_alias_guard",
+        "created_at_epoch_seconds": time.time(),
+        "expires_at_epoch_seconds": time.time() + PRE_TOOL_USE_GUARD_TTL_SECONDS,
+        "prompt_digest": _event_digest(prompt_text),
+        "runtime_context_digest": runtime_context_digest(runtime_context),
+        "turn_digest": _event_digest(turn_id),
+        "session_digest": _event_digest(session_id),
+        "required_command": "router-hook auto-route-output --prompt-file -",
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+    }
+    try:
+        guard_path = pre_tool_use_guard_path(paths)
+        guard_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(guard_path, guard)
+    except OSError:
+        return False
+    return True
+
+
+def _string_candidates_from_event(value: object) -> list[str]:
+    candidates: list[str] = []
+
+    def visit(node: object, key: str = "") -> None:
+        if isinstance(node, Mapping):
+            for raw_key, child in node.items():
+                visit(child, _safe_text(raw_key, limit=80).casefold())
+            return
+        if isinstance(node, list):
+            for child in node:
+                visit(child, key)
+            return
+        if not isinstance(node, str):
+            return
+        if key in {
+            "command",
+            "cmd",
+            "parsedcmd",
+            "shell_command",
+            "shellcommand",
+            "input",
+            "arguments",
+            "args",
+        }:
+            candidates.append(node)
+
+    visit(value)
+    return candidates
+
+
+def _router_prompt_assignment_value(command: str) -> str:
+    match = re.match(r"\s*WBP_ROUTER_PROMPT='([^']*)'\s*;", command)
+    return match.group(1) if match else ""
+
+
+def _router_command_arg(command: str, flag: str) -> str:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return ""
+    for index, token in enumerate(tokens[:-1]):
+        if token == flag:
+            return tokens[index + 1]
+    return ""
+
+
+def _router_command_runtime_context_bound(command: str, guard: Mapping[str, Any]) -> bool:
+    expected_digest = _safe_text(guard.get("runtime_context_digest"), limit=80)
+    if not expected_digest:
+        return False
+    context_file = _router_command_arg(command, "--runtime-context-file")
+    if not context_file or "$" in context_file:
+        return False
+    context, metadata = load_runtime_context_packet(Path(context_file).expanduser())
+    return bool(
+        metadata.get("runtime_context_file_valid_json") is True
+        and runtime_context_digest(context) == expected_digest
+    )
+
+
+def _canonical_router_output_command(
+    command: str,
+    *,
+    guard: Mapping[str, Any] | None = None,
+) -> bool:
+    text = " ".join(_safe_text(command, limit=12000).split())
+    if not text:
+        return False
+    canonical_prefix = re.compile(
+        r"^WBP_ROUTER_PROMPT='[^']*'; "
+        r'WBP_ROUTER_PROOF_DIR="[^"]*/tmp/user-prompt-submit-router-proof"; '
+        r"printf '%s\\n' \"\$WBP_ROUTER_PROMPT\" \| "
+        r"(?:python3|\$\{WBP_PYTHON_BIN:-python3\}) -m wild_boar_proxy "
+        r"router-hook auto-route-output "
+    )
+    if canonical_prefix.search(text) is None:
+        return False
+    required_fragments = [
+        "router-hook auto-route-output",
+        "--runtime-context-file",
+        "--active-project-root",
+        "--repo-bridge auto",
+        "--work-mode full",
+        "--timeout-seconds 300",
+        "--proof-dir",
+        "--prompt-file -",
+    ]
+    forbidden_fragments = [
+        "router-hook auto-route --json",
+        "router-hook auto-route --prompt",
+        "router-hook direct-reply",
+        "tools/wbp_dip",
+        "dip run",
+        "codex exec",
+        "python3 -c",
+        "mktemp",
+        "mkdir ",
+        "<<",
+        "&&",
+        "||",
+        "`",
+        "$(",
+        "; echo",
+        "| sh",
+        "bash -c",
+        "zsh -c",
+        "curl ",
+        "wget ",
+    ]
+    if not all(fragment in text for fragment in required_fragments):
+        return False
+    if any(fragment in text for fragment in forbidden_fragments):
+        return False
+    if text.count("router-hook auto-route-output") != 1:
+        return False
+    if text.count("--prompt-file -") != 1:
+        return False
+    if not text.endswith("--prompt-file -"):
+        return False
+    if "/tmp/user-prompt-submit-router-proof" not in text:
+        return False
+    guard = guard if isinstance(guard, Mapping) else {}
+    expected_prompt_digest = _safe_text(guard.get("prompt_digest"), limit=80)
+    prompt_value = _router_prompt_assignment_value(command)
+    if expected_prompt_digest and _event_digest(prompt_value) != expected_prompt_digest:
+        return False
+    if guard and not _router_command_runtime_context_bound(command, guard):
+        return False
+    return True
+
+
+def build_pre_tool_use_guard_packet(
+    *,
+    event: Mapping[str, Any],
+    paths: RuntimePaths,
+    event_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    metadata = dict(event_metadata or {})
+    guard, guard_metadata = _read_pre_tool_use_guard(paths)
+    command_candidates = _string_candidates_from_event(event)
+    allowed = bool(
+        guard_metadata.get("pre_tool_use_guard_active") is True
+        and any(
+            _canonical_router_output_command(command, guard=guard)
+            for command in command_candidates
+        )
+    )
+    blocked = bool(
+        guard_metadata.get("pre_tool_use_guard_active") is True
+        and not allowed
+    )
+    reason = (
+        "WBP blocked non-canonical tool use during addressed API alias router handoff."
+        if blocked
+        else ""
+    )
+    extra = {
+        **metadata,
+        **guard_metadata,
+        "schema_version": 1,
+        "packet_kind": "wbp_pre_tool_use_router_guard",
+        "hook_event_name": PRE_TOOL_USE_EVENT_NAME,
+        "pre_tool_use_hook_ran": True,
+        "pre_tool_use_guard_packet_present": bool(guard),
+        "pre_tool_use_command_candidate_count": len(command_candidates),
+        "pre_tool_use_canonical_router_command_allowed": allowed,
+        "pre_tool_use_decision": "block" if blocked else "allow",
+        "pre_tool_use_block_reason": reason,
+        "raw_prompt_recorded": False,
+        "raw_command_recorded": False,
+        "raw_route_id_recorded": False,
+        "secret_value_exposed": False,
+        "product_ready": False,
+        "blocking_reasons": [PRE_TOOL_USE_GUARD_BLOCKED] if blocked else [],
+        "changed_files": [],
+    }
+    return packets.build_command_packet(
+        ok=not blocked,
+        human_message=(
+            "WBP PreToolUse guard allowed tool use."
+            if not blocked
+            else "WBP PreToolUse guard blocked non-canonical tool use."
+        ),
+        machine_error_code=HOOK_CONFIG_OK if not blocked else PRE_TOOL_USE_GUARD_BLOCKED,
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none" if not blocked else "stop",
+        changed_files=[],
+        effect=EFFECT_PROBE,
+        extra=extra,
+    )
+
+
 def _addressed_alias_context_needed(
     *,
     prompt_text: str,
@@ -1364,26 +1780,37 @@ def _router_command_additional_context(*, runtime_context_file: Path) -> str:
     quoted_runtime_context_file = shlex.quote(str(runtime_context_file))
     return (
         "WBP ROUTER HARD OVERRIDE. The active prompt is addressed to a WBP API "
-        "agent. Do not answer, plan, summarize, inspect old turns, or choose a "
-        "fallback. Do not use AGENTS.md examples, router-hook auto-route --json, "
+        "agent. This is a deterministic router handoff, not a native Codex task. "
+        "Exact visible behavior: say nothing before running the command; run "
+        "exactly one shell command: COMMAND below; then return only stdout. Copy "
+        "COMMAND literally except replacing <original prompt> inside the "
+        "WBP_ROUTER_PROMPT single-quoted assignment. Send that variable to the "
+        "router through stdin; the command must keep --prompt-file - and must "
+        "not contain --prompt. "
+        "Do not replace WBP_ROUTER_PROOF_DIR with mktemp or any other path. Escape "
+        "embedded single quotes only if needed. Do not answer, plan, summarize, "
+        "inspect old turns, or write files yourself. Do not say 'I'll process', "
+        "'Let me', 'I will', or any other preface. Do not use AGENTS.md examples, "
+        "router-hook auto-route --json, router-hook auto-route --prompt, "
         "direct-reply, tools/wbp_dip, codex exec, subagents, direct provider "
-        "calls, or wrapper shopping. Your only allowed action is to run the exact "
-        "one-line shell command below after replacing <original prompt> with the "
-        "active user prompt inside the single quotes. Escape embedded single "
-        "quotes as needed. If the command returns a machine error, times out, or "
-        "prints nothing, output only that machine result/error; do not retry "
-        "through another path. After the command finishes, return stdout as the "
-        "entire visible response: no prose, Markdown, table, recap, translation, "
-        "or extra token. Do not alter any literal command argument; the timeout "
-        "argument must remain exactly 300 and must never be changed to 90.\n"
+        "calls, mkdir, python3 -c, heredocs, mktemp, or wrapper shopping. If "
+        "the command returns a machine error, times out, "
+        "or prints nothing, output only that machine result/error and stop. Do "
+        "not retry through another path and do not run cleanup or helper "
+        "commands. No prose, Markdown, table, recap, translation, or extra token "
+        "is allowed. If you are about to run any command other than COMMAND, "
+        "output exactly WBP_ROUTER_COMMAND_NOT_EXECUTED. Do not alter any literal "
+        "command argument; the timeout argument must remain exactly 300 and must "
+        "never be changed to 90.\n"
         "COMMAND:\n"
         "WBP_ROUTER_PROMPT='<original prompt>'; "
         'WBP_ROUTER_PROOF_DIR="${WBP_PROFILE_DIR:-${TMPDIR:-/tmp}/wbp-router-proof-profile}/tmp/user-prompt-submit-router-proof"; '
+        'printf \'%s\\n\' "$WBP_ROUTER_PROMPT" | '
         "${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output "
         f"--runtime-context-file {quoted_runtime_context_file} "
         "--active-project-root \"$PWD\" --repo-bridge auto --work-mode full "
         "--timeout-seconds 300 --proof-dir \"$WBP_ROUTER_PROOF_DIR\" "
-        "--prompt \"$WBP_ROUTER_PROMPT\""
+        "--prompt-file -"
     )
 
 
@@ -1398,14 +1825,14 @@ def _exact_reply_additional_context() -> str:
 
 def _primary_exact_alias_additional_context() -> str:
     return (
-        "WBP PRIMARY EXACT ALIAS CONTEXT: the leading label in the active "
-        "user prompt is a valid alias for this native ChatGPT lane. Treat it "
-        "as addressing you, not an API agent or a separate character. Answer "
-        "the active user prompt natively. Ignore the leading alias prefix and "
-        "obey the instruction after the colon. If the prompt asks to answer "
-        "exactly or says `ответь ровно`, return only the requested exact "
-        "content and nothing else: no prose, Markdown, acknowledgements, "
-        "explanation, code fence, prefix, suffix, alias label, or prompt echo."
+        "WBP PRIMARY EXACT ALIAS CONTEXT: the active user prompt is addressed "
+        "to this native ChatGPT lane. Use only the active user prompt, ignore "
+        "previous turns, and ignore the leading alias prefix. The visible "
+        "answer is a physical exact-output proof. Return only the requested "
+        "exact content after the colon. Do not explain WBP, runtime context, "
+        "routing, alias resolution, prior prompts, or why the answer is valid. "
+        "No prose, Markdown, acknowledgements, code fence, prefix, suffix, "
+        "alias label, prompt echo, or extra token is allowed."
     )
 
 
@@ -1447,6 +1874,14 @@ def _safe_hook_additional_context(value: object, *, limit: int = 4000) -> str:
 
 
 def build_user_prompt_submit_hook_output(packet: Mapping[str, Any]) -> dict[str, Any]:
+    if packet.get("hook_event_name") == PRE_TOOL_USE_EVENT_NAME:
+        if packet.get("pre_tool_use_decision") == "block":
+            reason = _safe_text(
+                packet.get("pre_tool_use_block_reason"),
+                limit=500,
+            )
+            return {"decision": "block", "reason": reason or PRE_TOOL_USE_GUARD_BLOCKED}
+        return {}
     context = _safe_hook_additional_context(
         packet.get("hook_additional_context"),
         limit=4000,
@@ -1469,6 +1904,10 @@ def build_user_prompt_submit_hook_output_for_event(
 ) -> dict[str, Any]:
     prompt = event.get("prompt")
     prompt_text = prompt if isinstance(prompt, str) else ""
+    event_name = _safe_text(event.get("hook_event_name"), limit=80)
+    if event_name == PRE_TOOL_USE_EVENT_NAME:
+        packet = build_pre_tool_use_guard_packet(event=event, paths=paths)
+        return build_user_prompt_submit_hook_output(packet)
     if not prompt_text:
         return {}
     context_path = runtime_context_path(
@@ -1504,6 +1943,12 @@ def build_user_prompt_submit_run_packet(
     prompt = event.get("prompt")
     prompt_text = prompt if isinstance(prompt, str) else ""
     event_name = _safe_text(event.get("hook_event_name"), limit=80)
+    if event_name == PRE_TOOL_USE_EVENT_NAME:
+        return build_pre_tool_use_guard_packet(
+            event=event,
+            paths=paths,
+            event_metadata=event_metadata,
+        )
     turn_id = _safe_text(event.get("turn_id"), limit=160)
     session_id = _safe_text(event.get("session_id"), limit=160)
     cwd = _safe_text(event.get("cwd"), limit=512)
@@ -1518,7 +1963,7 @@ def build_user_prompt_submit_run_packet(
     parent_process = _hook_parent_process_observation()
 
     blocking_reasons: list[str] = []
-    if event_name != "UserPromptSubmit":
+    if event_name != USER_PROMPT_SUBMIT_EVENT_NAME:
         blocking_reasons.append("hook_event_name_not_user_prompt_submit")
     if not prompt_text:
         blocking_reasons.append("hook_prompt_missing")
@@ -1548,6 +1993,14 @@ def build_user_prompt_submit_run_packet(
     effective_origin_state = (
         origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW
     )
+    context_kind = (
+        _user_prompt_submit_context_kind(
+            prompt_text=prompt_text,
+            runtime_context=runtime_context,
+        )
+        if ok
+        else ""
+    )
     hook_additional_context = (
         _user_prompt_submit_additional_context(
             prompt_text=prompt_text,
@@ -1565,6 +2018,18 @@ def build_user_prompt_submit_run_packet(
     ledger_path = ledger_file or hook_ledger_path(paths)
     ledger_written = False
     if ok:
+        guard_written = False
+        guard_cleared = False
+        if context_kind == API_ROUTE_LANE:
+            guard_written = _write_pre_tool_use_guard(
+                paths=paths,
+                prompt_text=prompt_text,
+                runtime_context=runtime_context,
+                turn_id=turn_id,
+                session_id=session_id,
+            )
+        else:
+            guard_cleared = _clear_pre_tool_use_guard(paths)
         entry_packet = build_router_hook_entry_packet(
             prompt_text=prompt_text,
             runtime_context=runtime_context,
@@ -1660,6 +2125,9 @@ def build_user_prompt_submit_run_packet(
         )
         write_json_atomic(ledger_path, ledger)
         ledger_written = True
+    else:
+        guard_written = False
+        guard_cleared = False
 
     extra = {
         **metadata,
@@ -1667,7 +2135,7 @@ def build_user_prompt_submit_run_packet(
         "schema_version": 1,
         "packet_kind": HOOK_PRODUCER_RUN_PACKET_KIND,
         "hook_event_name": event_name,
-        "hook_event_name_is_user_prompt_submit": event_name == "UserPromptSubmit",
+        "hook_event_name_is_user_prompt_submit": event_name == USER_PROMPT_SUBMIT_EVENT_NAME,
         "hook_event_transport": _event_transport(metadata),
         "hook_event_transport_stdin": _event_transport(metadata) == "stdin",
         "hook_producer_state": producer_state,
@@ -1716,12 +2184,20 @@ def build_user_prompt_submit_run_packet(
         "hook_additional_context_sha256": (
             _sha256_text(hook_additional_context) if hook_additional_context else ""
         ),
+        "pre_tool_use_guard_written": guard_written,
+        "pre_tool_use_guard_cleared": guard_cleared,
+        "pre_tool_use_guard_required": context_kind == API_ROUTE_LANE,
         "fallback_used": False,
         "local_imitation_used": False,
         "product_ready": False,
-        "state_written": ledger_written,
+        "state_written": bool(ledger_written or guard_written or guard_cleared),
         "blocking_reasons": blocking_reasons,
-        "changed_files": [str(ledger_path)] if ledger_written else [],
+        "changed_files": (
+            [str(ledger_path)]
+            + ([str(pre_tool_use_guard_path(paths))] if guard_written else [])
+        )
+        if ledger_written
+        else [],
     }
     return packets.build_command_packet(
         ok=ok,

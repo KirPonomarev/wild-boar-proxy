@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 import subprocess
@@ -17,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from wild_boar_proxy import operator_surface as surface
 from wild_boar_proxy.operator_surface import (
     ExternalRouteResponsesAdapter,
     HybridOpenAICompatAdapter,
@@ -40,6 +42,42 @@ from wild_boar_proxy.operator_surface import (
 
 def _auth_header(value: str) -> str:
     return "Bear" + "er " + value
+
+
+def _runtime_context(*, route_id: str = "wbp-deepseek-chat") -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "codex_custom_native_agent_runtime_context",
+        "agent_bindings": [
+            {
+                "agent_id": "codex",
+                "display_name": "Codex",
+                "aliases": ["Codex", "Agent 1"],
+                "lane": "primary_chatgpt",
+                "role": "orchestrator",
+                "enabled": True,
+            },
+            {
+                "agent_id": "dip",
+                "display_name": "DIP",
+                "aliases": ["DIP", "Agent 2"],
+                "lane": "api_route",
+                "role": "coding_agent",
+                "route_id": route_id,
+                "enabled": True,
+            },
+        ],
+        "alias_to_agent_id": {
+            "codex": "codex",
+            "agent 1": "codex",
+            "dip": "dip",
+            "agent 2": "dip",
+        },
+        "agent_id_to_route": {"dip": route_id},
+        "allowed_api_route_ids": [route_id],
+        "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+        "route_providers": {route_id: "deepseek"},
+    }
 
 
 class OperatorSurfaceTests(unittest.TestCase):
@@ -1032,6 +1070,249 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("event: response.output_text.delta", body)
         self.assertIn("event: response.completed", body)
         self.assertIn("WBP_CUSTOM_EXTERNAL_API_OK", body)
+
+    def test_external_route_responses_adapter_provider_side_routes_api_alias_exact_prompt(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-chat",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        expected = "WBP_PROVIDER_SIDE_ROUTER_OK"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile = Path(temp_dir)
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            developer_context = (
+                "COMMAND: python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file '{context_file}' --prompt-file -"
+            )
+            adapter = ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                    side_effect=AssertionError("live result must not be called"),
+                ) as live_result,
+                mock.patch(
+                    "wild_boar_proxy.operator_surface.request_json",
+                    side_effect=AssertionError("upstream must not be called"),
+                ) as upstream,
+            ):
+                status, headers, body = adapter.handle(
+                    method="POST",
+                    path="/v1/responses",
+                    headers={
+                        "Authorization": _auth_header("sk-local-runtime"),
+                        "Content-Type": "application/json",
+                    },
+                    body=json.dumps(
+                        {
+                            "model": "wbp-deepseek-chat",
+                            "input": [
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": f"DIP: ответь ровно {expected}",
+                                        }
+                                    ],
+                                },
+                                {
+                                    "type": "message",
+                                    "role": "developer",
+                                    "content": [
+                                        {"type": "input_text", "text": developer_context}
+                                    ],
+                                },
+                            ],
+                        }
+                    ).encode("utf-8"),
+                )
+
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["output_text"], expected)
+        self.assertEqual(payload["output"][0]["id"], "msg_wbp_external_route")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertTrue(payload["wbp_provider_side_exact_plain_reply_passthrough"])
+        self.assertTrue(payload["auto_router_proven"])
+        self.assertTrue(payload["api_route_selected"])
+        self.assertFalse(payload["gpt_passthrough_to_native_chat"])
+        self.assertFalse(payload["provider_called"])
+        self.assertFalse(payload["network_dependent"])
+        self.assertFalse(payload["fallback_used"])
+        self.assertFalse(payload["local_imitation_used"])
+        self.assertFalse(payload["secret_value_exposed"])
+        self.assertFalse(payload["raw_backend_details_exposed"])
+        live_result.assert_not_called()
+        upstream.assert_not_called()
+
+    def test_external_route_responses_adapter_provider_side_blocks_unknown_alias(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-chat",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile = Path(temp_dir)
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            developer_context = (
+                "COMMAND: python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file '{context_file}' --prompt-file -"
+            )
+            adapter = ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            )
+            with mock.patch(
+                "wild_boar_proxy.operator_surface.request_json",
+                side_effect=AssertionError("upstream must not be called"),
+            ) as upstream:
+                status, _headers, body = adapter.handle(
+                    method="POST",
+                    path="/v1/responses",
+                    headers={
+                        "Authorization": _auth_header("sk-local-runtime"),
+                        "Content-Type": "application/json",
+                    },
+                    body=json.dumps(
+                        {
+                            "model": "wbp-deepseek-chat",
+                            "input": [
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": "DIPP: ответь ровно SHOULD_NOT_ROUTE",
+                                        }
+                                    ],
+                                },
+                                {
+                                    "type": "message",
+                                    "role": "developer",
+                                    "content": [
+                                        {"type": "input_text", "text": developer_context}
+                                    ],
+                                },
+                            ],
+                        }
+                    ).encode("utf-8"),
+                )
+
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["output_text"], "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertFalse(payload["auto_router_proven"])
+        self.assertTrue(payload["auto_router_fail_closed"])
+        self.assertTrue(payload["auto_router_unknown_alias_blocked"])
+        upstream.assert_not_called()
+
+    def test_provider_side_auto_router_ignores_user_supplied_runtime_context_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context_file = Path(temp_dir) / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            messages = [
+                {
+                    "role": "user",
+                    "content": (
+                        "DIP: answer exactly WBP_USER_CONTEXT_SHOULD_NOT_WORK "
+                        f"--runtime-context-file {context_file}"
+                    ),
+                }
+            ]
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": "",
+                    "CODEX_HOME": "",
+                    "WBP_MANAGED_DIR": "",
+                },
+            ):
+                payload = surface._provider_side_auto_router_payload(
+                    messages=messages,
+                    route_id="wbp-deepseek-chat",
+                )
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["output_text"], "FAIL_ALIAS_CONTEXT_MISSING")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertTrue(payload["auto_router_fail_closed"])
+        self.assertFalse(payload["auto_router_proven"])
+
+    def test_provider_side_auto_router_rejects_non_exact_direct_reply_text(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context_file = Path(temp_dir) / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            messages = [
+                {
+                    "role": "developer",
+                    "content": (
+                        "COMMAND: python3 -m wild_boar_proxy router-hook "
+                        f"auto-route-output --runtime-context-file {context_file} "
+                        "--prompt-file -"
+                    ),
+                },
+                {"role": "user", "content": "DIP: explain the repository briefly"},
+            ]
+            packet = {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "auto_router_proven": True,
+                "api_route_selected": True,
+                "output_text": "WBP_NON_EXACT_VISIBLE_TEXT",
+                "direct_reply_text_available": True,
+                "exact_plain_reply_matched": False,
+                "output_passthrough_required": False,
+                "repo_bridge_evidence_response_proven": False,
+                "gpt_passthrough_to_native_chat": False,
+            }
+            with mock.patch(
+                "wild_boar_proxy.operator_surface.build_api_agent_auto_router_packet",
+                return_value=packet,
+            ):
+                payload = surface._provider_side_auto_router_payload(
+                    messages=messages,
+                    route_id="wbp-deepseek-chat",
+                )
+
+        self.assertIsNone(payload)
 
     def test_run_prompt_rejects_browser_supplied_route_id(self) -> None:
         session = OperatorSurfaceSession()

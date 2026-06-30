@@ -712,6 +712,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         route_id: str = "wbp-deepseek-chat",
         allowed_route_ids: list[str] | None = None,
         forbidden_stale_route_ids: list[str] | None = None,
+        api_reasoning_option_id: str = "",
     ) -> Path:
         context = {
             "packet_kind": "codex_custom_native_agent_runtime_context",
@@ -750,6 +751,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ),
             "secret_value_exposed": False,
         }
+        if api_reasoning_option_id:
+            context["api_reasoning_option_id"] = api_reasoning_option_id
         context_path = Path(temp_dir) / "wbp-agent-runtime-context.json"
         context_path.write_text(
             json.dumps(context, ensure_ascii=False, sort_keys=True) + "\n",
@@ -1240,6 +1243,84 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(packet["api_reasoning_parameter_sent"])
         self.assertFalse(packet["api_reasoning_intelligence_measured"])
         self.assertEqual(packet["thinking"], {"type": "enabled", "reasoning_effort": "max"})
+
+    def test_custom_native_acceptance_smoke_allows_disabled_reasoning_without_provider_parameter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "execution_mode": "chatgpt_plus_api",
+                "agent_bindings_status": "ok",
+                "agent_bindings": live_server.default_agent_bindings(
+                    primary_model_id="gpt-5.5",
+                    api_route_id="wbp-deepseek-chat",
+                ),
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "api_reasoning_option_id": "provider_declared_disabled",
+                "api_reasoning_option_packet": {
+                    "option_id": "provider_declared_disabled",
+                    "provider_option": {
+                        "thinking": {"type": "disabled"},
+                        "api_parameter_sent": True,
+                    },
+                },
+                "deepseek_live_format_check_file_bridge": worker.packet(
+                    enabled=True,
+                    model="wbp-deepseek-chat",
+                ),
+            }
+
+            class FakeBridgeResponse:
+                status = 200
+
+                def __enter__(self) -> "FakeBridgeResponse":
+                    return self
+
+                def __exit__(self, *args: object) -> None:
+                    return None
+
+                def read(self) -> bytes:
+                    return json.dumps(
+                        {
+                            "status": "completed",
+                            "provider": "deepseek",
+                            "requested_model": "wbp-deepseek-chat",
+                            "fallback_used": False,
+                            "output_text": "WBP_DISABLED_REASONING_ACCEPTANCE_OK",
+                            "thinking": {"type": "unconfigured"},
+                            "api_parameter_sent": False,
+                            "intelligence_measured": False,
+                        }
+                    ).encode("utf-8")
+
+                def getcode(self) -> int:
+                    return self.status
+
+            with mock.patch.object(live_server, "proxyless_urlopen", return_value=FakeBridgeResponse()):
+                packet = live_server._custom_native_chatgpt_plus_api_acceptance_smoke_packet(
+                    payload={
+                        "alias": "DIP",
+                        "request_id": "acceptance-reasoning-disabled-ok",
+                        "expected_text": "WBP_DISABLED_REASONING_ACCEPTANCE_OK",
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    timeout_seconds=0.1,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_disabled")
+        self.assertFalse(packet["api_reasoning_evidence_required"])
+        self.assertFalse(packet["api_reasoning_parameter_sent"])
+        self.assertFalse(packet["api_reasoning_intelligence_measured"])
+        self.assertEqual(packet["thinking"], {"type": "unconfigured"})
 
     def test_custom_native_acceptance_smoke_blocks_reasoning_false_green(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3549,11 +3630,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             expected_text = f"WBP_NATIVE_NATURAL_DIP_OK_{request_id}"
 
             def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
-                self.assertIn("Planner", prompt)
-                self.assertIn("Дай короткую задачу агенту DIP", prompt)
-                self.assertIn("API-lane coding agent", prompt)
-                self.assertIn("server-owned natural DIP command proof", prompt)
-                self.assertIn("отдельного внутреннего исполнителя", prompt)
+                self.assertIn("DIP:", prompt)
                 self.assertNotIn("subagent", prompt.casefold())
                 self.assertNotIn("sub-agent", prompt.casefold())
                 self.assertIn(expected_text, prompt)
@@ -3642,7 +3719,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     },
                     reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
                 )
-
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
         self.assertEqual(
@@ -3696,6 +3772,378 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("prompt", packet)
         self.assertNotIn(str(proof_root), json.dumps(packet, ensure_ascii=False))
         self.assertEqual(packet["next_action"], "none")
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_custom_native_natural_dip_command_accepts_trusted_router_handoff_when_model_proof_file_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["DIP"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            proof_root = root / "native-natural-dip-proof"
+            profile_root = root / "profile"
+            profile_root.mkdir(parents=True)
+            (profile_root / live_server.AGENT_RUNTIME_CONTEXT_FILENAME).write_text(
+                context_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            request_id = "native-natural-router-handoff"
+            expected_text = f"WBP_NATIVE_NATURAL_ROUTER_OK_{request_id}"
+
+            def write_router_handoff_files(prompt: str) -> None:
+                prompt_digest = live_server._native_free_text_event_digest(prompt)
+                router_prompt_digest = live_server._native_free_text_event_digest(
+                    prompt.splitlines()[0]
+                )
+                runtime_context_digest = (
+                    live_server._native_free_text_canonical_mapping_digest(context)
+                )
+                expected_sha256 = hashlib.sha256(
+                    expected_text.encode("utf-8")
+                ).hexdigest()
+                ledger_dir = profile_root / "managed" / "router-hook"
+                proof_dir = profile_root / "tmp" / "user-prompt-submit-router-proof"
+                ledger_dir.mkdir(parents=True, exist_ok=True)
+                proof_dir.mkdir(parents=True, exist_ok=True)
+                (ledger_dir / "user-prompt-submit-ledger.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "wbp_user_prompt_submit_hook_ledger",
+                            "origin_state": "custom_codex_flow_proven",
+                            "hook_event_name": "UserPromptSubmit",
+                            "hook_producer_state": "HOOK_RAN_CUSTOM_CODEX_PROVEN",
+                            "hook_trust_source": "codex_non_managed_hook_execution",
+                            "hook_config_present": True,
+                            "hook_enabled": True,
+                            "hook_trusted": True,
+                            "hook_hash_current": True,
+                            "hook_runnable": True,
+                            "user_prompt_submit_hook_ran": True,
+                            "hook_ledger_written": True,
+                            "hook_parent_process_chain_observed": True,
+                            "hook_parent_process_chain_path_proven": True,
+                            "hook_parent_process_chain_exact_path_classified": True,
+                            "hook_parent_process_chain_custom_wbp_clean_app": True,
+                            "hook_parent_process_chain_app_server": True,
+                            "hook_parent_process_chain_clean_root": True,
+                            "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound": True,
+                            "hook_parent_process_chain_app_server_executable_path_bound": True,
+                            "hook_parent_process_chain_clean_root_executable_path_bound": True,
+                            "hook_parent_process_chain_stock_codex_app": False,
+                            "hook_parent_process_chain_command_text_substring_only": False,
+                            "prompt_digest": prompt_digest,
+                            "runtime_context_digest": runtime_context_digest,
+                            "raw_prompt_recorded": False,
+                            "prompt_text_recorded": False,
+                            "raw_route_id_recorded": False,
+                            "selected_api_route_id_recorded": False,
+                            "raw_backend_details_exposed": False,
+                            "secret_value_exposed": False,
+                            "fallback_used": False,
+                            "local_imitation_used": False,
+                            "native_codex_subagent_used_as_dip": False,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                (ledger_dir / "pre-tool-use-api-alias-guard.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "wbp_pre_tool_use_api_alias_guard",
+                            "prompt_digest": prompt_digest,
+                            "runtime_context_digest": runtime_context_digest,
+                            "required_command": "router-hook auto-route-output --prompt-file -",
+                            "expires_at_epoch_seconds": time.time() + 300,
+                            "raw_prompt_recorded": False,
+                            "raw_route_id_recorded": False,
+                            "secret_value_exposed": False,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                (proof_dir / "api-agent-auto-router.packet.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "packet_kind": "wbp_api_agent_auto_router",
+                            "status": "ok",
+                            "machine_error_code": "OK",
+                            "auto_router_used": True,
+                            "auto_router_proven": True,
+                            "api_route_selected": True,
+                            "api_route_called": True,
+                            "direct_reply_selected": True,
+                            "direct_reply_proven": True,
+                            "allowed_api_route_ids_enforced": True,
+                            "forbidden_stale_route_ids_enforced": True,
+                            "fallback_used": False,
+                            "local_imitation_used": False,
+                            "wrapper_substitution_used": False,
+                            "wrapper_substitution_detected": False,
+                            "raw_prompt_recorded": False,
+                            "selected_api_route_id_recorded": False,
+                            "secret_value_exposed": False,
+                            "raw_backend_details_exposed": False,
+                            "prompt_digest": router_prompt_digest,
+                            "output_text": expected_text,
+                            "exact_plain_reply_matched": True,
+                            "repo_bridge_used": False,
+                            "exact_plain_reply_expected_text_sha256": expected_sha256,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
+                self.assertIn("DIP:", prompt)
+                write_router_handoff_files(prompt)
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": hashlib.sha256(
+                        expected_text.encode("utf-8")
+                    ).hexdigest(),
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ) as urlopen,
+            ):
+                packet = live_server._custom_native_natural_dip_command_proof_packet(
+                    payload={
+                        "expected_coding_response": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=proof_root,
+                    last_launch_packet={"persistent_profile_root": str(profile_root)},
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+                stale_context = dict(context)
+                stale_context["api_model_id"] = "wbp-stale-route"
+                stale_context["allowed_api_route_ids"] = ["wbp-stale-route"]
+                stale_handoff = live_server._custom_native_router_handoff_proof_packet(
+                    prompt=f"DIP: ответь ровно {expected_text}",
+                    expected_text=expected_text,
+                    context=stale_context,
+                    last_launch_packet={"persistent_profile_root": str(profile_root)},
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["server_owned_natural_dip_command_proven"])
+        self.assertTrue(packet["native_agent_proof_file_missing"])
+        self.assertFalse(packet["native_agent_proof_file_valid"])
+        self.assertTrue(packet["native_router_handoff_proof_required"])
+        self.assertTrue(packet["native_router_handoff_proof_valid"])
+        nested_handoff = packet["native_router_handoff_proof_packet"]
+        self.assertTrue(nested_handoff["router_handoff_profile_context_source_used"])
+        self.assertTrue(packet["native_free_text_alias_routing_proven"])
+        self.assertEqual(
+            packet["native_free_text_tool_bridge_source"],
+            "trusted_hook_router_handoff_plus_server_gpt_api_command_loop",
+        )
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertNotIn(str(profile_root), json.dumps(packet, ensure_ascii=False))
+        self.assertEqual(urlopen.call_count, 1)
+
+        self.assertEqual(stale_handoff["status"], "ok")
+        self.assertTrue(stale_handoff["router_handoff_profile_context_source_used"])
+        self.assertTrue(stale_handoff["hook_runtime_context_digest_bound"])
+        self.assertTrue(stale_handoff["pre_tool_use_guard_runtime_context_digest_bound"])
+
+    def test_custom_native_natural_dip_command_accepts_session_external_route_when_model_proof_file_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=root / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["DIP"],
+            )
+            with mock.patch.object(
+                live_server,
+                "_custom_native_agent_runtime_context_candidates",
+                return_value=[context_path],
+            ):
+                context, metadata = live_server._load_custom_native_agent_runtime_context({})
+            profile_root = root / "profile"
+            profile_root.mkdir(parents=True)
+            (profile_root / live_server.AGENT_RUNTIME_CONTEXT_FILENAME).write_text(
+                context_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            request_id = "native-natural-session-route"
+            expected_text = f"WBP_NATIVE_NATURAL_SESSION_OK_{request_id}"
+            expected_sha256 = hashlib.sha256(expected_text.encode("utf-8")).hexdigest()
+
+            def submitter(*, prompt: str, request_id: str, expected_text: str) -> dict[str, object]:
+                self.assertIn("DIP:", prompt)
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "native_window_observed": True,
+                    "input_capable_ui_observed": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "prompt_submitted": True,
+                    "prompt_text_recorded": False,
+                    "secret_value_exposed": False,
+                    "native_agent_provider_call_directly_observed": False,
+                    "custom_codex_response_text_read_proven": True,
+                    "custom_response_exact_token_observed": True,
+                    "custom_response_bound_to_request": True,
+                    "custom_response_expected_sha256": expected_sha256,
+                    "custom_response_text_read_without_storing": True,
+                    "native_codex_subagent_used_as_dip": False,
+                    "native_codex_subagent_absence_proven": True,
+                    "native_free_text_observer_source": "custom_session_jsonl_external_route",
+                    "custom_session_external_route_observer_packet": {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_session_prompt_digest_bound": True,
+                        "custom_session_external_route_message_observed": True,
+                        "custom_session_task_complete_observed": True,
+                        "custom_session_router_command_attempted": False,
+                        "custom_session_tool_call_count": 0,
+                        "raw_prompt_recorded": False,
+                        "secret_value_exposed": False,
+                    },
+                }
+
+            with (
+                mock.patch.object(
+                    live_server,
+                    "submit_custom_native_window_prompt_packet",
+                    side_effect=submitter,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ) as urlopen,
+            ):
+                packet = live_server._custom_native_natural_dip_command_proof_packet(
+                    payload={
+                        "expected_coding_response": expected_text,
+                        "request_id": request_id,
+                        "timeout_seconds": 0,
+                    },
+                    file_bridge_worker=worker,
+                    agent_runtime_context=context,
+                    context_metadata=metadata,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    proof_root=root / "native-natural-dip-proof",
+                    last_launch_packet={"persistent_profile_root": str(profile_root)},
+                    native_activator=lambda **_: {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_observed": True,
+                        "process_started": True,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                        "secret_value_exposed": False,
+                        "raw_backend_details_exposed": False,
+                    },
+                    reasoning_matrix_builder=self._reasoning_matrix_ok_packet,
+                )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["server_owned_natural_dip_command_proven"])
+        self.assertTrue(packet["native_agent_proof_file_missing"])
+        self.assertFalse(packet["native_agent_proof_file_valid"])
+        self.assertFalse(packet["native_router_handoff_proof_required"])
+        self.assertFalse(packet["native_router_handoff_proof_valid"])
+        self.assertTrue(packet["native_session_external_route_proof_valid"])
+        self.assertTrue(packet["native_session_external_route_message_observed"])
+        self.assertTrue(packet["native_session_external_route_task_complete_observed"])
+        self.assertFalse(packet["native_session_external_route_router_command_attempted"])
+        self.assertEqual(packet["native_session_external_route_tool_call_count"], 0)
+        self.assertTrue(packet["native_free_text_alias_routing_proven"])
+        self.assertEqual(
+            packet["native_free_text_tool_bridge_source"],
+            "custom_session_external_route_plus_server_gpt_api_command_loop",
+        )
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["custom_response_expected_sha256_match"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["secret_value_exposed"])
         self.assertEqual(urlopen.call_count, 1)
 
     def test_custom_native_natural_dip_command_rejects_browser_authority_fields(self) -> None:
@@ -5404,6 +5852,71 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(packet["reasoning_prerequisite_proven"])
         self.assertEqual(packet["command_loop_provider_call_count"], 0)
         urlopen.assert_not_called()
+
+    def test_custom_native_gpt_api_alias_command_loop_skips_reasoning_matrix_when_declared_disabled(
+        self,
+    ) -> None:
+        called = False
+
+        def reasoning_builder() -> dict[str, object]:
+            nonlocal called
+            called = True
+            return self._reasoning_matrix_blocked_packet()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            worker = live_server._CustomNativeFileBridgeWorker(
+                bridge_root=Path(temp_dir) / "file-bridge"
+            )
+            with worker._lock:
+                worker._bridge_endpoint = "http://127.0.0.1:50555/v1"
+            context_path = self._write_command_loop_context(
+                temp_dir=temp_dir,
+                worker=worker,
+                primary_aliases=["Planner"],
+                coding_aliases=["Builder"],
+                api_reasoning_option_id="provider_declared_disabled",
+            )
+            expected_text = live_server.GPT_API_ALIAS_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT
+            with (
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_agent_runtime_context_candidates",
+                    return_value=[context_path],
+                ),
+                mock.patch.object(
+                    live_server,
+                    "proxyless_urlopen",
+                    return_value=self._bridge_response(
+                        route_id="wbp-deepseek-chat",
+                        output_text=expected_text,
+                    ),
+                ) as urlopen,
+            ):
+                packet = live_server._custom_native_gpt_api_alias_command_loop_proof_packet(
+                    payload={"request_id": "disabled-reasoning-command-loop"},
+                    file_bridge_worker=worker,
+                    last_launch_packet={},
+                    reasoning_matrix_builder=reasoning_builder,
+                )
+
+        self.assertFalse(called)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_loop_proven"])
+        self.assertTrue(packet["reasoning_prerequisite_proven"])
+        self.assertFalse(packet["reasoning_matrix_required_for_command_loop"])
+        self.assertEqual(
+            packet["reasoning_prerequisite_mode"],
+            "provider_declared_disabled",
+        )
+        self.assertEqual(packet["reasoning_provider_call_count"], 0)
+        self.assertEqual(packet["command_loop_provider_call_count"], 1)
+        self.assertTrue(packet["api_lane_exact_token_matched"])
+        self.assertTrue(packet["bridge_or_file_bridge_used"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertEqual(urlopen.call_count, 1)
 
     def test_custom_native_gpt_api_alias_command_loop_blocks_short_reasoning_false_green(self) -> None:
         short_ok_packet = {

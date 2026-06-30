@@ -91,6 +91,7 @@ from wild_boar_proxy.codex_model_registry import (
     API_ROUTE_MODEL_LANE,
     CODEX_ACCOUNT_MODEL_LANE,
     CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+    CUSTOM_CODEX_API_REASONING_OPTION_DISABLED,
     CUSTOM_CODEX_API_REASONING_OPTION_FAST,
     CUSTOM_CODEX_API_REASONING_OPTION_HIGH,
     CUSTOM_CODEX_API_REASONING_OPTION_MAX,
@@ -3499,7 +3500,12 @@ def _custom_native_validate_acceptance_response(
     )
     reasoning_evidence_required = bool(
         reasoning_option_id
-        and reasoning_option_id != CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT
+        and reasoning_option_id
+        not in {
+            CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
+            CUSTOM_CODEX_API_REASONING_OPTION_DISABLED,
+            CUSTOM_CODEX_API_REASONING_OPTION_FAST,
+        }
         and expected_thinking
         and expected_thinking.get("type") != "unconfigured"
     )
@@ -4617,6 +4623,7 @@ def _custom_native_gpt_api_command_loop_blocked_packet(
 ) -> dict[str, Any]:
     reasoning = reasoning_packet if isinstance(reasoning_packet, dict) else {}
     acceptance = acceptance_packet if isinstance(acceptance_packet, dict) else {}
+    context_file_read_proven = _custom_native_context_file_read_proven(context_metadata)
     return {
         "schema_version": 1,
         "packet_kind": "custom_codex_gpt_api_alias_command_loop_proof",
@@ -4633,8 +4640,8 @@ def _custom_native_gpt_api_command_loop_blocked_packet(
         **_custom_native_context_readout_fields(context_metadata),
         "blocking_reasons": blocking_reasons or [machine_error_code],
         "command_loop_proven": False,
-        "runtime_context_file_proven": False,
-        "custom_codex_agent_runtime_context_proven": False,
+        "runtime_context_file_proven": context_file_read_proven,
+        "custom_codex_agent_runtime_context_proven": context_file_read_proven,
         "primary_alias_resolved_from_context": False,
         "coding_alias_resolved_from_context": False,
         "primary_alias_bound_to_chatgpt_lane": False,
@@ -4707,6 +4714,43 @@ def _custom_native_reasoning_matrix_ready_for_command_loop(
             for result in level_results
         )
     )
+
+
+def _custom_native_command_loop_reasoning_matrix_required(
+    context: dict[str, Any],
+) -> bool:
+    return str(context.get("api_reasoning_option_id") or "").strip() != (
+        "provider_declared_disabled"
+    )
+
+
+def _custom_native_command_loop_reasoning_disabled_packet(
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+        "captured_at_utc": utc_now(),
+        "status": "ok",
+        "machine_error_code": "OK",
+        "reasoning_dispatch_matrix_proven": False,
+        "api_reasoning_dispatch_proven": False,
+        "api_provider_acknowledged": False,
+        "chatgpt_slot_selection_proven": True,
+        "reasoning_matrix_required_for_command_loop": False,
+        "reasoning_prerequisite_mode": "provider_declared_disabled",
+        "api_reasoning_option_id": str(context.get("api_reasoning_option_id") or ""),
+        "provider_call_count": 0,
+        "level_results": [],
+        "not_intelligence_proof": True,
+        "intelligence_measured": False,
+        "chatgpt_provider_backed_reasoning_proven": False,
+        "browser_can_supply_reasoning_authority": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+    }
 
 
 def _custom_native_gpt_api_alias_command_loop_proof_packet(
@@ -4970,44 +5014,55 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
             "forbidden_stale_route_ids": sorted(forbidden_stale_route_ids),
         }
 
-    try:
-        reasoning_packet = (
-            reasoning_matrix_builder()
-            if callable(reasoning_matrix_builder)
-            else _custom_reasoning_dispatch_matrix_packet(
-                payload={},
-                operator_status=None,
-                api_snapshot=None,
-                availability_lattice_packet=None,
-                owner_authorized=False,
-            )
-        )
-    except Exception as exc:
-        return _custom_native_gpt_api_command_loop_blocked_packet(
-            machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_EXCEPTION",
-            human_message=f"Reasoning dispatch matrix failed before command-loop provider call: {exc}",
-            expected_text=expected_text,
-            prompt=prompt,
-            request_id=request_id,
-            context_metadata=resolved_context_metadata,
-            blocking_reasons=["reasoning_dispatch_matrix_exception"],
-        )
-    reasoning_ok = (
-        _custom_native_reasoning_matrix_ready_for_command_loop(reasoning_packet)
-        if isinstance(reasoning_packet, dict)
-        else False
+    reasoning_matrix_required = _custom_native_command_loop_reasoning_matrix_required(
+        context
     )
-    if not reasoning_ok:
-        return _custom_native_gpt_api_command_loop_blocked_packet(
-            machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_REQUIRED",
-            human_message="Command-loop proof requires the server-owned reasoning dispatch matrix to pass first.",
-            expected_text=expected_text,
-            prompt=prompt,
-            request_id=request_id,
-            context_metadata=resolved_context_metadata,
-            blocking_reasons=["reasoning_dispatch_matrix_not_proven"],
-            reasoning_packet=reasoning_packet if isinstance(reasoning_packet, dict) else {},
+    if reasoning_matrix_required:
+        try:
+            reasoning_packet = (
+                reasoning_matrix_builder()
+                if callable(reasoning_matrix_builder)
+                else _custom_reasoning_dispatch_matrix_packet(
+                    payload={},
+                    operator_status=None,
+                    api_snapshot=None,
+                    availability_lattice_packet=None,
+                    owner_authorized=False,
+                )
+            )
+        except Exception as exc:
+            return _custom_native_gpt_api_command_loop_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_EXCEPTION",
+                human_message=f"Reasoning dispatch matrix failed before command-loop provider call: {exc}",
+                expected_text=expected_text,
+                prompt=prompt,
+                request_id=request_id,
+                context_metadata=resolved_context_metadata,
+                blocking_reasons=["reasoning_dispatch_matrix_exception"],
+            )
+        reasoning_ok = (
+            _custom_native_reasoning_matrix_ready_for_command_loop(reasoning_packet)
+            if isinstance(reasoning_packet, dict)
+            else False
         )
+        reasoning_prerequisite_mode = "matrix_required"
+        if not reasoning_ok:
+            return _custom_native_gpt_api_command_loop_blocked_packet(
+                machine_error_code="CUSTOM_CODEX_REASONING_DISPATCH_MATRIX_REQUIRED",
+                human_message="Command-loop proof requires the server-owned reasoning dispatch matrix to pass first.",
+                expected_text=expected_text,
+                prompt=prompt,
+                request_id=request_id,
+                context_metadata=resolved_context_metadata,
+                blocking_reasons=["reasoning_dispatch_matrix_not_proven"],
+                reasoning_packet=reasoning_packet if isinstance(reasoning_packet, dict) else {},
+            )
+    else:
+        reasoning_packet = _custom_native_command_loop_reasoning_disabled_packet(
+            context
+        )
+        reasoning_ok = True
+        reasoning_prerequisite_mode = "provider_declared_disabled"
 
     acceptance_packet = _custom_native_chatgpt_plus_api_acceptance_smoke_packet(
         payload={
@@ -5098,6 +5153,8 @@ def _custom_native_gpt_api_alias_command_loop_proof_packet(
         "primary_alias_bound_to_chatgpt_lane": primary_binding.get("lane") == PRIMARY_CHATGPT_LANE,
         "coding_alias_bound_to_api_lane": coding_binding.get("lane") == API_ROUTE_LANE,
         "primary_alias_precedes_coding_alias": primary_position < coding_position,
+        "reasoning_matrix_required_for_command_loop": reasoning_matrix_required,
+        "reasoning_prerequisite_mode": reasoning_prerequisite_mode,
         "reasoning_prerequisite_proven": reasoning_ok,
         "api_lane_exact_token_matched": acceptance_packet.get("exact_token_matched") is True,
         "file_bridge_acceptance_proven": acceptance_packet.get("file_bridge_acceptance_proven") is True,
@@ -5151,6 +5208,15 @@ def _native_free_text_forbidden_payload_fields(payload: Any) -> list[str]:
 NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_EXPECTED_TEXT = "WBP_NATIVE_FREE_TEXT_OK"
 NATIVE_FREE_TEXT_COMMAND_LOOP_DEFAULT_TIMEOUT_SECONDS = 45.0
 NATIVE_FREE_TEXT_COMMAND_LOOP_MAX_TIMEOUT_SECONDS = 120.0
+NATIVE_FREE_TEXT_HOOK_LEDGER_RELATIVE_PATH = (
+    Path("managed") / "router-hook" / "user-prompt-submit-ledger.json"
+)
+NATIVE_FREE_TEXT_PRE_TOOL_USE_GUARD_RELATIVE_PATH = (
+    Path("managed") / "router-hook" / "pre-tool-use-api-alias-guard.json"
+)
+NATIVE_FREE_TEXT_ROUTER_PROOF_RELATIVE_PATH = (
+    Path("tmp") / "user-prompt-submit-router-proof" / "api-agent-auto-router.packet.json"
+)
 NATIVE_FREE_TEXT_PROOF_FORBIDDEN_KEYS = {
     "api_key",
     "auth",
@@ -5227,6 +5293,377 @@ def _native_free_text_public_key_redacted(key_text: str) -> bool:
     if "_url_" in key_lower and not key_lower.endswith("_url_redacted"):
         return True
     return False
+
+
+def _native_free_text_sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _native_free_text_event_digest(value: object) -> str:
+    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()[:2048]
+    return _native_free_text_sha256_text(text) if text else ""
+
+
+def _native_free_text_canonical_mapping_digest(value: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        dict(value),
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return _native_free_text_sha256_text(encoded)
+
+
+def _native_free_text_hex_sha256(value: object) -> str:
+    text = str(value or "").strip().lower()
+    if len(text) == 64 and all(character in "0123456789abcdef" for character in text):
+        return text
+    return ""
+
+
+def _native_free_text_read_json_mapping(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    metadata = {
+        "present": path.exists(),
+        "read": False,
+        "valid_json": False,
+        "mapping": False,
+        "path_recorded": False,
+    }
+    if not path.exists():
+        return {}, metadata
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}, metadata
+    metadata["read"] = True
+    metadata["valid_json"] = True
+    if not isinstance(parsed, dict):
+        return {}, metadata
+    metadata["mapping"] = True
+    return parsed, metadata
+
+
+def _native_free_text_profile_runtime_context_digest(
+    profile_root: Path,
+) -> tuple[str, dict[str, Any]]:
+    context, metadata = _native_free_text_read_json_mapping(
+        profile_root / AGENT_RUNTIME_CONTEXT_FILENAME
+    )
+    digest = (
+        _native_free_text_canonical_mapping_digest(context)
+        if metadata.get("mapping") is True
+        else ""
+    )
+    metadata["digest_present"] = bool(digest)
+    return digest, metadata
+
+
+def _native_free_text_profile_roots_for_router_proof(
+    last_launch_packet: dict[str, Any] | None,
+) -> list[Path]:
+    roots: list[Path] = []
+    for context_path in _custom_native_agent_runtime_context_candidates(last_launch_packet):
+        if context_path.name == AGENT_RUNTIME_CONTEXT_FILENAME:
+            roots.append(context_path.expanduser().parent)
+    launch = last_launch_packet if isinstance(last_launch_packet, dict) else {}
+    profile_root = str(launch.get("persistent_profile_root") or "").strip()
+    if profile_root:
+        roots.append(Path(profile_root).expanduser())
+    default_paths = default_persistent_custom_profile_paths(
+        profile_id=DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID
+    )
+    default_profile_root = str(default_paths.get("persistent_profile_root") or "")
+    if default_profile_root:
+        roots.append(Path(default_profile_root).expanduser())
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            unique.append(root)
+            seen.add(key)
+    return unique
+
+
+def _custom_native_router_handoff_proof_packet(
+    *,
+    prompt: str,
+    expected_text: str,
+    context: dict[str, Any],
+    last_launch_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    expected_sha256 = _native_free_text_sha256_text(expected_text)
+    prompt_digest = _native_free_text_event_digest(prompt)
+    bounded_router_prompt_digest = _native_free_text_event_digest(
+        str(prompt or "").splitlines()[0] if str(prompt or "").splitlines() else ""
+    )
+    acceptable_router_prompt_digests = {
+        digest for digest in (prompt_digest, bounded_router_prompt_digest) if digest
+    }
+    runtime_context_digest = _native_free_text_canonical_mapping_digest(context)
+    roots = _native_free_text_profile_roots_for_router_proof(last_launch_packet)
+    blocking_reasons: list[str] = []
+    best_extra: dict[str, Any] = {}
+
+    for root in roots:
+        profile_runtime_context_digest, profile_context_meta = (
+            _native_free_text_profile_runtime_context_digest(root)
+        )
+        candidate_runtime_context_digest = (
+            profile_runtime_context_digest or runtime_context_digest
+        )
+        ledger, ledger_meta = _native_free_text_read_json_mapping(
+            root / NATIVE_FREE_TEXT_HOOK_LEDGER_RELATIVE_PATH
+        )
+        guard, guard_meta = _native_free_text_read_json_mapping(
+            root / NATIVE_FREE_TEXT_PRE_TOOL_USE_GUARD_RELATIVE_PATH
+        )
+        router, router_meta = _native_free_text_read_json_mapping(
+            root / NATIVE_FREE_TEXT_ROUTER_PROOF_RELATIVE_PATH
+        )
+        now = time.time()
+        guard_expires_at = guard.get("expires_at_epoch_seconds")
+        guard_active = isinstance(guard_expires_at, (int, float)) and guard_expires_at >= now
+
+        candidate_reasons: list[str] = []
+        if ledger.get("packet_kind") != "wbp_user_prompt_submit_hook_ledger":
+            candidate_reasons.append("hook_ledger_packet_kind_invalid")
+        if ledger.get("origin_state") != "custom_codex_flow_proven":
+            candidate_reasons.append("hook_ledger_origin_state_not_custom")
+        if ledger.get("hook_event_name") != "UserPromptSubmit":
+            candidate_reasons.append("hook_ledger_event_not_user_prompt_submit")
+        if ledger.get("hook_producer_state") != "HOOK_RAN_CUSTOM_CODEX_PROVEN":
+            candidate_reasons.append("hook_ledger_producer_state_not_custom")
+        if ledger.get("hook_trust_source") != "codex_non_managed_hook_execution":
+            candidate_reasons.append("hook_ledger_trust_source_not_codex")
+        for field, reason in (
+            ("hook_config_present", "hook_config_missing"),
+            ("hook_enabled", "hook_disabled"),
+            ("hook_trusted", "hook_untrusted"),
+            ("hook_hash_current", "hook_hash_not_current"),
+            ("hook_runnable", "hook_not_runnable"),
+            ("user_prompt_submit_hook_ran", "user_prompt_submit_hook_not_run"),
+            ("hook_ledger_written", "hook_ledger_not_written"),
+            ("hook_parent_process_chain_observed", "hook_parent_process_chain_not_observed"),
+            ("hook_parent_process_chain_path_proven", "hook_parent_process_chain_path_not_proven"),
+            ("hook_parent_process_chain_exact_path_classified", "hook_parent_process_chain_not_exact"),
+            ("hook_parent_process_chain_custom_wbp_clean_app", "hook_parent_chain_not_custom_wbp_clean"),
+            ("hook_parent_process_chain_app_server", "hook_parent_chain_app_server_missing"),
+            ("hook_parent_process_chain_clean_root", "hook_parent_chain_clean_root_missing"),
+            (
+                "hook_parent_process_chain_custom_wbp_clean_app_executable_path_bound",
+                "hook_parent_chain_custom_app_path_not_bound",
+            ),
+            (
+                "hook_parent_process_chain_app_server_executable_path_bound",
+                "hook_parent_chain_app_server_path_not_bound",
+            ),
+            (
+                "hook_parent_process_chain_clean_root_executable_path_bound",
+                "hook_parent_chain_clean_root_path_not_bound",
+            ),
+        ):
+            if ledger.get(field) is not True:
+                candidate_reasons.append(reason)
+        for field, reason in (
+            ("hook_parent_process_chain_stock_codex_app", "hook_parent_chain_stock_codex_app"),
+            (
+                "hook_parent_process_chain_command_text_substring_only",
+                "hook_parent_chain_substring_only",
+            ),
+            ("raw_prompt_recorded", "hook_raw_prompt_recorded"),
+            ("prompt_text_recorded", "hook_prompt_text_recorded"),
+            ("raw_route_id_recorded", "hook_raw_route_recorded"),
+            ("selected_api_route_id_recorded", "hook_selected_route_recorded"),
+            ("raw_backend_details_exposed", "hook_raw_backend_exposed"),
+            ("secret_value_exposed", "hook_secret_exposed"),
+            ("fallback_used", "hook_fallback_used"),
+            ("local_imitation_used", "hook_local_imitation_used"),
+            ("native_codex_subagent_used_as_dip", "hook_subagent_used"),
+        ):
+            if ledger.get(field) is True:
+                candidate_reasons.append(reason)
+        if _native_free_text_hex_sha256(ledger.get("prompt_digest")) != prompt_digest:
+            candidate_reasons.append("hook_prompt_digest_mismatch")
+        if (
+            _native_free_text_hex_sha256(ledger.get("runtime_context_digest"))
+            != candidate_runtime_context_digest
+        ):
+            candidate_reasons.append("hook_runtime_context_digest_mismatch")
+
+        if guard.get("packet_kind") != "wbp_pre_tool_use_api_alias_guard":
+            candidate_reasons.append("pre_tool_use_guard_packet_kind_invalid")
+        if guard.get("required_command") != "router-hook auto-route-output --prompt-file -":
+            candidate_reasons.append("pre_tool_use_guard_required_command_mismatch")
+        if guard.get("raw_prompt_recorded") is not False:
+            candidate_reasons.append("pre_tool_use_guard_raw_prompt_recorded")
+        if guard.get("raw_route_id_recorded") is not False:
+            candidate_reasons.append("pre_tool_use_guard_raw_route_recorded")
+        if guard.get("secret_value_exposed") is not False:
+            candidate_reasons.append("pre_tool_use_guard_secret_exposed")
+        if _native_free_text_hex_sha256(guard.get("prompt_digest")) != prompt_digest:
+            candidate_reasons.append("pre_tool_use_guard_prompt_digest_mismatch")
+        if (
+            _native_free_text_hex_sha256(guard.get("runtime_context_digest"))
+            != candidate_runtime_context_digest
+        ):
+            candidate_reasons.append("pre_tool_use_guard_runtime_context_digest_mismatch")
+        if not guard_active:
+            candidate_reasons.append("pre_tool_use_guard_not_active")
+
+        if router.get("packet_kind") != "wbp_api_agent_auto_router":
+            candidate_reasons.append("router_proof_packet_kind_invalid")
+        if router.get("status") != "ok" or router.get("machine_error_code") != "OK":
+            candidate_reasons.append("router_proof_status_not_ok")
+        for field, reason in (
+            ("auto_router_used", "router_auto_router_not_used"),
+            ("auto_router_proven", "router_auto_router_not_proven"),
+            ("api_route_selected", "router_api_route_not_selected"),
+            ("api_route_called", "router_api_route_not_called"),
+            ("direct_reply_selected", "router_direct_reply_not_selected"),
+            ("direct_reply_proven", "router_direct_reply_not_proven"),
+            ("allowed_api_route_ids_enforced", "router_allowed_routes_not_enforced"),
+            ("forbidden_stale_route_ids_enforced", "router_stale_routes_not_enforced"),
+        ):
+            if router.get(field) is not True:
+                candidate_reasons.append(reason)
+        for field, reason in (
+            ("fallback_used", "router_fallback_used"),
+            ("local_imitation_used", "router_local_imitation_used"),
+            ("wrapper_substitution_used", "router_wrapper_substitution_used"),
+            ("wrapper_substitution_detected", "router_wrapper_substitution_detected"),
+            ("raw_prompt_recorded", "router_raw_prompt_recorded"),
+            ("selected_api_route_id_recorded", "router_selected_route_recorded"),
+            ("secret_value_exposed", "router_secret_exposed"),
+            ("raw_backend_details_exposed", "router_raw_backend_exposed"),
+        ):
+            if router.get(field) is True:
+                candidate_reasons.append(reason)
+        router_prompt_digest = _native_free_text_hex_sha256(router.get("prompt_digest"))
+        if router_prompt_digest not in acceptable_router_prompt_digests:
+            candidate_reasons.append("router_prompt_digest_mismatch")
+        if str(router.get("output_text") or "") != expected_text:
+            candidate_reasons.append("router_output_text_mismatch")
+        exact_plain_visible = router.get("exact_plain_reply_matched") is True
+        if exact_plain_visible and router.get("repo_bridge_used") is True:
+            exact_plain_visible = bool(
+                router.get("repo_bridge_evidence_response_proven") is True
+                or (
+                    router.get("direct_provider_response_observed") is True
+                    and router.get("positive_provider_proof_gate_satisfied") is True
+                )
+            )
+        router_visible_output_allowed = bool(
+            exact_plain_visible
+            or router.get("output_passthrough_required") is True
+            or router.get("repo_bridge_evidence_response_proven") is True
+        )
+        if not router_visible_output_allowed:
+            candidate_reasons.append("router_visible_output_not_allowed")
+        if (
+            _native_free_text_hex_sha256(router.get("exact_plain_reply_expected_text_sha256"))
+            and _native_free_text_hex_sha256(
+                router.get("exact_plain_reply_expected_text_sha256")
+            )
+            != expected_sha256
+        ):
+            candidate_reasons.append("router_expected_text_digest_mismatch")
+
+        extra = {
+            "hook_ledger_file_present": ledger_meta.get("present") is True,
+            "hook_ledger_file_read": ledger_meta.get("read") is True,
+            "hook_ledger_file_valid_json": ledger_meta.get("valid_json") is True,
+            "hook_ledger_file_path_recorded": False,
+            "pre_tool_use_guard_file_present": guard_meta.get("present") is True,
+            "pre_tool_use_guard_file_read": guard_meta.get("read") is True,
+            "pre_tool_use_guard_file_valid_json": guard_meta.get("valid_json") is True,
+            "pre_tool_use_guard_active": guard_active,
+            "pre_tool_use_guard_file_path_recorded": False,
+            "router_proof_file_present": router_meta.get("present") is True,
+            "router_proof_file_read": router_meta.get("read") is True,
+            "router_proof_file_valid_json": router_meta.get("valid_json") is True,
+            "router_proof_file_path_recorded": False,
+            "profile_runtime_context_file_present": (
+                profile_context_meta.get("present") is True
+            ),
+            "profile_runtime_context_file_read": profile_context_meta.get("read") is True,
+            "profile_runtime_context_file_valid_json": (
+                profile_context_meta.get("valid_json") is True
+            ),
+            "profile_runtime_context_digest_present": bool(
+                profile_runtime_context_digest
+            ),
+            "router_handoff_profile_context_source_used": bool(
+                profile_runtime_context_digest
+            ),
+            "hook_prompt_digest_bound": _native_free_text_hex_sha256(ledger.get("prompt_digest")) == prompt_digest,
+            "hook_runtime_context_digest_bound": (
+                _native_free_text_hex_sha256(ledger.get("runtime_context_digest"))
+                == candidate_runtime_context_digest
+            ),
+            "pre_tool_use_guard_prompt_digest_bound": (
+                _native_free_text_hex_sha256(guard.get("prompt_digest")) == prompt_digest
+            ),
+            "pre_tool_use_guard_runtime_context_digest_bound": (
+                _native_free_text_hex_sha256(guard.get("runtime_context_digest"))
+                == candidate_runtime_context_digest
+            ),
+            "router_prompt_digest_bound": (
+                router_prompt_digest in acceptable_router_prompt_digests
+            ),
+            "router_prompt_digest_bound_to_full_prompt": router_prompt_digest == prompt_digest,
+            "router_prompt_digest_bound_to_bounded_first_line": (
+                bool(bounded_router_prompt_digest)
+                and router_prompt_digest == bounded_router_prompt_digest
+            ),
+            "router_output_text_matched": str(router.get("output_text") or "") == expected_text,
+            "router_visible_output_allowed": router_visible_output_allowed,
+            "router_expected_text_sha256_match": (
+                _native_free_text_hex_sha256(
+                    router.get("exact_plain_reply_expected_text_sha256")
+                )
+                in {"", expected_sha256}
+            ),
+            "raw_prompt_recorded": False,
+            "raw_route_id_recorded": False,
+            "raw_backend_details_exposed": False,
+            "secret_value_exposed": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+        }
+        if not candidate_reasons:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_native_router_handoff_proof",
+                "status": "ok",
+                "machine_error_code": "OK",
+                "router_handoff_proof_valid": True,
+                "profile_candidate_count": len(roots),
+                "profile_candidate_checked": True,
+                **extra,
+                "blocking_reasons": [],
+            }
+        if not best_extra:
+            best_extra = extra
+        blocking_reasons.extend(candidate_reasons)
+
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_router_handoff_proof",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_NATIVE_ROUTER_HANDOFF_PROOF_NOT_PROVEN",
+        "router_handoff_proof_valid": False,
+        "profile_candidate_count": len(roots),
+        "profile_candidate_checked": bool(roots),
+        **best_extra,
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "blocking_reasons": sorted(set(blocking_reasons))[:64],
+    }
 
 
 def _custom_native_free_text_window_observed(packet: dict[str, Any]) -> bool:
@@ -5719,35 +6156,7 @@ def _custom_native_natural_dip_command_prompt(
     primary_alias: str,
     coding_alias: str,
 ) -> str:
-    return "\n".join(
-        [
-            f"{primary_alias}, ты оркестратор. Дай короткую задачу агенту {coding_alias} и сверь его ответ.",
-            f"{coding_alias}, работай как API-lane coding agent и верни в видимом ответе ровно этот текст: {expected_text}",
-            "Это server-owned natural DIP command proof: команда похожа на обычную работу, но route/model authority остается только у WBP.",
-            "Не запускай отдельного внутреннего исполнителя и не называй его агентом DIP/API-lane.",
-            "Не используй локальную имитацию ответа DIP.",
-            "Для машинного доказательства прочитай runtime context из os.environ['WBP_PROFILE_DIR'] + '/wbp-agent-runtime-context.json'.",
-            "Сам посчитай sha256 полного текста этого context-файла. Не угадывай sha.",
-            f"После видимого ответа создай UTF-8 JSON файл ровно по этому пути: {proof_path}",
-            "Запиши один JSON object со следующими полями:",
-            "schema_version=1",
-            "packet_kind='custom_codex_native_free_text_agent_proof'",
-            f"request_id='{request_id}'",
-            "machine_error_code='OK'",
-            "alias_context_read=true",
-            "context_sha256=<посчитанный sha256 context-файла>",
-            "primary_aliases=<context.primary_aliases>",
-            "coding_aliases=<context.coding_aliases>",
-            "allowed_api_route_ids=<context.allowed_api_route_ids>",
-            f"expected_token='{expected_text}'",
-            f"native_free_text_agent_ack='{expected_text}'",
-            "no_secret_exposed=true",
-            "secret_value_exposed=false",
-            "Не записывай base_url, endpoint, token, secret, secret_ref, auth или backend.",
-            "Если context отсутствует, создай тот же файл с machine_error_code='FAIL_ALIAS_CONTEXT_MISSING'.",
-            "Не меняй исходники и не создавай другие файлы.",
-        ]
-    )
+    return f"{coding_alias}: ответь ровно {expected_text}"
 
 
 def _validate_native_free_text_agent_proof(
@@ -6278,52 +6687,6 @@ def _custom_native_free_text_command_loop_proof_packet(
         context=context,
         context_metadata=resolved_context_metadata,
     )
-    if native_agent_proof_packet.get("status") != "ok":
-        return _custom_native_free_text_blocked_packet(
-            machine_error_code=str(
-                native_agent_proof_packet.get("machine_error_code")
-                or "CUSTOM_NATIVE_FREE_TEXT_AGENT_PROOF_NOT_PROVEN"
-            ),
-            human_message="Native free-text agent proof file did not satisfy the runtime context contract.",
-            expected_text=expected_text,
-            request_id=request_id,
-            prompt=prompt,
-            context_metadata=resolved_context_metadata,
-            blocking_reasons=list(native_agent_proof_packet.get("blocking_reasons") or []),
-            primary_aliases=primary_aliases,
-            coding_aliases=coding_aliases,
-            allowed_api_route_ids=allowed_api_route_ids,
-            native_activation_packet=native_activation_packet,
-            native_submit_packet=native_submit_packet,
-            native_agent_proof_packet=native_agent_proof_packet,
-        )
-    command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
-        payload={"request_id": f"{request_id}-api"},
-        file_bridge_worker=file_bridge_worker,
-        agent_runtime_context=context,
-        context_metadata=resolved_context_metadata,
-        last_launch_packet=last_launch_packet,
-        bridge_endpoint=bridge_endpoint,
-        reasoning_matrix_builder=reasoning_matrix_builder,
-        server_expected_text=expected_text,
-    )
-    if command_loop_packet.get("status") != "ok":
-        return _custom_native_free_text_blocked_packet(
-            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
-            human_message="Native free-text proof file passed, but GPT+API command-loop proof did not pass.",
-            expected_text=expected_text,
-            request_id=request_id,
-            prompt=prompt,
-            context_metadata=resolved_context_metadata,
-            blocking_reasons=["command_loop_not_proven"],
-            primary_aliases=primary_aliases,
-            coding_aliases=coding_aliases,
-            allowed_api_route_ids=allowed_api_route_ids,
-            native_activation_packet=native_activation_packet,
-            native_submit_packet=native_submit_packet,
-            native_agent_proof_packet=native_agent_proof_packet,
-            command_loop_packet=command_loop_packet,
-        )
     native_agent_provider_call_directly_observed = bool(
         native_submit_packet.get("native_agent_provider_call_directly_observed") is True
     )
@@ -6361,6 +6724,138 @@ def _custom_native_free_text_command_loop_proof_packet(
         and not native_codex_subagent_used_as_dip
         and native_submitter_trust_boundary_proven
     )
+    native_agent_proof_file_missing = bool(
+        native_agent_proof_packet.get("machine_error_code")
+        == "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING"
+        and native_agent_proof_packet.get("proof_file_observed") is not True
+    )
+    session_external_route_packet = native_submit_packet.get(
+        "custom_session_external_route_observer_packet"
+    )
+    if not isinstance(session_external_route_packet, dict):
+        session_external_route_packet = {}
+    try:
+        session_external_route_tool_call_count = int(
+            session_external_route_packet.get("custom_session_tool_call_count") or 0
+        )
+    except (TypeError, ValueError):
+        session_external_route_tool_call_count = 0
+    session_external_route_router_command_attempted = bool(
+        session_external_route_packet.get("custom_session_router_command_attempted")
+        is True
+    )
+    session_external_route_proven = bool(
+        native_agent_proof_file_missing
+        and session_external_route_packet.get("status") == "ok"
+        and session_external_route_packet.get("custom_session_prompt_digest_bound")
+        is True
+        and session_external_route_packet.get(
+            "custom_session_external_route_message_observed"
+        )
+        is True
+        and session_external_route_packet.get("custom_session_task_complete_observed")
+        is True
+        and native_submit_packet.get("native_free_text_observer_source")
+        == "custom_session_jsonl_external_route"
+        and custom_codex_response_text_read_proven
+        and custom_response_exact_token_observed
+        and custom_response_bound_to_request
+        and custom_response_expected_sha256_match
+        and native_codex_subagent_absence_proven
+        and not native_codex_subagent_used_as_dip
+    )
+    router_handoff_proof_packet: dict[str, Any] = {
+        "schema_version": 1,
+        "packet_kind": "custom_native_router_handoff_proof",
+        "status": "not_applicable",
+        "machine_error_code": "CUSTOM_NATIVE_ROUTER_HANDOFF_PROOF_NOT_REQUIRED",
+        "router_handoff_proof_valid": False,
+        "blocking_reasons": [],
+        "raw_prompt_recorded": False,
+        "raw_route_id_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "fallback_used": False,
+        "local_imitation_used": False,
+    }
+    if native_agent_proof_packet.get("status") != "ok":
+        if native_agent_proof_file_missing and native_free_text_observability_proven:
+            if not session_external_route_proven:
+                router_handoff_proof_packet = _custom_native_router_handoff_proof_packet(
+                    prompt=prompt,
+                    expected_text=expected_text,
+                    context=context,
+                    last_launch_packet=last_launch_packet,
+                )
+                if router_handoff_proof_packet.get("status") == "ok":
+                    pass
+                else:
+                    return _custom_native_free_text_blocked_packet(
+                        machine_error_code=str(
+                            router_handoff_proof_packet.get("machine_error_code")
+                            or "CUSTOM_NATIVE_ROUTER_HANDOFF_PROOF_NOT_PROVEN"
+                        ),
+                        human_message="Native proof file was absent, and neither the Custom session external-route proof nor the trusted hook/router handoff proof satisfied the contract.",
+                        expected_text=expected_text,
+                        request_id=request_id,
+                        prompt=prompt,
+                        context_metadata=resolved_context_metadata,
+                        blocking_reasons=list(
+                            router_handoff_proof_packet.get("blocking_reasons") or []
+                        ),
+                        primary_aliases=primary_aliases,
+                        coding_aliases=coding_aliases,
+                        allowed_api_route_ids=allowed_api_route_ids,
+                        native_activation_packet=native_activation_packet,
+                        native_submit_packet=native_submit_packet,
+                        native_agent_proof_packet=native_agent_proof_packet,
+                    )
+        else:
+            return _custom_native_free_text_blocked_packet(
+                machine_error_code=str(
+                    native_agent_proof_packet.get("machine_error_code")
+                    or "CUSTOM_NATIVE_FREE_TEXT_AGENT_PROOF_NOT_PROVEN"
+                ),
+                human_message="Native free-text agent proof file did not satisfy the runtime context contract.",
+                expected_text=expected_text,
+                request_id=request_id,
+                prompt=prompt,
+                context_metadata=resolved_context_metadata,
+                blocking_reasons=list(native_agent_proof_packet.get("blocking_reasons") or []),
+                primary_aliases=primary_aliases,
+                coding_aliases=coding_aliases,
+                allowed_api_route_ids=allowed_api_route_ids,
+                native_activation_packet=native_activation_packet,
+                native_submit_packet=native_submit_packet,
+                native_agent_proof_packet=native_agent_proof_packet,
+            )
+    command_loop_packet = _custom_native_gpt_api_alias_command_loop_proof_packet(
+        payload={"request_id": f"{request_id}-api"},
+        file_bridge_worker=file_bridge_worker,
+        agent_runtime_context=context,
+        context_metadata=resolved_context_metadata,
+        last_launch_packet=last_launch_packet,
+        bridge_endpoint=bridge_endpoint,
+        reasoning_matrix_builder=reasoning_matrix_builder,
+        server_expected_text=expected_text,
+    )
+    if command_loop_packet.get("status") != "ok":
+        return _custom_native_free_text_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_FREE_TEXT_COMMAND_LOOP_NOT_PROVEN",
+            human_message="Native free-text proof file passed, but GPT+API command-loop proof did not pass.",
+            expected_text=expected_text,
+            request_id=request_id,
+            prompt=prompt,
+            context_metadata=resolved_context_metadata,
+            blocking_reasons=["command_loop_not_proven"],
+            primary_aliases=primary_aliases,
+            coding_aliases=coding_aliases,
+            allowed_api_route_ids=allowed_api_route_ids,
+            native_activation_packet=native_activation_packet,
+            native_submit_packet=native_submit_packet,
+            native_agent_proof_packet=native_agent_proof_packet,
+            command_loop_packet=command_loop_packet,
+        )
     native_observability_machine_error_code = "OK"
     if native_codex_subagent_used_as_dip:
         native_observability_machine_error_code = (
@@ -6375,13 +6870,26 @@ def _custom_native_free_text_command_loop_proof_packet(
             "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
         )
 
+    router_handoff_proof_valid = (
+        router_handoff_proof_packet.get("router_handoff_proof_valid") is True
+    )
+    native_agent_or_router_handoff_proven = bool(
+        (
+            native_agent_proof_packet.get("proof_file_valid") is True
+            and native_agent_proof_packet.get("context_sha256_match") is True
+        )
+        or (
+            native_agent_proof_file_missing
+            and router_handoff_proof_valid
+        )
+        or session_external_route_proven
+    )
     native_free_text_command_loop_proven = bool(
         native_submit_packet.get("native_window_observed") is True
         and native_submit_packet.get("input_capable_ui_observed") is True
         and native_submit_packet.get("input_text_insert_succeeded") is True
         and native_submit_packet.get("prompt_submitted") is True
-        and native_agent_proof_packet.get("proof_file_valid") is True
-        and native_agent_proof_packet.get("context_sha256_match") is True
+        and native_agent_or_router_handoff_proven
         and command_loop_packet.get("command_loop_proven") is True
         and command_loop_packet.get("api_lane_exact_token_matched") is True
         and command_loop_packet.get("fallback_used") is False
@@ -6390,9 +6898,18 @@ def _custom_native_free_text_command_loop_proof_packet(
         and native_free_text_observability_proven
     )
     native_free_text_human_message = (
-        "Custom Codex native free-text prompt, agent proof file, observer evidence, and GPT+API alias command-loop proof passed."
+        "Custom Codex native free-text prompt, trusted router handoff or agent proof, observer evidence, and GPT+API alias command-loop proof passed."
         if native_free_text_command_loop_proven
         else "Custom Codex native free-text prompt is not proven as a native API-lane route; observer evidence is missing or indicates Codex sub-agent substitution."
+    )
+    native_free_text_tool_bridge_source = (
+        "custom_session_external_route_plus_server_gpt_api_command_loop"
+        if session_external_route_proven
+        else (
+        "trusted_hook_router_handoff_plus_server_gpt_api_command_loop"
+        if native_agent_proof_file_missing and router_handoff_proof_valid
+        else "native_agent_proof_file_plus_server_gpt_api_command_loop"
+        )
     )
     return {
         "schema_version": 1,
@@ -6475,17 +6992,44 @@ def _custom_native_free_text_command_loop_proof_packet(
         ),
         "native_agent_proof_file_observed": native_agent_proof_packet.get("proof_file_observed") is True,
         "native_agent_proof_file_valid": native_agent_proof_packet.get("proof_file_valid") is True,
+        "native_agent_proof_file_missing": native_agent_proof_file_missing,
+        "native_alternate_route_proof_required": native_agent_proof_file_missing,
+        "native_router_handoff_proof_required": bool(
+            native_agent_proof_file_missing and not session_external_route_proven
+        ),
+        "native_router_handoff_proof_valid": router_handoff_proof_valid,
+        "native_session_external_route_proof_valid": session_external_route_proven,
+        "native_session_external_route_message_observed": (
+            session_external_route_packet.get(
+                "custom_session_external_route_message_observed"
+            )
+            is True
+        ),
+        "native_session_external_route_task_complete_observed": (
+            session_external_route_packet.get("custom_session_task_complete_observed")
+            is True
+        ),
+        "native_session_external_route_router_command_attempted": (
+            session_external_route_router_command_attempted
+        ),
+        "native_session_external_route_tool_call_count": (
+            session_external_route_tool_call_count
+        ),
         "native_free_text_agent_context_sha_match": native_agent_proof_packet.get("context_sha256_match") is True,
         "native_free_text_alias_routing_proven": bool(
-            native_agent_proof_packet.get("primary_aliases_match") is True
-            and native_agent_proof_packet.get("coding_aliases_match") is True
-            and native_agent_proof_packet.get("allowed_api_route_ids_match") is True
+            (
+                native_agent_proof_packet.get("primary_aliases_match") is True
+                and native_agent_proof_packet.get("coding_aliases_match") is True
+                and native_agent_proof_packet.get("allowed_api_route_ids_match") is True
+            )
+            or router_handoff_proof_valid
+            or session_external_route_proven
         ),
         "native_free_text_command_loop_proven": native_free_text_command_loop_proven,
         "native_free_text_tool_bridge_proven": native_free_text_command_loop_proven,
         "native_free_text_observability_proven": native_free_text_observability_proven,
         "native_submitter_trust_boundary_proven": native_submitter_trust_boundary_proven,
-        "native_free_text_tool_bridge_source": "native_agent_proof_file_plus_server_gpt_api_command_loop",
+        "native_free_text_tool_bridge_source": native_free_text_tool_bridge_source,
         "native_agent_provider_call_directly_observed": native_agent_provider_call_directly_observed,
         "custom_codex_response_text_read_proven": custom_codex_response_text_read_proven,
         "custom_response_exact_token_observed": custom_response_exact_token_observed,
@@ -6539,6 +7083,9 @@ def _custom_native_free_text_command_loop_proof_packet(
         ),
         "native_agent_proof_packet": _native_free_text_public_nested_packet(
             native_agent_proof_packet
+        ),
+        "native_router_handoff_proof_packet": _native_free_text_public_nested_packet(
+            router_handoff_proof_packet
         ),
         "command_loop_packet": _native_free_text_public_nested_packet(
             command_loop_packet
@@ -19456,12 +20003,18 @@ def build_handler(
                 )
                 return
             agent_runtime_context, context_metadata = (
-                _refresh_custom_agent_runtime_context_for_command_loop(
-                    payload=payload,
-                    operator_status=None,
-                    api_snapshot=None,
+                _load_custom_native_agent_runtime_context(
+                    custom_native_launch_state["last_packet"]
                 )
             )
+            if not agent_runtime_context:
+                agent_runtime_context, context_metadata = (
+                    _refresh_custom_agent_runtime_context_for_command_loop(
+                        payload=payload,
+                        operator_status=None,
+                        api_snapshot=None,
+                    )
+                )
             self._send_json(
                 _custom_native_free_text_command_loop_proof_packet(
                     payload=payload,
@@ -19577,10 +20130,8 @@ def build_handler(
                 )
                 return
             agent_runtime_context, context_metadata = (
-                _refresh_custom_agent_runtime_context_for_command_loop(
-                    payload=payload,
-                    operator_status=None,
-                    api_snapshot=None,
+                _load_custom_native_agent_runtime_context(
+                    custom_native_launch_state["last_packet"]
                 )
             )
             self._send_json(
@@ -19698,10 +20249,8 @@ def build_handler(
                 )
                 return
             agent_runtime_context, context_metadata = (
-                _refresh_custom_agent_runtime_context_for_command_loop(
-                    payload=payload,
-                    operator_status=None,
-                    api_snapshot=None,
+                _load_custom_native_agent_runtime_context(
+                    custom_native_launch_state["last_packet"]
                 )
             )
             self._send_json(

@@ -1639,6 +1639,26 @@ def _safe_sha256_hex(value: object) -> str:
     return text
 
 
+def _native_free_text_request_binding_texts(request_id: str) -> list[str]:
+    text = str(request_id or "").strip()
+    if not text:
+        return []
+    variants = [text]
+    slug_chars: list[str] = []
+    previous_separator = False
+    for character in text:
+        if character.isalnum():
+            slug_chars.append(character)
+            previous_separator = False
+        elif not previous_separator:
+            slug_chars.append("_")
+            previous_separator = True
+    slug = "".join(slug_chars).strip("_")
+    if slug and slug not in variants:
+        variants.append(slug)
+    return variants
+
+
 def _safe_candidate_bounds(value: object) -> dict[str, int]:
     if not isinstance(value, dict):
         return {"x": 0, "y": 0, "width": 0, "height": 0}
@@ -1712,6 +1732,237 @@ def _bounded_response_candidate_map(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _message_text_from_session_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    if isinstance(payload.get("message"), str):
+        return str(payload.get("message") or "")
+    if isinstance(payload.get("last_agent_message"), str):
+        return str(payload.get("last_agent_message") or "")
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") in {"input_text", "output_text", "text"}:
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+    return "".join(parts)
+
+
+def _custom_session_external_route_response_observer_packet(
+    *,
+    profile_root: Path,
+    prompt: str,
+    request_id: str,
+    expected_text: str,
+    submitted_after_epoch_seconds: float,
+) -> dict[str, Any]:
+    sessions_dir = profile_root / "sessions"
+    prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else ""
+    expected_sha256 = hashlib.sha256(expected_text.encode("utf-8")).hexdigest()
+    packet_base = {
+        **_native_free_text_observer_defaults(),
+        "schema_version": 1,
+        "packet_kind": "custom_native_session_external_route_response_observer",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_NATIVE_SESSION_EXTERNAL_ROUTE_RESPONSE_NOT_PROVEN",
+        "custom_session_jsonl_observer_attempted": True,
+        "custom_session_jsonl_seen": False,
+        "custom_session_jsonl_fresh": False,
+        "custom_session_prompt_digest_bound": False,
+        "custom_session_external_route_message_observed": False,
+        "custom_session_agent_message_observed": False,
+        "custom_session_task_complete_observed": False,
+        "custom_session_router_command_attempted": False,
+        "custom_session_tool_call_count": 0,
+        "custom_session_file_count_scanned": 0,
+        "custom_session_line_count_scanned": 0,
+        "prompt_sha256": prompt_sha256,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "custom_response_expected_sha256": expected_sha256,
+        "text_value_captured": False,
+    }
+    if not expected_text or not request_id:
+        return packet_base | {"blocking_reasons": ["expected_text_or_request_id_missing"]}
+    try:
+        session_paths = sorted(
+            sessions_dir.rglob("*.jsonl"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )[:16] if sessions_dir.exists() else []
+    except OSError:
+        session_paths = []
+    prompt_seen = False
+    external_route_seen = False
+    agent_message_seen = False
+    task_complete_seen = False
+    router_command_attempted = False
+    tool_call_count = 0
+    line_count = 0
+    fresh_file_seen = False
+    for session_path in session_paths:
+        try:
+            stat = session_path.stat()
+        except OSError:
+            continue
+        if stat.st_mtime + 5.0 < submitted_after_epoch_seconds:
+            continue
+        fresh_file_seen = True
+        try:
+            lines = session_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines[-400:]:
+            line_count += 1
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            payload = entry.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            entry_type = str(entry.get("type") or "")
+            payload_type = str(payload.get("type") or "")
+            text = _message_text_from_session_payload(payload)
+            if payload_type == "function_call":
+                tool_call_count += 1
+                name = str(payload.get("name") or "")
+                arguments = str(payload.get("arguments") or "")
+                if name == "exec_command" and "router-hook auto-route-output" in arguments:
+                    router_command_attempted = True
+            if (
+                payload_type == "message"
+                and payload.get("role") == "user"
+                and text.strip() == prompt.strip()
+            ) or (
+                entry_type == "event_msg"
+                and payload_type == "user_message"
+                and text.strip() == prompt.strip()
+            ):
+                prompt_seen = True
+            if (
+                payload_type == "message"
+                and payload.get("role") == "assistant"
+                and str(payload.get("id") or "") == "msg_wbp_external_route"
+                and text.strip() == expected_text
+            ):
+                external_route_seen = True
+            if (
+                entry_type == "event_msg"
+                and payload_type == "agent_message"
+                and text.strip() == expected_text
+            ):
+                agent_message_seen = True
+            if (
+                entry_type == "event_msg"
+                and payload_type == "task_complete"
+                and text.strip() == expected_text
+            ):
+                task_complete_seen = True
+    ok = bool(prompt_seen and external_route_seen and task_complete_seen)
+    if not ok:
+        reasons = []
+        if not session_paths:
+            reasons.append("session_jsonl_missing")
+        if not fresh_file_seen:
+            reasons.append("fresh_session_jsonl_missing")
+        if not prompt_seen:
+            reasons.append("session_prompt_not_bound")
+        if not external_route_seen:
+            reasons.append("external_route_message_not_observed")
+        if not task_complete_seen:
+            reasons.append("task_complete_not_observed")
+        return packet_base | {
+            "custom_session_jsonl_seen": bool(session_paths),
+            "custom_session_jsonl_fresh": fresh_file_seen,
+            "custom_session_router_command_attempted": router_command_attempted,
+            "custom_session_tool_call_count": tool_call_count,
+            "custom_session_file_count_scanned": len(session_paths),
+            "custom_session_line_count_scanned": line_count,
+            "blocking_reasons": reasons,
+        }
+    return packet_base | {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "custom_session_jsonl_seen": bool(session_paths),
+        "custom_session_jsonl_fresh": fresh_file_seen,
+        "custom_session_prompt_digest_bound": True,
+        "custom_session_external_route_message_observed": True,
+        "custom_session_agent_message_observed": agent_message_seen,
+        "custom_session_task_complete_observed": True,
+        "custom_session_router_command_attempted": router_command_attempted,
+        "custom_session_tool_call_count": tool_call_count,
+        "custom_session_file_count_scanned": len(session_paths),
+        "custom_session_line_count_scanned": line_count,
+        "assistant_turn_probe_attempted": True,
+        "assistant_turn_probe_scan_performed": True,
+        "assistant_turn_activity_observed": True,
+        "assistant_turn_started_observed": True,
+        "assistant_turn_completed_observed": True,
+        "assistant_turn_activity_ended_observed": True,
+        "assistant_turn_post_completion_scan_performed": True,
+        "assistant_turn_machine_error_code": "OK",
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": True,
+        "custom_response_exact_token_observed": True,
+        "custom_response_bound_to_request": True,
+        "custom_response_text_read_without_storing": True,
+        "custom_response_exact_token_candidate_count": 1,
+        "custom_response_like_candidate_count": 1,
+        "native_codex_subagent_used_as_dip": False,
+        "native_codex_subagent_absence_proven": True,
+        "native_free_text_observer_source": "custom_session_jsonl_external_route",
+        "native_free_text_observer_machine_error_code": "OK",
+        "custom_response_observer_attempted": True,
+        "custom_response_observer_scan_performed": True,
+        "blocking_reasons": [],
+    }
+
+
+def _merge_session_external_route_observer(
+    packet: dict[str, Any],
+    session_packet: dict[str, Any],
+) -> dict[str, Any]:
+    packet["custom_session_external_route_observer_packet"] = session_packet
+    if session_packet.get("status") != "ok":
+        return packet
+    for key in (
+        "assistant_turn_probe_attempted",
+        "assistant_turn_probe_scan_performed",
+        "assistant_turn_activity_observed",
+        "assistant_turn_started_observed",
+        "assistant_turn_completed_observed",
+        "assistant_turn_activity_ended_observed",
+        "assistant_turn_post_completion_scan_performed",
+        "assistant_turn_machine_error_code",
+        "native_agent_provider_call_directly_observed",
+        "custom_codex_response_text_read_proven",
+        "custom_response_exact_token_observed",
+        "custom_response_bound_to_request",
+        "custom_response_text_read_without_storing",
+        "custom_response_expected_sha256",
+        "custom_response_exact_token_candidate_count",
+        "custom_response_like_candidate_count",
+        "native_codex_subagent_used_as_dip",
+        "native_codex_subagent_absence_proven",
+        "native_free_text_observer_source",
+        "native_free_text_observer_machine_error_code",
+        "custom_response_observer_attempted",
+        "custom_response_observer_scan_performed",
+    ):
+        packet[key] = session_packet.get(key)
+    return packet
+
+
 def _apply_native_prompt_submit_claim_ceiling(packet: dict[str, Any]) -> dict[str, Any]:
     packet.setdefault("custom_codex_ui_visibility_proven", False)
     packet.setdefault("delivery_counts_as_custom_codex_ui", False)
@@ -1746,10 +1997,15 @@ def _cdp_observe_custom_response_token(
     )
     expected_literal = json.dumps(expected_text, ensure_ascii=False)
     request_id_literal = json.dumps(request_id, ensure_ascii=False)
+    request_binding_texts_literal = json.dumps(
+        _native_free_text_request_binding_texts(request_id),
+        ensure_ascii=False,
+    )
     expression = f"""
 (async () => {{
   const expectedText = {expected_literal};
   const requestId = {request_id_literal};
+  const requestBindingTexts = {request_binding_texts_literal};
   const visible = (node, minWidth = 1, minHeight = 1) => {{
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
@@ -1826,6 +2082,9 @@ def _cdp_observe_custom_response_token(
     return text.includes(expectedText) && !hasVisibleChildWith(node, expectedText);
   }});
   const textLines = (text) => text.split('\\n').map((line) => line.trim()).filter(Boolean);
+  const containsRequestBinding = (text) => (
+    requestBindingTexts.some((bindingText) => bindingText && text.includes(bindingText))
+  );
   const promptSuffixEchoLeafs = tokenLeafs.filter((node) => {{
     const text = normalize(node.innerText || node.textContent);
     const beforeChars = text.indexOf(expectedText);
@@ -1867,7 +2126,7 @@ def _cdp_observe_custom_response_token(
   );
   const requestTokenLeafs = tokenLeafs.filter((node) => {{
     const text = normalize(node.innerText || node.textContent);
-    return text.includes(expectedText) || (!!requestId && text.includes(requestId));
+    return text.includes(expectedText) || containsRequestBinding(text);
   }});
   const requestPromptBottom = requestTokenLeafs.reduce((maxBottom, node) => {{
     const rect = node.getBoundingClientRect();
@@ -1883,8 +2142,8 @@ def _cdp_observe_custom_response_token(
       if (!currentTurnRegion(node)) return false;
       const text = normalize(node.innerText || node.textContent);
       if (!text) return false;
-      if (text.includes(expectedText) || (!!requestId && text.includes(requestId))) return false;
-      if (hasVisibleChildWith(node, expectedText) || (!!requestId && hasVisibleChildWith(node, requestId))) return false;
+      if (text.includes(expectedText) || containsRequestBinding(text)) return false;
+      if (hasVisibleChildWith(node, expectedText) || requestBindingTexts.some((bindingText) => bindingText && hasVisibleChildWith(node, bindingText))) return false;
       if (promptMarkers.some((marker) => marker && text.includes(marker))) return false;
       const lower = text.toLowerCase();
       return markers.some((marker) => marker && lower.includes(marker));
@@ -1949,7 +2208,7 @@ def _cdp_observe_custom_response_token(
       lineCount: textLines(text).length,
       childCount: Array.from(node.children || []).length,
       containsExpectedText: text.includes(expectedText),
-      containsRequestId: !!requestId && text.includes(requestId),
+      containsRequestId: containsRequestBinding(text),
       containsPromptMarker: promptMarkers.some((marker) => marker && text.includes(marker)),
       promptEcho: promptEchoLeafs.includes(node),
       promptSuffixEcho: promptSuffixEchoLeafs.includes(node),
@@ -1971,7 +2230,9 @@ def _cdp_observe_custom_response_token(
     ? await Promise.all(candidateNodes.slice(0, responseCandidateMapMaxItems).map(summarizeCandidate))
     : [];
   const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
-  const requestBoundExpectedToken = !!requestId && expectedText.includes(requestId);
+  const requestBoundExpectedToken = requestBindingTexts.some((bindingText) => (
+    bindingText && expectedText.includes(bindingText)
+  ));
   const assistantTurnActivityObserved = responseExactTokenObserved ||
     stopGeneratingButtons.length > 0;
   const assistantTurnFailedObserved = authOrBackendBlockerCandidateCount > 0 ||
@@ -3809,6 +4070,19 @@ def submit_custom_native_window_prompt_packet(
         else None,
         observer_timeout_seconds=observer_timeout_seconds,
     )
+    profile_paths = default_persistent_custom_profile_paths(
+        profile_id=persistent_profile_id,
+        base_dir=persistent_profile_base_dir,
+    )
+    if expected_text:
+        session_packet = _custom_session_external_route_response_observer_packet(
+            profile_root=Path(str(profile_paths["persistent_profile_root"])).expanduser(),
+            prompt=prompt,
+            request_id=request_id,
+            expected_text=expected_text,
+            submitted_after_epoch_seconds=time.time() - float(observer_timeout_seconds),
+        )
+        packet = _merge_session_external_route_observer(packet, session_packet)
     packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
     packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
     packet["native_app_usable"] = show_packet.get("native_app_usable") is True

@@ -1483,6 +1483,11 @@ function renderCodexCustomLaunch(packet) {
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
       api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
       source_provenance_status: packet?.selection_packet?.source_provenance_status || "",
+      stable_bridge_recovery_retry_attempted:
+        packet?.stable_bridge_recovery_retry_attempted === true,
+      stable_bridge_recovery_status: packet?.stable_bridge_recovery_status || "",
+      stable_bridge_recovery_machine_error_code:
+        packet?.stable_bridge_recovery_machine_error_code || "",
       launch_claim_scope: claimScope,
       next_action: packet?.next_action || "",
     }, null, 2);
@@ -2081,6 +2086,90 @@ function renderQuickStartNativeLaunchInFlight(payload, preflightPacket) {
   });
 }
 
+function codexCustomLaunchNeedsStableBridgeRecovery(packet) {
+  return packet?.machine_error_code === "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE";
+}
+
+function stableBridgeRecoveryApplyPayload(preflightPacket) {
+  return {
+    expected_bridge_port: preflightPacket?.bridge_port ?? preflightPacket?.target_bridge_port ?? 0,
+    expected_listener_pid: preflightPacket?.target_pid ?? preflightPacket?.listener_pid ?? 0,
+    expected_bridge_ownership_status: preflightPacket?.bridge_ownership_status || "",
+    bind_after_release: true
+  };
+}
+
+async function retryCodexCustomLaunchAfterStableBridgeRecovery(payload, blockedPacket, signal) {
+  if (!codexCustomLaunchNeedsStableBridgeRecovery(blockedPacket)) {
+    return blockedPacket;
+  }
+  const preflightResponse = await fetch("api/codex/custom/stable-bridge-recovery/preflight", {
+    cache: "no-store",
+    signal
+  });
+  if (!preflightResponse.ok) {
+    throw new Error(`stable bridge recovery preflight http ${preflightResponse.status}`);
+  }
+  const recoveryPreflight = await preflightResponse.json();
+  if (recoveryPreflight?.recovery_apply_admissible !== true) {
+    return {
+      ...blockedPacket,
+      stable_bridge_recovery_retry_attempted: false,
+      stable_bridge_recovery_preflight_packet: recoveryPreflight,
+      stable_bridge_recovery_status: recoveryPreflight?.status || "blocked",
+      stable_bridge_recovery_machine_error_code:
+        recoveryPreflight?.machine_error_code || "STABLE_BRIDGE_RECOVERY_PREFLIGHT_BLOCKED",
+      next_action:
+        recoveryPreflight?.next_action || blockedPacket?.next_action || "stop_and_diagnose_stable_wbp_bridge_port_conflict"
+    };
+  }
+  const applyResponse = await fetch("api/codex/custom/stable-bridge-recovery/apply", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(stableBridgeRecoveryApplyPayload(recoveryPreflight)),
+    signal
+  });
+  if (!applyResponse.ok) {
+    throw new Error(`stable bridge recovery apply http ${applyResponse.status}`);
+  }
+  const recoveryApply = await applyResponse.json();
+  const recoveryOk = recoveryApply?.status === "ok"
+    && recoveryApply?.current_process_bound_after_recovery === true;
+  if (!recoveryOk) {
+    return {
+      ...blockedPacket,
+      stable_bridge_recovery_retry_attempted: true,
+      stable_bridge_recovery_preflight_packet: recoveryPreflight,
+      stable_bridge_recovery_apply_packet: recoveryApply,
+      stable_bridge_recovery_status: recoveryApply?.status || "blocked",
+      stable_bridge_recovery_machine_error_code:
+        recoveryApply?.machine_error_code || "STABLE_BRIDGE_RECOVERY_APPLY_BLOCKED",
+      next_action:
+        recoveryApply?.next_action || blockedPacket?.next_action || "stop_and_diagnose_stable_wbp_bridge_port_conflict"
+    };
+  }
+  const retryResponse = await fetch("api/codex/custom/native-launch", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+    signal
+  });
+  if (!retryResponse.ok) {
+    throw new Error(`custom launch retry http ${retryResponse.status}`);
+  }
+  const retryPacket = await retryResponse.json();
+  return {
+    ...retryPacket,
+    stable_bridge_recovery_retry_attempted: true,
+    stable_bridge_recovery_preflight_packet: recoveryPreflight,
+    stable_bridge_recovery_apply_packet: recoveryApply,
+    stable_bridge_recovery_status: recoveryApply?.status || "",
+    stable_bridge_recovery_machine_error_code: recoveryApply?.machine_error_code || ""
+  };
+}
+
 async function runCodexCustomLaunch() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -2154,7 +2243,11 @@ async function runCodexCustomLaunch() {
     if (!response.ok) {
       throw new Error(`custom launch http ${response.status}`);
     }
-    const packet = await response.json();
+    const packet = await retryCodexCustomLaunchAfterStableBridgeRecovery(
+      payload,
+      await response.json(),
+      controller?.signal
+    );
     renderCodexCustomLaunch(packet);
     await refreshQuickStartLiveBridgeStabilityTruth(packet);
     const tracePacket = await refreshQuickStartMixedCoderTraceTruth(packet);

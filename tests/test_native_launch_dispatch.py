@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -101,6 +102,18 @@ def advertised_model_packet(model: str = "gpt-5.5") -> dict[str, object]:
 
 
 class NativeLaunchDispatchTests(unittest.TestCase):
+    def test_native_response_request_binding_texts_include_safe_slug_variant(self) -> None:
+        self.assertEqual(
+            native_probe._native_free_text_request_binding_texts(
+                "physical-natural-1782797606"
+            ),
+            ["physical-natural-1782797606", "physical_natural_1782797606"],
+        )
+        self.assertEqual(
+            native_probe._native_free_text_request_binding_texts("plain123"),
+            ["plain123"],
+        )
+
     def test_native_window_probe_runner_command_matches_custom_native_mode(self) -> None:
         command = native_window_probe_command()
         self.assertEqual(command["schema_version"], 1)
@@ -1948,7 +1961,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(cdp_command.call_count, 6)
         observer_expression = cdp_command.call_args_list[-1].args[1]["params"]["expression"]
         self.assertTrue(observer_expression.startswith("(async () => {"))
-        self.assertIn("expectedText.includes(requestId)", observer_expression)
+        self.assertIn("requestBindingTexts", observer_expression)
+        self.assertIn('"native-submit-response-ok"', observer_expression)
+        self.assertIn('"native_submit_response_ok"', observer_expression)
+        self.assertIn("expectedText.includes(bindingText)", observer_expression)
         self.assertNotIn("progressCandidateCount > 0", observer_expression)
         self.assertNotIn("requestId,\n    'expected_token'", observer_expression)
         self.assertNotIn("'model',", observer_expression)
@@ -2061,6 +2077,89 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertFalse(packet["raw_dom_exposed"])
         self.assertFalse(packet["raw_prompt_recorded"])
         self.assertFalse(packet["text_value_captured"])
+
+    def test_session_external_route_observer_proves_exact_custom_response_without_raw_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_root = Path(temp_dir)
+            session_dir = profile_root / "sessions" / "2026" / "06" / "30"
+            session_dir.mkdir(parents=True)
+            request_id = "native-session-route-ok"
+            prompt = f"DIP: ответь ровно WBP_SESSION_ROUTE_OK_{request_id}"
+            expected_text = f"WBP_SESSION_ROUTE_OK_{request_id}"
+            session_path = session_dir / "thread.jsonl"
+            rows = [
+                {
+                    "timestamp": "2026-06-30T05:00:36.467Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": prompt + "\n"}],
+                    },
+                },
+                {
+                    "timestamp": "2026-06-30T05:00:40.573Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "name": "exec_command",
+                        "arguments": "{\"cmd\":\"router-hook auto-route-output --prompt-file -\"}",
+                    },
+                },
+                {
+                    "timestamp": "2026-06-30T05:00:50.282Z",
+                    "type": "event_msg",
+                    "payload": {"type": "agent_message", "message": expected_text},
+                },
+                {
+                    "timestamp": "2026-06-30T05:00:50.282Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "id": "msg_wbp_external_route",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": expected_text}],
+                    },
+                },
+                {
+                    "timestamp": "2026-06-30T05:00:50.292Z",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "task_complete",
+                        "last_agent_message": expected_text,
+                    },
+                },
+            ]
+            session_path.write_text(
+                "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+                encoding="utf-8",
+            )
+
+            packet = native_probe._custom_session_external_route_response_observer_packet(
+                profile_root=profile_root,
+                prompt=prompt,
+                request_id=request_id,
+                expected_text=expected_text,
+                submitted_after_epoch_seconds=time.time() - 5,
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["custom_session_prompt_digest_bound"])
+        self.assertTrue(packet["custom_session_external_route_message_observed"])
+        self.assertTrue(packet["custom_session_task_complete_observed"])
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertTrue(packet["native_codex_subagent_absence_proven"])
+        self.assertTrue(packet["custom_session_router_command_attempted"])
+        self.assertEqual(
+            packet["native_free_text_observer_source"],
+            "custom_session_jsonl_external_route",
+        )
+        serialized = json.dumps(packet, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn(prompt, serialized)
+        self.assertNotIn(expected_text, serialized)
+        self.assertFalse(packet["raw_prompt_recorded"])
 
     def test_cdp_prompt_submit_blocks_when_prompt_stays_in_input_after_click(self) -> None:
         cdp_packets = [
@@ -2782,6 +2881,115 @@ class NativeLaunchDispatchTests(unittest.TestCase):
                 native_probe.CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS
             ),
         )
+
+    def test_submit_custom_native_window_prompt_uses_session_observer_when_cdp_exact_is_unbound(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir)
+            profile_root = base_dir / "wbp-custom-main"
+            session_dir = profile_root / "sessions" / "2026" / "06" / "30"
+            session_dir.mkdir(parents=True)
+            request_id = "physical-natural-1782797606"
+            expected_text = "WBP_PHYSICAL_NATURAL_OK_physical_natural_1782797606"
+            prompt = f"DIP: ответь ровно {expected_text}"
+            session_rows = [
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": prompt}],
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {"type": "agent_message", "message": expected_text},
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "id": "msg_wbp_external_route",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": expected_text}],
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "task_complete",
+                        "last_agent_message": expected_text,
+                    },
+                },
+            ]
+            (session_dir / "thread.jsonl").write_text(
+                "\n".join(json.dumps(row, ensure_ascii=False) for row in session_rows)
+                + "\n",
+                encoding="utf-8",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe.show_custom_native_window_packet",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "custom_process_pid": 222,
+                        "custom_window_candidate_pids": [222],
+                        "custom_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "native_app_usable": True,
+                    },
+                ),
+                mock.patch(
+                    "wild_boar_proxy.native_window_probe._cdp_submit_prompt_to_app_page",
+                    return_value={
+                        "schema_version": 1,
+                        "packet_kind": "custom_codex_native_prompt_submit",
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "request_id": request_id,
+                        "native_window_observed": True,
+                        "input_capable_ui_observed": True,
+                        "input_text_insert_succeeded": True,
+                        "prompt_submitted": True,
+                        "custom_codex_response_text_read_proven": True,
+                        "custom_response_exact_token_observed": True,
+                        "custom_response_bound_to_request": False,
+                        "native_codex_subagent_used_as_dip": False,
+                        "native_codex_subagent_absence_proven": True,
+                        "native_free_text_observer_source": (
+                            "bounded_cdp_response_token_scan"
+                        ),
+                        "native_free_text_observer_machine_error_code": (
+                            "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+                        ),
+                        "raw_prompt_recorded": False,
+                        "prompt_text_recorded": False,
+                    },
+                ),
+            ):
+                packet = native_probe.submit_custom_native_window_prompt_packet(
+                    prompt=prompt,
+                    request_id=request_id,
+                    expected_text=expected_text,
+                    persistent_profile_base_dir=base_dir,
+                    observer_timeout_seconds=5.0,
+                )
+
+        self.assertTrue(packet["custom_response_exact_token_observed"])
+        self.assertTrue(packet["custom_response_bound_to_request"])
+        self.assertEqual(
+            packet["native_free_text_observer_source"],
+            "custom_session_jsonl_external_route",
+        )
+        session_packet = packet["custom_session_external_route_observer_packet"]
+        self.assertEqual(session_packet["status"], "ok")
+        self.assertTrue(session_packet["custom_session_prompt_digest_bound"])
+        self.assertTrue(session_packet["custom_session_external_route_message_observed"])
+        self.assertTrue(session_packet["custom_session_task_complete_observed"])
+        self.assertFalse(packet["raw_prompt_recorded"])
+        self.assertFalse(packet["prompt_text_recorded"])
 
     def test_native_ui_observer_proof_command_writes_file_backed_native_packet(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
