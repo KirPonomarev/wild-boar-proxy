@@ -2282,6 +2282,14 @@ class OperatorSurfaceTests(unittest.TestCase):
                 routes=[route],
             ) as adapter,
         ):
+            adapter.set_trace_context(
+                {
+                    "launch_packet_id": "launch-context-guard",
+                    "trace_id": "trace-context-guard",
+                    "selected_model": "wbp-deepseek-v4-pro-max",
+                    "launch_route_digest": surface._safe_route_digest(route),
+                }
+            )
             request = urllib.request.Request(
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(
@@ -2319,6 +2327,17 @@ class OperatorSurfaceTests(unittest.TestCase):
                 )
             payload = json.loads(raised.exception.read().decode("utf-8"))
             trace = adapter.trace_snapshot()
+            preflight = build_stable_bridge_preflight_packet(
+                last_launch_packet={
+                    "status": "ok",
+                    "launch_id": trace["launch_packet_id"],
+                    "trace_id": trace["trace_id"],
+                    "selected_model": "wbp-deepseek-v4-pro-max",
+                    "original_codex_touched": False,
+                    "asar_touched": False,
+                },
+                bridge_trace_packet=trace,
+            )
 
         self.assertEqual(raised.exception.code, 413)
         self.assertEqual(payload["machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
@@ -2331,6 +2350,16 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(record["downstream_called"])
         self.assertEqual(record["response_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
         self.assertEqual(record["bridge_machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(trace["bridge_machine_error_code"], "OK")
+        self.assertTrue(trace["bridge_health_packet"]["responses_endpoint_ready"])
+        self.assertEqual(trace["bridge_health_packet"]["machine_error_code"], "OK")
+        self.assertEqual(
+            trace["bridge_request_trace_packet"]["machine_error_code"],
+            "WBP_CONTEXT_BUDGET_EXCEEDED",
+        )
+        self.assertEqual(preflight["status"], "ok")
+        self.assertTrue(preflight["launch_allowed"])
+        self.assertTrue(preflight["bridge_health_ok"])
         self.assertFalse(record["raw_prompt_recorded"])
         self.assertFalse(record["secret_value_recorded"])
 

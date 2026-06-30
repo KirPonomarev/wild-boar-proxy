@@ -86,6 +86,10 @@ WBP_CONTEXT_BUDGET_EXCEEDED = "WBP_CONTEXT_BUDGET_EXCEEDED"
 DEFAULT_PROVIDER_CONTEXT_WINDOW_TOKENS = 1_048_565
 DEFAULT_PROVIDER_CONTEXT_SAFETY_TOKENS = 64_000
 CONTEXT_GUARD_BYTES_PER_TOKEN = 3
+REQUEST_ADMISSION_ERROR_CODES = {
+    API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+    WBP_CONTEXT_BUDGET_EXCEEDED,
+}
 _LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s*", re.UNICODE)
 
 
@@ -2748,11 +2752,11 @@ class HybridOpenAICompatAdapter:
         last_error_type = "STALE_LAUNCH_PACKET" if stale_launch_packet else response_error_type
         bridge_started = self._server is not None
         if stale_launch_packet:
-            bridge_machine_error_code = _canonical_bridge_error_code("STALE_LAUNCH_PACKET")
+            request_machine_error_code = _canonical_bridge_error_code("STALE_LAUNCH_PACKET")
         elif not bridge_started and not last_error_type:
-            bridge_machine_error_code = "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
+            request_machine_error_code = "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
         else:
-            bridge_machine_error_code = str(
+            request_machine_error_code = str(
                 last_record.get("bridge_machine_error_code")
                 or _canonical_bridge_error_code(
                     last_error_type,
@@ -2761,6 +2765,14 @@ class HybridOpenAICompatAdapter:
                     ),
                 )
             )
+        bridge_machine_error_code = (
+            "OK"
+            if (
+                bridge_started
+                and request_machine_error_code in REQUEST_ADMISSION_ERROR_CODES
+            )
+            else request_machine_error_code
+        )
         bridge_port = int(self._server.server_port) if self._server is not None else 0
         recoverable = bridge_machine_error_code in BRIDGE_CANONICAL_RECOVERABLE_CODES
         route_unchanged = bool(
@@ -2791,7 +2803,7 @@ class HybridOpenAICompatAdapter:
             "recovery_succeeded": False,
             "retry_attempted": False,
             "retry_allowed": recoverable and bool(last_record),
-            "machine_error_code": bridge_machine_error_code,
+            "machine_error_code": request_machine_error_code,
             "legacy_machine_error_code": last_error_type,
             "raw_prompt_recorded": False,
             "auth_header_recorded": False,
