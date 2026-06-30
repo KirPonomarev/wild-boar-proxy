@@ -305,6 +305,345 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("Do not say 'I am Codex CLI from OpenAI'", str(runtime_truth[0]["content"]))
         self.assertLess(messages.index(runtime_truth[0]), len(messages) - 1)
 
+    def test_deepseek_thinking_route_replays_cached_reasoning_content_for_followup(self) -> None:
+        captured_payloads: list[dict[str, object]] = []
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payloads.append(kwargs["payload"])  # type: ignore[arg-type]
+
+            class FakeResponse:
+                status_code = 200
+
+                @property
+                def payload(self) -> dict[str, object]:
+                    if len(captured_payloads) == 1:
+                        return {
+                            "choices": [
+                                {
+                                    "message": {
+                                        "content": "Первый ответ DeepSeek.",
+                                        "reasoning_content": "hidden-provider-reasoning",
+                                    }
+                                }
+                            ]
+                        }
+                    return {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "Второй ответ DeepSeek.",
+                                    "reasoning_content": "hidden-provider-reasoning-2",
+                                }
+                            }
+                        ]
+                    }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            first_status, _, first_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": "первый вопрос",
+                    }
+                ).encode("utf-8"),
+            )
+            second_status, _, second_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "первый вопрос"}],
+                            },
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": "Первый ответ DeepSeek."}
+                                ],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "уточнение"}],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        first_payload = json.loads(first_body.decode("utf-8"))
+        second_payload = json.loads(second_body.decode("utf-8"))
+        self.assertTrue(first_payload["deepseek_reasoning_content_observed"])
+        self.assertFalse(first_payload["deepseek_reasoning_content_exposed"])
+        self.assertEqual(second_payload["deepseek_reasoning_content_replayed_count"], 1)
+        self.assertNotIn("hidden-provider-reasoning", first_body.decode("utf-8"))
+        self.assertNotIn("hidden-provider-reasoning", second_body.decode("utf-8"))
+        second_messages = captured_payloads[1]["messages"]
+        assistant_messages = [
+            message
+            for message in second_messages
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ]
+        self.assertEqual(len(assistant_messages), 1)
+        self.assertEqual(
+            assistant_messages[0]["reasoning_content"],
+            "hidden-provider-reasoning",
+        )
+
+    def test_deepseek_thinking_route_replays_cached_reasoning_content_for_tool_call_followup(self) -> None:
+        captured_payloads: list[dict[str, object]] = []
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payloads.append(kwargs["payload"])  # type: ignore[arg-type]
+
+            class FakeResponse:
+                status_code = 200
+
+                @property
+                def payload(self) -> dict[str, object]:
+                    if len(captured_payloads) == 1:
+                        return {
+                            "choices": [
+                                {
+                                    "message": {
+                                        "content": "",
+                                        "reasoning_content": "hidden-tool-reasoning",
+                                        "tool_calls": [
+                                            {
+                                                "id": "call_wbp_probe",
+                                                "type": "function",
+                                                "function": {
+                                                    "name": "probe",
+                                                    "arguments": "{}",
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            ]
+                        }
+                    return {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "Tool follow-up accepted.",
+                                    "reasoning_content": "hidden-tool-reasoning-2",
+                                }
+                            }
+                        ]
+                    }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            first_status, _, first_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": "вызови tool",
+                        "tools": [
+                            {
+                                "type": "function",
+                                "name": "probe",
+                                "parameters": {"type": "object", "properties": {}},
+                            }
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+            second_status, _, second_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {"type": "input_text", "text": "вызови tool"},
+                            {
+                                "type": "function_call",
+                                "id": "call_wbp_probe",
+                                "call_id": "call_wbp_probe",
+                                "name": "probe",
+                                "arguments": "{}",
+                            },
+                            {
+                                "type": "function_call_output",
+                                "call_id": "call_wbp_probe",
+                                "output": "{\"ok\":true}",
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        first_payload = json.loads(first_body.decode("utf-8"))
+        second_payload = json.loads(second_body.decode("utf-8"))
+        self.assertTrue(first_payload["deepseek_reasoning_content_observed"])
+        self.assertEqual(second_payload["deepseek_reasoning_content_replayed_count"], 1)
+        self.assertNotIn("hidden-tool-reasoning", first_body.decode("utf-8"))
+        self.assertNotIn("hidden-tool-reasoning", second_body.decode("utf-8"))
+        second_messages = captured_payloads[1]["messages"]
+        assistant_messages = [
+            message
+            for message in second_messages
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ]
+        self.assertEqual(len(assistant_messages), 1)
+        self.assertEqual(assistant_messages[0]["reasoning_content"], "hidden-tool-reasoning")
+
+    def test_deepseek_thinking_route_drops_orphan_tool_turn_when_reasoning_cache_is_missing(self) -> None:
+        captured_payload: dict[str, object] = {}
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payload.update(kwargs["payload"])  # type: ignore[index]
+
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Recovered without provider protocol error.",
+                                "reasoning_content": "hidden-new-reasoning",
+                            }
+                        }
+                    ]
+                }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            status, _, body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {"type": "input_text", "text": "старый запрос"},
+                            {
+                                "type": "function_call",
+                                "id": "call_missing_reasoning",
+                                "call_id": "call_missing_reasoning",
+                                "name": "probe",
+                                "arguments": "{}",
+                            },
+                            {
+                                "type": "function_call_output",
+                                "call_id": "call_missing_reasoning",
+                                "output": "{\"ok\":true}",
+                            },
+                            {"type": "input_text", "text": "новый запрос"},
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(payload["deepseek_reasoning_content_orphan_tool_turns_dropped"], 1)
+        messages = captured_payload["messages"]
+        self.assertFalse(
+            any(
+                isinstance(message, dict) and message.get("role") == "assistant"
+                for message in messages
+            )
+        )
+        self.assertFalse(
+            any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+        )
+        self.assertTrue(
+            any(
+                isinstance(message, dict)
+                and message.get("role") == "user"
+                and message.get("content") == "новый запрос"
+                for message in messages
+            )
+        )
+
     def test_trace_observer_forwards_without_recording_body_or_auth(self) -> None:
         captured_headers: dict[str, str] = {}
 

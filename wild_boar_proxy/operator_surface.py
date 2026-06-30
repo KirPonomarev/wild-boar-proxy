@@ -1323,17 +1323,49 @@ def _responses_tools_to_chat_tools(tools: Any) -> tuple[list[dict[str, Any]], li
     return chat_tools, sorted(set(dropped_tool_types)), sorted(set(unsupported_tool_types))
 
 
-def _chat_completion_message_text_and_tool_calls(payload: Any) -> tuple[str, list[dict[str, str]]]:
+def _assistant_reasoning_cache_keys(message: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    text = _message_text(message).strip()
+    if text:
+        keys.append("content:" + hashlib.sha256(text.encode("utf-8")).hexdigest())
+    raw_tool_calls = message.get("tool_calls")
+    if isinstance(raw_tool_calls, list):
+        for raw_call in raw_tool_calls:
+            if not isinstance(raw_call, dict):
+                continue
+            call_id = str(raw_call.get("id") or raw_call.get("call_id") or "").strip()
+            if call_id:
+                keys.append("tool_call:" + call_id)
+    return keys
+
+
+def _assistant_response_reasoning_cache_keys(
+    text: str,
+    tool_calls: list[dict[str, str]],
+) -> list[str]:
+    keys: list[str] = []
+    stripped_text = str(text or "").strip()
+    if stripped_text:
+        keys.append("content:" + hashlib.sha256(stripped_text.encode("utf-8")).hexdigest())
+    for call in tool_calls:
+        call_id = str(call.get("id") or call.get("call_id") or "").strip()
+        if call_id:
+            keys.append("tool_call:" + call_id)
+    return keys
+
+
+def _chat_completion_message_parts(payload: Any) -> tuple[str, list[dict[str, str]], str]:
     choices = payload.get("choices") if isinstance(payload, dict) else None
     if not isinstance(choices, list) or not choices:
-        return "", []
+        return "", [], ""
     first = choices[0]
     if not isinstance(first, dict):
-        return "", []
+        return "", [], ""
     message = first.get("message")
     if not isinstance(message, dict):
-        return "", []
+        return "", [], ""
     text = str(message.get("content") or "").strip()
+    reasoning_content = str(message.get("reasoning_content") or "").strip()
     raw_tool_calls = message.get("tool_calls")
     tool_calls: list[dict[str, str]] = []
     if isinstance(raw_tool_calls, list):
@@ -1354,7 +1386,7 @@ def _chat_completion_message_text_and_tool_calls(payload: Any) -> tuple[str, lis
                     "arguments": str(function.get("arguments") or raw_call.get("arguments") or "{}"),
                 }
             )
-    return text, tool_calls
+    return text, tool_calls, reasoning_content
 
 
 def _responses_stream_body(payload: dict[str, Any]) -> bytes:
@@ -2139,6 +2171,8 @@ class ExternalRouteResponsesAdapter:
         self.timeout_seconds = timeout_seconds
         self._server: _ExternalRouteAdapterServer | None = None
         self._thread: threading.Thread | None = None
+        self._reasoning_content_by_message_key: dict[str, str] = {}
+        self._reasoning_content_lock = threading.Lock()
 
     @property
     def listen_endpoint(self) -> str:
@@ -2167,6 +2201,87 @@ class ExternalRouteResponsesAdapter:
         if self._thread is not None:
             self._thread.join(timeout=2)
             self._thread = None
+
+    def _deepseek_thinking_replay_enabled(self) -> bool:
+        if str(self.route.get("provider") or "").strip().casefold() != "deepseek":
+            return False
+        thinking_metadata = transforms.route_thinking_metadata(self.route)
+        thinking = thinking_metadata.get("thinking") if isinstance(thinking_metadata, dict) else {}
+        return isinstance(thinking, dict) and thinking.get("type") == "enabled"
+
+    def _with_cached_reasoning_content(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        if not self._deepseek_thinking_replay_enabled():
+            return messages, 0, 0
+        with self._reasoning_content_lock:
+            cache = dict(self._reasoning_content_by_message_key)
+        replayed_count = 0
+        dropped_orphan_tool_turns = 0
+        dropped_tool_call_ids: set[str] = set()
+        patched_messages: list[dict[str, Any]] = []
+        for message in messages:
+            role = str(message.get("role") or "").strip()
+            if role == "tool":
+                tool_call_id = str(message.get("tool_call_id") or "").strip()
+                if tool_call_id and tool_call_id in dropped_tool_call_ids:
+                    continue
+            if role != "assistant":
+                patched_messages.append(message)
+                continue
+            if isinstance(message.get("reasoning_content"), str) and str(
+                message.get("reasoning_content") or ""
+            ).strip():
+                patched_messages.append(message)
+                continue
+            reasoning_content = ""
+            for key in _assistant_reasoning_cache_keys(message):
+                reasoning_content = cache.get(key, "")
+                if reasoning_content:
+                    break
+            if not reasoning_content:
+                raw_tool_calls = message.get("tool_calls")
+                if isinstance(raw_tool_calls, list) and raw_tool_calls:
+                    for raw_call in raw_tool_calls:
+                        if not isinstance(raw_call, dict):
+                            continue
+                        call_id = str(raw_call.get("id") or raw_call.get("call_id") or "").strip()
+                        if call_id:
+                            dropped_tool_call_ids.add(call_id)
+                    dropped_orphan_tool_turns += 1
+                    continue
+                patched_messages.append(message)
+                continue
+            patched = dict(message)
+            patched["reasoning_content"] = reasoning_content
+            patched_messages.append(patched)
+            replayed_count += 1
+        return patched_messages, replayed_count, dropped_orphan_tool_turns
+
+    def _remember_reasoning_content(
+        self,
+        *,
+        text: str,
+        tool_calls: list[dict[str, str]],
+        reasoning_content: str,
+    ) -> int:
+        if not self._deepseek_thinking_replay_enabled():
+            return 0
+        reasoning_content = str(reasoning_content or "").strip()
+        if not reasoning_content:
+            return 0
+        keys = _assistant_response_reasoning_cache_keys(text, tool_calls)
+        if not keys:
+            return 0
+        with self._reasoning_content_lock:
+            for key in keys:
+                self._reasoning_content_by_message_key[key] = reasoning_content
+            if len(self._reasoning_content_by_message_key) > 256:
+                self._reasoning_content_by_message_key = dict(
+                    list(self._reasoning_content_by_message_key.items())[-256:]
+                )
+        return len(keys)
 
     def handle(
         self,
@@ -2241,6 +2356,11 @@ class ExternalRouteResponsesAdapter:
             body_bytes = json.dumps(provider_side_auto_router_payload, ensure_ascii=True).encode("utf-8")
             return 200, {"Content-Type": "application/json"}, body_bytes
         messages = _with_external_route_runtime_truth(messages, self.route)
+        (
+            messages,
+            reasoning_content_replayed_count,
+            reasoning_content_orphan_tool_turns_dropped,
+        ) = self._with_cached_reasoning_content(messages)
         requested_max_tokens = int(request_payload.get("max_output_tokens") or 256)
         thinking_metadata = transforms.route_thinking_metadata(self.route)
         thinking = thinking_metadata.get("thinking")
@@ -2308,7 +2428,7 @@ class ExternalRouteResponsesAdapter:
         if response.status_code >= 400:
             body_bytes = json.dumps(response.payload, ensure_ascii=True).encode("utf-8")
             return response.status_code, {"Content-Type": "application/json"}, body_bytes
-        text, tool_calls = _chat_completion_message_text_and_tool_calls(response.payload)
+        text, tool_calls, reasoning_content = _chat_completion_message_parts(response.payload)
         if not text and not tool_calls:
             try:
                 text, _response_meta = transforms.extract_check_response(self.route, response.payload)
@@ -2321,6 +2441,11 @@ class ExternalRouteResponsesAdapter:
                     {"Content-Type": "application/json"},
                     body_bytes,
                 )
+        reasoning_content_cache_keys_written = self._remember_reasoning_content(
+            text=text,
+            tool_calls=tool_calls,
+            reasoning_content=reasoning_content,
+        )
         payload = _responses_result_payload(
             text,
             str(self.route.get("route_id") or ""),
@@ -2332,6 +2457,15 @@ class ExternalRouteResponsesAdapter:
         payload["thinking"] = thinking_metadata.get("thinking")
         payload["api_parameter_sent"] = thinking_metadata.get("api_parameter_sent") is True
         payload["max_tokens_sent"] = requested_max_tokens
+        payload["deepseek_reasoning_content_observed"] = bool(reasoning_content)
+        payload["deepseek_reasoning_content_replayed_count"] = reasoning_content_replayed_count
+        payload["deepseek_reasoning_content_orphan_tool_turns_dropped"] = (
+            reasoning_content_orphan_tool_turns_dropped
+        )
+        payload["deepseek_reasoning_content_cache_keys_written"] = (
+            reasoning_content_cache_keys_written
+        )
+        payload["deepseek_reasoning_content_exposed"] = False
         payload["intelligence_measured"] = False
         payload["label_source"] = str(thinking_metadata.get("label_source") or "unavailable_unknown")
         if dropped_tool_types:
