@@ -41,6 +41,12 @@ class MakefileTestFastContractTests(unittest.TestCase):
         self.assertIn("tests/test_gpt_api_dip_acceptance_gate.py", makefile)
         self.assertIn("tests/test_gpt_api_dip_product_ready_gate.py", makefile)
         self.assertIn("tests/test_e2e_mode_matrix.py", makefile)
+        self.assertIn("tests/test_fresh_router_ready_proof.py", makefile)
+        self.assertIn("tests/test_review_bridge_packet_import.py", makefile)
+        self.assertIn("tests/test_review_bridge_apply_admission.py", makefile)
+        self.assertIn("tests/test_review_bridge_command_bus.py", makefile)
+        self.assertIn("tests/test_review_bridge_live_server.py", makefile)
+        self.assertIn("tests/test_codex_account_selection.py", makefile)
 
     def test_make_test_fast_collects_real_material_subset_of_full_suite(self) -> None:
         fast_count = _run_collect(
