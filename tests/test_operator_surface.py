@@ -2246,6 +2246,94 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(primary_record["raw_prompt_recorded"])
         self.assertFalse(coder_record["secret_value_recorded"])
 
+    def test_hybrid_openai_compat_adapter_context_guard_trace_does_not_claim_provider_call(
+        self,
+    ) -> None:
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+        huge_context = "hidden branch diff\n" + ("- deleted line\n" * 400)
+        with (
+            mock.patch(
+                "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                return_value="sk-route-secret",
+            ),
+            mock.patch(
+                "wild_boar_proxy.operator_surface.request_json",
+                side_effect=AssertionError("provider must not be called"),
+            ) as request_json_mock,
+            mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROVIDER_CONTEXT_WINDOW_TOKENS": "256",
+                    "WBP_PROVIDER_CONTEXT_SAFETY_TOKENS": "16",
+                },
+            ),
+            HybridOpenAICompatAdapter(
+                downstream_endpoint="http://127.0.0.1:1/v1",
+                expected_api_key="sk-local-test",
+                routes=[route],
+            ) as adapter,
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "max_output_tokens": 32,
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "developer",
+                                "content": [
+                                    {"type": "input_text", "text": huge_context}
+                                ],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [
+                                    {"type": "input_text", "text": "continue"}
+                                ],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                )
+            payload = json.loads(raised.exception.read().decode("utf-8"))
+            trace = adapter.trace_snapshot()
+
+        self.assertEqual(raised.exception.code, 413)
+        self.assertEqual(payload["machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        request_json_mock.assert_not_called()
+        self.assertEqual(trace["request_count"], 1)
+        record = trace["last_record"]
+        self.assertEqual(record["requested_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(record["effective_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertFalse(record["provider_called"])
+        self.assertFalse(record["downstream_called"])
+        self.assertEqual(record["response_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(record["bridge_machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertFalse(record["raw_prompt_recorded"])
+        self.assertFalse(record["secret_value_recorded"])
+
     def test_hybrid_openai_compat_adapter_routes_api_alias_before_downstream_auth(self) -> None:
         class DownstreamHandler(BaseHTTPRequestHandler):
             downstream_called = False

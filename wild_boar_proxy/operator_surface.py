@@ -82,6 +82,10 @@ WINDOW_SMOKE_PHRASES = (
 DEFAULT_API_ROUTE_ADDRESS_ALIASES = ("DIP", "Agent 2", "2")
 DEFAULT_PRIMARY_ROUTE_ADDRESS_ALIASES = ("Codex", "Agent 1", "1")
 API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS = "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS"
+WBP_CONTEXT_BUDGET_EXCEEDED = "WBP_CONTEXT_BUDGET_EXCEEDED"
+DEFAULT_PROVIDER_CONTEXT_WINDOW_TOKENS = 1_048_565
+DEFAULT_PROVIDER_CONTEXT_SAFETY_TOKENS = 64_000
+CONTEXT_GUARD_BYTES_PER_TOKEN = 3
 _LEADING_ADDRESS_RE = re.compile(r"^\s*([^:：,]{1,80})\s*[:：,]\s*", re.UNICODE)
 
 
@@ -860,6 +864,91 @@ def _response_body_smoke_match(response_body: bytes) -> bool:
         except Exception:
             response_text = ""
     return any(phrase in response_text for phrase in WINDOW_SMOKE_PHRASES)
+
+
+def _bounded_positive_int(value: object, *, default: int, minimum: int) -> int:
+    try:
+        parsed = int(value) if value is not None and str(value).strip() else default
+    except (TypeError, ValueError):
+        return default
+    if parsed < minimum:
+        return default
+    return parsed
+
+
+def _provider_context_window_tokens(route: dict[str, Any]) -> int:
+    route_value = route.get("context_window_tokens")
+    if isinstance(route_value, int) and not isinstance(route_value, bool) and route_value > 0:
+        return route_value
+    return _bounded_positive_int(
+        os.environ.get("WBP_PROVIDER_CONTEXT_WINDOW_TOKENS"),
+        default=DEFAULT_PROVIDER_CONTEXT_WINDOW_TOKENS,
+        minimum=1,
+    )
+
+
+def _provider_context_safety_tokens() -> int:
+    return _bounded_positive_int(
+        os.environ.get("WBP_PROVIDER_CONTEXT_SAFETY_TOKENS"),
+        default=DEFAULT_PROVIDER_CONTEXT_SAFETY_TOKENS,
+        minimum=0,
+    )
+
+
+def _estimated_payload_tokens(value: object) -> tuple[int, int]:
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    byte_count = len(raw.encode("utf-8"))
+    estimated_tokens = (byte_count + CONTEXT_GUARD_BYTES_PER_TOKEN - 1) // CONTEXT_GUARD_BYTES_PER_TOKEN
+    return estimated_tokens, byte_count
+
+
+def _context_budget_guard_payload(
+    *,
+    route: dict[str, Any],
+    upstream_payload: dict[str, Any],
+    requested_output_tokens: int,
+) -> dict[str, Any] | None:
+    estimated_input_tokens, estimated_input_bytes = _estimated_payload_tokens(upstream_payload)
+    context_window_tokens = _provider_context_window_tokens(route)
+    safety_tokens = _provider_context_safety_tokens()
+    input_budget_tokens = max(0, context_window_tokens - requested_output_tokens - safety_tokens)
+    estimated_total_tokens = estimated_input_tokens + requested_output_tokens
+    if estimated_input_tokens <= input_budget_tokens:
+        return None
+    return {
+        "error": {
+            "message": (
+                f"{WBP_CONTEXT_BUDGET_EXCEEDED}: request is too large for the "
+                "configured provider context window; start a fresh Custom session "
+                "or reduce attached history/diff context."
+            ),
+            "type": "context_length_exceeded",
+            "code": WBP_CONTEXT_BUDGET_EXCEEDED,
+            "bridge_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        },
+        "machine_error_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        "bridge_machine_error_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        "provider_called": False,
+        "downstream_called": False,
+        "retryable": False,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "secret_value_recorded": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+        "context_budget_guard_triggered": True,
+        "context_window_tokens": context_window_tokens,
+        "context_safety_tokens": safety_tokens,
+        "input_budget_tokens": input_budget_tokens,
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_total_tokens": estimated_total_tokens,
+        "estimated_input_bytes": estimated_input_bytes,
+        "requested_output_tokens": requested_output_tokens,
+        "message_count": len(upstream_payload.get("messages", []))
+        if isinstance(upstream_payload.get("messages"), list)
+        else 0,
+        "next_action": "start_fresh_custom_session_or_reduce_context",
+    }
 
 
 def _json_loads_object(raw: bytes) -> dict[str, Any]:
@@ -2393,6 +2482,14 @@ class ExternalRouteResponsesAdapter:
                 transformed["role"] = role
                 transformed_messages.append(transformed)
             upstream_payload["messages"] = transformed_messages
+        context_guard_payload = _context_budget_guard_payload(
+            route=self.route,
+            upstream_payload=upstream_payload,
+            requested_output_tokens=requested_max_tokens,
+        )
+        if context_guard_payload is not None:
+            body_bytes = json.dumps(context_guard_payload, ensure_ascii=True).encode("utf-8")
+            return 413, {"Content-Type": "application/json"}, body_bytes
         try:
             response = request_json(
                 url=_route_completion_url(self.route),
@@ -3038,6 +3135,13 @@ class HybridOpenAICompatAdapter:
         response_payload = _json_loads_object(response_body)
         response_smoke_match = _response_body_smoke_match(response_body)
         response_seen = 200 <= status < 500 and bool(response_body)
+        provider_called = True
+        if (
+            response_payload
+            and response_payload.get("provider_called") is False
+            and response_payload.get("downstream_called") is False
+        ):
+            provider_called = False
         record = {
             **self._trace_context,
             "captured_at_utc": utc_now(),
@@ -3052,7 +3156,7 @@ class HybridOpenAICompatAdapter:
                 route_digest
                 and route_digest == str(self._trace_context.get("launch_route_digest") or "")
             ),
-            "provider_called": True,
+            "provider_called": provider_called,
             "downstream_called": False,
             "provider_id": str(route.get("provider") or ""),
             "upstream_model": str(route.get("upstream_model") or ""),

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import unittest
 import urllib.error
@@ -293,6 +294,51 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["type"], "invalid_request_error")
         self.assertIn("responses input did not contain prompt text", payload["error"]["message"])
+        self.assertEqual(captured, {})
+
+    def test_context_budget_guard_blocks_huge_payload_before_upstream_call(self) -> None:
+        huge_context = "branch diff hidden context\n" + ("+ changed line\n" * 400)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROVIDER_CONTEXT_WINDOW_TOKENS": "256",
+                "WBP_PROVIDER_CONTEXT_SAFETY_TOKENS": "16",
+            },
+        ):
+            status, body, captured, _fixture = self.run_adapter_request(
+                "non_stream_text_request.json",
+                request_payload={
+                    "model": "wbp-fixture-route",
+                    "max_output_tokens": 32,
+                    "input": [
+                        {
+                            "type": "message",
+                            "role": "developer",
+                            "content": [
+                                {"type": "input_text", "text": huge_context}
+                            ],
+                        },
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": "continue"}
+                            ],
+                        },
+                    ],
+                },
+            )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 413)
+        self.assertEqual(payload["machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(payload["error"]["code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertTrue(payload["context_budget_guard_triggered"])
+        self.assertFalse(payload["provider_called"])
+        self.assertFalse(payload["downstream_called"])
+        self.assertFalse(payload["secret_value_exposed"])
+        self.assertEqual(payload["requested_output_tokens"], 32)
+        self.assertGreater(payload["estimated_input_tokens"], payload["input_budget_tokens"])
         self.assertEqual(captured, {})
 
     def test_system_role_transform_profile_maps_system_to_developer(self) -> None:
