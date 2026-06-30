@@ -824,6 +824,78 @@ def _json_mapping_candidates_from_text(text: str) -> list[Mapping[str, Any]]:
     return candidates
 
 
+def _live_format_packet_from_router_output(
+    *,
+    command: str,
+    aggregated_output: str,
+    source: Mapping[str, Any],
+    expected_live_provider_response_digest: str,
+) -> dict[str, Any]:
+    if "router-hook" not in command or "auto-route-output" not in command:
+        return {}
+    if "--runtime-context-file" not in command or "--proof-dir" not in command:
+        return {}
+    output_text = _safe_text(aggregated_output, limit=512).strip()
+    route_digest = _hex_sha256(
+        source.get("live_provider_route_id_sha256")
+        or source.get("selected_api_route_id_sha256")
+    )
+    if (
+        not output_text
+        or not expected_live_provider_response_digest
+        or _sha256_text(output_text) != expected_live_provider_response_digest
+        or source.get("live_provider_response_proven") is not True
+        or source.get("external_live_provider_response_proven") is not True
+        or not route_digest
+    ):
+        return {}
+    return packets.build_command_packet(
+        ok=True,
+        human_message=(
+            "WBP normalized router-hook auto-route-output into a Codex "
+            "working-flow delivery packet."
+        ),
+        machine_error_code="OK",
+        liveness="network_dependent",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        effect=EFFECT_PROBE,
+        extra={
+            "data": {
+                "check_kind": "api_only_live_route_format",
+                "network_dependent": True,
+                "verification_scope": "route_provider_only_no_write",
+                "route_state": "live_response_observed_no_write",
+                "requested_model_sha256": route_digest,
+                "effective_model_recorded": False,
+                "provider": "router_hook_auto_route_output",
+                "fallback_used": False,
+                "latency_ms": 0,
+                "request_count": 1,
+                "retry_count": 0,
+                "parallel_fanout_attempted": False,
+                "expected_text_observed": True,
+                "response_preview_bounded": output_text,
+                "response_text_length": len(output_text),
+                "changed_files": [],
+                "state_written": False,
+                "evidence_written": False,
+                "file_mutation_attempted": False,
+                "commands_started_by_provider": False,
+                "codex_history_sent": False,
+                "repo_context_sent": False,
+                "request_shape": "router_hook_auto_route_output",
+                "response_shape": "exact_visible_output",
+                "router_hook_auto_route_output_used": True,
+            },
+            "raw_provider_response_recorded": False,
+            "raw_route_id_recorded": False,
+            "provider_response_text_recorded": False,
+        },
+    )
+
+
 def _bound_text_digest(text: str, *, expected_digest: str) -> tuple[str, bool]:
     text_digest = _sha256_text(text.strip())
     if text_digest == expected_digest:
@@ -963,8 +1035,10 @@ def _live_format_command_invocation_details(
 def _codex_exec_live_format_command_candidates(
     events: Sequence[Mapping[str, Any]],
     *,
+    source: Mapping[str, Any],
     expected_route_digest: str,
     declared_cli_command_digest: str,
+    expected_live_provider_response_digest: str,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for index, event in enumerate(events):
@@ -984,6 +1058,16 @@ def _codex_exec_live_format_command_candidates(
                 provider_packet,
             )
             provider_source_kind = "server_owned_file_bridge_response"
+            if not provider_packet:
+                provider_packet = _live_format_packet_from_router_output(
+                    command=command,
+                    aggregated_output=aggregated_output,
+                    source=source,
+                    expected_live_provider_response_digest=(
+                        expected_live_provider_response_digest
+                    ),
+                )
+                provider_source_kind = "router_hook_auto_route_output"
         if not provider_packet:
             continue
         invocation = _live_format_command_invocation_details(
@@ -1037,8 +1121,10 @@ def _live_format_command_failures(
         failures.append("live_format_source_cli_command_digest_missing")
     candidates = _codex_exec_live_format_command_candidates(
         events,
+        source=source,
         expected_route_digest=route_digest,
         declared_cli_command_digest=declared_cli_command_digest,
+        expected_live_provider_response_digest=expected_live_provider_response_digest,
     )
     selected: Mapping[str, Any] = {}
     selected_packet: Mapping[str, Any] = {}
@@ -1056,7 +1142,10 @@ def _live_format_command_failures(
         )
         response_digest = _sha256_text(response_text) if response_text else ""
         requested_route = _safe_text(data.get("requested_model"), limit=256)
-        candidate_route_digest = _sha256_text(requested_route) if requested_route else ""
+        candidate_route_digest = (
+            _hex_sha256(data.get("requested_model_sha256"))
+            or (_sha256_text(requested_route) if requested_route else "")
+        )
         if (
             packet.get("status") == "ok"
             and packet.get("machine_error_code") == "OK"
@@ -1064,14 +1153,25 @@ def _live_format_command_failures(
             and candidate.get("status") == "completed"
             and (
                 is_file_bridge_response
+                or candidate.get("provider_source_kind")
+                == "router_hook_auto_route_output"
                 or candidate.get("command_prefix_digest_bound_to_source") is True
             )
             and (
                 candidate.get("command_route_digest_bound_to_source") is True
-                or (is_file_bridge_response and candidate_route_digest == route_digest)
+                or (
+                    (
+                        is_file_bridge_response
+                        or candidate.get("provider_source_kind")
+                        == "router_hook_auto_route_output"
+                    )
+                    and candidate_route_digest == route_digest
+                )
             )
             and (
                 is_file_bridge_response
+                or candidate.get("provider_source_kind")
+                == "router_hook_auto_route_output"
                 or candidate.get("command_extra_args_allowed") is True
             )
             and response_digest == expected_live_provider_response_digest
@@ -1091,10 +1191,13 @@ def _live_format_command_failures(
     selected_is_file_bridge_response = (
         selected.get("provider_source_kind") == "server_owned_file_bridge_response"
     )
+    selected_is_router_output = (
+        selected.get("provider_source_kind") == "router_hook_auto_route_output"
+    )
     selected_route_bound = bool(
         selected.get("command_route_digest_bound_to_source") is True
         or (
-            selected_is_file_bridge_response
+            (selected_is_file_bridge_response or selected_is_router_output)
             and route_digest
             and selected_route_digest == route_digest
         )
@@ -1102,20 +1205,24 @@ def _live_format_command_failures(
     selected_extra_args_allowed = bool(
         selected.get("command_extra_args_allowed") is True
         or selected_is_file_bridge_response
+        or selected_is_router_output
     )
     if selected:
         if (
             not selected_is_file_bridge_response
+            and not selected_is_router_output
             and selected.get("command_prefix_digest_bound_to_source") is not True
         ):
             failures.append("live_format_command_prefix_not_bound_to_source")
         if (
             not selected_is_file_bridge_response
+            and not selected_is_router_output
             and not selected_route_bound
         ):
             failures.append("live_format_command_route_not_bound_to_source")
         if (
             not selected_is_file_bridge_response
+            and not selected_is_router_output
             and not selected_extra_args_allowed
         ):
             failures.append("live_format_command_extra_args_not_allowed")
@@ -1190,6 +1297,13 @@ def _live_format_command_failures(
         ),
         "command_execution_file_bridge_response_bound": (
             selected.get("provider_source_kind") == "server_owned_file_bridge_response"
+        ),
+        "command_execution_router_output_observed": any(
+            candidate.get("provider_source_kind") == "router_hook_auto_route_output"
+            for candidate in candidates
+        ),
+        "command_execution_router_output_bound": (
+            selected.get("provider_source_kind") == "router_hook_auto_route_output"
         ),
     }
 
@@ -1357,6 +1471,7 @@ def build_codex_working_flow_delivery_proof_packet(
     if command_details.get("command_execution_live_format_event_index_present") is True:
         for candidate in _codex_exec_live_format_command_candidates(
             events,
+            source=source,
             expected_route_digest=_hex_sha256(
                 source.get("live_provider_route_id_sha256")
                 or source.get("selected_api_route_id_sha256")
@@ -1364,6 +1479,7 @@ def build_codex_working_flow_delivery_proof_packet(
             declared_cli_command_digest=_hex_sha256(
                 source.get("live_provider_cli_command_sha256")
             ),
+            expected_live_provider_response_digest=live_provider_response_digest,
         ):
             if _hex_sha256(candidate.get("command_digest")) == command_details.get(
                 "command_execution_live_format_command_digest"
@@ -1806,6 +1922,12 @@ def build_codex_working_flow_delivery_proof_packet(
         ),
         "command_execution_file_bridge_response_bound": (
             command_details.get("command_execution_file_bridge_response_bound") is True
+        ),
+        "command_execution_router_output_observed": (
+            command_details.get("command_execution_router_output_observed") is True
+        ),
+        "command_execution_router_output_bound": (
+            command_details.get("command_execution_router_output_bound") is True
         ),
         "command_execution_delivery_failures": (
             command_failures if not approved_delivery_surface_proven else []

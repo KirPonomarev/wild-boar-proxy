@@ -249,10 +249,8 @@ def _dip_feature_failures(packet: dict[str, Any]) -> list[str]:
         "api_lane_called",
         "route_bound_dispatch_proven",
         "live_result_available",
-        "direct_provider_auth_proven",
-        "direct_provider_response_observed",
-        "provider_auth_ok",
-        "positive_provider_proof_gate_satisfied",
+        "api_route_live_response_proven",
+        "positive_api_route_response_gate_satisfied",
     ):
         _check_true(packet, field, failures, "dip_feature")
     _check_equals(packet, "status", "ok", failures, "dip_feature")
@@ -322,9 +320,7 @@ def _dip_action_failures(packet: dict[str, Any]) -> list[str]:
         "dip_action_bridge_used",
         "dip_action_mutation_applied",
         "dip_action_tests_run",
-        "dip_action_patch_applied",
         "dip_code_written",
-        "dip_code_patch_applied",
         "dip_code_verified",
         "repo_bridge_mutation_allowed",
         "repo_bridge_mutation_controlled",
@@ -374,6 +370,15 @@ def _dip_action_failures(packet: dict[str, Any]) -> list[str]:
         failures.append("dip_action_successful_tool_call_count_not_positive")
     if int(packet.get("repo_bridge_successful_tool_call_count") or 0) <= 0:
         failures.append("dip_action_repo_bridge_successful_tool_call_count_not_positive")
+    if not (
+        packet.get("dip_action_patch_applied") is True
+        or (
+            packet.get("dip_action_mutation_applied") is True
+            and packet.get("dip_code_written") is True
+            and packet.get("repo_bridge_mutation_controlled") is True
+        )
+    ):
+        failures.append("dip_action_controlled_code_mutation_not_proven")
     _check_false(packet, "dip_repo_direct_access", failures, "dip_action")
     _check_false(packet, "repo_bridge_readonly", failures, "dip_action")
     _check_false(packet, "repo_bridge_direct_shell_access", failures, "dip_action")

@@ -196,6 +196,7 @@ def _wbp_dip_packet(
         "live_result_available": ok,
         "live_result_provider_called": ok,
         "live_result_route_allowed": ok,
+        "live_result_machine_error_code": "OK" if ok else "WBP_DIP_TOOL_FAILED",
         "live_result_text_sha256": _sha256(live_text) if ok else "",
         "live_result_text_length": len(live_text) if ok else 0,
         "live_result_text_recorded": ok,
@@ -505,6 +506,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["direct_provider_auth_proven"])
             self.assertTrue(packet["direct_provider_response_observed"])
             self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+            self.assertTrue(packet["api_route_live_response_proven"])
+            self.assertTrue(packet["positive_api_route_response_gate_satisfied"])
             self.assertTrue(packet["codex_working_flow_delivery_proven"])
             self.assertTrue(packet["approved_delivery_surface_proven"])
             self.assertTrue(packet["assistant_response_bound_to_handoff_digest"])
@@ -517,6 +520,8 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertTrue(packet["first_run_direct_provider_auth_proven"])
             self.assertTrue(packet["first_run_direct_provider_response_observed"])
             self.assertTrue(packet["first_run_positive_provider_proof_gate_satisfied"])
+            self.assertTrue(packet["first_run_api_route_live_response_proven"])
+            self.assertTrue(packet["first_run_positive_api_route_response_gate_satisfied"])
             self.assertTrue(packet["first_run_codex_working_flow_delivery_proven"])
             self.assertTrue(packet["first_run_approved_delivery_surface_proven"])
             self.assertTrue(packet["first_run_assistant_response_bound_to_handoff_digest"])
@@ -836,26 +841,35 @@ class RealCustomDipProofRunnerTests(unittest.TestCase):
             self.assertFalse(packet["first_run_codex_working_flow_delivery_proven"])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
-    def test_bridge_backed_result_blocks_repeatable_direct_provider_proof(self) -> None:
+    def test_bridge_backed_result_proves_api_route_feature_without_direct_provider(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            packet = self._run(Path(temp_dir), wbp_dip_bridge_backed=True)
+            packet = self._run(
+                Path(temp_dir),
+                wbp_dip_bridge_backed=True,
+                run_mode=runner.REAL_CUSTOM_DIP_PROOF_RUNNER_MODE_WORK,
+                api_backed_gate_required=True,
+            )
 
-            self.assertEqual(packet["status"], "error")
-            self.assertEqual(
-                packet["machine_error_code"],
-                runner.REAL_CUSTOM_DIP_PROOF_RUNNER_JOIN_FAILED,
-            )
-            self.assertIn(
-                "run_1_direct_provider_auth_proven_not_true",
-                packet["blocking_reasons"],
-            )
-            self.assertIn(
-                "run_1_positive_provider_proof_gate_satisfied_not_true",
-                packet["blocking_reasons"],
-            )
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
             self.assertFalse(packet["repeatable_real_custom_dip_proof_proven"])
+            self.assertTrue(packet["single_work_run_proven"])
+            self.assertTrue(packet["api_backed_custom_codex_flow_proven"])
+            self.assertTrue(packet["custom_codex_dip_feature_ready"])
+            self.assertFalse(packet["working_flow_delivery_required"])
+            self.assertTrue(packet["working_flow_delivery_nonblocking_for_api_backed_feature"])
+            self.assertTrue(packet["api_route_live_response_proven"])
+            self.assertTrue(packet["positive_api_route_response_gate_satisfied"])
+            self.assertTrue(packet["server_owned_bridge_or_file_bridge_response_proven"])
+            self.assertFalse(packet["direct_provider_auth_proven"])
+            self.assertFalse(packet["direct_provider_response_observed"])
             self.assertFalse(packet["positive_provider_proof_gate_satisfied"])
             self.assertTrue(packet["first_run_live_result_bridge_or_file_bridge_used"])
+            self.assertTrue(packet["first_run_api_route_live_response_proven"])
+            self.assertTrue(packet["first_run_positive_api_route_response_gate_satisfied"])
+            self.assertEqual(packet["blocking_reasons"], [])
             self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_readiness_failure_blocks_before_runtime_runs(self) -> None:

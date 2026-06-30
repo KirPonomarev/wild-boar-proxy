@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "packet_kind": "wbp_full_runtime_dispatch_proof_runner_manifest",
+  "proof_scope": "repeatable_full_runtime_dispatch_proof_runner",
+  "input_file_paths_recorded": false,
+  "artifact_file_paths_recorded": false,
+  "input_files": [
+    {
+      "input_name": "real_custom_hook_proof",
+      "file_present": true,
+      "file_sha256": "03d7e876be1157cb93c079339e6f6123942826fe12db195cc282cf1de9ecd155",
+      "file_path_recorded": false
+    },
+    {
+      "input_name": "working_flow_delivery_proof",
+      "file_present": true,
+      "file_sha256": "2387a6c3026531781e3204fea68d84833b36c54e7dc0c756beefe33d5151775f",
+      "file_path_recorded": false
+    },
+    {
+      "input_name": "codex_exec_jsonl",
+      "file_present": true,
+      "file_sha256": "600cafd83fc108d9331b05edde4a21c8a07b7413870b5c78ee56c711c938e851",
+      "file_path_recorded": false
+    },
+    {
+      "input_name": "custom_codex_ui_visibility_proof",
+      "file_present": true,
+      "file_sha256": "b9f669087765fe9b3f6e569a23254e214be425d853b2c541992a2edc124f5eb3",
+      "file_path_recorded": false
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_name": "official-working-flow-handoff-source-proof.packet.json",
+      "packet_kind": "wbp_official_mcp_handoff_source_proof",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_HANDOFF_SOURCE_WORKING_FLOW_INVALID",
+      "file_sha256": "b7485a3bb4a552931314faad62bfd47e832b89c04c9ce147f437fe799845ae76",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-transcript-tool-result-observation.packet.json",
+      "packet_kind": "wbp_official_mcp_transcript_tool_result_observation",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_TRANSCRIPT_TOOL_RESULT_SOURCE_INVALID",
+      "file_sha256": "555518e71af7ae9a067abc3cdcab2415c7107c7a2730a1198f79791bc7c4d874",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-assistant-continuation-observation.packet.json",
+      "packet_kind": "wbp_official_mcp_assistant_continuation_observation",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_ASSISTANT_CONTINUATION_SOURCE_INVALID",
+      "file_sha256": "2db9b4cca6862b50b59bce7406cabb6c36ce77283ddeaa3d45e8fdc2a85ae24b",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-approved-codex-exec-source-observation.packet.json",
+      "packet_kind": "wbp_official_mcp_approved_codex_exec_source_observation",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_APPROVED_CODEX_EXEC_SOURCE_SOURCE_INVALID",
+      "file_sha256": "6a0efe0300c0af09bed3aeb5f073cd1366e31581d6c6a3caa2a110185d23d663",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-delivery-candidate-join.packet.json",
+      "packet_kind": "wbp_official_mcp_delivery_candidate_join",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_DELIVERY_CANDIDATE_SOURCE_INVALID",
+      "file_sha256": "1045fb62ae4814467caed57329af7c2abe42677273954f5a679d7c5089214fb9",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-working-flow-delivery-join.packet.json",
+      "packet_kind": "wbp_official_mcp_working_flow_delivery_join",
+      "status": "error",
+      "machine_error_code": "WBP_OFFICIAL_MCP_WORKING_FLOW_DELIVERY_JOIN_CANDIDATE_INVALID",
+      "file_sha256": "aa147f362742dca74f77a5836899d8e75eb8630b234f31e27168e294e26cf9f4",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "official-e2e-working-flow-proof-join.packet.json",
+      "packet_kind": "wbp_official_e2e_working_flow_proof_join",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "file_sha256": "fe6d5631bc28e2594d4e4cd3894046dd5ba2181891b45b09bc3cf6c37c293e23",
+      "file_path_recorded": false
+    },
+    {
+      "artifact_name": "full-runtime-dispatch-proof.packet.json",
+      "packet_kind": "wbp_full_runtime_dispatch_proof",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "file_sha256": "42f50712ba319c1df510a4315398aa62553b29ef97abfe166818d5d500ef9f0e",
+      "file_path_recorded": false
+    }
+  ],
+  "final_packet_kind": "wbp_full_runtime_dispatch_proof",
+  "final_status": "ok",
+  "final_machine_error_code": "OK",
+  "final_full_runtime_dispatch_proven": true,
+  "final_handoff_payload_digest": "85b05c6763e6c773bfdf6ee0f9649806ec4be2f902f7002d41943cbcbd576c11",
+  "runner_status": "ok",
+  "runner_machine_error_code": "OK",
+  "freshness_anchor_required": false,
+  "freshness_anchor_digest_present": true,
+  "freshness_anchor_digest": "f2e1d3a1b973a90938451b6590c08795fc36e21224414691d08dcf3116587a73",
+  "freshness_anchor_bound_to_manifest": true,
+  "expected_freshness_anchor_digest_bound": false,
+  "external_freshness_proven": false,
+  "raw_freshness_anchor_recorded": false,
+  "product_ready": false,
+  "fallback_used": false,
+  "local_imitation_used": false,
+  "native_codex_subagent_used_as_dip": false,
+  "raw_prompt_recorded": false,
+  "raw_route_id_recorded": false,
+  "raw_provider_response_recorded": false,
+  "raw_dom_exposed": false,
+  "raw_ax_tree_exposed": false,
+  "raw_backend_details_exposed": false,
+  "secret_value_exposed": false,
+  "roadmap_recorded": false,
+  "future_plan_recorded": false,
+  "next_contour_recorded": false
+}

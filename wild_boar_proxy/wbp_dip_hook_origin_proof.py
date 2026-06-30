@@ -174,22 +174,13 @@ def _dip_failures(
         ("live_result_provider_called", "live_result_provider_not_called"),
         ("live_result_route_allowed", "live_result_route_not_allowed"),
         ("live_result_required", "live_result_not_required"),
-        ("direct_provider_auth_proven", "direct_provider_auth_not_proven"),
-        (
-            "direct_provider_response_observed",
-            "direct_provider_response_not_observed",
-        ),
-        (
-            "positive_provider_proof_gate_satisfied",
-            "positive_provider_proof_gate_not_satisfied",
-        ),
     ):
         if dip.get(field) is not True:
             failures.append(reason)
     if dip.get("bridge_green_counts_as_provider_proof") is not False:
         failures.append("bridge_green_counts_as_provider_proof_not_false")
-    if dip.get("live_result_bridge_or_file_bridge_used") is True:
-        failures.append("bridge_or_file_bridge_used_for_direct_provider_proof")
+    if not _positive_api_route_response_gate_satisfied(dip):
+        failures.append("positive_api_route_response_gate_not_satisfied")
     if not _hex_sha256(dip.get("task_sha256")):
         failures.append("wbp_dip_task_digest_missing")
     if not _hex_sha256(dip.get("live_result_text_sha256")):
@@ -197,6 +188,45 @@ def _dip_failures(
     if _sequence_nonempty(dip.get("blocking_reasons")):
         failures.append("wbp_dip_blocking_reasons_not_empty")
     return sorted(set(failures + _safe_reasons(dip.get("blocking_reasons"))))
+
+
+def _direct_provider_response_gate_satisfied(dip: Mapping[str, Any]) -> bool:
+    return bool(
+        dip.get("direct_provider_auth_proven") is True
+        and dip.get("direct_provider_response_observed") is True
+        and dip.get("provider_auth_ok") is True
+        and dip.get("positive_provider_proof_gate_satisfied") is True
+        and dip.get("live_result_bridge_or_file_bridge_used") is not True
+    )
+
+
+def _server_owned_bridge_response_gate_satisfied(dip: Mapping[str, Any]) -> bool:
+    bridge_used = dip.get("live_result_bridge_or_file_bridge_used") is True
+    server_owned_bridge = (
+        dip.get("live_result_runtime_context_bridge_used") is True
+        or dip.get("live_result_runtime_context_file_bridge_used") is True
+    )
+    return bool(
+        bridge_used
+        and server_owned_bridge
+        and dip.get("live_result_available") is True
+        and dip.get("live_result_provider_called") is True
+        and dip.get("live_result_route_allowed") is True
+        and dip.get("route_bound_dispatch_proven") is True
+        and dip.get("fallback_used") is not True
+        and dip.get("local_imitation_used") is not True
+        and dip.get("live_result_machine_error_code") in {None, "OK"}
+        and bool(_hex_sha256(dip.get("live_result_text_sha256")))
+        and dip.get("live_result_raw_backend_details_exposed") is not True
+        and dip.get("live_result_secret_value_exposed") is not True
+    )
+
+
+def _positive_api_route_response_gate_satisfied(dip: Mapping[str, Any]) -> bool:
+    return bool(
+        _direct_provider_response_gate_satisfied(dip)
+        or _server_owned_bridge_response_gate_satisfied(dip)
+    )
 
 
 def _unsafe_claim_failures(
@@ -353,6 +383,8 @@ def build_wbp_dip_hook_origin_proof_packet(
         unsafe_failures=unsafe_failures,
     )
     live_result_text_sha256 = _hex_sha256(dip.get("live_result_text_sha256"))
+    server_owned_bridge_response_proven = _server_owned_bridge_response_gate_satisfied(dip)
+    positive_api_route_response_gate = _positive_api_route_response_gate_satisfied(dip)
     extra = {
         **ledger_metadata,
         **dip_metadata,
@@ -427,6 +459,15 @@ def build_wbp_dip_hook_origin_proof_packet(
         "provider_auth_smoke_required_before_full_runner": True,
         "positive_provider_proof_gate_satisfied": bool(
             ok and dip.get("positive_provider_proof_gate_satisfied") is True
+        ),
+        "server_owned_bridge_or_file_bridge_response_proven": bool(
+            ok and server_owned_bridge_response_proven
+        ),
+        "api_route_live_response_proven": bool(
+            ok and positive_api_route_response_gate
+        ),
+        "positive_api_route_response_gate_satisfied": bool(
+            ok and positive_api_route_response_gate
         ),
         "live_result_bridge_or_file_bridge_used": bool(
             ok and dip.get("live_result_bridge_or_file_bridge_used") is True

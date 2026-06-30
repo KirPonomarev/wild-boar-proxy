@@ -28,6 +28,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     WBP_DIP_TOOL_DELEGATE_NOT_PROVEN,
     WBP_DIP_TOOL_DRY_RUN,
     WBP_DIP_TOOL_EXACT_REPLY_MISMATCH,
+    WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN,
     WBP_DIP_TOOL_FORBIDDEN_CODEX_EXEC_EVENT,
     WBP_DIP_TOOL_ACTION_BRIDGE_NOT_USED,
     WBP_DIP_TOOL_ACTIVE_PROJECT_ROOT_UNAVAILABLE,
@@ -7955,6 +7956,139 @@ index 0000000..89c82ad
         self.assertFalse(result["provider_auth_ok"])
         self.assertFalse(result["positive_provider_proof_gate_satisfied"])
         find_route_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_explicit_file_bridge_requirement_skips_http_bridge(
+        self,
+        request_json_mock: mock.Mock,
+        file_bridge_mock: mock.Mock,
+    ) -> None:
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=10,
+            payload={"output_text": "HTTP bridge result must not be used."},
+        )
+        file_bridge_mock.return_value = _live_result(
+            source="runtime_context_file_bridge",
+            result_text="File bridge result from WBP.",
+            provider_recorded=False,
+            runtime_context_bridge_used=False,
+            runtime_context_file_bridge_used=True,
+            bridge_or_file_bridge_used=True,
+            direct_provider_auth_proven=False,
+            direct_provider_response_observed=False,
+            provider_auth_ok=False,
+            positive_provider_proof_gate_satisfied=False,
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "method": "POST",
+                            "model": "route-ok",
+                            "response_text_field": "output_text",
+                            "url_candidates": ["http://127.0.0.1:50555/v1/responses"],
+                        },
+                        "deepseek_live_format_check_file_bridge": {
+                            "enabled": True,
+                            "request_dir": str(profile / "requests"),
+                            "response_dir": str(profile / "responses"),
+                            "response_text_field": "output_text",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: Use only the enabled "
+                    "deepseek_live_format_check_file_bridge shell_command_template. "
+                    "Replace only <expected_text> with WBP_FILE_BRIDGE_OK."
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=3.0,
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["source"], "runtime_context_file_bridge")
+        self.assertTrue(result["file_bridge_required"])
+        self.assertTrue(result["file_bridge_attempted"])
+        self.assertTrue(result["runtime_context_file_bridge_used"])
+        self.assertTrue(result["bridge_or_file_bridge_used"])
+        self.assertFalse(result["runtime_context_bridge_used"])
+        self.assertEqual(result["result_text"], "File bridge result from WBP.")
+        request_json_mock.assert_not_called()
+        file_bridge_mock.assert_called_once()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._runtime_file_bridge_result")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_explicit_file_bridge_requirement_fails_closed(
+        self,
+        request_json_mock: mock.Mock,
+        file_bridge_mock: mock.Mock,
+    ) -> None:
+        request_json_mock.return_value = SimpleNamespace(
+            status_code=200,
+            latency_ms=10,
+            payload={"output_text": "HTTP bridge result must not be used."},
+        )
+        file_bridge_mock.return_value = None
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                        "deepseek_live_format_check_bridge": {
+                            "enabled": True,
+                            "method": "POST",
+                            "model": "route-ok",
+                            "response_text_field": "output_text",
+                            "url_candidates": ["http://127.0.0.1:50555/v1/responses"],
+                        },
+                        "deepseek_live_format_check_file_bridge": {
+                            "enabled": True,
+                            "request_dir": str(profile / "requests"),
+                            "response_dir": str(profile / "responses"),
+                            "response_text_field": "output_text",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = request_live_result(
+                task=(
+                    "DIP: Use only the enabled "
+                    "deepseek_live_format_check_file_bridge shell_command_template. "
+                    "Replace only <expected_text> with WBP_FILE_BRIDGE_OK."
+                ),
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=3.0,
+            )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["machine_error_code"],
+            WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN,
+        )
+        self.assertTrue(result["file_bridge_required"])
+        self.assertTrue(result["file_bridge_attempted"])
+        self.assertFalse(result["result_available"])
+        request_json_mock.assert_not_called()
+        file_bridge_mock.assert_called_once()
 
     @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})

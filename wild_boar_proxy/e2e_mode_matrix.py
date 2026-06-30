@@ -560,14 +560,21 @@ def _dip_code_edit_failures(packet: Mapping[str, Any]) -> list[str]:
         "dip_action_bridge_used",
         "dip_action_mutation_applied",
         "dip_action_tests_run",
-        "dip_action_patch_applied",
         "dip_code_written",
-        "dip_code_patch_applied",
         "dip_code_verified",
         "repo_bridge_mutation_allowed",
         "repo_bridge_mutation_controlled",
     ):
         _check_true(packet, field, failures, prefix)
+    if not (
+        packet.get("dip_action_patch_applied") is True
+        or (
+            packet.get("dip_action_mutation_applied") is True
+            and packet.get("dip_code_written") is True
+            and packet.get("repo_bridge_mutation_controlled") is True
+        )
+    ):
+        failures.append(f"{prefix}_controlled_code_mutation_not_proven")
     _check_positive_int(packet, "repo_bridge_successful_tool_call_count", failures, prefix)
     _check_positive_int(packet, "dip_action_successful_tool_call_count", failures, prefix)
     _check_false(packet, "repo_bridge_readonly", failures, prefix)

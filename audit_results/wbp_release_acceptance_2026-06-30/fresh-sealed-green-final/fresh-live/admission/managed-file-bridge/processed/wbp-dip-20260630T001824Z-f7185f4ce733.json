@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "request_id": "wbp-dip-20260630T001824Z-f7185f4ce733",
+  "model": "wbp-deepseek-chat",
+  "input": "Return only this exact string, with no quotes, no markdown, and no extra words:\nWBP_DIP_DISPATCH_OK",
+  "max_output_tokens": 512,
+  "stream": false,
+  "temperature": 0
+}

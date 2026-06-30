@@ -408,11 +408,70 @@ def _file_bridge_command_assistant_event() -> dict[str, object]:
     )
 
 
+def _router_output_command_execution_event() -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-router-output",
+            "type": "command_execution",
+            "command": (
+                "/bin/zsh -lc "
+                + shlex.quote(
+                    "python3 -m wild_boar_proxy router-hook auto-route-output "
+                    "--runtime-context-file /tmp/wbp-context.json "
+                    "--active-project-root /tmp/project "
+                    "--repo-bridge auto --work-mode full --timeout-seconds 300 "
+                    "--proof-dir /tmp/user-prompt-submit-router-proof "
+                    "--prompt \"$WBP_ROUTER_PROMPT\""
+                )
+            ),
+            "aggregated_output": EXPECTED_TEXT + "\n",
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }
+
+
 def _working_flow_command_packet(source: dict[str, object]) -> dict[str, object]:
     events = [
         {"type": "thread.started", "thread_id": "thread-working-flow-command"},
         {"type": "turn.started"},
         _command_execution_event(source),
+        _command_assistant_event(),
+        {"type": "turn.completed"},
+    ]
+    packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+        source,
+        events,
+        file_metadata={
+            "integrated_live_provider_proof_file_required": True,
+            "integrated_live_provider_proof_file_present": True,
+            "integrated_live_provider_proof_file_read": True,
+            "integrated_live_provider_proof_file_valid_json": True,
+            "integrated_live_provider_proof_file_mapping": True,
+            "integrated_live_provider_proof_file_error_code": "",
+            "integrated_live_provider_proof_file_path_recorded": False,
+            "codex_exec_jsonl_file_required": True,
+            "codex_exec_jsonl_file_present": True,
+            "codex_exec_jsonl_file_read": True,
+            "codex_exec_jsonl_file_valid_jsonl": True,
+            "codex_exec_jsonl_file_error_code": "",
+            "codex_exec_jsonl_file_path_recorded": False,
+            "codex_exec_jsonl_parse_error_count": 0,
+            "codex_exec_event_count": len(events),
+        },
+    )
+    assert packet["status"] == "ok"
+    return packet
+
+
+def _working_flow_router_output_command_packet(
+    source: dict[str, object],
+) -> dict[str, object]:
+    events = [
+        {"type": "thread.started", "thread_id": "thread-working-flow-router-output"},
+        {"type": "turn.started"},
+        _router_output_command_execution_event(),
         _command_assistant_event(),
         {"type": "turn.completed"},
     ]
@@ -764,6 +823,40 @@ class CustomCodexHookOriginProofTests(unittest.TestCase):
             working_flow_path = _write_json(
                 root / "working-flow-file-bridge-command.json",
                 _working_flow_file_bridge_command_packet(source),
+            )
+            result = _run_cli(
+                profile_dir=profile_dir,
+                source_path=source_path,
+                working_flow_path=working_flow_path,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packet = json.loads(result.stdout)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["command_origin_proven"])
+        self.assertTrue(packet["custom_codex_flow_proven"])
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["external_live_provider_response_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertFalse(packet["custom_codex_ui_visibility_proven"])
+        self.assertFalse(packet["native_free_chat_router_proven"])
+        self.assertFalse(packet["product_ready"])
+        self.assertEqual(packet["working_flow_failures"], [])
+        self.assertEqual(packet["blocking_reasons"], [])
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_router_output_command_delivery_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_dir, context, ledger = _write_profile(root)
+            source = _source_packet(context, ledger)
+            source_path = _write_json(root / "source.json", source)
+            working_flow_path = _write_json(
+                root / "working-flow-router-output-command.json",
+                _working_flow_router_output_command_packet(source),
             )
             result = _run_cli(
                 profile_dir=profile_dir,

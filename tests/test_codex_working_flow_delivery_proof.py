@@ -385,6 +385,33 @@ def _file_bridge_command_execution_event(
     }
 
 
+def _router_output_command_execution_event(
+    *,
+    expected_text: str = EXPECTED_TEXT,
+) -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item-router-output",
+            "type": "command_execution",
+            "command": (
+                "/bin/zsh -lc "
+                + json.dumps(
+                    "python3 -m wild_boar_proxy router-hook auto-route-output "
+                    "--runtime-context-file /tmp/wbp-context.json "
+                    "--active-project-root /tmp/project "
+                    "--repo-bridge auto --work-mode full --timeout-seconds 300 "
+                    "--proof-dir /tmp/user-prompt-submit-router-proof "
+                    "--prompt \"$WBP_ROUTER_PROMPT\""
+                )
+            ),
+            "aggregated_output": expected_text + "\n",
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }
+
+
 def _codex_wrapped_command_execution_event(source: dict[str, object]) -> dict[str, object]:
     event = _command_execution_event(source)
     original_command = str(event["item"]["command"])
@@ -736,6 +763,47 @@ class CodexWorkingFlowDeliveryProofTests(unittest.TestCase):
         self.assertTrue(packet["command_execution_live_format_extra_args_allowed"])
         self.assertTrue(packet["command_execution_file_bridge_response_observed"])
         self.assertTrue(packet["command_execution_file_bridge_response_bound"])
+        self.assertTrue(packet["command_assistant_response_after_command"])
+        self.assertTrue(packet["command_assistant_response_bound_to_live_provider_digest"])
+        self.assertEqual(
+            packet["command_assistant_binding_digest"],
+            packet["live_provider_response_digest"],
+        )
+        self.assertTrue(packet["codex_exec_assistant_continuation_proven"])
+        self.assertTrue(packet["codex_working_flow_delivery_proven"])
+        self.assertEqual(packet["command_execution_delivery_failures"], [])
+        self.assertEqual(packet["command_assistant_binding_failures"], [])
+        _assert_no_product_or_ui_claim(self, packet)
+        _assert_no_secret_or_raw_text(self, packet)
+        self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_positive_accepts_router_hook_auto_route_output_delivery(self) -> None:
+        source = _integrated_packet()
+        events = [
+            {"type": "thread.started", "thread_id": "thread-router-output-flow"},
+            {"type": "turn.started"},
+            _router_output_command_execution_event(),
+            _command_assistant_event(),
+            {"type": "turn.completed"},
+        ]
+
+        packet = working_flow.build_codex_working_flow_delivery_proof_packet(
+            source,
+            events,
+            file_metadata=_file_metadata(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["approved_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_delivery_surface_proven"])
+        self.assertTrue(packet["command_execution_live_format_observed"])
+        self.assertTrue(packet["command_execution_live_format_event_index_present"])
+        self.assertFalse(packet["command_execution_live_format_cli_command_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_route_digest_bound"])
+        self.assertTrue(packet["command_execution_live_format_extra_args_allowed"])
+        self.assertTrue(packet["command_execution_router_output_observed"])
+        self.assertTrue(packet["command_execution_router_output_bound"])
         self.assertTrue(packet["command_assistant_response_after_command"])
         self.assertTrue(packet["command_assistant_response_bound_to_live_provider_digest"])
         self.assertEqual(

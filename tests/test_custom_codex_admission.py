@@ -751,6 +751,8 @@ class CustomCodexAdmissionTests(unittest.TestCase):
             paths = _paths(root)
             context = _runtime_context(file_bridge=_file_bridge_packet(root))
             _write_profile(paths, runtime_context=context)
+            runtime_context_file = paths.profile_dir / "wbp-agent-runtime-context.json"
+            original_runtime_context = runtime_context_file.read_text(encoding="utf-8")
             fake_codex = _write_fake_codex(root / "fake-codex")
             with _mocked_provider(expected_text=EXPECTED_TEXT) as (base_url, provider):
                 _write_external_models_registry(paths, base_url=base_url)
@@ -772,6 +774,9 @@ class CustomCodexAdmissionTests(unittest.TestCase):
                         sandbox="workspace-write",
                         timeout_seconds=20,
                     )
+                    restored_runtime_context = runtime_context_file.read_text(
+                        encoding="utf-8"
+                    )
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], "OK")
@@ -789,6 +794,9 @@ class CustomCodexAdmissionTests(unittest.TestCase):
         self.assertTrue(packet["managed_file_bridge_ok"])
         self.assertTrue(packet["server_owned_file_bridge_configured"])
         self.assertTrue(packet["server_owned_file_bridge"])
+        self.assertTrue(packet["runtime_context_file_bridge_isolated"])
+        self.assertTrue(packet["runtime_context_restored_after_admission"])
+        self.assertEqual(restored_runtime_context, original_runtime_context)
         self.assertIn("managed_file_bridge_response", packet["declared_write_surfaces"])
         self.assertTrue(packet["runtime_context_file_bridge_used"])
         self.assertTrue(packet["bridge_or_file_bridge_used"])

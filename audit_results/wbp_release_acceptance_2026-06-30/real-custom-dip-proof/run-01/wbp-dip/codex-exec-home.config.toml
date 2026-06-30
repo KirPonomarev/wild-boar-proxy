@@ -1,0 +1,93 @@
+model = "gpt-5.5"
+model_provider = "cliproxy"
+sandbox_mode = "read-only"
+personality = "pragmatic"
+model_reasoning_effort = "high"
+
+[model_providers.cliproxy]
+name = "CLIProxy"
+base_url = "http://127.0.0.1:8318/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+supports_websockets = false
+
+[marketplaces.openai-bundled]
+last_updated = "2026-06-27T09:48:24Z"
+source_type = "local"
+source = "/Users/kirillponomarev/.codex-custom-cli/.tmp/bundled-marketplaces/openai-bundled"
+
+[marketplaces.openai-primary-runtime]
+last_updated = "2026-05-08T06:07:59Z"
+source_type = "local"
+source = "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+
+[projects."/Volumes/Work/writer-editor-codex"]
+trust_level = "trusted"
+
+[projects."/Users/kirillponomarev/Documents/Codex/2026-05-03/files-mentioned-by-the-user-cursor"]
+trust_level = "trusted"
+
+[projects."/Users/kirillponomarev/Documents/Codex/2026-05-03/new-chat"]
+trust_level = "trusted"
+
+[projects."/Users/kirillponomarev/Documents/Codex/2026-05-03/new-chat-2"]
+trust_level = "trusted"
+
+[projects."/Volumes/Work/wild-boar-proxy"]
+trust_level = "trusted"
+
+[projects."/Volumes/Work/Security Researcher"]
+trust_level = "trusted"
+
+[projects."/Users/kirillponomarev/Documents/Codex/2026-05-25/new-chat"]
+trust_level = "trusted"
+
+[projects."/private/tmp/wbp-dummy-live.9XyQet"]
+trust_level = "trusted"
+
+[projects."/private/tmp/wbp-dummy-live.DLSpAd"]
+trust_level = "trusted"
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[desktop]
+ambient-suggestions-enabled = false
+conversationDetailMode = "STEPS_COMMANDS"
+
+[features]
+js_repl = false
+
+[mcp_servers.node_repl]
+args = []
+command = "/Users/kirillponomarev/Applications/Codex WBP Clean.app/Contents/Resources/cua_node/bin/node_repl"
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = "/Users/kirillponomarev/Applications/Codex WBP Clean.app/Contents/Resources/cua_node/lib/node_modules"
+NODE_REPL_NODE_PATH = "/Users/kirillponomarev/Applications/Codex WBP Clean.app/Contents/Resources/cua_node/bin/node"
+NODE_REPL_TRUSTED_CODE_PATHS = "/Users/kirillponomarev/.codex-custom-cli"
+CODEX_HOME = "/Users/kirillponomarev/.codex-custom-cli"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "5ee3754ef68f803b9cebf40e30f94ea22aaf446de1a0a24b109180fa2ae0bd3e"
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.616.71553"
+CODEX_CLI_PATH = "/Users/kirillponomarev/Applications/Codex WBP Clean.app/Contents/Resources/codex"
+
+[hooks.state."/Users/kirillponomarev/.codex-custom-cli/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:b78bebb6c2e72cb22aa1fcde9b4795a0a690be0cbd20a4ecd45efe79f834b827"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4

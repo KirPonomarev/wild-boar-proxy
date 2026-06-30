@@ -581,6 +581,27 @@ class E2EModeMatrixTests(unittest.TestCase):
         self.assertEqual(packet["effect"], EFFECT_MUTATE)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
+    def test_accepts_controlled_scratch_write_code_edit_without_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                dip_code_edit_tests_dummy=_dip_packet(
+                    root_required=True,
+                    root_available=True,
+                    is_wbp_repo=False,
+                    sha="d" * 64,
+                    repo_audit=True,
+                    code_edit=True,
+                    readonly=False,
+                    dip_action_patch_applied=False,
+                    dip_code_patch_applied=False,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["dip_code_edit_tests_dummy_ready"])
+        self.assertEqual(packet["blocking_reasons"], [])
+
     def test_blocks_missing_row_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

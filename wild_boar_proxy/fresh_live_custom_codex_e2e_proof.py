@@ -87,6 +87,8 @@ def build_canonical_fresh_live_prompt(
                 "must be exactly one line and exactly this text, with no extra words:"
             ),
             expected,
+            "Answer exactly",
+            expected,
         ]
     )
 
@@ -232,8 +234,8 @@ def _fresh_runner_inputs(
         "packet_kind": OFFICIAL_E2E_FRESH_WORKING_FLOW_PROOF_RUNNER_INPUTS_PACKET_KIND,
         "proof_run_id": proof_run_id,
         "proof_run_started_at_ns": proof_run_started_at_ns,
-        "real_custom_hook_proof_file": str(source_proof_path),
-        "codex_exec_jsonl_file": str(codex_exec_jsonl_path),
+        "real_custom_hook_proof_file": str(source_proof_path.resolve()),
+        "codex_exec_jsonl_file": str(codex_exec_jsonl_path.resolve()),
         "expected_real_custom_hook_proof_file_sha256": sha256_file(source_proof_path),
         "expected_codex_exec_jsonl_file_sha256": sha256_file(codex_exec_jsonl_path),
     }

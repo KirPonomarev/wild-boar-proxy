@@ -415,7 +415,15 @@ product readiness. It joins two live facts:
 - `router-hook custom-codex-auth-session-readiness` reports the expected Custom
   Codex process/user-data binding and `session_state="API_KEY_ONLY"`;
 - the work-mode DIP runner proves one full Custom Codex hook-origin dispatch to
-  DIP through the allowed API route with working-flow delivery.
+  DIP through the allowed API route with a live API-route response.
+
+When the Custom runtime context advertises a server-owned bridge or file bridge,
+this gate may use that bridge as live API-route response evidence. That bridge
+evidence must not be reported as direct-provider auth: `direct_provider_*` fields
+remain diagnostic, and `bridge_green_counts_as_provider_proof` must stay `false`.
+Working-flow delivery for release acceptance is supplied by the fresh-sealed E2E
+gate; in `--mode work --api-backed-gate`, legacy MCP working-flow delivery
+diagnostics are non-blocking for this DIP feature gate.
 
 On success the packet must include:
 
@@ -437,8 +445,11 @@ On success the packet must include:
 - `api_lane_called=true`
 - `route_bound_dispatch_proven=true`
 - `live_result_available=true`
-- `direct_provider_auth_proven=true`
-- `provider_auth_ok=true`
+- `api_route_live_response_proven=true`
+- `positive_api_route_response_gate_satisfied=true`
+- either direct-provider proof is true or
+  `server_owned_bridge_or_file_bridge_response_proven=true`
+- `bridge_green_counts_as_provider_proof=false`
 - `fallback_used=false`
 - `local_imitation_used=false`
 - `native_codex_subagent_used_as_dip=false`

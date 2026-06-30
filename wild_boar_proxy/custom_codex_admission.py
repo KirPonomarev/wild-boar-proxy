@@ -52,6 +52,7 @@ from .runtime import (
     RuntimePaths,
     build_launcher_subprocess_env,
     snapshot_path_state,
+    write_bytes_atomic,
     write_json_atomic,
     write_text_atomic,
 )
@@ -256,6 +257,44 @@ def _runtime_file_bridge_config(runtime_context: Mapping[str, Any]) -> dict[str,
     return dict(bridge) if isinstance(bridge, Mapping) else {}
 
 
+def _admission_isolated_file_bridge_runtime_context(
+    runtime_context: Mapping[str, Any],
+    *,
+    proof_root: Path,
+) -> tuple[dict[str, Any], bool]:
+    context = json.loads(json.dumps(dict(runtime_context), ensure_ascii=True))
+    bridge = _runtime_file_bridge_config(context)
+    if not (
+        bridge.get("enabled") is True
+        and str(bridge.get("model") or "").strip()
+        and str(bridge.get("request_dir") or "").strip()
+        and str(bridge.get("response_dir") or "").strip()
+    ):
+        return context, False
+
+    bridge_root = proof_root / "managed-file-bridge"
+    request_dir = bridge_root / "requests"
+    response_dir = bridge_root / "responses"
+    processed_dir = bridge_root / "processed"
+    replacements = {
+        str(bridge.get("request_dir") or ""): str(request_dir),
+        str(bridge.get("response_dir") or ""): str(response_dir),
+        str(bridge.get("processed_dir") or ""): str(processed_dir),
+    }
+    template = str(bridge.get("shell_command_template") or "")
+    for old, new in replacements.items():
+        if old:
+            template = template.replace(old, new)
+
+    bridge["request_dir"] = str(request_dir)
+    bridge["response_dir"] = str(response_dir)
+    bridge["processed_dir"] = str(processed_dir)
+    if template:
+        bridge["shell_command_template"] = template
+    context["deepseek_live_format_check_file_bridge"] = bridge
+    return context, True
+
+
 class _ManagedAdmissionFileBridgeWorker:
     def __init__(
         self,
@@ -300,6 +339,7 @@ class _ManagedAdmissionFileBridgeWorker:
         self.error_count = 0
         self.last_machine_error_code = ""
         self.start_error = ""
+        self.response_paths: list[Path] = []
         self.response_request_ids: set[str] = set()
         self.response_request_id_digests: set[str] = set()
         self._stop_event = Event()
@@ -363,6 +403,7 @@ class _ManagedAdmissionFileBridgeWorker:
                 response_path,
                 json.dumps(packet, ensure_ascii=True, sort_keys=True) + "\n",
             )
+            self.response_paths.append(response_path)
             os.replace(processing_path, self.processed_dir / f"{request_id}.json")
         except OSError:
             self.error_count += 1
@@ -742,6 +783,27 @@ def _live_provider_extract_error_packet() -> dict[str, Any]:
     )
 
 
+def _live_provider_packet_from_managed_file_bridge_worker(
+    worker: _ManagedAdmissionFileBridgeWorker,
+    *,
+    expected_text: str,
+) -> tuple[dict[str, Any], bool]:
+    for response_path in worker.response_paths:
+        try:
+            parsed = json.loads(response_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(parsed, Mapping):
+            continue
+        normalized = _normalize_file_bridge_response_packet(
+            parsed,
+            expected_text=expected_text,
+        )
+        if normalized is not None:
+            return normalized, True
+    return _live_provider_extract_error_packet(), False
+
+
 def _write_packet(path: Path, packet: Mapping[str, Any]) -> str:
     write_json_atomic(path, dict(packet))
     return str(path)
@@ -862,6 +924,22 @@ def run_custom_codex_admission_command(
     prompt = str(prompt_text)
     runtime_context_file = runtime_context_path(paths=paths, runtime_context_file=None)
     runtime_context, _ = load_runtime_context_packet(runtime_context_file)
+    original_runtime_context_exists = runtime_context_file.exists()
+    original_runtime_context_text = ""
+    original_runtime_context_bytes = b""
+    if original_runtime_context_exists:
+        try:
+            original_runtime_context_bytes = runtime_context_file.read_bytes()
+            original_runtime_context_text = original_runtime_context_bytes.decode("utf-8")
+        except OSError:
+            original_runtime_context_text = ""
+    runtime_context, runtime_context_file_bridge_isolated = (
+        _admission_isolated_file_bridge_runtime_context(
+            runtime_context,
+            proof_root=proof_root,
+        )
+    )
+    runtime_context_restored = not runtime_context_file_bridge_isolated
     secret_values = [prompt, safe_expected_text] + _runtime_secret_values(runtime_context)
     external_models_dir, external_models_dir_source = _select_external_models_dir(
         paths,
@@ -899,6 +977,8 @@ def run_custom_codex_admission_command(
     try:
         runner_env = _runner_env(paths, runtime_context)
         runner_env["WBP_ADMISSION_RUN_ID"] = admission_run_id
+        if runtime_context_file_bridge_isolated:
+            write_json_atomic(runtime_context_file, runtime_context)
         managed_file_bridge_worker.start()
         try:
             result = subprocess.run(
@@ -934,6 +1014,16 @@ def run_custom_codex_admission_command(
         events,
         expected_text=safe_expected_text,
     )
+    live_provider_packet_source = "codex_exec_jsonl"
+    if not provider_observed:
+        live_provider_packet, provider_observed = (
+            _live_provider_packet_from_managed_file_bridge_worker(
+                managed_file_bridge_worker,
+                expected_text=safe_expected_text,
+            )
+        )
+        if provider_observed:
+            live_provider_packet_source = "managed_file_bridge_response"
     live_provider_data = (
         live_provider_packet.get("data")
         if isinstance(live_provider_packet.get("data"), Mapping)
@@ -1053,6 +1143,15 @@ def run_custom_codex_admission_command(
     )
     origin_packet_path = proof_root / "custom-origin-proof.strict-sealed.packet.json"
     changed_files.append(_write_packet(origin_packet_path, origin_packet))
+    if runtime_context_file_bridge_isolated:
+        if original_runtime_context_exists:
+            write_bytes_atomic(runtime_context_file, original_runtime_context_bytes)
+        else:
+            try:
+                runtime_context_file.unlink()
+            except OSError:
+                pass
+        runtime_context_restored = True
 
     runtime_truth_ok, mutated_truth, unchanged_truth = _runtime_truth_unchanged(
         paths,
@@ -1430,6 +1529,9 @@ def run_custom_codex_admission_command(
         "proof_dir_path_recorded": False,
         "ledger_cleared_before_run": ledger_was_cleared,
         "declared_write_surfaces": declared_write_surfaces,
+        "runtime_context_file_bridge_isolated": runtime_context_file_bridge_isolated,
+        "runtime_context_restored_after_admission": runtime_context_restored,
+        "live_provider_packet_source": live_provider_packet_source,
         "runtime_effective_truth_unchanged": runtime_truth_ok,
         "supervisor_state_unchanged": unchanged_truth.get("supervisor_state") is True,
         "runtime_effective_mode_unchanged": unchanged_truth.get("runtime_effective_mode")

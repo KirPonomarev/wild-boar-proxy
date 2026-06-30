@@ -358,6 +358,9 @@ def _working_flow_failures(
         file_bridge_command_surface = (
             working_flow.get("command_execution_file_bridge_response_bound") is True
         )
+        router_output_command_surface = (
+            working_flow.get("command_execution_router_output_bound") is True
+        )
         for field, reason in (
             ("command_execution_live_format_observed", "working_flow_command_live_format_not_observed"),
             ("command_execution_live_format_event_index_present", "working_flow_command_event_missing"),
@@ -374,6 +377,9 @@ def _working_flow_failures(
         if file_bridge_command_surface:
             if working_flow.get("command_execution_file_bridge_response_observed") is not True:
                 failures.append("working_flow_command_file_bridge_response_not_observed")
+        elif router_output_command_surface:
+            if working_flow.get("command_execution_router_output_observed") is not True:
+                failures.append("working_flow_command_router_output_not_observed")
         elif working_flow.get("command_execution_live_format_cli_command_digest_bound") is not True:
             failures.append("working_flow_command_cli_digest_not_bound")
         if working_flow.get("command_execution_live_format_fallback_used") is True:

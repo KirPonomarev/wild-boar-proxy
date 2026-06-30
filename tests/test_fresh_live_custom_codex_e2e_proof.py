@@ -153,6 +153,7 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
             "final assistant message must be exactly one line",
             prompt,
         )
+        self.assertIn(f"Answer exactly {EXPECTED_TEXT}", prompt)
         self.assertTrue(prompt.rstrip().endswith(EXPECTED_TEXT))
 
     def test_positive_runs_admission_then_fresh_official_e2e_runner(self) -> None:
@@ -315,6 +316,25 @@ class FreshLiveCustomCodexE2EProofTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_fresh_runner_inputs_use_absolute_artifact_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_proof = root / "proof" / "admission" / "source.json"
+            codex_jsonl = root / "proof" / "admission" / "codex-exec.jsonl"
+            source_proof.parent.mkdir(parents=True, exist_ok=True)
+            source_proof.write_text("{}", encoding="utf-8")
+            codex_jsonl.write_text("{}", encoding="utf-8")
+
+            packet = fresh_live._fresh_runner_inputs(
+                proof_run_id="WBP_FRESH_LIVE_E2E_ABSOLUTE_PATHS",
+                proof_run_started_at_ns=1,
+                source_proof_path=source_proof,
+                codex_exec_jsonl_path=codex_jsonl,
+            )
+
+        self.assertTrue(Path(str(packet["real_custom_hook_proof_file"])).is_absolute())
+        self.assertTrue(Path(str(packet["codex_exec_jsonl_file"])).is_absolute())
 
     def test_final_packet_blocks_runner_only_dispatch_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

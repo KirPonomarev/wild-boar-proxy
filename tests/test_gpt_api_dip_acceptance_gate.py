@@ -130,6 +130,9 @@ def _dip_feature_packet(**overrides: object) -> dict[str, object]:
         "direct_provider_response_observed": True,
         "provider_auth_ok": True,
         "positive_provider_proof_gate_satisfied": True,
+        "server_owned_bridge_or_file_bridge_response_proven": False,
+        "api_route_live_response_proven": True,
+        "positive_api_route_response_gate_satisfied": True,
         "api_key_only_counts_as_ui_session": False,
         "auth_session_logged_in_ui_session_proven": False,
         "logged_in_ui_session_proven": False,
@@ -195,6 +198,9 @@ def _dip_action_packet(**overrides: object) -> dict[str, object]:
         "direct_provider_response_observed": True,
         "provider_auth_ok": True,
         "positive_provider_proof_gate_satisfied": True,
+        "server_owned_bridge_or_file_bridge_response_proven": False,
+        "api_route_live_response_proven": True,
+        "positive_api_route_response_gate_satisfied": True,
         "dip_repo_tool_bridge_required": True,
         "dip_repo_tool_bridge_available": True,
         "dip_repo_tool_bridge_used": True,
@@ -345,6 +351,23 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
         self.assertEqual(packet["blocking_reasons"], [])
         self.assertEqual(packet["effect"], EFFECT_MUTATE)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+    def test_accepts_controlled_scratch_write_code_action_without_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            packet = self._run(
+                Path(temp_dir),
+                action=_dip_action_packet(
+                    dip_action_patch_applied=False,
+                    dip_code_patch_applied=False,
+                ),
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["feature_ready"])
+        self.assertTrue(packet["dip_action_bridge_proven"])
+        self.assertTrue(packet["dip_code_written"])
+        self.assertTrue(packet["dip_code_verified"])
+        self.assertEqual(packet["blocking_reasons"], [])
 
     def test_blocks_status_ok_fresh_packet_without_full_runtime_dispatch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

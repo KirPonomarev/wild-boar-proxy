@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from typing import Any
@@ -56,6 +57,8 @@ STALE_CODEX_PROFILE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
 DEFAULT_ENTRY_EVIDENCE_FILENAME = "mcp-entry-evidence.json"
 DEFAULT_CODEX_JSONL_FILENAME = "codex-exec.jsonl"
 DEFAULT_LAST_MESSAGE_FILENAME = "last-message.txt"
+DEFAULT_CODEX_EXEC_HOME_DIRNAME = "codex-exec-home"
+DEFAULT_CODEX_EXEC_CONFIG_EVIDENCE_FILENAME = "codex-exec-home.config.toml"
 DEFAULT_LIVE_RESULT_TEXT_ARTIFACT_FILENAME = "live-result-full-text.txt"
 DEFAULT_LIVE_RESULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_BRIDGE_TIMEOUT_SECONDS = 8.0
@@ -92,6 +95,7 @@ WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE = "WBP_DIP_TOOL_LIVE_RESULT_UNAVAILABLE"
 WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT = "WBP_DIP_TOOL_LIVE_RESULT_TIMEOUT"
 WBP_DIP_TOOL_UNSAFE_PACKET = "WBP_DIP_TOOL_UNSAFE_PACKET"
 WBP_DIP_TOOL_LIVE_RESULT_UNSAFE = "WBP_DIP_TOOL_LIVE_RESULT_UNSAFE"
+WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN = "WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN"
 WBP_DIP_TOOL_EXACT_REPLY_MISMATCH = "WBP_DIP_TOOL_EXACT_REPLY_MISMATCH"
 WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT = "WBP_DIP_TOOL_ALIAS_NOT_IN_CONTEXT"
 WBP_DIP_TOOL_ROUTE_NOT_ALLOWED = "WBP_DIP_TOOL_ROUTE_NOT_ALLOWED"
@@ -704,6 +708,14 @@ def _exact_plain_reply_expected_text(task: str) -> str:
     return tail.rstrip(".!?").strip(" \t\n\r\"'`")
 
 
+def _runtime_file_bridge_required(task: str) -> bool:
+    text = str(task or "").casefold()
+    return bool(
+        "deepseek_live_format_check_file_bridge" in text
+        and "shell_command_template" in text
+    )
+
+
 def _exact_plain_reply_prompt(expected_text: str) -> str:
     return (
         "Return only this exact string, with no quotes, no markdown, "
@@ -854,6 +866,37 @@ def _merge_profile_config_repair_packets(
             or before.get("profile_config_repair_error"),
             limit=120,
         ),
+    }
+
+
+def _merge_parallel_profile_config_repair_packets(
+    primary: Mapping[str, Any],
+    secondary: Mapping[str, Any],
+) -> dict[str, Any]:
+    primary_error = _safe_text(primary.get("profile_config_repair_error"), limit=120)
+    secondary_error = _safe_text(secondary.get("profile_config_repair_error"), limit=120)
+    repair_error = primary_error or secondary_error
+    return {
+        **primary,
+        "profile_config_model_repair_attempted": (
+            primary.get("profile_config_model_repair_attempted") is True
+            or secondary.get("profile_config_model_repair_attempted") is True
+        ),
+        "profile_config_model_repaired": (
+            primary.get("profile_config_model_repaired") is True
+            or secondary.get("profile_config_model_repaired") is True
+        ),
+        "profile_config_model_after": _safe_text(
+            secondary.get("profile_config_model_after")
+            or primary.get("profile_config_model_after"),
+            limit=120,
+        ),
+        "profile_config_model_target": _safe_text(
+            secondary.get("profile_config_model_target")
+            or primary.get("profile_config_model_target"),
+            limit=120,
+        ),
+        "profile_config_repair_error": repair_error,
     }
 
 
@@ -1101,6 +1144,38 @@ def build_codex_exec_argv(
         *list(extra_args),
         prompt,
     ]
+
+
+def prepare_codex_exec_home(
+    *,
+    profile_dir: Path,
+    proof_dir: Path,
+    codex_cwd: Path,
+    model: str,
+) -> tuple[Path, Path]:
+    """Create a hook-free CODEX_HOME for the inner MCP delegate exec."""
+    exec_home = Path(
+        tempfile.mkdtemp(prefix="wbp-codex-exec-home-")
+    ).resolve(strict=False)
+    exec_home.mkdir(parents=True, exist_ok=True)
+    config_path = exec_home / "config.toml"
+    evidence_config_path = proof_dir / DEFAULT_CODEX_EXEC_CONFIG_EVIDENCE_FILENAME
+    trusted_cwd = str(codex_cwd.expanduser().resolve(strict=False))
+    try:
+        config_text = (profile_dir / "config.toml").read_text(encoding="utf-8")
+    except OSError:
+        config_text = f"model = {_toml_string(model)}\n"
+    project_header = f"[projects.{_toml_string(trusted_cwd)}]"
+    if project_header not in config_text:
+        config_text = (
+            config_text.rstrip("\n")
+            + "\n\n"
+            + project_header
+            + '\ntrust_level = "trusted"\n'
+        )
+    write_text_atomic(config_path, config_text)
+    write_text_atomic(evidence_config_path, config_text)
+    return exec_home, evidence_config_path
 
 
 def _iter_mappings(value: Any) -> list[Mapping[str, Any]]:
@@ -4861,6 +4936,7 @@ def _live_result_turn(
     output_token_limit: int = DEFAULT_BRIDGE_MAX_OUTPUT_TOKENS,
     result_text_limit: int = DEFAULT_LIVE_RESULT_TEXT_LIMIT,
     skip_file_bridge: bool = False,
+    require_file_bridge: bool = False,
 ) -> dict[str, Any]:
     turn_base = dict(base)
     deadline = _live_result_deadline(timeout_seconds, minimum=0.001)
@@ -4875,6 +4951,46 @@ def _live_result_turn(
     )
     turn_base["file_bridge_attempted"] = False
     turn_base["file_bridge_skipped"] = bool(skip_file_bridge)
+    file_bridge_required = bool(require_file_bridge and not skip_file_bridge)
+    if file_bridge_required:
+        if not file_bridge_configured:
+            return {
+                **turn_base,
+                "status": "error",
+                "machine_error_code": WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN,
+                "operator_action": "retry",
+                "provider_called": False,
+                "result_available": False,
+                "result_text": "",
+                "result_text_sha256": "",
+                "result_text_length": 0,
+                "result_text_truncated": False,
+                "file_bridge_required": True,
+            }
+        turn_base["file_bridge_attempted"] = True
+        turn_base["file_bridge_skipped"] = False
+        file_bridge_result = _runtime_file_bridge_result(
+            context=context,
+            prompt=prompt,
+            timeout_seconds=timeout_seconds,
+            output_token_limit=output_token_limit,
+            result_text_limit=result_text_limit,
+        )
+        if file_bridge_result is not None:
+            return {**turn_base, **file_bridge_result, "file_bridge_required": True}
+        return {
+            **turn_base,
+            "status": "error",
+            "machine_error_code": WBP_DIP_TOOL_FILE_BRIDGE_NOT_PROVEN,
+            "operator_action": "retry",
+            "provider_called": True,
+            "result_available": False,
+            "result_text": "",
+            "result_text_sha256": "",
+            "result_text_length": 0,
+            "result_text_truncated": False,
+            "file_bridge_required": True,
+        }
     remaining = _remaining_live_result_timeout(deadline)
     if remaining <= 0:
         return _live_result_timeout_packet(turn_base, provider_called=False)
@@ -4965,6 +5081,7 @@ def request_live_result(
         and requested_exact_reply_text
         and not _json_reply_requested(task)
     )
+    file_bridge_required = _runtime_file_bridge_required(task)
     if exact_plain_reply:
         live_result_text_limit = min(live_result_text_limit, 512)
         output_token_limit = min(output_token_limit, 512)
@@ -5046,6 +5163,7 @@ def request_live_result(
         "runtime_context_bridge_used": False,
         "runtime_context_file_bridge_used": False,
         "bridge_or_file_bridge_used": False,
+        "file_bridge_required": file_bridge_required,
         "dip_work_mode": effective_work_mode,
         "dip_full_work_mode": effective_work_mode == "full",
         "live_result_text_limit": live_result_text_limit,
@@ -5096,6 +5214,7 @@ def request_live_result(
             output_token_limit=output_token_limit,
             result_text_limit=live_result_text_limit,
             skip_file_bridge=False,
+            require_file_bridge=file_bridge_required,
         )
         result = _normalize_json_result_for_task(result, task=task)
         if exact_plain_reply:
@@ -5203,6 +5322,7 @@ def request_live_result(
             timeout_seconds=remaining,
             output_token_limit=output_token_limit,
             result_text_limit=live_result_text_limit,
+            require_file_bridge=file_bridge_required,
         )
         if last_result.get("status") != "ok":
             current_repo_fields = _repo_bridge_fields(
@@ -5437,6 +5557,7 @@ def request_live_result(
                 timeout_seconds=remaining,
                 output_token_limit=output_token_limit,
                 result_text_limit=live_result_text_limit,
+                require_file_bridge=file_bridge_required,
             )
             final_repo_fields = _repo_bridge_fields(
                 required=repo_bridge_required,
@@ -6484,13 +6605,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(dry_packet["exit_code"])
 
     proof_dir.mkdir(parents=True, exist_ok=True)
+    codex_exec_home, codex_exec_config_evidence_file = prepare_codex_exec_home(
+        profile_dir=profile_dir,
+        proof_dir=proof_dir,
+        codex_cwd=codex_cwd,
+        model=model,
+    )
+    changed_files.append(str(codex_exec_config_evidence_file))
     env = dict(os.environ)
+    for key in (
+        "WBP_PROFILE_DIR",
+        "WBP_MANAGED_DIR",
+        "WBP_CONFIG_TOML",
+        ACTIVE_PROJECT_ROOT_ENV,
+        TARGET_REPO_ENV,
+    ):
+        env.pop(key, None)
     env.update(
         {
-            "CODEX_HOME": str(profile_dir),
-            "WBP_PROFILE_DIR": str(profile_dir),
-            "WBP_MANAGED_DIR": str(profile_dir / "managed"),
-            "WBP_CONFIG_TOML": str(profile_dir / "config.toml"),
+            "CODEX_HOME": str(codex_exec_home),
         }
     )
     env.setdefault(
@@ -6508,22 +6641,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         "profile_config_model_repaired": False,
         "profile_config_model_repair_attempted": False,
     }
-    if codex_executable and task:
-        with output_jsonl.open("w", encoding="utf-8") as stdout_handle:
-            completed = subprocess.run(
-                argv_to_run,
-                cwd=str(control_repo_root),
-                env=env,
-                stdout=stdout_handle,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                check=False,
+    try:
+        if codex_executable and task:
+            with output_jsonl.open("w", encoding="utf-8") as stdout_handle:
+                completed = subprocess.run(
+                    argv_to_run,
+                    cwd=str(control_repo_root),
+                    env=env,
+                    stdout=stdout_handle,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    check=False,
+                )
+            codex_exit_code = int(completed.returncode)
+            redactions = _redaction_replacements(task=task, prompt=prompt)
+            _redact_text_file(output_jsonl, redactions)
+            _redact_text_file(output_last_message, redactions)
+            profile_repair_after = _repair_stale_profile_config_model(profile_dir, model=model)
+            codex_exec_home_repair_after = _repair_stale_profile_config_model(
+                codex_exec_home,
+                model=model,
             )
-        codex_exit_code = int(completed.returncode)
-        redactions = _redaction_replacements(task=task, prompt=prompt)
-        _redact_text_file(output_jsonl, redactions)
-        _redact_text_file(output_last_message, redactions)
-        profile_repair_after = _repair_stale_profile_config_model(profile_dir, model=model)
+            profile_repair_after = _merge_parallel_profile_config_repair_packets(
+                profile_repair_after,
+                codex_exec_home_repair_after,
+            )
+            try:
+                write_text_atomic(
+                    codex_exec_config_evidence_file,
+                    (codex_exec_home / "config.toml").read_text(encoding="utf-8"),
+                )
+            except OSError:
+                pass
+    finally:
+        shutil.rmtree(codex_exec_home, ignore_errors=True)
     live_result: dict[str, Any] | None = None
     if not args.proof_only and codex_exit_code == 0:
         delegate_packet = _find_delegate_packet(_read_codex_exec_jsonl(output_jsonl))

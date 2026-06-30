@@ -96,6 +96,7 @@ def _wbp_dip_packet(
         "live_result_available": True,
         "live_result_provider_called": True,
         "live_result_route_allowed": True,
+        "live_result_machine_error_code": "OK",
         "live_result_text_sha256": _sha256("live answer"),
         "live_result_text_length": len("live answer"),
         "live_result_text_recorded": True,
@@ -204,6 +205,9 @@ class WbpDipHookOriginProofTests(unittest.TestCase):
         self.assertTrue(packet["direct_provider_auth_proven"])
         self.assertTrue(packet["direct_provider_response_observed"])
         self.assertTrue(packet["positive_provider_proof_gate_satisfied"])
+        self.assertTrue(packet["api_route_live_response_proven"])
+        self.assertTrue(packet["positive_api_route_response_gate_satisfied"])
+        self.assertFalse(packet["server_owned_bridge_or_file_bridge_response_proven"])
         self.assertFalse(packet["live_result_bridge_or_file_bridge_used"])
         self.assertTrue(packet["live_result_digest_bound"])
         self.assertFalse(packet["source_file_unforgeable"])
@@ -216,7 +220,9 @@ class WbpDipHookOriginProofTests(unittest.TestCase):
         self.assertFalse(packet["live_result_text_recorded"])
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
-    def test_bridge_backed_live_result_blocks_direct_provider_join(self) -> None:
+    def test_bridge_backed_live_result_proves_api_route_response_not_direct_provider(
+        self,
+    ) -> None:
         packet = _packet(
             dip=_wbp_dip_packet(
                 extra={
@@ -230,18 +236,19 @@ class WbpDipHookOriginProofTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"],
-            proof.WBP_DIP_HOOK_ORIGIN_DIP_NOT_PROVEN,
-        )
-        self.assertIn("direct_provider_auth_not_proven", packet["blocking_reasons"])
-        self.assertIn(
-            "positive_provider_proof_gate_not_satisfied",
-            packet["blocking_reasons"],
-        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["api_lane_called"])
+        self.assertTrue(packet["route_bound_dispatch_proven"])
+        self.assertTrue(packet["live_result_available"])
+        self.assertTrue(packet["server_owned_bridge_or_file_bridge_response_proven"])
+        self.assertTrue(packet["api_route_live_response_proven"])
+        self.assertTrue(packet["positive_api_route_response_gate_satisfied"])
+        self.assertTrue(packet["live_result_bridge_or_file_bridge_used"])
+        self.assertFalse(packet["direct_provider_auth_proven"])
+        self.assertFalse(packet["direct_provider_response_observed"])
         self.assertFalse(packet["positive_provider_proof_gate_satisfied"])
-        self.assertFalse(packet["api_lane_called"])
+        self.assertEqual(packet["blocking_reasons"], [])
         _assert_no_prompt_or_route(self, packet)
         self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 

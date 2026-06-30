@@ -513,9 +513,20 @@ def _direct_working_flow_contract_failures(
         failures.append("working_flow_delivery_surface_kind_not_command_execution")
     if working_flow.get("mcp_delivery_surface_proven") is True:
         failures.append("direct_working_flow_must_not_claim_mcp_delivery_surface")
-    if working_flow.get("command_execution_file_bridge_response_bound") is not True:
-        if working_flow.get("command_execution_live_format_cli_command_digest_bound") is not True:
-            failures.append("working_flow_command_cli_digest_not_bound")
+    file_bridge_command_surface = (
+        working_flow.get("command_execution_file_bridge_response_bound") is True
+    )
+    router_output_command_surface = (
+        working_flow.get("command_execution_router_output_bound") is True
+    )
+    if file_bridge_command_surface:
+        if working_flow.get("command_execution_file_bridge_response_observed") is not True:
+            failures.append("working_flow_command_file_bridge_response_not_observed")
+    elif router_output_command_surface:
+        if working_flow.get("command_execution_router_output_observed") is not True:
+            failures.append("working_flow_command_router_output_not_observed")
+    elif working_flow.get("command_execution_live_format_cli_command_digest_bound") is not True:
+        failures.append("working_flow_command_cli_digest_not_bound")
     if working_flow.get("command_execution_live_format_fallback_used") is True:
         failures.append("working_flow_command_fallback_used")
     if _safe_text(
