@@ -1133,6 +1133,106 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
         self.assertIn("Return exactly the requested content", plain_exact_context)
         self.assertNotIn("router-hook auto-route-output", plain_exact_context)
 
+    def test_codex_desktop_request_envelope_does_not_route_service_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            runtime_context = _runtime_context()
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+            prompt = "\n".join(
+                [
+                    "# AGENTS.md instructions for /Volumes/Work/wild-boar-proxy",
+                    "DIP: example inside repository instructions, not active request.",
+                    "",
+                    "# Files mentioned by the user:",
+                    "",
+                    "## My request for Codex:",
+                    "нужно переосмыслить дизайн этого экрана приложения",
+                    "![Image #1](/tmp/screen.png)",
+                ]
+            )
+
+            context_kind = producer._user_prompt_submit_context_kind(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+            )
+            additional_context = producer._user_prompt_submit_additional_context(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+                runtime_context_file=context_file,
+            )
+
+        self.assertEqual("", context_kind)
+        self.assertEqual("", additional_context)
+
+    def test_codex_desktop_request_envelope_routes_active_api_alias_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            runtime_context = _runtime_context()
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+            prompt = "\n".join(
+                [
+                    "# AGENTS.md instructions for /Volumes/Work/wild-boar-proxy",
+                    "Codex: example inside repository instructions, not active request.",
+                    "",
+                    "## My request for Codex:",
+                    "DIP: ответь ровно WBP_ACTIVE_DIP_OK",
+                ]
+            )
+
+            context_kind = producer._user_prompt_submit_context_kind(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+            )
+            additional_context = producer._user_prompt_submit_additional_context(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+                runtime_context_file=context_file,
+            )
+
+        self.assertEqual("api_route", context_kind)
+        self.assertIn("WBP ROUTER HARD OVERRIDE", additional_context)
+        self.assertIn("only the active user request text", additional_context)
+        self.assertIn("router-hook auto-route-output", additional_context)
+
+    def test_pre_tool_use_guard_digest_uses_active_codex_desktop_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            active_prompt = "DIP: ответь ровно WBP_ACTIVE_DIGEST_OK"
+            envelope = "\n".join(
+                [
+                    "# AGENTS.md instructions for /Volumes/Work/wild-boar-proxy",
+                    "DIP: stale example that must not be hashed.",
+                    "",
+                    "## My request for Codex:",
+                    active_prompt,
+                ]
+            )
+
+            packet = producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt=envelope),
+                paths=paths,
+                ledger_file=root / "ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            guard = json.loads(
+                producer.pre_tool_use_guard_path(paths).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["pre_tool_use_guard_required"])
+        self.assertEqual(guard["prompt_digest"], producer._event_digest(active_prompt))
+
     def test_additional_context_handles_custom_renamed_aliases_casefolded(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

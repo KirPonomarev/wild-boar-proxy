@@ -86,6 +86,9 @@ CODEX_BIN_ENV = "WBP_CODEX_BIN"
 _LEADING_ADDRESS_RE = re.compile(
     r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s*"
 )
+_CODEX_DESKTOP_REQUEST_MARKER_RE = re.compile(
+    r"(?im)^[ \t]*(?:#+[ \t]*)?My request for Codex\s*[:：][ \t]*$"
+)
 
 
 def _sha256_text(value: str) -> str:
@@ -1412,6 +1415,14 @@ def _leading_address_label(prompt_text: str) -> str:
     return _safe_text(match.group(1), limit=80) if match else ""
 
 
+def _active_prompt_for_alias_routing(prompt_text: str) -> str:
+    text = str(prompt_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    markers = list(_CODEX_DESKTOP_REQUEST_MARKER_RE.finditer(text))
+    if not markers:
+        return prompt_text
+    return text[markers[-1].end() :].lstrip()
+
+
 def _leading_label_looks_like_addressed_alias(label: str) -> bool:
     normalized = _safe_text(label, limit=80).casefold()
     if not normalized:
@@ -1473,6 +1484,7 @@ def _user_prompt_submit_context_kind(
     prompt_text: str,
     runtime_context: Mapping[str, Any],
 ) -> str:
+    prompt_text = _active_prompt_for_alias_routing(prompt_text)
     parser_result = parse_natural_alias_intent(
         prompt_text=prompt_text,
         runtime_context=runtime_context,
@@ -1784,7 +1796,9 @@ def _router_command_additional_context(*, runtime_context_file: Path) -> str:
         "Exact visible behavior: say nothing before running the command; run "
         "exactly one shell command: COMMAND below; then return only stdout. Copy "
         "COMMAND literally except replacing <original prompt> inside the "
-        "WBP_ROUTER_PROMPT single-quoted assignment. Send that variable to the "
+        "WBP_ROUTER_PROMPT single-quoted assignment with only the active user "
+        "request text, after any Codex Desktop envelope such as 'My request for "
+        "Codex:'. Send that variable to the "
         "router through stdin; the command must keep --prompt-file - and must "
         "not contain --prompt. "
         "Do not replace WBP_ROUTER_PROOF_DIR with mktemp or any other path. Escape "
@@ -1842,16 +1856,17 @@ def _user_prompt_submit_additional_context(
     runtime_context: Mapping[str, Any],
     runtime_context_file: Path,
 ) -> str:
+    active_prompt_text = _active_prompt_for_alias_routing(prompt_text)
     context_kind = _user_prompt_submit_context_kind(
-        prompt_text=prompt_text,
+        prompt_text=active_prompt_text,
         runtime_context=runtime_context,
     )
     if not context_kind:
-        if _exact_plain_reply_requested(prompt_text):
+        if _exact_plain_reply_requested(active_prompt_text):
             return _exact_reply_additional_context()
         return ""
     if context_kind == PRIMARY_CHATGPT_LANE:
-        if _exact_plain_reply_requested(prompt_text):
+        if _exact_plain_reply_requested(active_prompt_text):
             return _primary_exact_alias_additional_context()
         return (
             "WBP PRIMARY ALIAS CONTEXT: this UserPromptSubmit hook observed a "
@@ -1993,9 +2008,10 @@ def build_user_prompt_submit_run_packet(
     effective_origin_state = (
         origin_state if ok else ORIGIN_STATE_SYNTHETIC_HOOK_FLOW
     )
+    active_prompt_text = _active_prompt_for_alias_routing(prompt_text)
     context_kind = (
         _user_prompt_submit_context_kind(
-            prompt_text=prompt_text,
+            prompt_text=active_prompt_text,
             runtime_context=runtime_context,
         )
         if ok
@@ -2003,7 +2019,7 @@ def build_user_prompt_submit_run_packet(
     )
     hook_additional_context = (
         _user_prompt_submit_additional_context(
-            prompt_text=prompt_text,
+            prompt_text=active_prompt_text,
             runtime_context=runtime_context,
             runtime_context_file=context_path,
         )
@@ -2023,7 +2039,7 @@ def build_user_prompt_submit_run_packet(
         if context_kind == API_ROUTE_LANE:
             guard_written = _write_pre_tool_use_guard(
                 paths=paths,
-                prompt_text=prompt_text,
+                prompt_text=active_prompt_text,
                 runtime_context=runtime_context,
                 turn_id=turn_id,
                 session_id=session_id,
