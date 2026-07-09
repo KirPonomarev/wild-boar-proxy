@@ -16,6 +16,7 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 from . import errors
 
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 5.0
+DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES = 16 * 1024 * 1024
 RESPONSE_READ_CHUNK_BYTES = 65536
 UNKNOWN_LENGTH_READ_CHUNK_BYTES = 1
 
@@ -93,15 +94,28 @@ def _is_complete_json_document(raw: bytes) -> bool:
     return not text[end:].strip()
 
 
+def _raise_response_body_too_large() -> None:
+    raise RuntimeErrorInfo(
+        "Provider response body exceeded the configured byte limit.",
+        machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
+        operator_action="retry",
+    )
+
+
 def _read_response_body(
     response: Any,
     *,
     started_at: float,
     timeout_seconds: float,
+    max_body_bytes: int = DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES,
 ) -> bytes:
     deadline = started_at + max(timeout_seconds, 0.001)
     body = bytearray()
     content_length = _response_content_length(response)
+    if max_body_bytes < 1:
+        _raise_response_body_too_large()
+    if content_length is not None and content_length > max_body_bytes:
+        _raise_response_body_too_large()
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -117,6 +131,8 @@ def _read_response_body(
         chunk = response.read(read_size)
         if not chunk:
             return bytes(body)
+        if len(body) + len(chunk) > max_body_bytes:
+            _raise_response_body_too_large()
         body.extend(chunk)
         if content_length is None and _is_complete_json_document(bytes(body)):
             return bytes(body)
@@ -129,6 +145,7 @@ def request_json(
     headers: dict[str, str],
     payload: dict[str, Any] | None = None,
     timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+    max_body_bytes: int = DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES,
 ) -> HttpJsonResponse:
     data = None
     if payload is not None:
@@ -143,6 +160,7 @@ def request_json(
                 response,
                 started_at=started_at,
                 timeout_seconds=timeout_seconds,
+                max_body_bytes=max_body_bytes,
             )
             parsed = json.loads(raw.decode("utf-8"))
             return HttpJsonResponse(
@@ -151,7 +169,12 @@ def request_json(
                 latency_ms=int((time.monotonic() - started_at) * 1000),
             )
     except urllib.error.HTTPError as exc:
-        body = exc.read()
+        body = _read_response_body(
+            exc,
+            started_at=started_at,
+            timeout_seconds=timeout_seconds,
+            max_body_bytes=max_body_bytes,
+        )
         try:
             parsed = json.loads(body.decode("utf-8"))
         except Exception:

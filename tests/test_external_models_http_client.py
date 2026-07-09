@@ -2,18 +2,29 @@ from unittest import mock
 import time
 import unittest
 
+from wild_boar_proxy.external_models import errors
 from wild_boar_proxy.external_models import http_client
+from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
 class FakeResponse:
-    def __init__(self, chunks: list[bytes]) -> None:
+    def __init__(self, chunks: list[bytes], *, content_length: int | None = None) -> None:
         self._chunks = list(chunks)
+        self.headers = {}
+        if content_length is not None:
+            self.headers["Content-Length"] = str(content_length)
+        self.read_calls = 0
         self.timeouts: list[float] = []
 
-    def read(self, _size: int = -1) -> bytes:
-        if self._chunks:
-            return self._chunks.pop(0)
-        return b""
+    def read(self, size: int = -1) -> bytes:
+        self.read_calls += 1
+        if not self._chunks:
+            return b""
+        chunk = self._chunks.pop(0)
+        if size >= 0 and len(chunk) > size:
+            self._chunks.insert(0, chunk[size:])
+            return chunk[:size]
+        return chunk
 
     def settimeout(self, timeout: float) -> None:
         self.timeouts.append(timeout)
@@ -82,6 +93,33 @@ class HttpClientTests(unittest.TestCase):
                     started_at=0.0,
                     timeout_seconds=0.01,
                 )
+
+    def test_read_response_body_rejects_declared_body_above_cap_before_read(self) -> None:
+        response = FakeResponse([b"{}"], content_length=9)
+
+        with self.assertRaises(RuntimeErrorInfo) as raised:
+            http_client._read_response_body(
+                response,
+                started_at=time.monotonic(),
+                timeout_seconds=1.0,
+                max_body_bytes=8,
+            )
+
+        self.assertEqual(raised.exception.machine_error_code, errors.INVALID_UPSTREAM_RESPONSE)
+        self.assertEqual(response.read_calls, 0)
+
+    def test_read_response_body_rejects_unknown_length_body_above_cap(self) -> None:
+        response = FakeResponse([b'{"payload":"', b"abcdef", b'"}'])
+
+        with self.assertRaises(RuntimeErrorInfo) as raised:
+            http_client._read_response_body(
+                response,
+                started_at=time.monotonic(),
+                timeout_seconds=1.0,
+                max_body_bytes=16,
+            )
+
+        self.assertEqual(raised.exception.machine_error_code, errors.INVALID_UPSTREAM_RESPONSE)
 
 
 if __name__ == "__main__":
