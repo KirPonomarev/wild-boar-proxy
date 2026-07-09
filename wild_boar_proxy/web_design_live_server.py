@@ -21342,6 +21342,10 @@ def build_handler(
             session = str((query.get("session") or [""])[0] or "")
             state = str((query.get("state") or [""])[0] or "")
             nonce = str((query.get("nonce") or [""])[0] or "")
+            provider_html = html.escape(provider, quote=True)
+            session_html = html.escape(session, quote=True) if session else "-"
+            state_html = html.escape(state, quote=True) if state else "-"
+            nonce_html = html.escape(nonce, quote=True) if nonce else "-"
             lines = [
                 "<!doctype html>",
                 '<html lang="ru"><head><meta charset="utf-8">',
@@ -21362,10 +21366,10 @@ def build_handler(
                 "<h1>Sandbox owner login surface</h1>",
                 "<p>Browser открыл owner-provided sandbox login URL. Auth completion остаётся owner-owned, а главное подтверждение подключения приходит обратно в основном web UI через onboarding packet и refresh.</p>",
                 "<dl>",
-                f"<dt>provider</dt><dd>{provider}</dd>",
-                f"<dt>session</dt><dd>{session or '-'}</dd>",
-                f"<dt>state</dt><dd>{state or '-'}</dd>",
-                f"<dt>nonce</dt><dd>{nonce or '-'}</dd>",
+                f"<dt>provider</dt><dd>{provider_html}</dd>",
+                f"<dt>session</dt><dd>{session_html}</dd>",
+                f"<dt>state</dt><dd>{state_html}</dd>",
+                f"<dt>nonce</dt><dd>{nonce_html}</dd>",
                 "</dl>",
                 "</main></body></html>",
             ]

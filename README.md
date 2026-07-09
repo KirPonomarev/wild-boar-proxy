@@ -52,23 +52,24 @@ completed evidence.
 
 ## Managed pool capacity
 
-The current local real-load contour has exercised a managed pool of 25 accounts.
+The canonical account-capacity target is 20 managed accounts.
 
 The default operating contour uses a 10-account active window.
-The wider managed pool remains available for ranking, replacement, and staged expansion.
+The wider managed pool is staged through 15 and then 20 accounts for ranking,
+replacement, and controlled expansion.
 
-This means the system does not need to route through all 25 accounts at the same time.
+This means the system does not need to route through all managed accounts at the same time.
 Instead, it selects a healthy working subset and can pull in additional managed accounts when active accounts degrade, hit quota limits, fail authentication, or are placed on hold.
 
 Account-level failures such as `401`, `429`, or quota exhaustion do not, by themselves, mean that the runtime architecture has failed.
 They mean the system has identified a problem with a specific account and should continue operating through the remaining healthy pool.
 
-This currently indicates 25-account managed-pool readiness for the experimental control contour.
+This currently keeps managed-pool readiness bound to the canonical 20-account ceiling.
 Canonical release-facing claims remain bound to committed evidence and closeout.
 
 In short:
 
-- `25 accounts` is the tested managed-pool capacity
+- `20 accounts` is the canonical managed-pool capacity target
 - `10 accounts` is the default active window
 - the remaining managed accounts provide replacement depth, resilience, and controlled scale headroom
 

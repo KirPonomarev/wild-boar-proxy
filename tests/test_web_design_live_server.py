@@ -11932,8 +11932,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         thread.start()
         try:
             base_url = f"http://127.0.0.1:{server.server_port}"
+            query = urllib.parse.urlencode(
+                {
+                    "provider": '<script>window.__WBP_XSS=1</script>',
+                    "session": TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "state": TEST_SANDBOX_LOGIN_STATE,
+                    "nonce": '" onclick="window.__WBP_XSS=2',
+                }
+            )
             html = fetch(
-                f"{base_url}/owner-login/sandbox?provider=sandbox&session={TEST_SANDBOX_LOGIN_SESSION_ID}&state={TEST_SANDBOX_LOGIN_STATE}&nonce=sandbox-nonce-test"
+                f"{base_url}/owner-login/sandbox?{query}"
             )
         finally:
             server.shutdown()
@@ -11943,6 +11951,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("Sandbox owner login surface", html)
         self.assertIn(TEST_SANDBOX_LOGIN_SESSION_ID, html)
         self.assertIn(TEST_SANDBOX_LOGIN_STATE, html)
+        self.assertNotIn("<script>window.__WBP_XSS=1</script>", html)
+        self.assertNotIn('" onclick="window.__WBP_XSS=2', html)
+        self.assertIn("&lt;script&gt;window.__WBP_XSS=1&lt;/script&gt;", html)
+        self.assertIn("&quot; onclick=&quot;window.__WBP_XSS=2", html)
 
     def test_account_connect_preflight_admits_clear_registry_identity(self) -> None:
         runner = MappingRunner(
