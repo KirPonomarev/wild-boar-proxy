@@ -164,6 +164,8 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         self.assertIn("transitionEpoch !== sourceTransitionEpoch", fixture)
         self.assertIn("const transitionEpoch = ++sourceTransitionEpoch", live)
         self.assertGreaterEqual(live.count("transitionEpoch !== sourceTransitionEpoch"), 2)
+        self.assertIn("function liveSourceRefreshIsCurrent(", js)
+        self.assertGreaterEqual(js.count("if (!liveSourceRefreshIsCurrent(refreshEpoch))"), 6)
 
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {

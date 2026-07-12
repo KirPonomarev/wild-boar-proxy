@@ -1191,14 +1191,21 @@ function renderCodexLaunchModes(launchModes, originalStatus, customStatus) {
 }
 
 async function refreshCodexLaunchModesPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [launchModes, originalStatus, customStatus] = await Promise.all([
       fetchCodexLaunchJson("api/codex/launch-modes"),
       fetchCodexLaunchJson("api/codex/original/status"),
       fetchCodexLaunchJson("api/codex/custom/status")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexLaunchModes(launchModes, originalStatus, customStatus);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexLaunchSetChip("red", "failed");
     codexLaunchSetText("codexLaunchModesSummary", `Launch modes fetch failed: ${error.message}`);
   }
@@ -4035,14 +4042,22 @@ function resetQuickStartVoicePasteBridge() {
 }
 
 async function refreshQuickStartVoiceDraftContract() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const response = await fetch("api/wbp/voice-draft", { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`voice draft contract http ${response.status}`);
     }
-    quickStartVoiceDraftState.serverPacket = await response.json();
+    const packet = await response.json();
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
+    quickStartVoiceDraftState.serverPacket = packet;
     renderQuickStartVoiceDraft();
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     quickStartVoiceDraftState.serverPacket = {
       schema_version: 1,
       packet_kind: "wbp_voice_draft_contract",
@@ -8146,14 +8161,21 @@ async function runCodexCustomDeepSeekLiveFormat() {
 }
 
 async function refreshCodexCustomModelsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [registry, compat] = await Promise.all([
       fetchCodexLaunchJson("api/codex/custom/model-selector"),
       fetchCodexLaunchJson("api/codex/custom/api-compat")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomModels(registry, compat);
     await refreshCodexCustomApiActionGate();
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomModelsSetChip("red", "failed");
     codexCustomModelsSetText("codexCustomModelsSummary", `Dual-lane selector fetch failed: ${error.message}`);
     codexCustomModelsSetText("codexCustomApiCompat", "fetch failed");
@@ -8330,13 +8352,20 @@ function renderCodexCustomAccountDryRun(packet) {
 }
 
 async function refreshCodexCustomAccountsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [accounts, selection] = await Promise.all([
       fetchCodexLaunchJson("api/codex/custom/accounts"),
       fetchCodexLaunchJson("api/codex/custom/account-selection")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomAccounts(accounts, selection);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomAccountsSetChip("red", "failed");
     codexCustomAccountsSetText("codexCustomAccountsSummary", `Account truth fetch failed: ${error.message}`);
     codexCustomAccountsSetText("codexCustomAccountsSelection", "fetch failed");
@@ -8841,10 +8870,17 @@ function renderCodexCustomTranscript(packet) {
 }
 
 async function refreshCodexCustomSessionsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const packet = await fetchCodexLaunchJson("api/codex/custom/sessions");
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomSessionList(packet);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomSessionsSetChip("red", "failed");
     codexCustomSessionsSetText("codexCustomSessionsSummary", `Session fetch failed: ${error.message}`);
   }
@@ -11407,17 +11443,24 @@ function operatorRenderResult(packet) {
 }
 
 async function refreshOperatorPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [status, models, transcript] = await Promise.all([
       fetchOperatorJson("api/operator/status"),
       fetchOperatorJson("api/operator/models"),
       fetchOperatorJson("api/operator/transcript")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     operatorRenderStatus(status);
     operatorRenderModels(models);
     operatorRenderTranscript(transcript);
     operatorSetText("operatorRefreshState", "readonly refresh complete");
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     operatorSetChip("red", "failed");
     operatorSetText("operatorStatusLine", `Operator surface fetch failed: ${error.message}`);
     operatorSetText("operatorMachineCode", "OPERATOR_SURFACE_FETCH_FAILED");
@@ -17928,6 +17971,10 @@ function renderSnapshot(snapshot) {
 
 async function setFixtureState(stateId, updateUrl = false) {
   const transitionEpoch = ++sourceTransitionEpoch;
+  const desktop = document.querySelector(".desktop");
+  if (desktop) {
+    desktop.dataset.source = "fixture";
+  }
   setSourceCopy("fixture");
   const state = canonicalState(stateId);
   const fixture = await loadFixture(state);
@@ -18047,6 +18094,11 @@ function refreshServerBackedPanels() {
   refreshCodexCustomAccountsPanel();
   refreshCodexCustomSessionsPanel();
   refreshOperatorPanel();
+}
+
+function liveSourceRefreshIsCurrent(refreshEpoch) {
+  return refreshEpoch === sourceTransitionEpoch
+    && document.querySelector(".desktop")?.dataset?.source === "live";
 }
 
 async function bootstrapInitialSource(initialSource, initialState) {
