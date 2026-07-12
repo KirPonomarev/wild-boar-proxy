@@ -491,6 +491,7 @@ let onboardLoginWindowRef = null;
 let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
 let sourceTransitionEpoch = 0;
+let sourceTransitionAbortController = null;
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
 let reviewPanelBusy = false;
@@ -645,9 +646,9 @@ function currentSettingsSection() {
   return document.querySelector(".desktop").dataset.settingsSection || "hub";
 }
 
-async function loadFixture(stateId) {
+async function loadFixture(stateId, signal = null) {
   try {
-    const response = await fetch(`fixtures/${stateId}.json`, { cache: "no-store" });
+    const response = await fetch(`fixtures/${stateId}.json`, { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`fixture http ${response.status}`);
     }
@@ -661,9 +662,9 @@ async function loadFixture(stateId) {
   }
 }
 
-async function loadLiveReadonly() {
+async function loadLiveReadonly(signal = null) {
   try {
-    const response = await fetch("api/live-readonly", { cache: "no-store" });
+    const response = await fetch("api/live-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`live http ${response.status}`);
     }
@@ -697,9 +698,9 @@ async function loadLiveReadonly() {
   }
 }
 
-async function loadAccountsReadonly() {
+async function loadAccountsReadonly(signal = null) {
   try {
-    const response = await fetch("api/accounts-readonly", { cache: "no-store" });
+    const response = await fetch("api/accounts-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`accounts http ${response.status}`);
     }
@@ -740,9 +741,9 @@ async function loadAccountsReadonly() {
   }
 }
 
-async function loadApiConnectionsReadonly() {
+async function loadApiConnectionsReadonly(signal = null) {
   try {
-    const response = await fetch("api/api-connections-readonly", { cache: "no-store" });
+    const response = await fetch("api/api-connections-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`api-connections http ${response.status}`);
     }
@@ -784,9 +785,9 @@ async function loadApiConnectionsReadonly() {
   }
 }
 
-async function loadActionMetadata() {
+async function loadActionMetadata(signal = null) {
   try {
-    const response = await fetch("api/actions", { cache: "no-store" });
+    const response = await fetch("api/actions", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`metadata http ${response.status}`);
     }
@@ -815,16 +816,16 @@ async function ensureActionMetadataLoaded() {
   await actionMetadataLoadPromise;
 }
 
-async function fetchOperatorJson(path) {
-  const response = await fetch(path, { cache: "no-store" });
+async function fetchOperatorJson(path, signal = sourceTransitionAbortController?.signal) {
+  const response = await fetch(path, { cache: "no-store", signal });
   if (!response.ok) {
     throw new Error(`${path} http ${response.status}`);
   }
   return response.json();
 }
 
-async function fetchCodexLaunchJson(path) {
-  const response = await fetch(path, { cache: "no-store" });
+async function fetchCodexLaunchJson(path, signal = sourceTransitionAbortController?.signal) {
+  const response = await fetch(path, { cache: "no-store", signal });
   if (!response.ok) {
     throw new Error(`${path} http ${response.status}`);
   }
@@ -4044,7 +4045,10 @@ function resetQuickStartVoicePasteBridge() {
 async function refreshQuickStartVoiceDraftContract() {
   const refreshEpoch = sourceTransitionEpoch;
   try {
-    const response = await fetch("api/wbp/voice-draft", { cache: "no-store" });
+    const response = await fetch("api/wbp/voice-draft", {
+      cache: "no-store",
+      signal: sourceTransitionAbortController?.signal,
+    });
     if (!response.ok) {
       throw new Error(`voice draft contract http ${response.status}`);
     }
@@ -17971,13 +17975,15 @@ function renderSnapshot(snapshot) {
 
 async function setFixtureState(stateId, updateUrl = false) {
   const transitionEpoch = ++sourceTransitionEpoch;
+  sourceTransitionAbortController?.abort();
+  sourceTransitionAbortController = typeof AbortController === "function" ? new AbortController() : null;
   const desktop = document.querySelector(".desktop");
   if (desktop) {
     desktop.dataset.source = "fixture";
   }
   setSourceCopy("fixture");
   const state = canonicalState(stateId);
-  const fixture = await loadFixture(state);
+  const fixture = await loadFixture(state, sourceTransitionAbortController?.signal);
   if (transitionEpoch !== sourceTransitionEpoch) {
     return null;
   }
@@ -18004,23 +18010,26 @@ async function setFixtureState(stateId, updateUrl = false) {
 
 async function setLiveReadonly(updateUrl = false) {
   const transitionEpoch = ++sourceTransitionEpoch;
+  sourceTransitionAbortController?.abort();
+  sourceTransitionAbortController = typeof AbortController === "function" ? new AbortController() : null;
+  const signal = sourceTransitionAbortController?.signal;
   setLiveReadonlyPendingUi();
   if (currentScreen() === "overview") {
     renderOverviewLivePendingState();
   }
-  await loadActionMetadata();
+  await loadActionMetadata(signal);
   if (transitionEpoch !== sourceTransitionEpoch) {
     return null;
   }
   applyActionAvailability();
   const snapshot = currentScreen() === "quick-start"
     ? {
-      accounts: await loadAccountsReadonly(),
-      apiConnections: await loadApiConnectionsReadonly()
+      accounts: await loadAccountsReadonly(signal),
+      apiConnections: await loadApiConnectionsReadonly(signal)
     }
     : (currentScreen() === "accounts"
-      ? await loadAccountsReadonly()
-      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly()));
+      ? await loadAccountsReadonly(signal)
+      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly(signal) : await loadLiveReadonly(signal)));
   if (transitionEpoch !== sourceTransitionEpoch) {
     return null;
   }

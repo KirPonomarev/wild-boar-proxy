@@ -166,6 +166,8 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         self.assertGreaterEqual(live.count("transitionEpoch !== sourceTransitionEpoch"), 2)
         self.assertIn("function liveSourceRefreshIsCurrent(", js)
         self.assertGreaterEqual(js.count("if (!liveSourceRefreshIsCurrent(refreshEpoch))"), 6)
+        self.assertGreaterEqual(js.count("sourceTransitionAbortController?.abort()"), 2)
+        self.assertIn("signal: sourceTransitionAbortController?.signal", js)
 
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
