@@ -20,7 +20,10 @@ from wild_boar_proxy.review_bridge_command_bus import (
     execute_review_command,
     review_allowlist_metadata,
 )
-from wild_boar_proxy.review_bridge_exact_text_apply import ReviewExactTextApplyResult
+from wild_boar_proxy.review_bridge_exact_text_apply import (
+    ReviewExactTextApplyResult,
+    _write_text_exact_atomic,
+)
 from wild_boar_proxy.review_bridge_packet_import import ReviewImportContext
 from wild_boar_proxy.review_bridge_session_store import ReviewQueryBridge, ReviewSessionStore
 
@@ -78,6 +81,19 @@ class ReviewBridgeCommandBusTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = ReviewSessionStore()
         self.query = ReviewQueryBridge(self.store)
+
+    def test_exact_text_writer_uses_hardened_store_and_preserves_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "scene.md"
+            target.write_text("old\n", encoding="utf-8")
+            target.chmod(0o640)
+
+            with patch(
+                "wild_boar_proxy.review_bridge_exact_text_apply.write_state_text"
+            ) as write_state_text:
+                _write_text_exact_atomic(target, "new\n")
+
+            write_state_text.assert_called_once_with(target, "new\n", mode=0o640)
 
     def test_allowlist_is_explicit_and_apply_is_reserved(self) -> None:
         self.assertEqual(
