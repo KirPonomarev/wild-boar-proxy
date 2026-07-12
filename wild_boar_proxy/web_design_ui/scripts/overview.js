@@ -18028,6 +18028,25 @@ async function refreshCurrentSource() {
   }
 }
 
+function refreshServerBackedPanels() {
+  refreshCodexLaunchModesPanel();
+  refreshCodexCustomModelsPanel();
+  refreshCodexCustomAccountsPanel();
+  refreshCodexCustomSessionsPanel();
+  refreshOperatorPanel();
+}
+
+async function bootstrapInitialSource(initialSource, initialState) {
+  if (initialSource === "live") {
+    await setLiveReadonly(false);
+    refreshQuickStartVoiceDraftContract();
+    refreshServerBackedPanels();
+    return;
+  }
+  applyActionAvailability();
+  await setFixtureState(initialState, false);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const sourcePicker = document.getElementById("sourcePicker");
   const picker = document.getElementById("statePicker");
@@ -18044,12 +18063,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft());
   document.getElementById("quickStartVoicePastePreflightAction")?.addEventListener("click", () => runQuickStartVoicePastePreflight());
   document.getElementById("quickStartVoicePasteCustomAction")?.addEventListener("click", () => runQuickStartVoicePasteCustom());
-  await ensureActionMetadataLoaded();
-  applyActionAvailability();
   setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
   renderQuickStartVoiceDraft();
-  refreshQuickStartVoiceDraftContract();
   applyCodexRouteSelection(readStoredCodexRouteSelection());
   sourcePicker.value = initialSource;
   picker.value = initialState;
@@ -18231,16 +18247,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
   refresh.addEventListener("click", () => refreshCurrentSource());
-  if (initialSource === "live") {
-    setLiveReadonly(false);
-  } else {
-    setFixtureState(initialState, false);
-  }
-  refreshCodexLaunchModesPanel();
-  refreshCodexCustomModelsPanel();
-  refreshCodexCustomAccountsPanel();
-  refreshCodexCustomSessionsPanel();
-  refreshOperatorPanel();
+  await bootstrapInitialSource(initialSource, initialState);
   reviewEnsurePacketInputSeed();
   renderReviewPanel();
   if (initialScreen === "overview" && initialSource === "live") {

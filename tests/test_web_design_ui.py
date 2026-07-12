@@ -138,6 +138,20 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_initial_fixture_bootstrap_does_not_start_server_backed_panels(self) -> None:
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        bootstrap_start = js.index("async function bootstrapInitialSource(")
+        bootstrap_end = js.index("\n}\n", bootstrap_start) + 2
+        bootstrap = js[bootstrap_start:bootstrap_end]
+        fixture_branch = bootstrap.split('if (initialSource === "live")', 1)[0]
+        self.assertNotIn("ensureActionMetadataLoaded", fixture_branch)
+        self.assertNotIn("refreshQuickStartVoiceDraftContract", fixture_branch)
+        self.assertNotIn("refreshServerBackedPanels", fixture_branch)
+        self.assertIn("setFixtureState(initialState, false)", bootstrap)
+        self.assertIn("await setLiveReadonly(false)", bootstrap)
+        self.assertIn("refreshQuickStartVoiceDraftContract()", bootstrap)
+        self.assertIn("refreshServerBackedPanels()", bootstrap)
+
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
             "healthy",
