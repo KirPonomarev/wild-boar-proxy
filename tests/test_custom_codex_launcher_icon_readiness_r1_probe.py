@@ -74,6 +74,10 @@ class CustomCodexLauncherIconReadinessR1ProbeTests(unittest.TestCase):
         self.assertEqual(summary["final_status"], TARGET_STATUS)
         self.assertFalse(summary["icon_shipped"])
         self.assertFalse(summary["safe_wbp_managed_entrypoint_proven"])
+        self.assertEqual(
+            packets["launcher_target_resolution_packet.json"]["launch_argv"][:3],
+            ["open", "-n", "/Applications/ChatGPT.app"],
+        )
         self.assertEqual(independent["status"], "ok")
         self.assertEqual(independent["truthful_outcome"], TARGET_STATUS)
         self.assertTrue(independent["icon_path_inert_display_only"])

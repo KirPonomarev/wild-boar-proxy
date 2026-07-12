@@ -222,7 +222,7 @@ def build_launcher_target_resolution_packet() -> dict[str, Any]:
     validation = validate_persistent_launcher_dry_run_config(config)
     ok = (
         validation["status"] == "ok"
-        and command["argv"][:3] == ["open", "-n", "/Applications/Codex.app"]
+        and command["argv"][:3] == ["open", "-n", "/Applications/ChatGPT.app"]
         and command["launcher_path"] == str(Path(paths["launcher_path"]).expanduser().resolve(strict=False))
     )
     return packet(
