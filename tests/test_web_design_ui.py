@@ -2180,7 +2180,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn('.desktop[data-screen="quick-start"] .main-header', css)
         self.assertIn("position: fixed", css)
         self.assertIn("z-index: 120", css)
-        self.assertIn("padding-top: 112px", css)
+        self.assertIn("padding-top: 24px", css)
         self.assertIn("async function refreshCurrentSource()", js)
         self.assertIn('setRefreshButtonFeedback("busy", "Обновляю...", { disabled: true })', js)
         self.assertIn('setRefreshButtonFeedback("success", "Обновлено", { resetAfterMs: 1000 })', js)
@@ -3095,7 +3095,7 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn("overflow: hidden;", alias_preview_css)
         self.assertIn("text-overflow: ellipsis;", alias_preview_css)
 
-    def test_quick_start_alias_layout_fits_at_1024(self) -> None:
+    def test_quick_start_layout_fits_supported_viewports(self) -> None:
         node_bin = Path(
             os.environ.get("WBP_NODE_BIN")
             or Path.home()
@@ -3129,7 +3129,8 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         if chrome_bin is None:
             self.skipTest("Chrome or Chromium unavailable for layout probe")
 
-        page_url = (WEB_DESIGN_UI / "index.html").as_uri() + "?source=fixture&screen=quick-start"
+        page_base_url = (WEB_DESIGN_UI / "index.html").as_uri()
+        page_url = page_base_url + "?source=fixture&screen=quick-start"
         script = f"""
 const {{ chromium }} = require("playwright");
 
@@ -3142,7 +3143,7 @@ const {{ chromium }} = require("playwright");
     const page = await browser.newPage({{ viewport: {{ width: 1024, height: 768 }} }});
     await page.goto({json.dumps(page_url)}, {{ waitUntil: "domcontentloaded" }});
     await page.waitForSelector(".quick-start-alias-card");
-    const metrics = await page.evaluate(() => Object.fromEntries([
+    const aliasMetrics = await page.evaluate(() => Object.fromEntries([
       ".quick-start-grid",
       ".quick-start-route-card",
       ".quick-start-alias-card",
@@ -3151,13 +3152,115 @@ const {{ chromium }} = require("playwright");
       const node = document.querySelector(selector);
       return [selector, {{ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }}];
     }})));
-    const overflowing = Object.entries(metrics)
+    const overflowing = Object.entries(aliasMetrics)
       .filter(([, metric]) => metric.scrollWidth > metric.clientWidth)
       .map(([selector]) => selector);
     if (overflowing.length) {{
-      throw new Error(`quick-start overflow at 1024px: ${{JSON.stringify({{ overflowing, metrics }})}}`);
+      throw new Error(`quick-start overflow at 1024px: ${{JSON.stringify({{ overflowing, aliasMetrics }})}}`);
     }}
-    console.log(JSON.stringify({{ status: "ok", viewport: "1024x768", metrics }}));
+
+    async function compactMetrics(width, height) {{
+      await page.setViewportSize({{ width, height }});
+      return page.evaluate(() => {{
+        const rect = (selector) => {{
+          const node = document.querySelector(selector);
+          const box = node.getBoundingClientRect();
+          return {{
+            display: getComputedStyle(node).display,
+            height: Math.round(box.height),
+            top: Math.round(box.top)
+          }};
+        }};
+        return {{
+          brand: rect(".brand"),
+          footer: rect(".sidebar-footer"),
+          preview: rect(".preview-instrumentation"),
+          traffic: rect(".traffic"),
+          header: rect(".main-header"),
+          sidebar: rect(".sidebar"),
+          nav: rect(".nav"),
+          grid: rect(".quick-start-grid"),
+          content: Object.fromEntries([
+            ".main",
+            ".quick-start-grid",
+            ".quick-start-route-card",
+            ".quick-start-alias-card",
+            ".quick-start-alias-grid"
+          ].map((selector) => {{
+            const node = document.querySelector(selector);
+            return [selector, {{ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }}];
+          }})),
+          innerWidth,
+          pageScrollWidth: document.documentElement.scrollWidth
+        }};
+      }});
+    }}
+
+    const compact900 = await compactMetrics(900, 768);
+    const compact420 = await compactMetrics(420, 800);
+    const compact320 = await compactMetrics(320, 800);
+    for (const [viewport, metrics] of Object.entries({{
+      "900x768": compact900,
+      "420x800": compact420,
+      "320x800": compact320
+    }})) {{
+      const isMobile = viewport !== "900x768";
+      const failures = [];
+      for (const selector of ["brand", "traffic"]) {{
+        if (metrics[selector].display !== "none") failures.push(`${{selector}}_visible`);
+      }}
+      if (metrics.footer.display === "none") failures.push("footer_controls_hidden");
+      if (metrics.preview.display === "none") failures.push("preview_controls_hidden");
+      if (metrics.header.top + metrics.header.height > metrics.nav.top) failures.push("header_overlaps_nav");
+      if (metrics.sidebar.height > (isMobile ? 290 : 240)) failures.push("sidebar_too_tall");
+      if (metrics.nav.height > (isMobile ? 150 : 100)) failures.push("nav_too_tall");
+      if (metrics.grid.top > (isMobile ? 360 : 310)) failures.push("grid_below_first_view");
+      if (metrics.pageScrollWidth > metrics.innerWidth) failures.push("horizontal_overflow");
+      for (const [selector, width] of Object.entries(metrics.content)) {{
+        if (width.scrollWidth > width.clientWidth) failures.push(`${{selector}}_overflow`);
+      }}
+      if (failures.length) {{
+        throw new Error(`quick-start compact layout failed at ${{viewport}}: ${{JSON.stringify({{ failures, metrics }})}}`);
+      }}
+    }}
+
+    const sidebarScreens = {{}};
+    for (const screen of ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings"]) {{
+      await page.setViewportSize({{ width: 420, height: 800 }});
+      await page.goto(`${{{json.dumps(page_base_url)}}}?source=fixture&screen=${{screen}}`, {{ waitUntil: "domcontentloaded" }});
+      const metrics = await page.evaluate(() => {{
+        const sidebar = document.querySelector(".sidebar");
+        const nav = document.querySelector(".nav");
+        const footer = document.querySelector(".sidebar-footer");
+        const preview = document.querySelector(".preview-instrumentation");
+        return {{
+          sidebar: {{ clientWidth: sidebar.clientWidth, scrollWidth: sidebar.scrollWidth }},
+          nav: {{ clientWidth: nav.clientWidth, scrollWidth: nav.scrollWidth }},
+          footerDisplay: getComputedStyle(footer).display,
+          previewDisplay: getComputedStyle(preview).display
+        }};
+      }});
+      const failures = [];
+      if (metrics.sidebar.scrollWidth > metrics.sidebar.clientWidth) failures.push("sidebar_overflow");
+      if (metrics.nav.scrollWidth > metrics.nav.clientWidth) failures.push("nav_overflow");
+      if (metrics.footerDisplay === "none") failures.push("footer_controls_hidden");
+      if (metrics.previewDisplay === "none") failures.push("preview_controls_hidden");
+      if (failures.length) {{
+        throw new Error(`compact sidebar failed on ${{screen}}: ${{JSON.stringify({{ failures, metrics }})}}`);
+      }}
+      sidebarScreens[screen] = metrics;
+    }}
+
+    console.log(JSON.stringify({{
+      status: "ok",
+      viewports: {{
+        "1024x768": aliasMetrics,
+        "900x768": compact900,
+        "420x800": compact420,
+        "320x800": compact320
+      }},
+      sidebarScreens
+    }}));
   }} finally {{
     await browser.close();
   }}
@@ -3180,7 +3283,14 @@ const {{ chromium }} = require("playwright");
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         packet = json.loads(result.stdout.strip())
         self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["viewport"], "1024x768")
+        self.assertEqual(
+            sorted(packet["viewports"]),
+            ["1024x768", "320x800", "420x800", "900x768"],
+        )
+        self.assertEqual(
+            sorted(packet["sidebarScreens"]),
+            ["accounts", "api-connections", "diagnostics", "overview", "quick-start", "settings"],
+        )
 
     def test_c7_stale_agent_alias_binding_does_not_bleed_between_sessions(self) -> None:
         script = r"""
