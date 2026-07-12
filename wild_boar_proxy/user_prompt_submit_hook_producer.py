@@ -1311,6 +1311,14 @@ def _path_has_suffix(path: str, suffix: str) -> bool:
     return path == suffix or path.endswith("/" + suffix)
 
 
+def _command_uses_wbp_isolated_user_data(command: str) -> bool:
+    return (
+        "--user-data-dir=" in command
+        and "WildBoarProxy/CodexProfiles/" in command
+        and "/electron-user-data" in command
+    )
+
+
 def _command_class(executable_path: str, command: str = "") -> str:
     if _path_has_suffix(
         executable_path,
@@ -1324,13 +1332,27 @@ def _command_class(executable_path: str, command: str = "") -> str:
         return "wbp_clean_app_root"
     if "/Codex WBP Clean.app/Contents/Frameworks/" in executable_path:
         return "wbp_clean_app_helper"
-    if _path_has_suffix(executable_path, "Applications/Codex.app/Contents/MacOS/Codex"):
-        return "stock_codex_app_root"
     if _path_has_suffix(
         executable_path,
-        "Codex.app/Contents/Resources/codex",
+        "Applications/ChatGPT.app/Contents/Resources/codex",
     ) and command.startswith(executable_path + " app-server"):
-        return "codex_app_server"
+        return "official_codex_app_server"
+    if _path_has_suffix(
+        executable_path,
+        "Applications/Codex.app/Contents/Resources/codex",
+    ) and command.startswith(executable_path + " app-server"):
+        return "official_codex_app_server"
+    if _path_has_suffix(
+        executable_path,
+        "Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+    ):
+        if _command_uses_wbp_isolated_user_data(command):
+            return "wbp_isolated_official_app_root"
+        return "stock_codex_app_root"
+    if _path_has_suffix(executable_path, "Applications/Codex.app/Contents/MacOS/Codex"):
+        if _command_uses_wbp_isolated_user_data(command):
+            return "wbp_isolated_official_app_root"
+        return "stock_codex_app_root"
     if "wild_boar_proxy.user_prompt_submit_hook_producer" in command:
         return "wbp_hook_producer"
     if "python" in executable_path:
@@ -1359,9 +1381,17 @@ def _hook_parent_process_observation() -> dict[str, Any]:
         if parent_pid <= 0 or parent_pid == pid:
             break
         pid = parent_pid
-    clean_app_class_present = any(item.startswith("wbp_clean_app_") for item in classes)
-    clean_app_server_present = "wbp_clean_app_server" in classes
-    clean_app_root_present = "wbp_clean_app_root" in classes
+    isolated_official_root_present = "wbp_isolated_official_app_root" in classes
+    clean_app_class_present = isolated_official_root_present or any(
+        item.startswith("wbp_clean_app_") for item in classes
+    )
+    clean_app_server_present = (
+        "wbp_clean_app_server" in classes
+        or "official_codex_app_server" in classes
+    )
+    clean_app_root_present = (
+        "wbp_clean_app_root" in classes or isolated_official_root_present
+    )
     digest = _sha256_text(
         json.dumps(
             {

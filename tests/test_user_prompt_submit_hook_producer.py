@@ -329,6 +329,27 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             "wbp_clean_app_server",
         )
 
+    def test_parent_process_classification_binds_official_app_to_wbp_profile(self) -> None:
+        root = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+        server = "/Applications/ChatGPT.app/Contents/Resources/codex"
+        custom_command = (
+            f"{root} --user-data-dir=/Users/me/Library/Application Support/"
+            "WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+        )
+
+        self.assertEqual(
+            producer._command_class(root, custom_command),
+            "wbp_isolated_official_app_root",
+        )
+        self.assertEqual(
+            producer._command_class(server, f"{server} app-server --analytics-default-enabled"),
+            "official_codex_app_server",
+        )
+        self.assertEqual(
+            producer._command_class(root, root),
+            "stock_codex_app_root",
+        )
+
     def test_install_apply_writes_profile_local_hooks_json_and_script_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
