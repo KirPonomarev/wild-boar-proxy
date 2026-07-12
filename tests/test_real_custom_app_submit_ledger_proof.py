@@ -123,6 +123,24 @@ def _process_inventory(*, stock_only: bool = False, missing_server: bool = False
     }
 
 
+def _official_shared_bundle_inventory() -> dict[str, object]:
+    custom_root = (
+        "222 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT "
+        "--user-data-dir=/Users/k/Library/Application Support/WildBoarProxy/"
+        "CodexProfiles/wbp-custom-main/electron-user-data"
+    )
+    stock_root = "111 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+    app_server = (
+        "333 /Applications/ChatGPT.app/Contents/Resources/codex "
+        "app-server --analytics-default-enabled"
+    )
+    return {
+        "sample": [stock_root, custom_root, app_server],
+        "custom_process_lines": [custom_root],
+        "default_process_lines": [stock_root],
+    }
+
+
 def _packet(
     *,
     ledger: dict[str, object] | None = None,
@@ -163,6 +181,16 @@ def _assert_no_raw_prompt_route_or_product(
 
 
 class RealCustomAppSubmitLedgerProofTests(unittest.TestCase):
+    def test_official_shared_bundle_with_isolated_profile_proves_custom_instance(self) -> None:
+        packet = _packet(process_inventory=_official_shared_bundle_inventory())
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["wbp_clean_app_process_observed"])
+        self.assertTrue(packet["wbp_clean_app_server_process_observed"])
+        self.assertTrue(packet["stock_codex_app_process_observed"])
+        self.assertTrue(packet["custom_app_submit_proven"])
+        self.assertEqual(packet["blocking_reasons"], [])
+
     def test_positive_clean_app_parent_chain_and_fresh_ledger_proves_gate_only(self) -> None:
         packet = _packet()
 

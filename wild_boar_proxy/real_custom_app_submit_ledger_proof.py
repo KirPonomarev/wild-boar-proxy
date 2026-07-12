@@ -128,6 +128,36 @@ def _process_lines(process_inventory: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _line_is_wbp_isolated_native_root(line: str) -> bool:
+    return (
+        any(
+            root in line
+            for root in (
+                "ChatGPT.app/Contents/MacOS/ChatGPT",
+                "Codex.app/Contents/MacOS/Codex",
+            )
+        )
+        and "--user-data-dir=" in line
+        and "WildBoarProxy/CodexProfiles/" in line
+        and "/electron-user-data" in line
+        and "/Contents/Frameworks/" not in line
+    )
+
+
+def _line_is_native_root(line: str) -> bool:
+    return (
+        any(
+            root in line
+            for root in (
+                "ChatGPT.app/Contents/MacOS/ChatGPT",
+                "Codex.app/Contents/MacOS/Codex",
+                "Codex WBP Clean.app/Contents/MacOS/Codex",
+            )
+        )
+        and "/Contents/Frameworks/" not in line
+    )
+
+
 def _process_inventory_observation(
     process_inventory: Mapping[str, Any] | None,
     *,
@@ -136,15 +166,20 @@ def _process_inventory_observation(
     inventory = _mapping(process_inventory)
     lines = _process_lines(inventory)
     wbp_root = any(
-        "Codex WBP Clean.app/Contents/MacOS/Codex" in line for line in lines
+        "Codex WBP Clean.app/Contents/MacOS/Codex" in line
+        or _line_is_wbp_isolated_native_root(line)
+        for line in lines
     )
-    wbp_server = any(
+    wbp_server = wbp_root and any(
         "Codex WBP Clean.app/Contents/Resources/codex app-server" in line
+        or "ChatGPT.app/Contents/Resources/codex app-server" in line
+        or "Codex.app/Contents/Resources/codex app-server" in line
         for line in lines
     )
     stock_root = any(
-        "Codex.app/Contents/MacOS/Codex" in line
+        _line_is_native_root(line)
         and "Codex WBP Clean.app/" not in line
+        and not _line_is_wbp_isolated_native_root(line)
         for line in lines
     )
     return {
