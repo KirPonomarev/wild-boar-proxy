@@ -39,6 +39,34 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("file://", html + css + js)
         self.assertNotIn("кабан дизайн iosevka clean", html + css + js)
 
+    def test_small_text_color_tokens_meet_wcag_contrast(self) -> None:
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        tokens = dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6});", css))
+
+        def luminance(hex_color: str) -> float:
+            channels = [int(hex_color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+            linear = [
+                channel / 12.92
+                if channel <= 0.04045
+                else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in channels
+            ]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        def contrast(foreground: str, background: str) -> float:
+            first = luminance(foreground)
+            second = luminance(background)
+            return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+        for foreground_name in ("secondary", "muted"):
+            for background_name in ("surface", "canvas", "surface-muted"):
+                ratio = contrast(tokens[foreground_name], tokens[background_name])
+                self.assertGreaterEqual(
+                    ratio,
+                    4.5,
+                    f"--{foreground_name} on --{background_name}: {ratio:.2f}:1",
+                )
+
     def test_referenced_phosphor_png_assets_exist_and_tokens_are_declared(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
