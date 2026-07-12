@@ -12403,6 +12403,16 @@ function onboardLoginWindowHtml(model) {
   <script>
     const MODEL = ${encodedModel};
     const ACTION_URL = MODEL.serverOrigin ? MODEL.serverOrigin + "/api/action" : "api/action";
+    const OPENER_ORIGIN = (() => {
+      try {
+        const parsed = new URL(MODEL.serverOrigin || "");
+        return ["http:", "https:"].includes(parsed.protocol) && parsed.origin === MODEL.serverOrigin
+          ? parsed.origin
+          : "";
+      } catch (_originError) {
+        return "";
+      }
+    })();
     let requestInFlight = false;
     const safeText = (value, fallback = "-") => {
       if (typeof value !== "string") return fallback;
@@ -12411,8 +12421,8 @@ function onboardLoginWindowHtml(model) {
     };
     const postToOpener = (payload) => {
       try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: "wbp-onboard-login-payload", payload }, "*");
+        if (OPENER_ORIGIN && window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: "wbp-onboard-login-payload", payload }, OPENER_ORIGIN);
         }
       } catch (_openerError) {
       }
@@ -14815,24 +14825,75 @@ function renderApiCredentialSetupLane(payload = lastApiCredentialActionPayload, 
   }
 }
 
+const ONBOARD_LOGIN_MESSAGE_ACTIONS = new Set([
+  "account_login_status",
+  "account_login_complete",
+  "account_login_cancel",
+]);
+let lastOnboardLoginMessageKey = "";
+
+function trustedOnboardLoginMessagePayload(event, loginWindow, activeSession) {
+  if (
+    !event
+    || typeof window === "undefined"
+    || typeof window.location?.origin !== "string"
+    || !window.location.origin
+    || window.location.origin === "null"
+    || event.origin !== window.location.origin
+    || !loginWindow
+    || loginWindow.closed === true
+    || event.source !== loginWindow
+  ) {
+    return null;
+  }
+  const envelope = event.data;
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+    return null;
+  }
+  if (envelope.type !== "wbp-onboard-login-payload") {
+    return null;
+  }
+  const payload = envelope.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  if (!ONBOARD_LOGIN_MESSAGE_ACTIONS.has(payload.ui_action)) {
+    return null;
+  }
+  const activeSessionId = typeof activeSession?.sessionId === "string" ? activeSession.sessionId : "";
+  const payloadSessionId = onboardLoginSessionIdFromPayload(payload);
+  if (!activeSessionId || payloadSessionId !== activeSessionId) {
+    return null;
+  }
+  return payload;
+}
+
+function onboardLoginMessageKey(payload) {
+  return [
+    onboardLoginSessionIdFromPayload(payload),
+    payload?.ui_action || "",
+    payload?.result?.status || "",
+    payload?.result?.machine_error_code || "",
+    payload?.result?.next_action || "",
+  ].join("|");
+}
+
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("message", (event) => {
-    const payload = event?.data;
-    if (!payload || typeof payload !== "object") {
+    const payload = trustedOnboardLoginMessagePayload(
+      event,
+      onboardLoginWindowRef,
+      activeOnboardLoginSession,
+    );
+    if (!payload) {
       return;
     }
-    if (payload.type === "wbp-onboard-login-payload" && payload.payload) {
-      handleActionPayload(payload.payload, onboardLoginWindowRef).catch(() => {});
+    const messageKey = onboardLoginMessageKey(payload);
+    if (messageKey === lastOnboardLoginMessageKey) {
       return;
     }
-    if (payload.type === "wbp-onboard-login-command") {
-      const uiAction = typeof payload.uiAction === "string" ? payload.uiAction : "";
-      const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
-      if (!uiAction || !sessionId) {
-        return;
-      }
-      runUiAction(uiAction, { session_id: sessionId }).catch(() => {});
-    }
+    lastOnboardLoginMessageKey = messageKey;
+    handleActionPayload(payload, onboardLoginWindowRef).catch(() => {});
   });
 }
 

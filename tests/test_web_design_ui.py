@@ -60,6 +60,84 @@ class WebDesignUiTests(unittest.TestCase):
                 block[:240],
             )
 
+    def test_onboard_login_message_bridge_rejects_forged_messages(self) -> None:
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        self.assertNotIn("wbp-onboard-login-command", js)
+        self.assertNotIn(
+            'postMessage({ type: "wbp-onboard-login-payload", payload }, "*")',
+            js,
+        )
+        self.assertIn("event.origin !== window.location.origin", js)
+        self.assertIn("event.source !== loginWindow", js)
+
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    documentElement: { lang: "ru" },
+    getElementById() { return null; },
+    createElement() { return { addEventListener() {}, append() {}, replaceChildren() {} }; },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  navigator: { language: "ru-RU" },
+  window: {
+    location: { origin: "http://127.0.0.1:8788", search: "", href: "http://127.0.0.1:8788/" },
+    history: { replaceState() {} },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const popup = { closed: false };
+const session = { sessionId: "session-123" };
+const validPayload = {
+  ui_action: "account_login_status",
+  result: { data: { login_bridge: { session_id: "session-123" } } }
+};
+const validEvent = {
+  origin: "http://127.0.0.1:8788",
+  source: popup,
+  data: { type: "wbp-onboard-login-payload", payload: validPayload }
+};
+if (sandbox.trustedOnboardLoginMessagePayload(validEvent, popup, session) !== validPayload) {
+  throw new Error("valid onboarding popup payload must be accepted");
+}
+for (const forged of [
+  { ...validEvent, origin: "https://attacker.example" },
+  { ...validEvent, origin: "null" },
+  { ...validEvent, source: {} },
+  { ...validEvent, data: { type: "unknown", payload: validPayload } },
+  { ...validEvent, data: { type: "wbp-onboard-login-payload", payload: { ...validPayload, ui_action: "sync" } } },
+  { ...validEvent, data: { type: "wbp-onboard-login-payload", payload: { ...validPayload, result: { data: { login_bridge: { session_id: "wrong" } } } } } },
+  { ...validEvent, data: null }
+]) {
+  if (sandbox.trustedOnboardLoginMessagePayload(forged, popup, session) !== null) {
+    throw new Error(`forged onboarding message was accepted: ${JSON.stringify(forged)}`);
+  }
+}
+if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, session) !== null) {
+  throw new Error("closed popup must not be trusted");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
             "healthy",
