@@ -432,7 +432,15 @@ class JsonCommandRunnerTests(unittest.TestCase):
         result = runner.run("status", "--json")
 
         self.assertEqual(result.payload["human_message"], "ready")
-        run_mock.assert_called_once()
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 300.0)
+
+    @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
+    def test_run_surfaces_bounded_command_timeout(self, run_mock: mock.Mock) -> None:
+        run_mock.side_effect = subprocess.TimeoutExpired(cmd=["wbp"], timeout=3)
+        runner = JsonCommandRunner(base_command=["wbp"], timeout_seconds=3)
+
+        with self.assertRaisesRegex(UiShellError, "timed out after 3 seconds"):
+            runner.run("status", "--json")
 
     @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
     def test_run_rejects_missing_required_command_fields(self, run_mock: mock.Mock) -> None:

@@ -262,20 +262,29 @@ class JsonCommandRunner:
         base_command: list[str] | None = None,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
+        timeout_seconds: float = 300.0,
     ) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
         self._base_command = base_command or [sys.executable, "-m", "wild_boar_proxy"]
         self._cwd = cwd
         self._env = env
+        self._timeout_seconds = float(timeout_seconds)
 
     def run(self, *args: str) -> CommandResult:
-        result = subprocess.run(
-            [*self._base_command, *args],
-            cwd=self._cwd,
-            env=self._env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [*self._base_command, *args],
+                cwd=self._cwd,
+                env=self._env,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=self._timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timeout_label = f"{self._timeout_seconds:g}"
+            raise UiShellError(f"command timed out after {timeout_label} seconds") from exc
         payload = parse_exact_json_object(result.stdout)
         require_fields(
             payload,
