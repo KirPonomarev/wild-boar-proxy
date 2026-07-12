@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import socket
 import subprocess
 import time
@@ -3071,6 +3073,114 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertNotIn("localStorage", alias_markup + alias_js)
         self.assertIn(".quick-start-alias-card", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+
+    def test_quick_start_alias_card_cannot_expand_its_route_column(self) -> None:
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        alias_card_match = re.search(
+            r"\.quick-start-alias-card \{(?P<body>.*?)\n\}",
+            css,
+            re.S,
+        )
+        self.assertIsNotNone(alias_card_match)
+        self.assertIn("min-width: 0;", alias_card_match.group("body"))
+
+        alias_preview_match = re.search(
+            r"\.quick-start-alias-preview \{(?P<body>.*?)\n\}",
+            css,
+            re.S,
+        )
+        self.assertIsNotNone(alias_preview_match)
+        alias_preview_css = alias_preview_match.group("body")
+        self.assertIn("overflow: hidden;", alias_preview_css)
+        self.assertIn("text-overflow: ellipsis;", alias_preview_css)
+
+    def test_quick_start_alias_layout_fits_at_1024(self) -> None:
+        node_bin = Path(
+            os.environ.get("WBP_NODE_BIN")
+            or Path.home()
+            / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+        )
+        if not node_bin.is_file():
+            fallback_node = shutil.which("node")
+            if not fallback_node:
+                self.skipTest("node runtime unavailable for layout probe")
+            node_bin = Path(fallback_node)
+
+        node_modules = Path(
+            os.environ.get("WBP_NODE_MODULES")
+            or Path.home()
+            / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules"
+        )
+        if not (node_modules / "playwright").is_dir():
+            self.skipTest("playwright runtime unavailable for layout probe")
+
+        chrome_candidates = [
+            os.environ.get("WBP_CHROME_BIN"),
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            shutil.which("google-chrome"),
+            shutil.which("chromium"),
+            shutil.which("chromium-browser"),
+        ]
+        chrome_bin = next(
+            (Path(candidate) for candidate in chrome_candidates if candidate and Path(candidate).is_file()),
+            None,
+        )
+        if chrome_bin is None:
+            self.skipTest("Chrome or Chromium unavailable for layout probe")
+
+        page_url = (WEB_DESIGN_UI / "index.html").as_uri() + "?source=fixture&screen=quick-start"
+        script = f"""
+const {{ chromium }} = require("playwright");
+
+(async () => {{
+  const browser = await chromium.launch({{
+    executablePath: {json.dumps(str(chrome_bin))},
+    headless: true
+  }});
+  try {{
+    const page = await browser.newPage({{ viewport: {{ width: 1024, height: 768 }} }});
+    await page.goto({json.dumps(page_url)}, {{ waitUntil: "domcontentloaded" }});
+    await page.waitForSelector(".quick-start-alias-card");
+    const metrics = await page.evaluate(() => Object.fromEntries([
+      ".quick-start-grid",
+      ".quick-start-route-card",
+      ".quick-start-alias-card",
+      ".quick-start-alias-grid"
+    ].map((selector) => {{
+      const node = document.querySelector(selector);
+      return [selector, {{ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth }}];
+    }})));
+    const overflowing = Object.entries(metrics)
+      .filter(([, metric]) => metric.scrollWidth > metric.clientWidth)
+      .map(([selector]) => selector);
+    if (overflowing.length) {{
+      throw new Error(`quick-start overflow at 1024px: ${{JSON.stringify({{ overflowing, metrics }})}}`);
+    }}
+    console.log(JSON.stringify({{ status: "ok", viewport: "1024x768", metrics }}));
+  }} finally {{
+    await browser.close();
+  }}
+}})().catch((error) => {{
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+}});
+"""
+        env = dict(os.environ)
+        env["NODE_PATH"] = str(node_modules)
+        result = subprocess.run(
+            [str(node_bin), "-e", script],
+            cwd=WEB_DESIGN_UI,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        packet = json.loads(result.stdout.strip())
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["viewport"], "1024x768")
 
     def test_c7_stale_agent_alias_binding_does_not_bleed_between_sessions(self) -> None:
         script = r"""

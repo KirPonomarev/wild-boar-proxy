@@ -7658,6 +7658,7 @@ button:disabled {
   border-radius: 16px;
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding: 10px;
 }
 
@@ -7735,6 +7736,8 @@ button:disabled {
   color: var(--text);
   font-size: 12px;
   line-height: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
