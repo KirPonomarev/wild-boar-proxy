@@ -15,7 +15,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SECRET_SENTINEL = "sk-wbp-read-snapshot-secret-should-not-leak-1234567890"
+SECRET_SENTINEL = "sentinel-secret-wbp-read-snapshot-should-not-leak-1234567890"
 
 COMMAND_PACKET_REQUIRED_FIELDS = {
     "status",
@@ -410,7 +410,7 @@ class ReadCompatibilitySnapshotTests(unittest.TestCase):
     def assert_no_secret_leak(self, payload: dict[str, Any]) -> None:
         serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
         self.assertNotIn(SECRET_SENTINEL, serialized)
-        self.assertNotIn("sk-wbp-read-snapshot-secret", serialized)
+        self.assertNotIn("sentinel-secret-wbp-read-snapshot", serialized)
         credential_result = (
             payload.get("data", {}).get("credential_result", {})
             if isinstance(payload.get("data"), dict)

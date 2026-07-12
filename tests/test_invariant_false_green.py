@@ -19,7 +19,7 @@ from tools.truth_tree_harness import assert_no_truth_mutation, snapshot_truth_tr
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SENTINEL_SECRET = "sk-d1a-invariant-false-green-sentinel"
+SENTINEL_SECRET = "sentinel-secret-d1a-invariant-false-green"
 
 
 def _free_port() -> int:

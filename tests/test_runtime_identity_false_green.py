@@ -21,7 +21,7 @@ from wild_boar_proxy import runtime as runtime_mod
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SENTINEL_SECRET = "sk-d0a-false-green-sentinel-secret"
+SENTINEL_SECRET = "sentinel-secret-d0a-false-green"
 
 
 def _free_port() -> int:
