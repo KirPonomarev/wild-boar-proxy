@@ -81,6 +81,12 @@ def _runtime_context(*, route_id: str = "wbp-deepseek-chat") -> dict[str, object
 
 
 class OperatorSurfaceTests(unittest.TestCase):
+    def test_default_codex_binary_uses_unified_official_chatgpt_bundle(self) -> None:
+        self.assertEqual(
+            surface.DEFAULT_CODEX_BIN,
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+        )
+
     def test_status_claim_gate_prefers_live_health_ready_over_stale_status_claim(self) -> None:
         claim = _status_claim_gate_from_live_health(
             {

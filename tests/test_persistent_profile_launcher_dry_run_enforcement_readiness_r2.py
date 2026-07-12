@@ -51,6 +51,7 @@ class PersistentProfileLauncherDryRunEnforcementReadinessR2Tests(unittest.TestCa
             command = render_persistent_launcher_dry_run_command(config)
 
         self.assertEqual(command["argv"][0], "open")
+        self.assertEqual(command["argv"][2], "/Applications/ChatGPT.app")
         self.assertIn("--user-data-dir", command["argv"])
         self.assertEqual(command["env"]["WBP_PROFILE_MODE"], "persistent_custom")
         self.assertEqual(command["env"]["WBP_PERSISTENT_PROFILE_ID"], "wbp-custom-main")
