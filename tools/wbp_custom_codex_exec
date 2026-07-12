@@ -6,12 +6,25 @@ set -euo pipefail
 
 default_profile_dir="$HOME/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main"
 profile_dir="${WBP_PROFILE_DIR:-${CODEX_HOME:-$default_profile_dir}}"
-default_app_path="$HOME/Applications/Codex WBP Clean.app"
-app_path="${WBP_CODEX_APP_COPY_PATH:-$default_app_path}"
-codex_bin="${WBP_CODEX_BIN:-$app_path/Contents/Resources/codex}"
+codex_bin="${WBP_CODEX_BIN:-}"
+if [[ -z "$codex_bin" ]]; then
+  for app_path in \
+    "${WBP_CODEX_APP_PATH:-}" \
+    "/Applications/ChatGPT.app" \
+    "$HOME/Applications/ChatGPT.app" \
+    "/Applications/Codex.app" \
+    "$HOME/Applications/Codex.app"; do
+    [[ -n "$app_path" ]] || continue
+    candidate="$app_path/Contents/Resources/codex"
+    if [[ -x "$candidate" ]]; then
+      codex_bin="$candidate"
+      break
+    fi
+  done
+fi
 
-if [[ ! -x "$codex_bin" ]]; then
-  echo "WBP custom Codex binary is not executable: $codex_bin" >&2
+if [[ -z "$codex_bin" || ! -x "$codex_bin" ]]; then
+  echo "WBP official Codex binary is not executable" >&2
   exit 127
 fi
 

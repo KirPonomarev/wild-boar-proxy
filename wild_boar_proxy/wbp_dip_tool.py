@@ -52,7 +52,7 @@ WBP_DIP_TOOL_PACKET_KIND = "wbp_dip_working_tool_run"
 DEFAULT_ALIAS = "DIP"
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_SANDBOX = "danger-full-access"
-DEFAULT_CODEX_APP_NAME = "Codex WBP Clean.app"
+DEFAULT_CODEX_APP_NAME = "ChatGPT.app"
 STALE_CODEX_PROFILE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
 DEFAULT_ENTRY_EVIDENCE_FILENAME = "mcp-entry-evidence.json"
 DEFAULT_CODEX_JSONL_FILENAME = "codex-exec.jsonl"
@@ -997,14 +997,14 @@ def _codex_exec_openai_api_key(profile_dir: Path) -> str:
 
 def _codex_app_candidates(source: Mapping[str, str]) -> list[Path]:
     app_candidates: list[Path] = []
-    if source.get("WBP_CODEX_APP_COPY_PATH"):
-        app_candidates.append(Path(str(source["WBP_CODEX_APP_COPY_PATH"])).expanduser())
+    if source.get("WBP_CODEX_APP_PATH"):
+        app_candidates.append(Path(str(source["WBP_CODEX_APP_PATH"])).expanduser())
     app_candidates.extend(
         [
-            Path.home() / "Applications" / DEFAULT_CODEX_APP_NAME,
             Path("/Applications") / DEFAULT_CODEX_APP_NAME,
-            Path.home() / "Applications" / "Codex.app",
+            Path.home() / "Applications" / DEFAULT_CODEX_APP_NAME,
             Path("/Applications/Codex.app"),
+            Path.home() / "Applications" / "Codex.app",
         ]
     )
     return app_candidates

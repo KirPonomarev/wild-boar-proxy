@@ -55,6 +55,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     _file_write_text_from_task,
     _build_repo_context_pack,
     _code_mutation_requested,
+    _codex_app_candidates,
     _repo_bridge_timeout_packet,
     _repo_bridge_fields,
     _repo_bridge_bootstrap_calls,
@@ -1085,6 +1086,27 @@ class WbpDipToolTests(unittest.TestCase):
                 resolved = default_codex_bin({})
 
         self.assertEqual(resolved, installed_bin)
+
+    def test_codex_app_candidates_prefer_current_official_native_bundle(self) -> None:
+        candidates = _codex_app_candidates({})
+
+        self.assertEqual(candidates[0], Path("/Applications/ChatGPT.app"))
+        self.assertIn(Path("/Applications/Codex.app"), candidates)
+        self.assertFalse(
+            any(candidate.name == "Codex WBP Clean.app" for candidate in candidates)
+        )
+
+    def test_codex_app_candidates_accept_only_explicit_official_override(self) -> None:
+        override = Path("/Applications/ChatGPT Canary.app")
+        candidates = _codex_app_candidates(
+            {
+                "WBP_CODEX_APP_PATH": str(override),
+                "WBP_CODEX_APP_COPY_PATH": "/tmp/legacy-copy.app",
+            }
+        )
+
+        self.assertEqual(candidates[0], override)
+        self.assertNotIn(Path("/tmp/legacy-copy.app"), candidates)
 
     def test_packet_accepts_only_observed_delegate_api_lane(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
