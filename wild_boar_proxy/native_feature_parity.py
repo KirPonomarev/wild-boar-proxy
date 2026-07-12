@@ -217,6 +217,9 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
             "exports_codex_access_token": False,
             "uses_electron_user_data_dir": False,
             "uses_hash_identical_app_copy_policy": False,
+            "uses_official_native_app_policy": False,
+            "custom_process_auto_update_disabled": False,
+            "uses_legacy_custom_app_copy_policy": False,
             "raw_launcher_recorded": False,
         }
 
@@ -239,6 +242,17 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
         "uses_hash_identical_app_copy_policy": (
             "primary_bin_hash=" in text and "preferred_asar_hash=" in text
         ),
+        "uses_official_native_app_policy": (
+            'OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"' in text
+            and 'OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"' in text
+            and 'CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"' in text
+        ),
+        "custom_process_auto_update_disabled": (
+            'CODEX_SPARKLE_ENABLED="false"' in text
+        ),
+        "uses_legacy_custom_app_copy_policy": (
+            "Codex WBP Clean.app" in text or "WBP_CODEX_APP_COPY_PATH" in text
+        ),
         "raw_launcher_recorded": False,
     }
 
@@ -251,9 +265,9 @@ def _sha256_or_empty(path: Path) -> str:
 
 
 def _app_identity_summary() -> dict[str, Any]:
-    primary = Path("/Applications/Codex.app")
+    primary = Path("/Applications/ChatGPT.app")
     preferred = Path.home() / "Applications" / "Codex WBP Clean.app"
-    primary_bin = primary / "Contents" / "MacOS" / "Codex"
+    primary_bin = primary / "Contents" / "MacOS" / "ChatGPT"
     primary_asar = primary / "Contents" / "Resources" / "app.asar"
     preferred_bin = preferred / "Contents" / "MacOS" / "Codex"
     preferred_asar = preferred / "Contents" / "Resources" / "app.asar"
@@ -268,7 +282,10 @@ def _app_identity_summary() -> dict[str, Any]:
 
     return {
         "primary_codex_app_observed": primary_present,
+        "official_native_app_observed": primary_present,
         "preferred_clean_app_observed": preferred_present,
+        "legacy_custom_copy_observed": preferred_present,
+        "legacy_custom_copy_required": False,
         "hash_comparison_run": compared,
         "preferred_binary_matches_primary": compared and primary_bin_hash == preferred_bin_hash,
         "preferred_asar_matches_primary": compared and primary_asar_hash == preferred_asar_hash,

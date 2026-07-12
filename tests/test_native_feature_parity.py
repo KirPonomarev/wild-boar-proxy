@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import wild_boar_proxy.native_feature_parity as parity
 from wild_boar_proxy.native_feature_parity import (
     FAST_UNAVAILABLE_API_KEY_AUTH,
     VOICE_STATUS_UNPROVEN,
@@ -69,6 +70,28 @@ def _write_launcher(path: Path, *, conditional_auth: bool) -> None:
 
 
 class NativeFeatureParityTests(unittest.TestCase):
+    def test_launcher_summary_requires_current_official_native_app_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            launcher = Path(temp_dir) / "launcher.sh"
+            launcher.write_text(
+                "\n".join(
+                    [
+                        'OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"',
+                        'OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"',
+                        'CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"',
+                        'CODEX_SPARKLE_ENABLED="false"',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            summary = parity._launcher_summary(launcher)
+
+        self.assertTrue(summary["uses_official_native_app_policy"])
+        self.assertTrue(summary["custom_process_auto_update_disabled"])
+        self.assertFalse(summary["uses_legacy_custom_app_copy_policy"])
+
     def test_api_key_profile_blocks_fast_without_recording_secret(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = _paths(Path(temp_dir))
