@@ -32,10 +32,11 @@ CUSTOM_UI_ORIGIN_ADMISSION_LEDGER_NOT_PROVEN = (
 CUSTOM_UI_ORIGIN_ADMISSION_UNSAFE_SOURCE = "WBP_CUSTOM_UI_ORIGIN_UNSAFE_SOURCE"
 CUSTOM_UI_ORIGIN_ADMISSION_NOT_PROVEN = "WBP_CUSTOM_UI_ORIGIN_NOT_PROVEN"
 CUSTOM_UI_ORIGIN_ADMISSION_INVALID = "WBP_CUSTOM_UI_ORIGIN_INVALID"
+OFFICIAL_CODEX_BUNDLE_ID = "com.openai.codex"
 
 
 def default_stock_codex_app_path() -> Path:
-    return Path("/Applications/Codex.app")
+    return Path("/Applications/ChatGPT.app")
 
 
 def default_custom_codex_app_path() -> Path:
@@ -88,6 +89,18 @@ def _path_present(path: Path | str | None) -> bool:
         return Path(str(path)).expanduser().exists()
     except OSError:
         return False
+
+
+def _path_is_within(path: Path | str | None, parent: Path | str | None) -> bool:
+    if not _path_declared(path) or not _path_declared(parent):
+        return False
+    try:
+        Path(str(path)).expanduser().resolve(strict=False).relative_to(
+            Path(str(parent)).expanduser().resolve(strict=False)
+        )
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _safe_reason_tokens(value: object) -> list[str]:
@@ -217,8 +230,10 @@ def build_custom_ui_origin_admission_packet(
     custom_launcher_path: Path | str | None,
 ) -> dict[str, Any]:
     submit_packet = _mapping(custom_app_submit_packet)
-    stock_bundle = _read_bundle_identifier(Path(str(stock_app_path)), prefix="stock_codex")
-    custom_bundle = _read_bundle_identifier(Path(str(custom_app_path)), prefix="custom_codex")
+    stock_app = Path(str(stock_app_path)).expanduser()
+    custom_app = Path(str(custom_app_path)).expanduser()
+    stock_bundle = _read_bundle_identifier(stock_app, prefix="stock_codex")
+    custom_bundle = _read_bundle_identifier(custom_app, prefix="custom_codex")
 
     stock_bundle_id = stock_bundle["stock_codex_bundle_id"]
     custom_bundle_id = custom_bundle["custom_codex_bundle_id"]
@@ -232,17 +247,35 @@ def build_custom_ui_origin_admission_packet(
         and bool(custom_bundle_id)
         and stock_bundle_id != custom_bundle_id
     )
+    try:
+        same_native_app_path = stock_app.resolve(strict=False) == custom_app.resolve(
+            strict=False
+        )
+    except OSError:
+        same_native_app_path = False
+    shared_official_native_bundle = bool(
+        same_native_app_path
+        and stock_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+        and custom_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+    )
 
     custom_profile_dir_declared = _path_declared(custom_profile_dir)
     custom_user_data_dir_declared = _path_declared(custom_user_data_dir)
     custom_launcher_declared = _path_declared(custom_launcher_path)
+    custom_identity_isolated_by_profile = bool(
+        custom_profile_dir_declared
+        and custom_user_data_dir_declared
+        and custom_launcher_declared
+        and _path_is_within(custom_user_data_dir, custom_profile_dir)
+        and _path_is_within(custom_launcher_path, custom_profile_dir)
+    )
 
     identity_failures: list[str] = []
     if stock_bundle.get("stock_codex_bundle_id_present") is not True:
         identity_failures.append("stock_codex_bundle_id_missing")
     if custom_bundle.get("custom_codex_bundle_id_present") is not True:
         identity_failures.append("custom_codex_bundle_id_missing")
-    if bundle_id_collision_detected:
+    if bundle_id_collision_detected and not shared_official_native_bundle:
         identity_failures.append("bundle_id_collision_detected")
     if not custom_profile_dir_declared:
         identity_failures.append("custom_profile_dir_missing")
@@ -250,6 +283,8 @@ def build_custom_ui_origin_admission_packet(
         identity_failures.append("custom_user_data_dir_missing")
     if not custom_launcher_declared:
         identity_failures.append("custom_launcher_missing")
+    if not custom_identity_isolated_by_profile:
+        identity_failures.append("custom_profile_isolation_not_proven")
 
     unsafe_failures = _unsafe_submit_packet_failures(submit_packet)
     submit_failures = _submit_packet_failures(submit_packet)
@@ -257,10 +292,8 @@ def build_custom_ui_origin_admission_packet(
     prompt_digest = _hex_sha256(submit_packet.get("prompt_digest"))
 
     custom_instance_coexistence_possible = (
-        custom_app_identity_distinct
-        and custom_profile_dir_declared
-        and custom_user_data_dir_declared
-        and custom_launcher_declared
+        (custom_app_identity_distinct or shared_official_native_bundle)
+        and custom_identity_isolated_by_profile
     )
     custom_instance_coexistence_proven = (
         custom_instance_coexistence_possible
@@ -279,7 +312,9 @@ def build_custom_ui_origin_admission_packet(
     machine_error_code = _machine_error_code(
         blocking_reasons=blocking_reasons,
         unsafe_failures=unsafe_failures,
-        bundle_id_collision_detected=bundle_id_collision_detected,
+        bundle_id_collision_detected=(
+            bundle_id_collision_detected and not shared_official_native_bundle
+        ),
         submit_failures=submit_failures,
     )
 
@@ -291,6 +326,9 @@ def build_custom_ui_origin_admission_packet(
         **custom_bundle,
         "bundle_id_collision_detected": bundle_id_collision_detected,
         "custom_app_identity_distinct": custom_app_identity_distinct,
+        "same_native_app_path": same_native_app_path,
+        "shared_official_native_bundle": shared_official_native_bundle,
+        "custom_identity_isolated_by_profile": custom_identity_isolated_by_profile,
         "custom_app_path_recorded": False,
         "stock_app_path_recorded": False,
         "custom_profile_dir_declared": custom_profile_dir_declared,
@@ -452,11 +490,13 @@ def run_custom_ui_origin_admission_command(
             custom_user_data_dir or profile_paths.get("user_data_dir", "")
         ),
     )
+    resolved_stock_app_path = stock_app_path or str(default_stock_codex_app_path())
+    resolved_custom_app_path = custom_app_path or resolved_stock_app_path
     return build_custom_ui_origin_admission_packet(
         custom_app_submit_packet=submit_packet,
         prompt_text=prompt_text,
-        stock_app_path=stock_app_path or default_stock_codex_app_path(),
-        custom_app_path=custom_app_path or default_custom_codex_app_path(),
+        stock_app_path=resolved_stock_app_path,
+        custom_app_path=resolved_custom_app_path,
         custom_profile_dir=(
             custom_profile_dir or profile_paths.get("persistent_profile_root", "")
         ),
