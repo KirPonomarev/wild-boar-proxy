@@ -4379,6 +4379,14 @@ class CliTests(unittest.TestCase):
             "stable",
         )
 
+    def test_root_help_describes_operator_command_groups(self) -> None:
+        help_text = cli_mod.build_parser().format_help()
+        self.assertIn("Проверить live-состояние без ремонта", help_text)
+        self.assertIn("Показать read-only snapshot", help_text)
+        self.assertIn("Управлять локальными аккаунтами", help_text)
+        self.assertIn("Запустить локальные companion surfaces", help_text)
+        self.assertIn("Управлять внешними API-маршрутами", help_text)
+
     def test_cli_effect_classifier_covers_canonical_error_contexts(self) -> None:
         parser = cli_mod.build_parser()
         cases = [

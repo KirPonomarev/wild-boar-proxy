@@ -36,6 +36,52 @@ issue tracker.
 Repository truth is limited to canon, contracts, implementation, tests, and
 completed evidence.
 
+## Local development quick start
+
+Wild Boar Proxy requires Python 3.11 or newer.
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e .
+make check
+make test-core
+```
+
+For a static fixture preview that does not read runtime/state/log surfaces and
+does not call `/api/*`:
+
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1 \
+  --directory wild_boar_proxy/web_design_ui
+```
+
+Then open `http://127.0.0.1:8765/?source=fixture&state=healthy`. Fixture states
+are UI examples only and never prove runtime health.
+
+For the bounded live-readonly web surface:
+
+```bash
+python3 -m wild_boar_proxy.web_design_live_server \
+  --host 127.0.0.1 \
+  --port 8788 \
+  --action-phase live_readonly \
+  --active-project-root "$PWD"
+```
+
+Then open `http://127.0.0.1:8788/?source=live`. Live readiness remains defined
+by fresh command packets; the UI must not infer it from fixture or cached data.
+Mutating owner actions are intentionally outside this quick start and require
+their explicit action phase, authorization, and rollback boundary.
+
+Useful local gates:
+
+```bash
+make test-custom-stability
+make test-full
+python3 -m wild_boar_proxy --help
+```
+
 ## First useful release claim matrix
 
 - `Review packet preview`: supported; local JSON review packet only

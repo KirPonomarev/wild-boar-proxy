@@ -263,21 +263,21 @@ def build_parser() -> argparse.ArgumentParser:
     root_parser = argparse.ArgumentParser(prog="wild-boar-proxy")
     subparsers = root_parser.add_subparsers(dest="command", required=True)
 
-    healthcheck = subparsers.add_parser("healthcheck")
+    healthcheck = subparsers.add_parser("healthcheck", help="Проверить live-состояние без ремонта")
     healthcheck.add_argument("--json", action="store_true", required=True)
     healthcheck.add_argument("--repair", action="store_true")
     healthcheck.add_argument("--model")
 
-    status = subparsers.add_parser("status")
+    status = subparsers.add_parser("status", help="Показать read-only snapshot без live attestation")
     status.add_argument("--json", action="store_true", required=True)
 
-    invariant_check = subparsers.add_parser("invariant-check")
+    invariant_check = subparsers.add_parser("invariant-check", help="Проверить false-green инварианты")
     invariant_check.add_argument("--json", action="store_true", required=True)
 
-    token = subparsers.add_parser("token")
+    token = subparsers.add_parser("token", help="Проверить или получить локальный web token")
     token.add_argument("--json", action="store_true")
 
-    stable = subparsers.add_parser("stable")
+    stable = subparsers.add_parser("stable", help="Диагностировать и ремонтировать stable runtime")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
     stable_repair = stable_subparsers.add_parser("repair")
     stable_repair_mode = stable_repair.add_mutually_exclusive_group(required=True)
@@ -296,18 +296,18 @@ def build_parser() -> argparse.ArgumentParser:
     stable_target_switch_mode.add_argument("--apply", action="store_true")
     stable_target_switch.add_argument("--json", action="store_true", required=True)
 
-    rollback = subparsers.add_parser("rollback")
+    rollback = subparsers.add_parser("rollback", help="Проверить или применить последний rollback")
     rollback.add_argument("--latest", action="store_true", required=True)
     rollback_mode = rollback.add_mutually_exclusive_group(required=True)
     rollback_mode.add_argument("--dry-run", action="store_true")
     rollback_mode.add_argument("--apply", action="store_true")
     rollback.add_argument("--json", action="store_true", required=True)
 
-    sync = subparsers.add_parser("sync")
+    sync = subparsers.add_parser("sync", help="Синхронизировать managed runtime state")
     sync.add_argument("--json", action="store_true", required=True)
     sync.add_argument("--model")
 
-    launch = subparsers.add_parser("launch")
+    launch = subparsers.add_parser("launch", help="Запустить smoke, клиент или bounded repair")
     launch_subparsers = launch.add_subparsers(dest="launch_command", required=True)
     launch_smoke = launch_subparsers.add_parser("smoke")
     launch_smoke.add_argument("--json", action="store_true", required=True)
@@ -327,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch_custom_app_identity.add_argument("--backup-dir")
     launch_custom_app_identity.add_argument("--json", action="store_true", required=True)
 
-    dip = subparsers.add_parser("dip")
+    dip = subparsers.add_parser("dip", help="Проверить канонический DIP execution path")
     dip_subparsers = dip.add_subparsers(dest="dip_command", required=True)
     dip_preflight = dip_subparsers.add_parser("preflight")
     dip_preflight.add_argument("--prompt", required=True)
@@ -428,7 +428,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dip_run.add_argument("--json", action="store_true", required=True)
 
-    codex_runner = subparsers.add_parser("codex-runner")
+    codex_runner = subparsers.add_parser("codex-runner", help="Запустить bounded Codex proof commands")
     codex_runner_subparsers = codex_runner.add_subparsers(
         dest="codex_runner_command", required=True
     )
@@ -907,7 +907,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
-    router_hook = subparsers.add_parser("router-hook")
+    router_hook = subparsers.add_parser("router-hook", help="Маршрутизировать Custom Codex aliases")
     router_hook_subparsers = router_hook.add_subparsers(
         dest="router_hook_command",
         required=True,
@@ -1763,7 +1763,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
-    accounts = subparsers.add_parser("accounts")
+    accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
 
     accounts_list = accounts_subparsers.add_parser("list")
@@ -1811,27 +1811,27 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_login_cancel.add_argument("--session", required=True)
     accounts_login_cancel.add_argument("--json", action="store_true", required=True)
 
-    diagnostics = subparsers.add_parser("diagnostics")
+    diagnostics = subparsers.add_parser("diagnostics", help="Собрать redacted диагностику")
     diagnostics_subparsers = diagnostics.add_subparsers(
         dest="diagnostics_command", required=True
     )
     diagnostics_export = diagnostics_subparsers.add_parser("export")
     diagnostics_export.add_argument("--json", action="store_true", required=True)
 
-    installer = subparsers.add_parser("installer")
+    installer = subparsers.add_parser("installer", help="Инициализировать локальную установку")
     installer_subparsers = installer.add_subparsers(
         dest="installer_command", required=True
     )
     installer_init = installer_subparsers.add_parser("init")
     installer_init.add_argument("--json", action="store_true", required=True)
 
-    legacy = subparsers.add_parser("legacy")
+    legacy = subparsers.add_parser("legacy", help="Импортировать legacy-конфигурацию")
     legacy_subparsers = legacy.add_subparsers(dest="legacy_command", required=True)
     legacy_import = legacy_subparsers.add_parser("import")
     legacy_import.add_argument("--source-dir", required=True)
     legacy_import.add_argument("--json", action="store_true", required=True)
 
-    companion = subparsers.add_parser("companion")
+    companion = subparsers.add_parser("companion", help="Запустить локальные companion surfaces")
     companion_subparsers = companion.add_subparsers(
         dest="companion_command", required=True
     )
@@ -1840,7 +1840,7 @@ def build_parser() -> argparse.ArgumentParser:
     companion_uninstall = companion_subparsers.add_parser("uninstall")
     companion_uninstall.add_argument("--json", action="store_true", required=True)
 
-    mode = subparsers.add_parser("mode")
+    mode = subparsers.add_parser("mode", help="Управлять желаемым runtime mode")
     mode_subparsers = mode.add_subparsers(dest="mode_command", required=True)
 
     mode_get_parser = mode_subparsers.add_parser("get")
@@ -1850,7 +1850,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode_set.add_argument("value", choices=["stable", "managed"])
     mode_set.add_argument("--json", action="store_true", required=True)
 
-    policy = subparsers.add_parser("policy")
+    policy = subparsers.add_parser("policy", help="Управлять staged pool policy")
     policy_subparsers = policy.add_subparsers(dest="policy_command", required=True)
     policy_stage = policy_subparsers.add_parser("stage")
     policy_stage_subparsers = policy_stage.add_subparsers(
@@ -1860,7 +1860,7 @@ def build_parser() -> argparse.ArgumentParser:
     policy_stage_set.add_argument("value")
     policy_stage_set.add_argument("--json", action="store_true", required=True)
 
-    rollout = subparsers.add_parser("rollout")
+    rollout = subparsers.add_parser("rollout", help="Проверить staged rollout evidence")
     rollout_subparsers = rollout.add_subparsers(dest="rollout_command", required=True)
     rollout_rotation = rollout_subparsers.add_parser("rotation")
     rollout_rotation_subparsers = rollout_rotation.add_subparsers(
@@ -1894,7 +1894,7 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_advance.add_argument("id")
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
 
-    package = subparsers.add_parser("package")
+    package = subparsers.add_parser("package", help="Собрать или проверить локальный package")
     package_subparsers = package.add_subparsers(dest="package_command", required=True)
     package_experimental = package_subparsers.add_parser("experimental")
     package_experimental_subparsers = package_experimental.add_subparsers(
@@ -1918,7 +1918,7 @@ def build_parser() -> argparse.ArgumentParser:
     package_launchable_verify.add_argument("--manifest", required=True)
     package_launchable_verify.add_argument("--json", action="store_true", required=True)
 
-    external_models = subparsers.add_parser("external-models")
+    external_models = subparsers.add_parser("external-models", help="Управлять внешними API-маршрутами")
     external_models_subparsers = external_models.add_subparsers(
         dest="external_models_command", required=True
     )
