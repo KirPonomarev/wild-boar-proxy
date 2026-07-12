@@ -23965,61 +23965,29 @@ class CliTests(unittest.TestCase):
             launcher_text,
         )
         self.assertIn('WORKSPACE_PATH="${1:-}"', launcher_text)
-        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', launcher_text)
-        self.assertIn(
-            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
-            launcher_text,
-        )
-        self.assertIn('CUSTOM_WBP_BUNDLE_ID="com.wildboarproxy.codex.wbpclean"', launcher_text)
-        self.assertIn(
-            'CUSTOM_WBP_PREFS_PLIST="$HOME/Library/Preferences/$CUSTOM_WBP_BUNDLE_ID.plist"',
-            launcher_text,
-        )
-        self.assertIn(
-            'CUSTOM_WBP_SPARKLE_PERSISTENT_DOWNLOADS_DIR="$CUSTOM_WBP_SPARKLE_CACHE_DIR/PersistentDownloads"',
-            launcher_text,
-        )
-        self.assertIn('chflags nouchg "$CUSTOM_WBP_PREFS_PLIST"', launcher_text)
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUEnableAutomaticChecks -bool false',
-            launcher_text,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyUpdate -bool false',
-            launcher_text,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAllowsAutomaticUpdates -bool false',
-            launcher_text,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyDownloadUpdates -bool false',
-            launcher_text,
-        )
-        self.assertIn('chflags uchg "$CUSTOM_WBP_PREFS_PLIST"', launcher_text)
-        self.assertIn(
-            'rm -rf "$CUSTOM_WBP_SPARKLE_CACHE_DIR"',
-            launcher_text,
-        )
-        self.assertIn('chmod 500 "$CUSTOM_WBP_SPARKLE_CACHE_DIR"', launcher_text)
-        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', launcher_text)
-        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', launcher_text)
+        self.assertIn('OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"', launcher_text)
+        self.assertIn('OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"', launcher_text)
+        self.assertIn('CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"', launcher_text)
+        self.assertIn('for candidate in "/Applications/ChatGPT.app"', launcher_text)
+        self.assertIn('"/Applications/Codex.app"', launcher_text)
+        self.assertNotIn("Codex WBP Clean.app", launcher_text)
+        self.assertNotIn("WBP_CODEX_APP_COPY_PATH", launcher_text)
+        self.assertNotIn("CUSTOM_WBP_SPARKLE_CACHE_DIR", launcher_text)
+        self.assertNotIn("/usr/bin/defaults write", launcher_text)
+        self.assertNotIn("chflags", launcher_text)
+        self.assertIn('CODEX_APP_EXECUTABLE="$(/usr/libexec/PlistBuddy', launcher_text)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/$CODEX_APP_EXECUTABLE"', launcher_text)
+        self.assertIn('[ "$CODEX_APP_BUNDLE_ID" = "$OFFICIAL_CODEX_BUNDLE_ID" ] || exit 9', launcher_text)
+        self.assertIn('[ "$CODEX_APP_TEAM_ID" = "$OFFICIAL_CODEX_TEAM_ID" ] || exit 9', launcher_text)
+        self.assertIn('/usr/bin/codesign --verify --deep --strict "$CODEX_APP_PATH"', launcher_text)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', launcher_text)
         self.assertIn('cd "$CODEX_APP_RESOURCES"', launcher_text)
         self.assertNotIn("primary_bin_hash=", launcher_text)
         self.assertNotIn("preferred_bin_hash=", launcher_text)
         self.assertNotIn("primary_asar_hash=", launcher_text)
         self.assertNotIn("preferred_asar_hash=", launcher_text)
-        self.assertIn("preferred_bundle_id=", launcher_text)
-        self.assertNotIn("preferred_codesign_ok=0", launcher_text)
-        self.assertIn(
-            '[ "$preferred_bundle_id" = "$CUSTOM_WBP_BUNDLE_ID" ]',
-            launcher_text,
-        )
-        self.assertIn(
-            '[ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ]',
-            launcher_text,
-        )
+        self.assertIn("candidate_bundle_id=", launcher_text)
+        self.assertIn("candidate_executable=", launcher_text)
         self.assertNotIn(
             'if [ "$primary_bin_hash" = "$preferred_bin_hash" ] && [ "$primary_asar_hash" = "$preferred_asar_hash" ]; then',
             launcher_text,
@@ -24133,57 +24101,29 @@ class CliTests(unittest.TestCase):
         self.assertIn('unset OPENAI_API_KEY', payload)
         self.assertIn('export OPENAI_API_KEY="$OPENAI_API_KEY_FROM_AUTH"', payload)
         self.assertIn('WORKSPACE_PATH="${1:-}"', payload)
-        self.assertIn('PRIMARY_CODEX_APP_PATH="/Applications/Codex.app"', payload)
-        self.assertIn(
-            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
-            payload,
-        )
-        self.assertIn('CUSTOM_WBP_BUNDLE_ID="com.wildboarproxy.codex.wbpclean"', payload)
-        self.assertIn(
-            'CUSTOM_WBP_PREFS_PLIST="$HOME/Library/Preferences/$CUSTOM_WBP_BUNDLE_ID.plist"',
-            payload,
-        )
-        self.assertIn(
-            'CUSTOM_WBP_SPARKLE_PERSISTENT_DOWNLOADS_DIR="$CUSTOM_WBP_SPARKLE_CACHE_DIR/PersistentDownloads"',
-            payload,
-        )
-        self.assertIn('chflags nouchg "$CUSTOM_WBP_PREFS_PLIST"', payload)
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUEnableAutomaticChecks -bool false',
-            payload,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyUpdate -bool false',
-            payload,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAllowsAutomaticUpdates -bool false',
-            payload,
-        )
-        self.assertIn(
-            '/usr/bin/defaults write "$CUSTOM_WBP_BUNDLE_ID" SUAutomaticallyDownloadUpdates -bool false',
-            payload,
-        )
-        self.assertIn('chflags uchg "$CUSTOM_WBP_PREFS_PLIST"', payload)
-        self.assertIn(
-            'rm -rf "$CUSTOM_WBP_SPARKLE_CACHE_DIR"',
-            payload,
-        )
-        self.assertIn('chmod 500 "$CUSTOM_WBP_SPARKLE_CACHE_DIR"', payload)
-        self.assertIn('CODEX_APP_PATH="$PRIMARY_CODEX_APP_PATH"', payload)
-        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/Codex"', payload)
+        self.assertIn('OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"', payload)
+        self.assertIn('OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"', payload)
+        self.assertIn('CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"', payload)
+        self.assertIn('for candidate in "/Applications/ChatGPT.app"', payload)
+        self.assertIn('"/Applications/Codex.app"', payload)
+        self.assertNotIn("Codex WBP Clean.app", payload)
+        self.assertNotIn("WBP_CODEX_APP_COPY_PATH", payload)
+        self.assertNotIn("CUSTOM_WBP_SPARKLE_CACHE_DIR", payload)
+        self.assertNotIn("/usr/bin/defaults write", payload)
+        self.assertNotIn("chflags", payload)
+        self.assertIn('CODEX_APP_EXECUTABLE="$(/usr/libexec/PlistBuddy', payload)
+        self.assertIn('CODEX_APP_BIN="$CODEX_APP_PATH/Contents/MacOS/$CODEX_APP_EXECUTABLE"', payload)
+        self.assertIn('[ "$CODEX_APP_BUNDLE_ID" = "$OFFICIAL_CODEX_BUNDLE_ID" ] || exit 9', payload)
+        self.assertIn('[ "$CODEX_APP_TEAM_ID" = "$OFFICIAL_CODEX_TEAM_ID" ] || exit 9', payload)
+        self.assertIn('/usr/bin/codesign --verify --deep --strict "$CODEX_APP_PATH"', payload)
         self.assertIn('CODEX_APP_RESOURCES="$CODEX_APP_PATH/Contents/Resources"', payload)
         self.assertIn('cd "$CODEX_APP_RESOURCES"', payload)
         self.assertNotIn("primary_bin_hash=", payload)
         self.assertNotIn("preferred_bin_hash=", payload)
         self.assertNotIn("primary_asar_hash=", payload)
         self.assertNotIn("preferred_asar_hash=", payload)
-        self.assertIn("preferred_bundle_id=", payload)
-        self.assertNotIn("preferred_codesign_ok=0", payload)
-        self.assertIn(
-            '[ -f "$PREFERRED_CODEX_APP_PATH/Contents/Resources/app.asar" ]',
-            payload,
-        )
+        self.assertIn("candidate_bundle_id=", payload)
+        self.assertIn("candidate_executable=", payload)
         self.assertNotIn("CODEX_CUSTOM_RUNTIME_APP_PATH", payload)
         self.assertNotIn("CODEX_CUSTOM_RUNTIME_BIN", payload)
         self.assertIn('"$CODEX_APP_BIN"', payload)
@@ -24287,8 +24227,9 @@ class CliTests(unittest.TestCase):
         )
         self.assertNotIn("primary_bin_hash=", launcher_text)
         self.assertNotIn("preferred_codesign_ok=0", launcher_text)
+        self.assertIn('for candidate in "/Applications/ChatGPT.app"', launcher_text)
         self.assertIn(
-            '[ "$preferred_bundle_id" = "$CUSTOM_WBP_BUNDLE_ID" ]',
+            '[ "$CODEX_APP_BUNDLE_ID" = "$OFFICIAL_CODEX_BUNDLE_ID" ] || exit 9',
             launcher_text,
         )
         self.assertTrue(os.access(self.default_launcher_script, os.X_OK))
@@ -24374,10 +24315,9 @@ class CliTests(unittest.TestCase):
                 self.default_launcher_script
             )
         )
-        self.assertIn(
-            'PREFERRED_CODEX_APP_PATH="${WBP_CODEX_APP_COPY_PATH:-$HOME/Applications/Codex WBP Clean.app}"',
-            self.default_launcher_script.read_text(encoding="utf-8"),
-        )
+        repaired_launcher = self.default_launcher_script.read_text(encoding="utf-8")
+        self.assertIn('for candidate in "/Applications/ChatGPT.app"', repaired_launcher)
+        self.assertNotIn("Codex WBP Clean.app", repaired_launcher)
 
     def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(
         self,
