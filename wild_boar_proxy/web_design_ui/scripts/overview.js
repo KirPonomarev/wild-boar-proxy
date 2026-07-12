@@ -490,6 +490,7 @@ let activeOnboardLoginSession = null;
 let onboardLoginWindowRef = null;
 let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
+let sourceTransitionEpoch = 0;
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
 let reviewPanelBusy = false;
@@ -17926,9 +17927,13 @@ function renderSnapshot(snapshot) {
 }
 
 async function setFixtureState(stateId, updateUrl = false) {
+  const transitionEpoch = ++sourceTransitionEpoch;
   setSourceCopy("fixture");
   const state = canonicalState(stateId);
   const fixture = await loadFixture(state);
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("state", state);
@@ -17947,14 +17952,19 @@ async function setFixtureState(stateId, updateUrl = false) {
   if (currentScreen() === "overview") {
     renderReviewPanel();
   }
+  return fixture;
 }
 
 async function setLiveReadonly(updateUrl = false) {
+  const transitionEpoch = ++sourceTransitionEpoch;
   setLiveReadonlyPendingUi();
   if (currentScreen() === "overview") {
     renderOverviewLivePendingState();
   }
   await loadActionMetadata();
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   applyActionAvailability();
   const snapshot = currentScreen() === "quick-start"
     ? {
@@ -17964,6 +17974,9 @@ async function setLiveReadonly(updateUrl = false) {
     : (currentScreen() === "accounts"
       ? await loadAccountsReadonly()
       : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly()));
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("source", "live");

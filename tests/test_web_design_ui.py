@@ -152,6 +152,19 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         self.assertIn("refreshQuickStartVoiceDraftContract()", bootstrap)
         self.assertIn("refreshServerBackedPanels()", bootstrap)
 
+    def test_source_switch_ignores_stale_snapshot_responses(self) -> None:
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        fixture_start = js.index("async function setFixtureState(")
+        fixture_end = js.index("\n}\n", fixture_start) + 2
+        live_start = js.index("async function setLiveReadonly(")
+        live_end = js.index("\n}\n", live_start) + 2
+        fixture = js[fixture_start:fixture_end]
+        live = js[live_start:live_end]
+        self.assertIn("const transitionEpoch = ++sourceTransitionEpoch", fixture)
+        self.assertIn("transitionEpoch !== sourceTransitionEpoch", fixture)
+        self.assertIn("const transitionEpoch = ++sourceTransitionEpoch", live)
+        self.assertGreaterEqual(live.count("transitionEpoch !== sourceTransitionEpoch"), 2)
+
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
             "healthy",
