@@ -55,6 +55,7 @@ PROTECTED_SURFACE_PATHS = {
     "default_httpstorage_codex": Path.home() / "Library" / "HTTPStorages" / "com.openai.codex",
 }
 DEFAULT_CODEX_PROCESS_PATTERNS = (
+    "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
     "/Applications/Codex.app/Contents/MacOS/Codex",
     "Codex WBP Clean.app/Contents/MacOS/Codex",
     "Codex Helper",
@@ -88,7 +89,13 @@ def _host_process_chain_contains_protected_codex(
     host_process_chain: list[dict[str, Any]],
 ) -> tuple[bool, bool]:
     codex_app_detected = any(
-        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
+        any(
+            app_root in entry.get("command", "")
+            for app_root in (
+                "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Applications/Codex.app/Contents/MacOS/Codex",
+            )
+        )
         for entry in host_process_chain
     )
     codex_app_server_detected = any(
@@ -1825,6 +1832,23 @@ def _line_is_custom_app_copy_root(line: str) -> bool:
     )
 
 
+def _line_is_native_app_root(line: str) -> bool:
+    return (
+        any(
+            app_root in line
+            for app_root in (
+                "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Codex.app/Contents/MacOS/Codex",
+                "/Codex WBP Clean.app/Contents/MacOS/Codex",
+            )
+        )
+        and "/Contents/Frameworks/" not in line
+        and "Codex Helper" not in line
+        and "Codex (Renderer)" not in line
+        and "Codex (Service)" not in line
+    )
+
+
 def collect_codex_process_inventory(
     *,
     custom_user_data_dir: str,
@@ -1850,7 +1874,7 @@ def collect_codex_process_inventory(
     root_lines = [
         line
         for line in lines
-        if "/Contents/MacOS/Codex" in line
+        if _line_is_native_app_root(line)
     ]
     root_pids = sorted(
         int(line.split(" ", 1)[0])

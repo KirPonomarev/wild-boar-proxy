@@ -102,6 +102,28 @@ def advertised_model_packet(model: str = "gpt-5.5") -> dict[str, object]:
 
 
 class NativeLaunchDispatchTests(unittest.TestCase):
+    def test_official_chatgpt_custom_root_is_bound_by_isolated_profile(self) -> None:
+        custom_user_data_dir = "/tmp/wbp-profile/electron-user-data"
+        inventory = {
+            "custom_process_lines": [
+                "222 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT "
+                f"--user-data-dir={custom_user_data_dir} "
+                "--remote-debugging-port=9444"
+            ],
+            "default_process_lines": [
+                "111 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+            ],
+        }
+
+        self.assertEqual(native_probe._custom_root_app_pids(inventory), [222])
+        self.assertEqual(native_probe._custom_window_candidate_pids(inventory), [222])
+        port, source = native_probe._custom_runtime_cdp_port(
+            inventory,
+            profile_root=Path("/tmp/wbp-profile"),
+        )
+        self.assertEqual(port, 9444)
+        self.assertEqual(source, "custom_process_command_line_remote_debugging_port")
+
     def test_native_response_request_binding_texts_include_safe_slug_variant(self) -> None:
         self.assertEqual(
             native_probe._native_free_text_request_binding_texts(

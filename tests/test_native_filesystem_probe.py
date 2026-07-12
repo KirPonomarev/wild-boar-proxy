@@ -248,6 +248,37 @@ from tools.persistent_custom_profile_backup_repair_r1_probe import (
 
 
 class NativeFilesystemProbeTests(unittest.TestCase):
+    def test_process_inventory_distinguishes_official_chatgpt_custom_instance(self) -> None:
+        custom_user_data_dir = (
+            "/Users/k/Library/Application Support/WildBoarProxy/"
+            "CodexProfiles/wbp-custom-main/electron-user-data"
+        )
+        default_user_data_dir = "/Users/k/Library/Application Support/Codex"
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                " 101 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n"
+                f" 102 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT --user-data-dir={custom_user_data_dir}\n"
+                f" 103 /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Helpers/Codex (Renderer) --user-data-dir={custom_user_data_dir}\n"
+                f" 104 /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Helpers/Codex (Renderer) --user-data-dir={default_user_data_dir}\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=custom_user_data_dir,
+                default_user_data_dir=default_user_data_dir,
+            )
+
+        self.assertEqual(inventory["custom_process_count"], 2)
+        self.assertEqual(inventory["default_process_count"], 1)
+        self.assertEqual(inventory["root_app_pids"], [101, 102])
+        self.assertIn("ChatGPT.app/Contents/MacOS/ChatGPT", inventory["custom_process_lines"][0])
+
     def test_codex_process_inventory_uses_ps_command_lines_with_spaced_user_data_dir(self) -> None:
         completed = subprocess.CompletedProcess(
             args=["ps"],

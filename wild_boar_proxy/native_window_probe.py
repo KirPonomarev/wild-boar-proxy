@@ -184,9 +184,18 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
             for line in custom_lines
             if (
                 isinstance(line, str)
-                and "/Contents/MacOS/Codex" in line
+                and any(
+                    app_root in line
+                    for app_root in (
+                        "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                        "/Codex.app/Contents/MacOS/Codex",
+                        "/Codex WBP Clean.app/Contents/MacOS/Codex",
+                    )
+                )
                 and "/Contents/Frameworks/" not in line
                 and "Codex Helper" not in line
+                and "Codex (Renderer)" not in line
+                and "Codex (Service)" not in line
             )
             for pid in [_pid_from_process_line(line)]
             if pid is not None
@@ -261,7 +270,15 @@ def _custom_runtime_cdp_port(
     preferred_lines = [
         line
         for line in custom_lines
-        if isinstance(line, str) and "/Contents/MacOS/Codex" in line
+        if isinstance(line, str)
+        and any(
+            app_root in line
+            for app_root in (
+                "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Codex.app/Contents/MacOS/Codex",
+                "/Codex WBP Clean.app/Contents/MacOS/Codex",
+            )
+        )
     ]
     for candidate_line in [*preferred_lines, *custom_lines]:
         port = _remote_debugging_port_from_process_line(candidate_line)
@@ -5095,7 +5112,7 @@ def _build_identity_binding(
     identity_chain = [
         "repo_canonical_custom_proxy_auth_isolated_home",
         str(layout.launcher_path),
-        "/Applications/Codex.app/Contents/MacOS/Codex",
+        "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
         f"process_group_or_pid:{launch_result['launcher_pid']}",
         f"window_binding:{'proven' if bound else 'unproven'}",
     ]
