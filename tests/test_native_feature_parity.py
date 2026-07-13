@@ -91,7 +91,12 @@ class NativeFeatureParityTests(unittest.TestCase):
 
         self.assertFalse(summary["repo_managed_launcher_proven"])
         self.assertFalse(summary["uses_official_native_app_policy"])
+        self.assertFalse(
+            summary["custom_process_auto_update_disable_policy_configured"]
+        )
+        self.assertFalse(summary["custom_process_auto_update_disabled_runtime_proven"])
         self.assertFalse(summary["custom_process_auto_update_disabled"])
+        self.assertTrue(summary["custom_process_auto_update_runtime_proof_required"])
         self.assertFalse(summary["uses_legacy_custom_app_copy_policy"])
 
     def test_launcher_summary_accepts_current_repo_managed_launcher_policy(self) -> None:
@@ -106,7 +111,12 @@ class NativeFeatureParityTests(unittest.TestCase):
 
         self.assertTrue(summary["repo_managed_launcher_proven"])
         self.assertTrue(summary["uses_official_native_app_policy"])
-        self.assertTrue(summary["custom_process_auto_update_disabled"])
+        self.assertTrue(
+            summary["custom_process_auto_update_disable_policy_configured"]
+        )
+        self.assertFalse(summary["custom_process_auto_update_disabled_runtime_proven"])
+        self.assertFalse(summary["custom_process_auto_update_disabled"])
+        self.assertTrue(summary["custom_process_auto_update_runtime_proof_required"])
         self.assertFalse(summary["uses_legacy_custom_app_copy_policy"])
 
     def test_api_key_profile_blocks_fast_without_recording_secret(self) -> None:

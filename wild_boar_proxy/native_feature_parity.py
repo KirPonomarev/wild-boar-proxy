@@ -221,7 +221,10 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
             "uses_electron_user_data_dir": False,
             "uses_hash_identical_app_copy_policy": False,
             "uses_official_native_app_policy": False,
+            "custom_process_auto_update_disable_policy_configured": False,
+            "custom_process_auto_update_disabled_runtime_proven": False,
             "custom_process_auto_update_disabled": False,
+            "custom_process_auto_update_runtime_proof_required": True,
             "uses_legacy_custom_app_copy_policy": False,
             "raw_launcher_recorded": False,
         }
@@ -255,10 +258,13 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
             and 'OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"' in text
             and 'CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"' in text
         ),
-        "custom_process_auto_update_disabled": (
+        "custom_process_auto_update_disable_policy_configured": (
             repo_managed_launcher_proven
             and 'CODEX_SPARKLE_ENABLED="false"' in text
         ),
+        "custom_process_auto_update_disabled_runtime_proven": False,
+        "custom_process_auto_update_disabled": False,
+        "custom_process_auto_update_runtime_proof_required": True,
         "uses_legacy_custom_app_copy_policy": (
             "Codex WBP Clean.app" in text or "WBP_CODEX_APP_COPY_PATH" in text
         ),
