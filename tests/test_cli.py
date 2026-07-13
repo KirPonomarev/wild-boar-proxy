@@ -24008,6 +24008,12 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', launcher_text)
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', launcher_text)
         self.assertIn("set_launch_env", launcher_text)
+        self.assertIn(
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
+            launcher_text,
+        )
+        self.assertIn('while ! /bin/mkdir "$LAUNCH_ENV_LOCK_DIR"', launcher_text)
+        self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', launcher_text)
         self.assertIn("find_launched_pid() {", launcher_text)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', launcher_text)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', launcher_text)
@@ -24081,6 +24087,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("'CODEX_CLI_PATH': resource_root / 'codex'", payload)
         self.assertIn("'command': resource_root / 'cua_node/bin/node_repl'", payload)
         self.assertIn("'/Contents/Resources/' in stripped", payload)
+        self.assertIn("toml_section == '[mcp_servers.node_repl]'", payload)
+        self.assertIn("toml_section == '[mcp_servers.node_repl.env]'", payload)
         self.assertIn("with NamedTemporaryFile('w'", payload)
         self.assertIn('os.replace(tmp_path, path)', payload)
         self.assertIn('export TMPDIR="$APP_RUNTIME_TMPDIR"', payload)
@@ -24143,6 +24151,12 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('/usr/bin/open -n -a "$CODEX_APP_PATH"', payload)
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', payload)
         self.assertIn("set_launch_env", payload)
+        self.assertIn(
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
+            payload,
+        )
+        self.assertIn('while ! /bin/mkdir "$LAUNCH_ENV_LOCK_DIR"', payload)
+        self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', payload)
         self.assertIn("find_launched_pid() {", payload)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', payload)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
@@ -24154,6 +24168,110 @@ class CliTests(unittest.TestCase):
             'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             payload,
         )
+
+    def test_repo_owned_launcher_config_repair_is_scoped_to_node_repl_sections(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        start_marker = (
+            '    "${WBP_PYTHON_BIN:-/usr/bin/python3}" - "$CONFIG_TOML" '
+            '"$CODEX_APP_RESOURCES" <<\'PY\''
+        )
+        lines = payload.splitlines()
+        start = lines.index(start_marker)
+        end = lines.index("PY", start + 1)
+        repair_script = "\n".join([lines[start][4:], *lines[start + 1 : end + 1]])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            config.write_text(
+                "[mcp_servers.node_repl]\n"
+                'command = "/Old/Codex.app/Contents/Resources/cua_node/bin/node_repl"\n'
+                "\n[mcp_servers.node_repl.env]\n"
+                'CODEX_CLI_PATH = "/Old/Codex.app/Contents/Resources/codex"\n'
+                "\n[mcp_servers.third_party]\n"
+                'command = "/Vendor/Tool.app/Contents/Resources/server"\n',
+                encoding="utf-8",
+            )
+            shell_script = root / "repair.sh"
+            shell_script.write_text(
+                "set -eu\n"
+                f"WBP_PYTHON_BIN={shlex.quote(sys.executable)}\n"
+                f"CONFIG_TOML={shlex.quote(str(config))}\n"
+                'CODEX_APP_RESOURCES="/Applications/ChatGPT.app/Contents/Resources"\n'
+                f"{repair_script}\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["/bin/sh", str(shell_script)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            repaired = config.read_text(encoding="utf-8")
+            self.assertIn(
+                'command = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"',
+                repaired,
+            )
+            self.assertIn(
+                'CODEX_CLI_PATH = "/Applications/ChatGPT.app/Contents/Resources/codex"',
+                repaired,
+            )
+            self.assertIn(
+                'command = "/Vendor/Tool.app/Contents/Resources/server"',
+                repaired,
+            )
+
+    def test_repo_owned_launcher_serializes_launchctl_environment_mutation(self) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        start = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith('  LAUNCH_ENV_LOCK_DIR=')
+        )
+        end = next(
+            index
+            for index, line in enumerate(lines[start + 1 :], start + 1)
+            if line.startswith('  LAUNCH_ENV_KEYS=')
+        )
+        lock_functions = "\n".join(line[2:] for line in lines[start:end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            lock_dir = Path(f"/tmp/wbp-codex-launch-env-test-{os.getpid()}.lock")
+            shutil.rmtree(lock_dir, ignore_errors=True)
+            script = root / "lock.sh"
+            script.write_text(
+                "set -eu\n"
+                f"APP_STDERR_LOG={shlex.quote(str(root / 'launcher.stderr.log'))}\n"
+                f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_dir))}\n"
+                f"{lock_functions}\n"
+                "acquire_launch_env_lock\n"
+                "sleep \"$1\"\n"
+                "release_launch_env_lock\n",
+                encoding="utf-8",
+            )
+            first = subprocess.Popen(["/bin/sh", str(script), "0.5"])
+            time.sleep(0.1)
+            started = time.monotonic()
+            second = subprocess.run(
+                ["/bin/sh", str(script), "0"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            elapsed = time.monotonic() - started
+            first_returncode = first.wait(timeout=5)
+
+            self.assertEqual(first_returncode, 0)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertGreaterEqual(elapsed, 0.3)
+            self.assertFalse(lock_dir.exists())
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
