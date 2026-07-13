@@ -24009,7 +24009,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', launcher_text)
         self.assertIn("set_launch_env", launcher_text)
         self.assertIn(
-            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$OWNER_HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
             launcher_text,
         )
         self.assertIn(
@@ -24043,6 +24043,11 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(
             'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
             payload,
+        )
+        self.assertIn('OWNER_HOME="$HOME"', payload)
+        self.assertLess(
+            payload.index('OWNER_HOME="$HOME"'),
+            payload.index('export HOME="$APP_HOME"'),
         )
         self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
         self.assertIn('APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"', payload)
@@ -24155,7 +24160,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', payload)
         self.assertIn("set_launch_env", payload)
         self.assertIn(
-            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$OWNER_HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
             payload,
         )
         self.assertIn(
@@ -24635,7 +24640,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "84da98c2abacc36ecab5a67d73ee795b29d62ecc06b74763a8523854003224ff",
+            "b5b2fd89bff542687d957456712c9ba5e573efb795ac47ac802597476b9ffc8b",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 

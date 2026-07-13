@@ -96,6 +96,8 @@ LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     "a3c23bbd3983c86ba0a694a6903c786282c59d2d912e36785cdbbff7635e6e4a",
     # Repo-owned v1 launcher before private lock-root and opened-fd validation.
     "84da98c2abacc36ecab5a67d73ee795b29d62ecc06b74763a8523854003224ff",
+    # Repo-owned v1 launcher before owner-home capture for the shared lock root.
+    "b5b2fd89bff542687d957456712c9ba5e573efb795ac47ac802597476b9ffc8b",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
@@ -1469,6 +1471,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'mode="${1:-}"',
             'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"',
             'PROFILE_DIR="${WBP_PROFILE_DIR:-$SCRIPT_DIR}"',
+            'OWNER_HOME="$HOME"',
             'AUTH_FILE="$PROFILE_DIR/auth.json"',
             'APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"',
             'APP_HOME="$PROFILE_DIR/home"',
@@ -1724,7 +1727,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "  launchctl_unsetenv() {",
             '    /bin/launchctl unsetenv "$1" 2>> "$APP_STDERR_LOG" || true',
             "  }",
-            '  LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
+            '  LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$OWNER_HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
             "  acquire_launch_env_lock() {",
             '    case "$LAUNCH_ENV_LOCK_DIR" in /*.lock) ;; *) exit 9 ;; esac',
             "    umask 077",
