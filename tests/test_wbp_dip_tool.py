@@ -82,6 +82,7 @@ from wild_boar_proxy.wbp_dip_tool import (
     default_python_bin,
     main,
     request_live_result,
+    resolve_requested_codex_bin,
 )
 
 
@@ -1087,6 +1088,22 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(resolved, installed_bin)
         resolver.assert_called_once_with({})
 
+    def test_requested_codex_bin_must_resolve_inside_attested_official_app(self) -> None:
+        expected = Path("/Applications/ChatGPT.app/Contents/Resources/codex")
+        with mock.patch(
+            "wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli",
+            return_value=expected,
+        ) as resolver:
+            resolved = resolve_requested_codex_bin(
+                str(expected),
+                {"WBP_CODEX_APP_PATH": "/Applications/Untrusted.app"},
+            )
+
+        source = resolver.call_args.args[0]
+        self.assertNotIn("WBP_CODEX_APP_PATH", source)
+        self.assertEqual(source["WBP_CODEX_BIN"], str(expected))
+        self.assertEqual(resolved, expected)
+
     def test_codex_app_candidates_prefer_current_official_native_bundle(self) -> None:
         candidates = _codex_app_candidates({})
 
@@ -1769,14 +1786,13 @@ class WbpDipToolTests(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 1)
         packet = json.loads(completed.stdout)
         self.assertEqual(packet["packet_kind"], "wbp_dip_working_tool_run")
-        self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_DRY_RUN)
+        self.assertEqual(packet["machine_error_code"], "OFFICIAL_CODEX_APP_PATH_INVALID")
         self.assertEqual(packet["effect"], "probe")
-        self.assertTrue(packet["planned_codex_exec"])
-        self.assertEqual(packet["planned_model"], DEFAULT_MODEL)
-        self.assertEqual(packet["planned_sandbox"], DEFAULT_SANDBOX)
+        self.assertFalse(packet["planned_codex_exec"])
+        self.assertIn("official_codex_app_not_attested", packet["blocking_reasons"])
         self.assertEqual(packet["dip_work_mode"], "standard")
         self.assertFalse(packet["dip_full_work_mode"])
         self.assertEqual(packet["live_result_text_limit"], 2400)
@@ -1785,27 +1801,27 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(packet_contains_text(packet, TASK))
 
     def test_tool_dry_run_full_work_mode_reports_full_packet_limits(self) -> None:
-        completed = subprocess.run(
-            [
-                sys.executable,
-                "tools/wbp_dip",
-                "--dry-run",
-                "--json",
-                "--work-mode",
-                "full",
-                "--codex-bin",
-                "/bin/echo",
-                TASK,
-            ],
-            cwd=Path(__file__).resolve().parents[1],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
+        stdout = StringIO()
+        with mock.patch(
+            "wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli",
+            return_value=Path(
+                "/Applications/ChatGPT.app/Contents/Resources/codex"
+            ),
+        ), redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "--dry-run",
+                    "--json",
+                    "--work-mode",
+                    "full",
+                    "--codex-bin",
+                    "/Applications/ChatGPT.app/Contents/Resources/codex",
+                    TASK,
+                ]
+            )
 
-        self.assertEqual(completed.returncode, 0)
-        packet = json.loads(completed.stdout)
+        self.assertEqual(exit_code, 0)
+        packet = json.loads(stdout.getvalue())
         self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_DRY_RUN)
         self.assertEqual(packet["planned_dip_work_mode"], "full")
         self.assertEqual(packet["dip_work_mode"], "full")
@@ -1815,18 +1831,21 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["repo_bridge_max_steps"], 24)
         self.assertFalse(packet_contains_text(packet, TASK))
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_json_operator_path_returns_working_result_packet(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
             proof_dir = root / "proof"
             profile_dir = root / "profile"
             profile_dir.mkdir()
@@ -1946,18 +1965,21 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertIn("<redacted-task-sha256:", codex_jsonl)
         self.assertIn("<redacted-codex-prompt-sha256:", codex_jsonl)
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_plain_operator_path_prints_useful_result(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
 
             def fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
                 stdout = kwargs["stdout"]
@@ -1996,12 +2018,14 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout.getvalue(), "DIP plain output is useful.\n")
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_loads_openai_api_key_from_local_token_when_env_missing(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         sentinel = "local-runtime-token-123456"
         with tempfile.TemporaryDirectory() as raw_root:
@@ -2009,6 +2033,7 @@ class WbpDipToolTests(unittest.TestCase):
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
             profile_dir = root / "profile"
             managed_dir = profile_dir / "managed"
             profile_dir.mkdir()
@@ -2074,18 +2099,21 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
         self.assertFalse(packet_contains_text(packet, sentinel))
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_does_not_inject_local_token_for_non_loopback_provider(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
             profile_dir = root / "profile"
             managed_dir = profile_dir / "managed"
             profile_dir.mkdir()
@@ -2150,18 +2178,21 @@ class WbpDipToolTests(unittest.TestCase):
         packet = json.loads(stdout.getvalue())
         self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_sets_wbp_stable_config_for_auth_command_profiles(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
             profile_dir = root / "profile"
             managed_dir = profile_dir / "managed"
             profile_dir.mkdir()
@@ -2231,18 +2262,21 @@ class WbpDipToolTests(unittest.TestCase):
         packet = json.loads(stdout.getvalue())
         self.assertEqual(packet["machine_error_code"], WBP_DIP_TOOL_OK)
 
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
     def test_main_passes_explicit_active_project_root_separate_from_codex_cwd(
         self,
         subprocess_run_mock: mock.Mock,
         request_live_result_mock: mock.Mock,
+        resolve_codex_mock: mock.Mock,
     ) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
             codex_bin = root / "codex"
             codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             codex_bin.chmod(0o755)
+            resolve_codex_mock.return_value = codex_bin
             profile_dir = root / "profile"
             profile_dir.mkdir()
             proof_dir = root / "proof"

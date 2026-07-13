@@ -38,7 +38,7 @@ from .external_models.http_client import request_json
 from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
 from .external_models.validate import _completion_url, _provider_headers
-from .official_codex_app import resolve_official_codex_cli
+from .official_codex_app import OfficialCodexAppError, resolve_official_codex_cli
 from .runtime import RuntimeErrorInfo, RuntimePaths, write_json_atomic, write_text_atomic
 from .runtime_dispatch_mode_truth import (
     DISPATCH_MODE_CHATGPT_API,
@@ -1013,6 +1013,17 @@ def _codex_app_candidates(source: Mapping[str, str]) -> list[Path]:
 
 def default_codex_bin(env: Mapping[str, str] | None = None) -> Path:
     source = env if env is not None else os.environ
+    return resolve_official_codex_cli(source)
+
+
+def resolve_requested_codex_bin(
+    requested_path: str | None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    source = dict(os.environ if env is None else env)
+    if requested_path:
+        source.pop("WBP_CODEX_APP_PATH", None)
+        source["WBP_CODEX_BIN"] = requested_path
     return resolve_official_codex_cli(source)
 
 
@@ -6449,7 +6460,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--sandbox", default=DEFAULT_SANDBOX)
     parser.add_argument("--profile-dir")
-    parser.add_argument("--codex-bin")
+    parser.add_argument(
+        "--codex-bin",
+        help="path inside a signed official OpenAI Codex/ChatGPT application",
+    )
     parser.add_argument("--cd", dest="codex_cwd", default=str(Path.cwd()))
     parser.add_argument(
         "--active-project-root",
@@ -6538,7 +6552,50 @@ def main(argv: Sequence[str] | None = None) -> int:
         if active_project_root_candidate is not None
         else {}
     )
-    codex_bin = Path(args.codex_bin).expanduser() if args.codex_bin else default_codex_bin()
+    try:
+        codex_bin = resolve_requested_codex_bin(args.codex_bin)
+    except OfficialCodexAppError as exc:
+        blocked_packet = build_wbp_dip_tool_packet(
+            task=task,
+            expected_alias=expected_alias,
+            codex_exit_code=None,
+            codex_exec_jsonl_file=output_jsonl,
+            output_last_message_file=output_last_message,
+            entry_evidence_file=entry_evidence_file,
+            proof_dir=proof_dir,
+            dry_run=args.dry_run,
+            codex_executable=False,
+            changed_files=[],
+            secret_values=[task],
+            target_repo=root_info,
+            require_live_result=False,
+            dip_work_mode=args.work_mode,
+        )
+        blocked_packet.update(
+            {
+                "status": "error",
+                "exit_code": 1,
+                "human_message": (
+                    "A signed official OpenAI Codex/ChatGPT application was not proven."
+                ),
+                "machine_error_code": exc.machine_error_code,
+                "operator_action": "repair",
+                "next_action": "select_signed_official_codex_app",
+                "blocking_reasons": sorted(
+                    set(blocked_packet.get("blocking_reasons", []))
+                    | {"official_codex_app_not_attested"}
+                ),
+                "planned_codex_exec": False,
+                "custom_codex_exec_invoked": False,
+            }
+        )
+        if args.json:
+            sys.stdout.write(
+                json.dumps(blocked_packet, ensure_ascii=True, sort_keys=True) + "\n"
+            )
+        else:
+            sys.stdout.write(str(blocked_packet["human_message"]) + "\n")
+        return 1
     python_bin = default_python_bin()
     model = _safe_text(args.model, limit=80) or DEFAULT_MODEL
     sandbox = _safe_text(args.sandbox, limit=80) or DEFAULT_SANDBOX
