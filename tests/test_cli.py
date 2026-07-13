@@ -24273,6 +24273,57 @@ class CliTests(unittest.TestCase):
             self.assertGreaterEqual(elapsed, 0.3)
             self.assertFalse(lock_dir.exists())
 
+    def test_repo_owned_launcher_waits_for_fresh_uninitialized_lock(self) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        start = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith('  LAUNCH_ENV_LOCK_DIR=')
+        )
+        end = next(
+            index
+            for index, line in enumerate(lines[start + 1 :], start + 1)
+            if line.startswith('  LAUNCH_ENV_KEYS=')
+        )
+        lock_functions = "\n".join(line[2:] for line in lines[start:end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            lock_dir = Path(f"/tmp/wbp-codex-launch-env-bootstrap-{os.getpid()}.lock")
+            shutil.rmtree(lock_dir, ignore_errors=True)
+            lock_dir.mkdir()
+            script = root / "lock.sh"
+            script.write_text(
+                "set -eu\n"
+                f"APP_STDERR_LOG={shlex.quote(str(root / 'launcher.stderr.log'))}\n"
+                f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_dir))}\n"
+                f"{lock_functions}\n"
+                "acquire_launch_env_lock\n"
+                "release_launch_env_lock\n",
+                encoding="utf-8",
+            )
+            contender = subprocess.Popen(
+                ["/bin/sh", str(script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                time.sleep(0.5)
+                self.assertIsNone(contender.poll())
+                self.assertTrue(lock_dir.is_dir())
+                self.assertFalse((lock_dir / "pid").exists())
+                shutil.rmtree(lock_dir)
+                stdout, stderr = contender.communicate(timeout=5)
+            finally:
+                if contender.poll() is None:
+                    contender.kill()
+                    contender.wait(timeout=5)
+                shutil.rmtree(lock_dir, ignore_errors=True)
+
+            self.assertEqual(contender.returncode, 0, f"{stdout}\n{stderr}")
+
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
         self.default_launcher_script.write_text(original_text, encoding="utf-8")
@@ -24451,7 +24502,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "7b7fe64dcbbedbb974cc7adde7ad4a639589603ff8dff70ab40a46094bdbb786",
+            "541cb6f25b2a00708b5acd7e86e4dfb7dfe6e09815577d16b9e3fc90d66f077f",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 

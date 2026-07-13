@@ -88,6 +88,8 @@ LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     "ffe9060372d687e38571b7c5cab5eb611ed45a77316d9eb82c822886c40391e8",
     # Repo-owned v1 launcher before launch-env serialization and scoped path repair.
     "7b7fe64dcbbedbb974cc7adde7ad4a639589603ff8dff70ab40a46094bdbb786",
+    # Repo-owned v1 launcher before uninitialized launch-lock grace handling.
+    "541cb6f25b2a00708b5acd7e86e4dfb7dfe6e09815577d16b9e3fc90d66f077f",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
@@ -1726,9 +1728,22 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '      lock_owner="$(/usr/bin/stat -f %u "$LAUNCH_ENV_LOCK_DIR" 2>/dev/null || printf unknown)"',
             '      [ "$lock_owner" = "$(id -u)" ] || exit 9',
             '      holder_pid="$(/bin/cat "$LAUNCH_ENV_LOCK_DIR/pid" 2>/dev/null || printf "")"',
+            '      case "$holder_pid" in ""|*[!0-9]*) holder_pid="" ;; esac',
+            '      if [ -z "$holder_pid" ]; then',
+            '        lock_mtime="$(/usr/bin/stat -f %m "$LAUNCH_ENV_LOCK_DIR" 2>/dev/null || printf 0)"',
+            '        lock_now="$(/bin/date +%s)"',
+            '        case "$lock_mtime:$lock_now" in *[!0-9:]*) exit 9 ;; esac',
+            '        lock_age=$((lock_now - lock_mtime))',
+            '        if [ "$lock_age" -lt 5 ]; then',
+            "          attempts=$((attempts + 1))",
+            '          [ "$attempts" -lt 160 ] || exit 9',
+            "          sleep 0.25",
+            "          continue",
+            "        fi",
+            "      fi",
             '      if [ -n "$holder_pid" ] && /bin/kill -0 "$holder_pid" 2>/dev/null; then',
             "        attempts=$((attempts + 1))",
-            '        [ "$attempts" -lt 80 ] || exit 9',
+            '        [ "$attempts" -lt 160 ] || exit 9',
             "        sleep 0.25",
             "        continue",
             "      fi",
