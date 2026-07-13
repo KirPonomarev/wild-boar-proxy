@@ -24012,7 +24012,10 @@ class CliTests(unittest.TestCase):
             'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
             launcher_text,
         )
-        self.assertIn('while ! /bin/mkdir "$LAUNCH_ENV_LOCK_DIR"', launcher_text)
+        self.assertIn(
+            'while ! /bin/ln "$LAUNCH_ENV_LOCK_CLAIM" "$LAUNCH_ENV_LOCK_DIR"',
+            launcher_text,
+        )
         self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', launcher_text)
         self.assertIn("find_launched_pid() {", launcher_text)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', launcher_text)
@@ -24155,7 +24158,10 @@ class CliTests(unittest.TestCase):
             'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
             payload,
         )
-        self.assertIn('while ! /bin/mkdir "$LAUNCH_ENV_LOCK_DIR"', payload)
+        self.assertIn(
+            'while ! /bin/ln "$LAUNCH_ENV_LOCK_CLAIM" "$LAUNCH_ENV_LOCK_DIR"',
+            payload,
+        )
         self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', payload)
         self.assertIn("find_launched_pid() {", payload)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', payload)
@@ -24273,7 +24279,7 @@ class CliTests(unittest.TestCase):
             self.assertGreaterEqual(elapsed, 0.3)
             self.assertFalse(lock_dir.exists())
 
-    def test_repo_owned_launcher_waits_for_fresh_uninitialized_lock(self) -> None:
+    def test_repo_owned_launcher_serializes_concurrent_stale_lock_reclaim(self) -> None:
         payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
         lines = payload.splitlines()
         start = next(
@@ -24292,7 +24298,9 @@ class CliTests(unittest.TestCase):
             root = Path(tmp)
             lock_dir = Path(f"/tmp/wbp-codex-launch-env-bootstrap-{os.getpid()}.lock")
             shutil.rmtree(lock_dir, ignore_errors=True)
-            lock_dir.mkdir()
+            lock_dir.write_text("2147483647:1\n", encoding="utf-8")
+            active_file = root / "active"
+            overlap_file = root / "overlap"
             script = root / "lock.sh"
             script.write_text(
                 "set -eu\n"
@@ -24300,29 +24308,32 @@ class CliTests(unittest.TestCase):
                 f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_dir))}\n"
                 f"{lock_functions}\n"
                 "acquire_launch_env_lock\n"
+                f"if [ -e {shlex.quote(str(active_file))} ]; then printf overlap > {shlex.quote(str(overlap_file))}; fi\n"
+                f"printf active > {shlex.quote(str(active_file))}\n"
+                "sleep 0.25\n"
+                f"rm -f {shlex.quote(str(active_file))}\n"
                 "release_launch_env_lock\n",
                 encoding="utf-8",
             )
-            contender = subprocess.Popen(
+            first = subprocess.Popen(
                 ["/bin/sh", str(script)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            try:
-                time.sleep(0.5)
-                self.assertIsNone(contender.poll())
-                self.assertTrue(lock_dir.is_dir())
-                self.assertFalse((lock_dir / "pid").exists())
-                shutil.rmtree(lock_dir)
-                stdout, stderr = contender.communicate(timeout=5)
-            finally:
-                if contender.poll() is None:
-                    contender.kill()
-                    contender.wait(timeout=5)
-                shutil.rmtree(lock_dir, ignore_errors=True)
+            second = subprocess.Popen(
+                ["/bin/sh", str(script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            first_stdout, first_stderr = first.communicate(timeout=5)
+            second_stdout, second_stderr = second.communicate(timeout=5)
 
-            self.assertEqual(contender.returncode, 0, f"{stdout}\n{stderr}")
+            self.assertEqual(first.returncode, 0, f"{first_stdout}\n{first_stderr}")
+            self.assertEqual(second.returncode, 0, f"{second_stdout}\n{second_stderr}")
+            self.assertFalse(overlap_file.exists())
+            self.assertFalse(lock_dir.exists())
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
@@ -24502,7 +24513,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "541cb6f25b2a00708b5acd7e86e4dfb7dfe6e09815577d16b9e3fc90d66f077f",
+            "5a0613003fffed5a5b69d102fbced7ce642ee7f9d20b43cc76a7952fa33d8d5a",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 
