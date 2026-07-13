@@ -24013,7 +24013,7 @@ class CliTests(unittest.TestCase):
             launcher_text,
         )
         self.assertIn(
-            'while ! /bin/ln "$LAUNCH_ENV_LOCK_CLAIM" "$LAUNCH_ENV_LOCK_DIR"',
+            '/usr/bin/lockf -s -t 40 9 || exit 9',
             launcher_text,
         )
         self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', launcher_text)
@@ -24159,7 +24159,7 @@ class CliTests(unittest.TestCase):
             payload,
         )
         self.assertIn(
-            'while ! /bin/ln "$LAUNCH_ENV_LOCK_CLAIM" "$LAUNCH_ENV_LOCK_DIR"',
+            '/usr/bin/lockf -s -t 40 9 || exit 9',
             payload,
         )
         self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', payload)
@@ -24277,9 +24277,10 @@ class CliTests(unittest.TestCase):
             self.assertEqual(first_returncode, 0)
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertGreaterEqual(elapsed, 0.3)
-            self.assertFalse(lock_dir.exists())
+            self.assertTrue(lock_dir.is_file())
+            lock_dir.unlink()
 
-    def test_repo_owned_launcher_serializes_concurrent_stale_lock_reclaim(self) -> None:
+    def test_repo_owned_launcher_serializes_with_persistent_stale_lock_file(self) -> None:
         payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
         lines = payload.splitlines()
         start = next(
@@ -24333,7 +24334,78 @@ class CliTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, f"{first_stdout}\n{first_stderr}")
             self.assertEqual(second.returncode, 0, f"{second_stdout}\n{second_stderr}")
             self.assertFalse(overlap_file.exists())
-            self.assertFalse(lock_dir.exists())
+            self.assertTrue(lock_dir.is_file())
+            lock_dir.unlink()
+
+    def test_repo_owned_launcher_kernel_lock_recovers_after_killed_holder_child_exits(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        start = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith('  LAUNCH_ENV_LOCK_DIR=')
+        )
+        end = next(
+            index
+            for index, line in enumerate(lines[start + 1 :], start + 1)
+            if line.startswith('  LAUNCH_ENV_KEYS=')
+        )
+        lock_functions = "\n".join(line[2:] for line in lines[start:end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            lock_dir = Path(f"/tmp/wbp-codex-launch-env-kill-{os.getpid()}.lock")
+            lock_dir.unlink(missing_ok=True)
+            ready_file = root / "ready"
+            holder_script = root / "holder.sh"
+            holder_script.write_text(
+                "set -eu\n"
+                f"APP_STDERR_LOG={shlex.quote(str(root / 'holder.stderr.log'))}\n"
+                f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_dir))}\n"
+                f"{lock_functions}\n"
+                "acquire_launch_env_lock\n"
+                f"printf ready > {shlex.quote(str(ready_file))}\n"
+                "sleep 1\n",
+                encoding="utf-8",
+            )
+            contender_script = root / "contender.sh"
+            contender_script.write_text(
+                "set -eu\n"
+                f"APP_STDERR_LOG={shlex.quote(str(root / 'contender.stderr.log'))}\n"
+                f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_dir))}\n"
+                f"{lock_functions}\n"
+                "acquire_launch_env_lock\n"
+                "release_launch_env_lock\n",
+                encoding="utf-8",
+            )
+            holder = subprocess.Popen(["/bin/sh", str(holder_script)])
+            try:
+                for _ in range(50):
+                    if ready_file.exists():
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(ready_file.exists())
+                holder.kill()
+                holder.wait(timeout=5)
+                started = time.monotonic()
+                contender = subprocess.run(
+                    ["/bin/sh", str(contender_script)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                elapsed = time.monotonic() - started
+            finally:
+                if holder.poll() is None:
+                    holder.kill()
+                    holder.wait(timeout=5)
+                lock_dir.unlink(missing_ok=True)
+
+            self.assertEqual(contender.returncode, 0, contender.stderr)
+            self.assertLess(elapsed, 2.0)
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
@@ -24513,7 +24585,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "5a0613003fffed5a5b69d102fbced7ce642ee7f9d20b43cc76a7952fa33d8d5a",
+            "a3c23bbd3983c86ba0a694a6903c786282c59d2d912e36785cdbbff7635e6e4a",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 
