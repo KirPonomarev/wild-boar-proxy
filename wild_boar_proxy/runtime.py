@@ -86,6 +86,8 @@ LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS = {
     "ad5cf6cc98a6c49cdccaf6d1a33e0285ba8552e6027ba83314dfb44bc5e86f84",
     # Repo-owned v1 launcher before current-app runtime path repair.
     "ffe9060372d687e38571b7c5cab5eb611ed45a77316d9eb82c822886c40391e8",
+    # Repo-owned v1 launcher before launch-env serialization and scoped path repair.
+    "7b7fe64dcbbedbb974cc7adde7ad4a639589603ff8dff70ab40a46094bdbb786",
 }
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="

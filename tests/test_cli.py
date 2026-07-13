@@ -24449,6 +24449,12 @@ class CliTests(unittest.TestCase):
         self.assertIn('for candidate in "/Applications/ChatGPT.app"', repaired_launcher)
         self.assertNotIn("Codex WBP Clean.app", repaired_launcher)
 
+    def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
+        self.assertIn(
+            "7b7fe64dcbbedbb974cc7adde7ad4a639589603ff8dff70ab40a46094bdbb786",
+            runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
+        )
+
     def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(
         self,
     ) -> None:
