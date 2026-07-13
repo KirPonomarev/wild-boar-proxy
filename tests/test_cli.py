@@ -24009,7 +24009,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', launcher_text)
         self.assertIn("set_launch_env", launcher_text)
         self.assertIn(
-            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
             launcher_text,
         )
         self.assertIn(
@@ -24155,7 +24155,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('/usr/bin/open -n "$CODEX_APP_PATH" --args', payload)
         self.assertIn("set_launch_env", payload)
         self.assertIn(
-            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-/tmp/wbp-codex-launch-env-$(id -u).lock}"',
+            'LAUNCH_ENV_LOCK_DIR="${WBP_LAUNCH_ENV_LOCK_DIR:-$HOME/.codex-custom-cli/managed/launch-locks/launch-env.lock}"',
             payload,
         )
         self.assertIn(
@@ -24248,8 +24248,7 @@ class CliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             root = Path(tmp)
-            lock_dir = Path(f"/tmp/wbp-codex-launch-env-test-{os.getpid()}.lock")
-            shutil.rmtree(lock_dir, ignore_errors=True)
+            lock_dir = root / "launch-env.lock"
             script = root / "lock.sh"
             script.write_text(
                 "set -eu\n"
@@ -24297,8 +24296,7 @@ class CliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             root = Path(tmp)
-            lock_dir = Path(f"/tmp/wbp-codex-launch-env-bootstrap-{os.getpid()}.lock")
-            shutil.rmtree(lock_dir, ignore_errors=True)
+            lock_dir = root / "launch-env.lock"
             lock_dir.write_text("2147483647:1\n", encoding="utf-8")
             active_file = root / "active"
             overlap_file = root / "overlap"
@@ -24356,7 +24354,7 @@ class CliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
             root = Path(tmp)
-            lock_dir = Path(f"/tmp/wbp-codex-launch-env-kill-{os.getpid()}.lock")
+            lock_dir = root / "launch-env.lock"
             lock_dir.unlink(missing_ok=True)
             ready_file = root / "ready"
             holder_script = root / "holder.sh"
@@ -24406,6 +24404,58 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(contender.returncode, 0, contender.stderr)
             self.assertLess(elapsed, 2.0)
+
+    def test_repo_owned_launcher_rejects_non_regular_lock_nodes_without_hanging(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        start = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith('  LAUNCH_ENV_LOCK_DIR=')
+        )
+        end = next(
+            index
+            for index, line in enumerate(lines[start + 1 :], start + 1)
+            if line.startswith('  LAUNCH_ENV_KEYS=')
+        )
+        lock_functions = "\n".join(line[2:] for line in lines[start:end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            target.write_text("not a lock\n", encoding="utf-8")
+            nodes = {
+                "fifo": root / "fifo.lock",
+                "symlink": root / "symlink.lock",
+            }
+            os.mkfifo(nodes["fifo"])
+            nodes["symlink"].symlink_to(target)
+
+            for label, lock_path in nodes.items():
+                with self.subTest(label=label):
+                    script = root / f"{label}.sh"
+                    script.write_text(
+                        "set -eu\n"
+                        f"APP_STDERR_LOG={shlex.quote(str(root / f'{label}.stderr.log'))}\n"
+                        f"WBP_LAUNCH_ENV_LOCK_DIR={shlex.quote(str(lock_path))}\n"
+                        f"{lock_functions}\n"
+                        "acquire_launch_env_lock\n",
+                        encoding="utf-8",
+                    )
+                    started = time.monotonic()
+                    completed = subprocess.run(
+                        ["/bin/sh", str(script)],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    elapsed = time.monotonic() - started
+
+                    self.assertEqual(completed.returncode, 9, completed.stderr)
+                    self.assertLess(elapsed, 1.0)
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
@@ -24585,7 +24635,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "a3c23bbd3983c86ba0a694a6903c786282c59d2d912e36785cdbbff7635e6e4a",
+            "84da98c2abacc36ecab5a67d73ee795b29d62ecc06b74763a8523854003224ff",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 
