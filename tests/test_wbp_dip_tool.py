@@ -1877,6 +1877,10 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         packet = json.loads(completed.stdout)
         self.assertEqual(packet["machine_error_code"], "OFFICIAL_CODEX_APP_PATH_INVALID")
+        self.assertEqual(
+            packet["blocking_reasons"],
+            ["official_codex_app_not_attested"],
+        )
         for field in (
             "custom_codex_exec_invoked",
             "assistant_response_observed",

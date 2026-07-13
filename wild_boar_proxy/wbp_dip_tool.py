@@ -6581,10 +6581,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "machine_error_code": exc.machine_error_code,
                 "operator_action": "repair",
                 "next_action": "select_signed_official_codex_app",
-                "blocking_reasons": sorted(
-                    set(blocked_packet.get("blocking_reasons", []))
-                    | {"official_codex_app_not_attested"}
-                ),
+                "blocking_reasons": ["official_codex_app_not_attested"],
                 "planned_codex_exec": False,
                 "custom_codex_exec_invoked": False,
                 "assistant_response_observed": False,
