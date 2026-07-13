@@ -38,6 +38,7 @@ from .external_models.http_client import request_json
 from .external_models.paths import ExternalModelsPaths
 from .external_models.routes import find_route, load_routes_file
 from .external_models.validate import _completion_url, _provider_headers
+from .official_codex_app import resolve_official_codex_cli
 from .runtime import RuntimeErrorInfo, RuntimePaths, write_json_atomic, write_text_atomic
 from .runtime_dispatch_mode_truth import (
     DISPATCH_MODE_CHATGPT_API,
@@ -1012,19 +1013,7 @@ def _codex_app_candidates(source: Mapping[str, str]) -> list[Path]:
 
 def default_codex_bin(env: Mapping[str, str] | None = None) -> Path:
     source = env if env is not None else os.environ
-    if source.get("WBP_CODEX_BIN"):
-        return Path(str(source["WBP_CODEX_BIN"])).expanduser()
-    binary_candidates = [
-        app / "Contents/Resources/codex"
-        for app in _codex_app_candidates(source)
-    ]
-    for candidate in binary_candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
-    path_codex = shutil.which("codex")
-    if path_codex:
-        return Path(path_codex).expanduser()
-    return binary_candidates[0]
+    return resolve_official_codex_cli(source)
 
 
 def _python_candidate_names() -> tuple[str, ...]:

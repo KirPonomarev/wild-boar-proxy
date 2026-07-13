@@ -1069,10 +1069,9 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertIn("complete structured operator answer", prompt)
         self.assertNotIn("2-6 concise bullets", prompt)
 
-    def test_default_codex_bin_falls_back_to_available_app_binary(self) -> None:
+    def test_default_codex_bin_uses_attested_official_resolver(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root)
-            missing_app = root / "missing" / "Codex WBP Clean.app"
             installed_app = root / "Applications" / "Codex.app"
             installed_bin = installed_app / "Contents" / "Resources" / "codex"
             installed_bin.parent.mkdir(parents=True)
@@ -1080,12 +1079,13 @@ class WbpDipToolTests(unittest.TestCase):
             installed_bin.chmod(0o755)
 
             with mock.patch(
-                "wild_boar_proxy.wbp_dip_tool._codex_app_candidates",
-                return_value=[missing_app, installed_app],
-            ):
+                "wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli",
+                return_value=installed_bin,
+            ) as resolver:
                 resolved = default_codex_bin({})
 
         self.assertEqual(resolved, installed_bin)
+        resolver.assert_called_once_with({})
 
     def test_codex_app_candidates_prefer_current_official_native_bundle(self) -> None:
         candidates = _codex_app_candidates({})
@@ -1107,6 +1107,15 @@ class WbpDipToolTests(unittest.TestCase):
 
         self.assertEqual(candidates[0], override)
         self.assertNotIn(Path("/tmp/legacy-copy.app"), candidates)
+
+    def test_custom_codex_exec_wrapper_uses_signed_official_resolver(self) -> None:
+        wrapper = (
+            Path(__file__).resolve().parents[1] / "tools/wbp_custom_codex_exec"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("wild_boar_proxy.official_codex_app --print-cli-path", wrapper)
+        self.assertNotIn('candidate="$app_path/Contents/Resources/codex"', wrapper)
+        self.assertNotIn('codex_bin="${WBP_CODEX_BIN:-}"', wrapper)
 
     def test_packet_accepts_only_observed_delegate_api_lane(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
