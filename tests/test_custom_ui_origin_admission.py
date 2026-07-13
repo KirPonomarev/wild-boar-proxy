@@ -104,17 +104,27 @@ def _packet(
         user_data_dir.mkdir(parents=True)
         launcher = profile_dir / "codex-custom-launch.sh"
         launcher.write_text("#!/bin/sh\n", encoding="utf-8")
-        return admission.build_custom_ui_origin_admission_packet(
-            custom_app_submit_packet=_submit_packet()
-            if submit_packet is None
-            else submit_packet,
-            prompt_text=PROMPT,
-            stock_app_path=stock_app,
-            custom_app_path=custom_app,
-            custom_profile_dir=profile_dir,
-            custom_user_data_dir=user_data_dir,
-            custom_launcher_path=launcher,
-        )
+        with mock.patch.object(
+            admission,
+            "attest_official_codex_app",
+            return_value={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "team_id_proven": True,
+                "codesign_valid": True,
+            },
+        ):
+            return admission.build_custom_ui_origin_admission_packet(
+                custom_app_submit_packet=_submit_packet()
+                if submit_packet is None
+                else submit_packet,
+                prompt_text=PROMPT,
+                stock_app_path=stock_app,
+                custom_app_path=custom_app,
+                custom_profile_dir=profile_dir,
+                custom_user_data_dir=user_data_dir,
+                custom_launcher_path=launcher,
+            )
 
 
 def _shared_official_packet() -> dict[str, object]:
@@ -126,17 +136,27 @@ def _shared_official_packet() -> dict[str, object]:
         user_data_dir.mkdir(parents=True)
         launcher = profile_dir / "codex-custom-launch.sh"
         launcher.write_text("#!/bin/sh\n", encoding="utf-8")
-        return admission.build_custom_ui_origin_admission_packet(
-            custom_app_submit_packet=_submit_packet(
-                stock_codex_app_process_observed=True,
-            ),
-            prompt_text=PROMPT,
-            stock_app_path=app,
-            custom_app_path=app,
-            custom_profile_dir=profile_dir,
-            custom_user_data_dir=user_data_dir,
-            custom_launcher_path=launcher,
-        )
+        with mock.patch.object(
+            admission,
+            "attest_official_codex_app",
+            return_value={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "team_id_proven": True,
+                "codesign_valid": True,
+            },
+        ):
+            return admission.build_custom_ui_origin_admission_packet(
+                custom_app_submit_packet=_submit_packet(
+                    stock_codex_app_process_observed=True,
+                ),
+                prompt_text=PROMPT,
+                stock_app_path=app,
+                custom_app_path=app,
+                custom_profile_dir=profile_dir,
+                custom_user_data_dir=user_data_dir,
+                custom_launcher_path=launcher,
+            )
 
 
 def _fixture_paths(root: Path, *, custom_bundle_id: str = "com.kirill.codexcustom") -> tuple[Path, Path, Path, Path, Path]:
@@ -179,11 +199,44 @@ class CustomUiOriginAdmissionTests(unittest.TestCase):
         self.assertTrue(packet["bundle_id_collision_detected"])
         self.assertFalse(packet["custom_app_identity_distinct"])
         self.assertTrue(packet["shared_official_native_bundle"])
+        self.assertTrue(packet["stock_official_app_attested"])
+        self.assertTrue(packet["stock_official_app_team_id_proven"])
+        self.assertTrue(packet["stock_official_app_codesign_valid"])
         self.assertTrue(packet["custom_identity_isolated_by_profile"])
         self.assertTrue(packet["custom_instance_coexistence_possible"])
         self.assertTrue(packet["custom_instance_coexistence_proven"])
         self.assertTrue(packet["custom_ui_origin_admitted"])
         self.assertEqual(packet["blocking_reasons"], [])
+
+    def test_unsigned_shared_bundle_id_lookalike_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            app = _write_app(root, "ChatGPT.app", "com.openai.codex")
+            profile_dir = root / "profile"
+            user_data_dir = profile_dir / "electron-user-data"
+            user_data_dir.mkdir(parents=True)
+            launcher = profile_dir / "codex-custom-launch.sh"
+            launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+            packet = admission.build_custom_ui_origin_admission_packet(
+                custom_app_submit_packet=_submit_packet(
+                    stock_codex_app_process_observed=True,
+                ),
+                prompt_text=PROMPT,
+                stock_app_path=app,
+                custom_app_path=app,
+                custom_profile_dir=profile_dir,
+                custom_user_data_dir=user_data_dir,
+                custom_launcher_path=launcher,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertFalse(packet["shared_official_native_bundle"])
+        self.assertFalse(packet["stock_official_app_attested"])
+        self.assertFalse(packet["custom_ui_origin_admitted"])
+        self.assertIn(
+            "shared_official_native_bundle_not_attested",
+            packet["blocking_reasons"],
+        )
 
     def test_distinct_bundle_and_positive_fresh_submit_admits_origin_gate_only(self) -> None:
         packet = _packet()

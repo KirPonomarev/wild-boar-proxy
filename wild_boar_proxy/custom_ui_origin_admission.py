@@ -11,6 +11,7 @@ from typing import Any
 from .command_effects import EFFECT_PROBE
 from .core import packets
 from .native_filesystem_probe import default_persistent_custom_profile_paths
+from .official_codex_app import attest_official_codex_app
 from .real_custom_app_submit_ledger_proof import (
     REAL_CUSTOM_APP_SUBMIT_LEDGER_OK,
     REAL_CUSTOM_APP_SUBMIT_LEDGER_PROOF_PACKET_KIND,
@@ -234,6 +235,7 @@ def build_custom_ui_origin_admission_packet(
     custom_app = Path(str(custom_app_path)).expanduser()
     stock_bundle = _read_bundle_identifier(stock_app, prefix="stock_codex")
     custom_bundle = _read_bundle_identifier(custom_app, prefix="custom_codex")
+    stock_official_attestation = attest_official_codex_app(stock_app)
 
     stock_bundle_id = stock_bundle["stock_codex_bundle_id"]
     custom_bundle_id = custom_bundle["custom_codex_bundle_id"]
@@ -257,6 +259,7 @@ def build_custom_ui_origin_admission_packet(
         same_native_app_path
         and stock_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
         and custom_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+        and stock_official_attestation.get("status") == "ok"
     )
 
     custom_profile_dir_declared = _path_declared(custom_profile_dir)
@@ -275,6 +278,18 @@ def build_custom_ui_origin_admission_packet(
         identity_failures.append("stock_codex_bundle_id_missing")
     if custom_bundle.get("custom_codex_bundle_id_present") is not True:
         identity_failures.append("custom_codex_bundle_id_missing")
+    if (
+        stock_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+        and stock_official_attestation.get("status") != "ok"
+    ):
+        identity_failures.append("stock_official_codex_app_not_attested")
+    if (
+        same_native_app_path
+        and stock_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+        and custom_bundle_id == OFFICIAL_CODEX_BUNDLE_ID
+        and not shared_official_native_bundle
+    ):
+        identity_failures.append("shared_official_native_bundle_not_attested")
     if bundle_id_collision_detected and not shared_official_native_bundle:
         identity_failures.append("bundle_id_collision_detected")
     if not custom_profile_dir_declared:
@@ -313,7 +328,7 @@ def build_custom_ui_origin_admission_packet(
         blocking_reasons=blocking_reasons,
         unsafe_failures=unsafe_failures,
         bundle_id_collision_detected=(
-            bundle_id_collision_detected and not shared_official_native_bundle
+            bundle_id_collision_detected and not same_native_app_path
         ),
         submit_failures=submit_failures,
     )
@@ -328,6 +343,19 @@ def build_custom_ui_origin_admission_packet(
         "custom_app_identity_distinct": custom_app_identity_distinct,
         "same_native_app_path": same_native_app_path,
         "shared_official_native_bundle": shared_official_native_bundle,
+        "stock_official_app_attested": (
+            stock_official_attestation.get("status") == "ok"
+        ),
+        "stock_official_app_team_id_proven": (
+            stock_official_attestation.get("team_id_proven") is True
+        ),
+        "stock_official_app_codesign_valid": (
+            stock_official_attestation.get("codesign_valid") is True
+        ),
+        "stock_official_app_attestation_error_code": _safe_text(
+            stock_official_attestation.get("machine_error_code"),
+            limit=96,
+        ),
         "custom_identity_isolated_by_profile": custom_identity_isolated_by_profile,
         "custom_app_path_recorded": False,
         "stock_app_path_recorded": False,
