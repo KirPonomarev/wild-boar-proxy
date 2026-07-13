@@ -39,6 +39,10 @@ from wild_boar_proxy.natural_intent_contract import (
     build_natural_intent_parser_packet,
 )
 from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
+from wild_boar_proxy.official_codex_app import (
+    OfficialCodexAppError,
+    resolve_official_codex_cli,
+)
 from wild_boar_proxy.wbp_dip_tool import (
     _exact_plain_reply_expected_text,
     _exact_plain_reply_requested,
@@ -3467,6 +3471,45 @@ class OperatorSurfaceConfig:
     runtime_config: Path = field(default_factory=default_runtime_config_path)
     max_prompt_chars: int = 8000
     timeout_seconds: int = 180
+    allow_unattested_codex_bin_for_tests: bool = False
+
+
+def attest_operator_codex_binary(config: OperatorSurfaceConfig) -> dict[str, Any]:
+    requested = config.codex_bin.expanduser().resolve(strict=False)
+    if config.allow_unattested_codex_bin_for_tests:
+        return {
+            "status": "ok",
+            "machine_error_code": "TEST_ONLY_UNATTESTED_CODEX_BINARY",
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": True,
+        }
+    try:
+        resolved = resolve_official_codex_cli({"WBP_CODEX_BIN": str(requested)})
+    except OfficialCodexAppError as exc:
+        return {
+            "status": "blocked",
+            "machine_error_code": exc.machine_error_code,
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": False,
+        }
+    resolved = resolved.expanduser().resolve(strict=False)
+    if resolved != requested:
+        return {
+            "status": "blocked",
+            "machine_error_code": "OPERATOR_CODEX_BINARY_ATTESTATION_MISMATCH",
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": False,
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "codex_bin": resolved,
+        "signed_official_app_proven": True,
+        "test_only_override": False,
+    }
 
 
 def _status_claim_gate_from_live_health(
@@ -3671,6 +3714,17 @@ class OperatorSurfaceSession:
                 "human_message": "Model id was not present in the current server-issued list.",
                 "refresh_packet": self.status_payload(),
             }
+        codex_attestation = attest_operator_codex_binary(self.config)
+        if codex_attestation["status"] != "ok":
+            return {
+                "status": "failed",
+                "machine_error_code": codex_attestation["machine_error_code"],
+                "human_message": "Operator Codex binary is not from the signed official application.",
+                "refresh_packet": self.status_payload(),
+                "signed_official_app_proven": False,
+                "secret_value_recorded": False,
+            }
+        codex_bin = Path(codex_attestation["codex_bin"])
         try:
             local_api_key = self.local_api_key()
         except Exception as exc:
@@ -3719,7 +3773,7 @@ class OperatorSurfaceSession:
             configured_provider = "external_route"
             configured_wire_api = "responses"
             configured_label = "Server-owned external route via bounded responses adapter"
-        if not self.config.codex_bin.exists():
+        if not codex_bin.exists():
             return {
                 "status": "failed",
                 "machine_error_code": "OPERATOR_CODEX_BINARY_UNAVAILABLE",
@@ -3933,7 +3987,7 @@ class OperatorSurfaceSession:
             env_home = Path(env["HOME"]).resolve()
             config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
             command = [
-                str(self.config.codex_bin),
+                str(codex_bin),
                 "exec",
                 "--skip-git-repo-check",
                 "--ephemeral",

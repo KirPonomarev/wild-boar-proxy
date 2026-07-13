@@ -87,6 +87,25 @@ class OperatorSurfaceTests(unittest.TestCase):
             "/Applications/ChatGPT.app/Contents/Resources/codex",
         )
 
+    def test_operator_codex_binary_attestation_fails_closed(self) -> None:
+        config = OperatorSurfaceConfig(codex_bin=Path("/tmp/untrusted-codex"))
+        with mock.patch.object(
+            surface,
+            "resolve_official_codex_cli",
+            side_effect=surface.OfficialCodexAppError(
+                "OFFICIAL_CODEX_APP_PATH_INVALID",
+                "not official",
+            ),
+        ):
+            packet = surface.attest_operator_codex_binary(config)
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "OFFICIAL_CODEX_APP_PATH_INVALID",
+        )
+        self.assertFalse(packet["signed_official_app_proven"])
+
     def test_status_claim_gate_prefers_live_health_ready_over_stale_status_claim(self) -> None:
         claim = _status_claim_gate_from_live_health(
             {
@@ -872,6 +891,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -956,6 +976,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -1025,6 +1046,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -1100,6 +1122,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -1131,6 +1154,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -1182,6 +1206,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -3424,6 +3449,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             OperatorSurfaceConfig(
                 endpoint=f"http://127.0.0.1:{server.server_port}/v1",
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -3532,6 +3558,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             OperatorSurfaceConfig(
                 endpoint=f"http://127.0.0.1:{server.server_port}/v1",
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
