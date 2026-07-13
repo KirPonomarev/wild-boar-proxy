@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .runtime import repo_managed_default_launcher_recognized
+
 
 FAST_UNAVAILABLE_API_KEY_AUTH = "FAST_UNAVAILABLE_API_KEY_AUTH"
 FAST_CONFIG_MISSING = "FAST_CONFIG_MISSING"
@@ -209,6 +211,7 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
             "launcher_present": launcher_script.exists(),
             "launcher_readable": False,
             "launcher_parse_error": error,
+            "repo_managed_launcher_proven": False,
             "exports_codex_home": False,
             "exports_home_app_home": False,
             "exports_openai_api_key": False,
@@ -224,10 +227,14 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
         }
 
     exports_openai_api_key = "export OPENAI_API_KEY" in text
+    repo_managed_launcher_proven = repo_managed_default_launcher_recognized(
+        launcher_script
+    )
     return {
         "launcher_present": True,
         "launcher_readable": True,
         "launcher_parse_error": "",
+        "repo_managed_launcher_proven": repo_managed_launcher_proven,
         "exports_codex_home": 'export CODEX_HOME="$PROFILE_DIR"' in text,
         "exports_home_app_home": 'export HOME="$APP_HOME"' in text,
         "exports_openai_api_key": exports_openai_api_key,
@@ -243,12 +250,14 @@ def _launcher_summary(launcher_script: Path) -> dict[str, Any]:
             "primary_bin_hash=" in text and "preferred_asar_hash=" in text
         ),
         "uses_official_native_app_policy": (
-            'OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"' in text
+            repo_managed_launcher_proven
+            and 'OFFICIAL_CODEX_BUNDLE_ID="com.openai.codex"' in text
             and 'OFFICIAL_CODEX_TEAM_ID="2DC432GLL2"' in text
             and 'CODEX_APP_PATH="${WBP_CODEX_APP_PATH:-}"' in text
         ),
         "custom_process_auto_update_disabled": (
-            'CODEX_SPARKLE_ENABLED="false"' in text
+            repo_managed_launcher_proven
+            and 'CODEX_SPARKLE_ENABLED="false"' in text
         ),
         "uses_legacy_custom_app_copy_policy": (
             "Codex WBP Clean.app" in text or "WBP_CODEX_APP_COPY_PATH" in text

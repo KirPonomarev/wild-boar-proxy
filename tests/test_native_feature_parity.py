@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 import wild_boar_proxy.native_feature_parity as parity
+from wild_boar_proxy.runtime import build_repo_owned_default_launcher_script_text
 from wild_boar_proxy.native_feature_parity import (
     FAST_UNAVAILABLE_API_KEY_AUTH,
     VOICE_STATUS_UNPROVEN,
@@ -88,6 +89,22 @@ class NativeFeatureParityTests(unittest.TestCase):
 
             summary = parity._launcher_summary(launcher)
 
+        self.assertFalse(summary["repo_managed_launcher_proven"])
+        self.assertFalse(summary["uses_official_native_app_policy"])
+        self.assertFalse(summary["custom_process_auto_update_disabled"])
+        self.assertFalse(summary["uses_legacy_custom_app_copy_policy"])
+
+    def test_launcher_summary_accepts_current_repo_managed_launcher_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            launcher = Path(temp_dir) / "launcher.sh"
+            launcher.write_text(
+                build_repo_owned_default_launcher_script_text() + "\n",
+                encoding="utf-8",
+            )
+
+            summary = parity._launcher_summary(launcher)
+
+        self.assertTrue(summary["repo_managed_launcher_proven"])
         self.assertTrue(summary["uses_official_native_app_policy"])
         self.assertTrue(summary["custom_process_auto_update_disabled"])
         self.assertFalse(summary["uses_legacy_custom_app_copy_policy"])
