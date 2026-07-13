@@ -1831,6 +1831,74 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertEqual(packet["repo_bridge_max_steps"], 24)
         self.assertFalse(packet_contains_text(packet, TASK))
 
+    def test_official_resolver_failure_ignores_stale_execution_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            proof_dir = root / "proof"
+            proof_dir.mkdir()
+            _write_jsonl(
+                proof_dir / "codex-exec.jsonl",
+                [
+                    {
+                        "type": "mcp_tool_result",
+                        "result": {"structuredContent": _delegate_packet()},
+                    }
+                ],
+            )
+            (proof_dir / "last-message.txt").write_text(
+                "stale assistant output\n",
+                encoding="utf-8",
+            )
+            (proof_dir / "mcp-entry-evidence.json").write_text(
+                json.dumps({"status": "ok"}) + "\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "tools/wbp_dip",
+                    "--dry-run",
+                    "--json",
+                    "--codex-bin",
+                    "/bin/echo",
+                    "--profile-dir",
+                    str(root / "profile"),
+                    "--proof-dir",
+                    str(proof_dir),
+                    TASK,
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 1)
+        packet = json.loads(completed.stdout)
+        self.assertEqual(packet["machine_error_code"], "OFFICIAL_CODEX_APP_PATH_INVALID")
+        for field in (
+            "custom_codex_exec_invoked",
+            "assistant_response_observed",
+            "delegate_to_dip_tool_call_observed",
+            "delegate_to_dip_proven",
+            "api_lane_called",
+            "api_route_selected",
+            "api_route_called",
+            "route_bound_dispatch_proven",
+            "codex_exec_jsonl_file_present",
+            "output_last_message_file_present",
+            "entry_evidence_file_present",
+        ):
+            self.assertFalse(packet[field], field)
+        for field in (
+            "codex_exec_jsonl_sha256",
+            "output_last_message_sha256",
+            "entry_evidence_sha256",
+            "delegate_packet_sha256",
+        ):
+            self.assertEqual(packet[field], "", field)
+
     @mock.patch("wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_live_result")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.subprocess.run")
