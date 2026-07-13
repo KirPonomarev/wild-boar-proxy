@@ -110,7 +110,7 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
 
         owner_root_line = (
             'OWNER_EXTERNAL_MODELS_DIR="${WBP_OWNER_EXTERNAL_MODELS_DIR:-'
-            '${WBP_EXTERNAL_MODELS_DIR:-$HOME/.wild-boar-proxy/external-models}}"'
+            '${WBP_EXTERNAL_MODELS_DIR:-$OWNER_HOME/.wild-boar-proxy/external-models}}"'
         )
         export_line = 'export WBP_EXTERNAL_MODELS_DIR="$OWNER_EXTERNAL_MODELS_DIR"'
         home_line = 'export HOME="$APP_HOME"'

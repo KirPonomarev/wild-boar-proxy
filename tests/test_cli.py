@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import pwd
 import shlex
 import shutil
 import socket
@@ -23932,7 +23933,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', launcher_text)
         self.assertIn('APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"', launcher_text)
         self.assertIn(
-            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
+            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$OWNER_HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
             launcher_text,
         )
         self.assertIn('case "$APP_RUNTIME_TMPDIR" in', launcher_text)
@@ -24016,7 +24017,9 @@ class CliTests(unittest.TestCase):
             '/usr/bin/lockf -s -t 40 9 || exit 9',
             launcher_text,
         )
-        self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', launcher_text)
+        self.assertIn("trap cleanup_launch_env EXIT", launcher_text)
+        self.assertIn("trap 'terminate_launch_env 143' TERM", launcher_text)
+        self.assertNotIn("trap cleanup_launch_env EXIT HUP INT TERM", launcher_text)
         self.assertIn("find_launched_pid() {", launcher_text)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', launcher_text)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', launcher_text)
@@ -24044,9 +24047,10 @@ class CliTests(unittest.TestCase):
             'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
             payload,
         )
-        self.assertIn('OWNER_HOME="$HOME"', payload)
+        self.assertIn('OWNER_HOME="${WBP_OWNER_HOME:-}"', payload)
+        self.assertIn("pwd.getpwuid(os.getuid()).pw_dir", payload)
         self.assertLess(
-            payload.index('OWNER_HOME="$HOME"'),
+            payload.index('OWNER_HOME="${WBP_OWNER_HOME:-}"'),
             payload.index('export HOME="$APP_HOME"'),
         )
         self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
@@ -24065,7 +24069,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('APP_RUNTIME_TMPDIR="${WBP_RUNTIME_TMPDIR:-/tmp/wbp-cdx-${PROFILE_BASENAME}}"', payload)
         self.assertIn('APP_RUNTIME_TMPDIR_MARKER="$APP_RUNTIME_TMPDIR/.wbp-runtime-tmpdir"', payload)
         self.assertIn(
-            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
+            'OWNER_STABLE_CONFIG="${WBP_OWNER_STABLE_CONFIG:-${WBP_STABLE_CONFIG:-$OWNER_HOME/.codex-custom-cli/managed/stable-runtime-config.generated.yaml}}"',
             payload,
         )
         self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
@@ -24167,7 +24171,9 @@ class CliTests(unittest.TestCase):
             '/usr/bin/lockf -s -t 40 9 || exit 9',
             payload,
         )
-        self.assertIn('trap cleanup_launch_env EXIT HUP INT TERM', payload)
+        self.assertIn("trap cleanup_launch_env EXIT", payload)
+        self.assertIn("trap 'terminate_launch_env 143' TERM", payload)
+        self.assertNotIn("trap cleanup_launch_env EXIT HUP INT TERM", payload)
         self.assertIn("find_launched_pid() {", payload)
         self.assertIn('"--user-data-dir=$APP_USER_DATA_DIR"', payload)
         self.assertIn('launch_codex_app "--open-project=$WORKSPACE_PATH"', payload)
@@ -24283,6 +24289,167 @@ class CliTests(unittest.TestCase):
             self.assertGreaterEqual(elapsed, 0.3)
             self.assertTrue(lock_dir.is_file())
             lock_dir.unlink()
+
+    def test_repo_owned_launcher_default_lock_is_shared_across_profile_homes(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        owner_setup_end = next(
+            index for index, line in enumerate(lines) if line.startswith("AUTH_FILE=")
+        )
+        owner_setup = "\n".join(lines[:owner_setup_end])
+        lock_start = next(
+            index
+            for index, line in enumerate(lines)
+            if line.startswith('  LAUNCH_ENV_LOCK_DIR=')
+        )
+        lock_end = next(
+            index
+            for index, line in enumerate(lines[lock_start + 1 :], lock_start + 1)
+            if line.startswith('  LAUNCH_ENV_KEYS=')
+        )
+        lock_functions = "\n".join(line[2:] for line in lines[lock_start:lock_end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            owner_home = root / "owner-home"
+            owner_home.mkdir()
+            profiles = [root / "profile-a", root / "profile-b"]
+            for profile in profiles:
+                profile.mkdir()
+            active_file = root / "active"
+            overlap_file = root / "overlap"
+            script = root / "lock.sh"
+            script.write_text(
+                f"{owner_setup}\n"
+                f"APP_STDERR_LOG={shlex.quote(str(root / 'launcher.stderr.log'))}\n"
+                f"{lock_functions}\n"
+                "acquire_launch_env_lock\n"
+                f"if [ -e {shlex.quote(str(active_file))} ]; then printf overlap > {shlex.quote(str(overlap_file))}; fi\n"
+                f"printf active > {shlex.quote(str(active_file))}\n"
+                "sleep 0.25\n"
+                f"rm -f {shlex.quote(str(active_file))}\n"
+                "release_launch_env_lock\n",
+                encoding="utf-8",
+            )
+            base_env = os.environ.copy()
+            base_env.pop("WBP_LAUNCH_ENV_LOCK_DIR", None)
+            base_env["WBP_OWNER_HOME"] = str(owner_home)
+            processes = []
+            for profile in profiles:
+                env = dict(base_env)
+                env["HOME"] = str(profile)
+                env["WBP_PROFILE_DIR"] = str(profile)
+                processes.append(
+                    subprocess.Popen(
+                        ["/bin/sh", str(script)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                    )
+                )
+            results = [process.communicate(timeout=5) for process in processes]
+
+            for process, (stdout, stderr) in zip(processes, results, strict=True):
+                self.assertEqual(process.returncode, 0, f"{stdout}\n{stderr}")
+            self.assertFalse(overlap_file.exists())
+            self.assertTrue(
+                (
+                    owner_home
+                    / ".codex-custom-cli/managed/launch-locks/launch-env.lock"
+                ).is_file()
+            )
+
+    def test_repo_owned_launcher_owner_home_ignores_profile_specific_home(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        owner_setup_end = next(
+            index for index, line in enumerate(lines) if line.startswith("AUTH_FILE=")
+        )
+        owner_setup = "\n".join(lines[:owner_setup_end])
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            profile_home = Path(tmp) / "profile-home"
+            profile_home.mkdir()
+            script = Path(tmp) / "owner-home.sh"
+            script.write_text(
+                f'{owner_setup}\nprintf "%s\\n" "$OWNER_HOME"\n',
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(profile_home)
+            env.pop("WBP_OWNER_HOME", None)
+            completed = subprocess.run(
+                ["/bin/sh", str(script)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=5,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(
+            completed.stdout.strip(),
+            pwd.getpwuid(os.getuid()).pw_dir,
+        )
+
+    def test_repo_owned_launcher_signal_cleanup_terminates_without_continuing(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        lines = payload.splitlines()
+        cleanup_start = next(
+            index
+            for index, line in enumerate(lines)
+            if line == "  cleanup_launch_env() {"
+        )
+        cleanup_end = next(
+            index
+            for index, line in enumerate(lines[cleanup_start + 1 :], cleanup_start + 1)
+            if line == "  launch_codex_app() {"
+        )
+        cleanup_block = "\n".join(
+            line[2:] for line in lines[cleanup_start:cleanup_end]
+        )
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            root = Path(tmp)
+            ready_file = root / "ready"
+            after_file = root / "after"
+            cleanup_file = root / "cleanup"
+            script = root / "signal.sh"
+            script.write_text(
+                "set -eu\n"
+                "restore_launch_env() { :; }\n"
+                f"release_launch_env_lock() {{ printf c >> {shlex.quote(str(cleanup_file))}; }}\n"
+                f"{cleanup_block}\n"
+                f"printf ready > {shlex.quote(str(ready_file))}\n"
+                "sleep 1\n"
+                f"printf after > {shlex.quote(str(after_file))}\n",
+                encoding="utf-8",
+            )
+            process = subprocess.Popen(["/bin/sh", str(script)])
+            try:
+                for _ in range(50):
+                    if ready_file.exists():
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(ready_file.exists())
+                process.terminate()
+                returncode = process.wait(timeout=5)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+
+            self.assertEqual(returncode, 143)
+            self.assertFalse(after_file.exists())
+            self.assertEqual(cleanup_file.read_text(encoding="utf-8"), "c")
 
     def test_repo_owned_launcher_serializes_with_persistent_stale_lock_file(self) -> None:
         payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
@@ -24640,7 +24807,7 @@ class CliTests(unittest.TestCase):
 
     def test_current_owner_profile_launcher_digest_remains_upgradeable(self) -> None:
         self.assertIn(
-            "b5b2fd89bff542687d957456712c9ba5e573efb795ac47ac802597476b9ffc8b",
+            "e9603694b16317124b2b79ce0081f50ef0cd625fa68d72650307ad1d74b4b509",
             runtime_mod.LEGACY_REPO_MANAGED_DEFAULT_LAUNCHER_DIGESTS,
         )
 
