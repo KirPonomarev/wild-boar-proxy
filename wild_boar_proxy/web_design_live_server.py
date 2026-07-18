@@ -17328,13 +17328,39 @@ def build_handler(
         external_routes_packet = _external_routes_packet()
         route_records = _enabled_external_route_records(external_routes_packet)
         api_route_id = _custom_agent_default_api_route_id(route_records)
+        operator_status = operator_surface_session.status_payload()
+        registry = build_custom_model_registry_packet(operator_status)
+        primary_model_ids = [
+            str(entry.get("model_id") or "").strip()
+            for entry in registry.get("available_models", [])
+            if isinstance(entry, dict)
+            and entry.get("lane") == "codex_native"
+            and entry.get("selection_enabled") is True
+            and str(entry.get("model_id") or "").strip()
+        ]
+        status_payload = (
+            operator_status.get("status")
+            if isinstance(operator_status, dict)
+            and isinstance(operator_status.get("status"), dict)
+            else {}
+        )
+        configured_model_id = str(status_payload.get("configured_model") or "").strip()
+        recommended_model_id = str(registry.get("recommended_model") or "").strip()
+        primary_model_id = next(
+            (
+                model_id
+                for model_id in (configured_model_id, recommended_model_id)
+                if model_id in primary_model_ids
+            ),
+            "",
+        )
         return {
             "state_path": agent_bindings_state_path(owner_paths.managed_dir),
             "default_bindings": default_agent_bindings(
-                primary_model_id="gpt-5.5",
+                primary_model_id=primary_model_id,
                 api_route_id=api_route_id,
             ),
-            "primary_model_ids": [],
+            "primary_model_ids": primary_model_ids,
             "route_records": route_records,
             "external_routes_available": bool(route_records),
             "require_api_route_binding": True,
@@ -17384,13 +17410,77 @@ def build_handler(
         context = _custom_agent_binding_context()
         if context["external_routes_available"] is not True:
             return _custom_agent_bindings_dry_run_packet(payload) | {"dry_run": False}
-        return write_agent_bindings_packet(
+        write_packet = write_agent_bindings_packet(
             context["state_path"],
             payload,
             primary_model_ids=context["primary_model_ids"],
             route_records=context["route_records"],
             require_api_route_binding=context["require_api_route_binding"],
         )
+        if write_packet.get("status") != "ok":
+            return write_packet
+        _existing_context, existing_metadata = _load_custom_native_agent_runtime_context(
+            custom_native_launch_state["last_packet"]
+        )
+        if existing_metadata.get("status") != "ok":
+            return {
+                **write_packet,
+                "runtime_context_refresh_required": False,
+                "runtime_context_refresh_status": "not_required",
+                "runtime_context_refresh_machine_error_code": "OK",
+                "alias_runtime_context_refreshed": False,
+                "alias_runtime_binding_proven": False,
+            }
+        refreshed_context, refresh_metadata = (
+            _refresh_custom_agent_runtime_context_for_command_loop(
+                refresh_reason="agent_bindings_updated",
+            )
+        )
+        alias_to_agent_id = (
+            refreshed_context.get("alias_to_agent_id")
+            if isinstance(refreshed_context.get("alias_to_agent_id"), dict)
+            else {}
+        )
+        expected_bindings = [
+            binding
+            for binding in write_packet.get("agent_bindings", [])
+            if isinstance(binding, dict) and binding.get("enabled") is True
+        ]
+        aliases_refreshed = bool(
+            expected_bindings
+            and all(
+                alias_to_agent_id.get(str(binding.get("display_name") or "").strip())
+                == str(binding.get("agent_id") or "").strip()
+                for binding in expected_bindings
+            )
+        )
+        refresh_proven = bool(
+            refresh_metadata.get("status") == "ok"
+            and refreshed_context.get("agent_binding_state_file_present") is True
+            and refreshed_context.get("alias_runtime_binding_proven") is True
+            and aliases_refreshed
+        )
+        refresh_fields = {
+            "runtime_context_refresh_required": True,
+            "runtime_context_refresh_status": refresh_metadata.get("status", "blocked"),
+            "runtime_context_refresh_machine_error_code": refresh_metadata.get(
+                "machine_error_code",
+                "CUSTOM_CODEX_AGENT_RUNTIME_CONTEXT_WRITE_FAILED",
+            ),
+            "alias_runtime_context_refreshed": refresh_proven,
+            "alias_runtime_binding_proven": refresh_proven,
+        }
+        if refresh_proven:
+            return {**write_packet, **refresh_fields}
+        return {
+            **write_packet,
+            **refresh_fields,
+            "state_write_status": "ok",
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_AGENT_BINDINGS_RUNTIME_CONTEXT_REFRESH_FAILED",
+            "human_message": "Agent bindings were saved, but the open Custom runtime context did not refresh.",
+            "next_action": "retry_agent_bindings_runtime_context_refresh",
+        }
 
     def _custom_agent_runtime_execution_packet_from_selection(
         *,
@@ -17531,31 +17621,67 @@ def build_handler(
     ) -> dict[str, Any]:
         if context.get("packet_kind") != "codex_custom_native_agent_runtime_context":
             return {}
-        if context.get("execution_mode") != "chatgpt_plus_api":
+        execution_mode = str(context.get("execution_mode") or "").strip()
+        if execution_mode not in {"api_only", "chatgpt_only", "chatgpt_plus_api"}:
             return {}
         if context.get("agent_bindings_status") not in {None, "", "ok"}:
             return {}
-        primary_model_id = str(context.get("primary_model_id") or "").strip()
+        primary_model_id = (
+            ""
+            if execution_mode == "api_only"
+            else str(context.get("primary_model_id") or "").strip()
+        )
         api_route_id = str(context.get("api_model_id") or "").strip()
-        if not primary_model_id or not api_route_id:
+        if execution_mode in {"chatgpt_only", "chatgpt_plus_api"} and not primary_model_id:
             return {}
-        route_record = next(
-            (
-                route
-                for route in route_records
-                if str(route.get("route_id") or "").strip() == api_route_id
+        if execution_mode in {"api_only", "chatgpt_plus_api"} and not any(
+            str(route.get("route_id") or "").strip() == api_route_id
+            for route in route_records
+        ):
+            return {}
+        primary_slot = (
+            dict(context.get("primary_model_slot"))
+            if isinstance(context.get("primary_model_slot"), dict)
+            else {}
+        )
+        coding_slot = (
+            dict(context.get("coding_agent_model_slot"))
+            if isinstance(context.get("coding_agent_model_slot"), dict)
+            else {}
+        )
+        return {
+            "status": "ok",
+            "execution_mode": execution_mode,
+            "chatgpt_model_id": primary_model_id,
+            "api_model_id": api_route_id,
+            "api_reasoning_option_id": str(
+                context.get("api_reasoning_option_id") or ""
             ),
-            {},
-        )
-        if not route_record:
-            return {}
-        return _custom_agent_runtime_execution_packet_from_selection(
-            execution_mode="chatgpt_plus_api",
-            chatgpt_model_id=primary_model_id,
-            api_route_id=api_route_id,
-            route_record=route_record,
-            source_context=context,
-        )
+            "api_reasoning_operator_level": str(
+                context.get("api_reasoning_operator_level") or ""
+            ),
+            "api_reasoning_supported_operator_levels": list(
+                context.get("api_reasoning_supported_operator_levels") or []
+            ),
+            "api_reasoning_option_packet": (
+                dict(context.get("api_reasoning_option_packet"))
+                if isinstance(context.get("api_reasoning_option_packet"), dict)
+                else {}
+            ),
+            "primary_model_slot": primary_slot,
+            "coding_agent_model_slot": coding_slot,
+            "chatgpt_line_used_as_executor": execution_mode in {
+                "chatgpt_only",
+                "chatgpt_plus_api",
+            },
+            "api_line_used_as_executor": execution_mode in {
+                "api_only",
+                "chatgpt_plus_api",
+            },
+            "api_only_calls_chatgpt": False,
+            "chatgpt_only_calls_api": False,
+            "server_issued_catalog_used": True,
+        }
 
     def _binding_projection_from_runtime_context(
         *,
@@ -17608,7 +17734,11 @@ def build_handler(
         )
         if packet.get("status") != "ok":
             return {}
-        if packet.get("execution_mode") != "chatgpt_plus_api":
+        if packet.get("execution_mode") not in {
+            "api_only",
+            "chatgpt_only",
+            "chatgpt_plus_api",
+        }:
             return {}
         return packet
 
@@ -17667,6 +17797,7 @@ def build_handler(
         payload: dict[str, Any] | None = None,
         operator_status: dict[str, Any] | None = None,
         api_snapshot: dict[str, Any] | None = None,
+        refresh_reason: str = "gpt_api_alias_command_loop_proof",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         external_routes_packet = _external_routes_packet()
         route_records = _enabled_external_route_records(external_routes_packet)
@@ -17685,11 +17816,18 @@ def build_handler(
             if isinstance(launch_packet.get("execution_mode_packet"), dict)
             else {}
         )
+        launch_execution_mode = str(
+            launch_execution_packet.get("execution_mode") or ""
+        ).strip()
         if (
             launch_execution_packet.get("status") != "ok"
-            or launch_execution_packet.get("execution_mode") != "chatgpt_plus_api"
-            or str(launch_execution_packet.get("api_model_id") or "").strip()
-            not in route_record_by_id
+            or launch_execution_mode
+            not in {"api_only", "chatgpt_only", "chatgpt_plus_api"}
+            or (
+                launch_execution_mode in {"api_only", "chatgpt_plus_api"}
+                and str(launch_execution_packet.get("api_model_id") or "").strip()
+                not in route_record_by_id
+            )
         ):
             launch_execution_packet = {}
         bindings_packet = _custom_agent_binding_selection_packet(route_records)
@@ -17697,7 +17835,7 @@ def build_handler(
             bindings_packet=bindings_packet,
             route_records=route_records,
         )
-        existing_context, _existing_context_metadata = (
+        existing_context, existing_context_metadata = (
             _load_custom_native_agent_runtime_context(custom_native_launch_state["last_packet"])
         )
         existing_execution_packet = _execution_packet_from_runtime_context(
@@ -17732,10 +17870,15 @@ def build_handler(
                 or existing_execution_packet
             )
         if execution_packet:
+            execution_mode = str(execution_packet.get("execution_mode") or "")
             api_route_id = str(execution_packet.get("api_model_id") or "").strip()
-            chatgpt_model_id = str(
-                execution_packet.get("chatgpt_model_id") or "gpt-5.5"
-            ).strip()
+            chatgpt_model_id = (
+                ""
+                if execution_mode == "api_only"
+                else str(
+                    execution_packet.get("chatgpt_model_id") or "gpt-5.5"
+                ).strip()
+            )
         else:
             api_route_id = _custom_agent_default_api_route_id(route_records)
             chatgpt_model_id = "gpt-5.5"
@@ -17755,11 +17898,30 @@ def build_handler(
                 route_record=route_record,
                 api_reasoning_option_id=CUSTOM_CODEX_API_REASONING_OPTION_CATALOG_DEFAULT,
             )
-        bridge_endpoint = _ensure_custom_agent_runtime_bridge_for_route(
-            api_route_id=api_route_id,
-            external_routes_packet=external_routes_packet,
-            operator_status=operator_status,
-            api_snapshot=api_snapshot,
+        existing_bridge = (
+            existing_context.get("deepseek_live_format_check_bridge")
+            if isinstance(
+                existing_context.get("deepseek_live_format_check_bridge"),
+                dict,
+            )
+            else {}
+        )
+        existing_bridge_endpoint = str(existing_bridge.get("base_url") or "").strip()
+        existing_bridge_reusable = bool(
+            api_route_id
+            and existing_context.get("api_model_id") == api_route_id
+            and existing_bridge.get("enabled") is True
+            and existing_bridge_endpoint.startswith("http://127.0.0.1:")
+        )
+        bridge_endpoint = (
+            existing_bridge_endpoint
+            if existing_bridge_reusable
+            else _ensure_custom_agent_runtime_bridge_for_route(
+                api_route_id=api_route_id,
+                external_routes_packet=external_routes_packet,
+                operator_status=operator_status,
+                api_snapshot=api_snapshot,
+            )
         )
         context = _custom_native_agent_runtime_context(
             execution_packet=execution_packet,
@@ -17773,6 +17935,7 @@ def build_handler(
         if (
             runtime_context_source_paths.profile_dir == custom_profile_paths.profile_dir
             and existing_bindings_projection
+            and context.get("agent_binding_state_file_present") is not True
         ):
             fallback_projection = existing_bindings_projection.get("projection", {})
             context["agent_binding_truth_source"] = fallback_projection.get(
@@ -17806,15 +17969,33 @@ def build_handler(
                 and context["allowed_api_route_ids"]
             )
         context["context_truth_source"] = "server_current_agent_bindings_state"
-        context["agent_runtime_context_refresh_reason"] = "gpt_api_alias_command_loop_proof"
+        context["agent_runtime_context_refresh_reason"] = refresh_reason
         context_text = json.dumps(context, ensure_ascii=False, indent=2, sort_keys=True)
         required_context_path = (
             runtime_context_required_profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
         )
-        optional_context_paths = [
-            profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
-            for profile_dir in runtime_context_optional_profile_dirs
-        ]
+        loaded_context_sha256 = str(
+            existing_context_metadata.get("context_sha256") or ""
+        )
+        if loaded_context_sha256:
+            for candidate in _custom_native_agent_runtime_context_candidates(
+                custom_native_launch_state["last_packet"]
+            ):
+                try:
+                    candidate_sha256 = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                except OSError:
+                    continue
+                if candidate_sha256 == loaded_context_sha256:
+                    required_context_path = candidate
+                    break
+        optional_context_paths: list[Path] = []
+        for profile_dir in (
+            runtime_context_required_profile_dir,
+            *runtime_context_optional_profile_dirs,
+        ):
+            candidate = profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+            if candidate != required_context_path and candidate not in optional_context_paths:
+                optional_context_paths.append(candidate)
         optional_written_count = 0
         try:
             write_text_atomic(required_context_path, context_text)
@@ -17852,10 +18033,10 @@ def build_handler(
             "context_read_source": "profile_context_file",
             "context_path_redacted": True,
             "context_required_profile_owner_path": (
-                runtime_context_required_profile_dir == owner_paths.profile_dir
+                required_context_path.parent == owner_paths.profile_dir
             ),
             "context_required_profile_custom_path": (
-                runtime_context_required_profile_dir == custom_profile_paths.profile_dir
+                required_context_path.parent == custom_profile_paths.profile_dir
             ),
             "context_owner_profile_optional_path": owner_paths.profile_dir
             in runtime_context_optional_profile_dirs,

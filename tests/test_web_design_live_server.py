@@ -6542,38 +6542,53 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "WBP_PROFILE_DIR": str(profile_dir),
                 "WBP_MANAGED_DIR": str(managed_dir),
             }
-            with mock.patch.dict(os.environ, env, clear=False):
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+            ):
                 server = ThreadingHTTPServer(
                     ("127.0.0.1", free_port()),
                     build_handler(runner=runner),
                 )
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            base = f"http://127.0.0.1:{server.server_port}"
-            initial = json.loads(fetch(f"{base}/api/codex/custom/agent-bindings"))
-            bindings = initial["agent_bindings"]
-            bindings[0]["display_name"] = "Агент GPT"
-            bindings[0]["aliases"] = ["Агент GPT", "Оркестратор", "Codex", "Agent 1", "1"]
-            bindings[1]["display_name"] = "Агент Дип"
-            bindings[1]["aliases"] = ["Агент Дип", "Кодер", "DIP"]
-            try:
-                dry_run = json.loads(
-                    post_json(
-                        f"{base}/api/codex/custom/agent-bindings/dry-run",
-                        {"agent_bindings": bindings},
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                initial = json.loads(fetch(f"{base}/api/codex/custom/agent-bindings"))
+                bindings = initial["agent_bindings"]
+                bindings[0]["display_name"] = "Агент GPT"
+                bindings[0]["aliases"] = [
+                    "Агент GPT",
+                    "Оркестратор",
+                    "Codex",
+                    "Agent 1",
+                    "1",
+                ]
+                bindings[1]["display_name"] = "Агент Дип"
+                bindings[1]["aliases"] = ["Агент Дип", "Кодер", "DIP"]
+                try:
+                    dry_run = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/agent-bindings/dry-run",
+                            {"agent_bindings": bindings},
+                        )
                     )
-                )
-                written = json.loads(
-                    post_json(
-                        f"{base}/api/codex/custom/agent-bindings",
-                        {"agent_bindings": bindings},
+                    written = json.loads(
+                        post_json(
+                            f"{base}/api/codex/custom/agent-bindings",
+                            {"agent_bindings": bindings},
+                        )
                     )
-                )
-                read_back = json.loads(fetch(f"{base}/api/codex/custom/agent-bindings"))
-            finally:
-                server.shutdown()
-                thread.join(timeout=2)
-                server.server_close()
+                    read_back = json.loads(
+                        fetch(f"{base}/api/codex/custom/agent-bindings")
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
 
             state_file = managed_dir / "custom-agent-bindings.json"
             self.assertEqual(dry_run["status"], "ok")
@@ -6587,6 +6602,225 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(read_back["alias_to_agent_id"]["Агент Дип"], "dip")
         self.assertEqual(read_back["agent_id_to_route"]["dip"], route_id)
         self.assertFalse(read_back["browser_secret_intake"])
+
+    def test_agent_bindings_web_api_refreshes_open_api_only_runtime_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            server_profile_dir = root / "server-profile"
+            bridge_root = root / "file-bridge"
+            managed_dir.mkdir(parents=True)
+            profile_dir.mkdir(parents=True)
+            server_profile_dir.mkdir(parents=True)
+            route_id = "wbp-deepseek-chat"
+            route_records = routes_list_packet(route_id)["data"]["routes"]
+            initial_bindings = live_server.default_agent_bindings(
+                primary_model_id="gpt-5.5",
+                api_route_id=route_id,
+            )
+            live_server.write_agent_bindings_packet(
+                live_server.agent_bindings_state_path(managed_dir),
+                {"agent_bindings": initial_bindings},
+                primary_model_ids=["gpt-5.5"],
+                route_records=route_records,
+                require_api_route_binding=True,
+            )
+            execution_packet = {
+                "status": "ok",
+                "execution_mode": "api_only",
+                "chatgpt_model_id": "",
+                "api_model_id": route_id,
+                "api_reasoning_option_id": "catalog_default",
+                "api_reasoning_operator_level": "catalog_default",
+                "primary_model_slot": {
+                    "status": "bound",
+                    "lane": live_server.API_ROUTE_MODEL_LANE,
+                    "model_id": route_id,
+                    "provider": "deepseek",
+                    "server_issued": True,
+                },
+                "coding_agent_model_slot": {
+                    "status": "not_bound_for_mode",
+                    "reason": "api_only_uses_primary_model_slot",
+                },
+                "chatgpt_line_used_as_executor": False,
+                "api_line_used_as_executor": True,
+            }
+            env = {
+                "WBP_PROFILE_DIR": str(server_profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                initial_context = live_server._custom_native_agent_runtime_context(
+                    execution_packet=execution_packet,
+                    launch_model_id=route_id,
+                    route_model_id=route_id,
+                    bridge_endpoint="http://127.0.0.1:50555/v1",
+                    route_records=route_records,
+                    managed_dir=managed_dir,
+                )
+            context_path = profile_dir / live_server.AGENT_RUNTIME_CONTEXT_FILENAME
+            context_path.write_text(
+                json.dumps(initial_context, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            renamed_bindings = [dict(binding) for binding in initial_bindings]
+            renamed_bindings[1]["display_name"] = "Scout"
+            renamed_bindings[1]["aliases"] = ["Scout", "DIP", "Agent 2", "2"]
+            runner = MappingRunner(
+                {
+                    ("external-models", "routes", "list", "--json"): routes_list_packet(
+                        route_id
+                    ),
+                }
+            )
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "default_persistent_custom_profile_paths",
+                    return_value={"persistent_profile_root": str(profile_dir)},
+                ),
+                mock.patch.object(
+                    live_server,
+                    "_custom_native_file_bridge_root",
+                    return_value=bridge_root,
+                ),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=FakeOperatorSurfaceSession(),
+                ),
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=runner),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    written = json.loads(
+                        post_json(
+                            f"http://127.0.0.1:{server.server_port}/api/codex/custom/agent-bindings",
+                            {"agent_bindings": renamed_bindings},
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+            refreshed_context = json.loads(context_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(written["status"], "ok")
+        self.assertTrue(written["runtime_context_refresh_required"])
+        self.assertTrue(written["alias_runtime_context_refreshed"])
+        self.assertTrue(written["alias_runtime_binding_proven"])
+        self.assertEqual(refreshed_context["execution_mode"], "api_only")
+        self.assertEqual(refreshed_context["api_model_id"], route_id)
+        self.assertTrue(refreshed_context["agent_binding_state_file_present"])
+        self.assertEqual(refreshed_context["coding_aliases"][0], "Scout")
+        self.assertEqual(refreshed_context["alias_to_agent_id"]["Scout"], "dip")
+        self.assertNotIn("Scout", initial_context["alias_to_agent_id"])
+        self.assertFalse(
+            (server_profile_dir / live_server.AGENT_RUNTIME_CONTEXT_FILENAME).exists()
+        )
+
+    def test_agent_bindings_use_current_selectable_native_model_registry(self) -> None:
+        class ThreeModelOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def status_payload(self) -> dict[str, object]:
+                payload = super().status_payload()
+                payload["status"] = {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "configured_model": "gpt-5.4",
+                }
+                payload["models"] = {
+                    "ok": True,
+                    "model_ids": ["gpt-5.5", "gpt-5.4", "gpt-5.3-codex"],
+                    "model_entries": [
+                        {"model_id": model_id, "lane": "codex_native"}
+                        for model_id in ("gpt-5.5", "gpt-5.4", "gpt-5.3-codex")
+                    ],
+                    "server_issued": True,
+                }
+                return payload
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            managed_dir = root / "managed"
+            profile_dir = root / "profile"
+            runner = MappingRunner(
+                {
+                    ("external-models", "routes", "list", "--json"): routes_list_packet(
+                        "wbp-deepseek-chat"
+                    ),
+                }
+            )
+            env = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=False),
+                mock.patch.object(
+                    live_server,
+                    "OperatorSurfaceSession",
+                    return_value=ThreeModelOperatorSurfaceSession(),
+                ),
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=runner),
+                )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                initial = json.loads(fetch(f"{base}/api/codex/custom/agent-bindings"))
+                accepted_statuses = []
+                for model_id in ("gpt-5.5", "gpt-5.4", "gpt-5.3-codex"):
+                    bindings = [dict(binding) for binding in initial["agent_bindings"]]
+                    bindings[0]["model_id"] = model_id
+                    accepted_statuses.append(
+                        json.loads(
+                            post_json(
+                                f"{base}/api/codex/custom/agent-bindings/dry-run",
+                                {"agent_bindings": bindings},
+                            )
+                        )["status"]
+                    )
+                invented = [dict(binding) for binding in initial["agent_bindings"]]
+                invented[0]["model_id"] = "gpt-invented"
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/agent-bindings/dry-run",
+                        {"agent_bindings": invented},
+                    )
+                )
+                api_in_primary = [dict(binding) for binding in initial["agent_bindings"]]
+                api_in_primary[0]["model_id"] = "wbp-deepseek-chat"
+                api_rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/agent-bindings/dry-run",
+                        {"agent_bindings": api_in_primary},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(initial["agent_bindings"][0]["model_id"], "gpt-5.4")
+        self.assertEqual(accepted_statuses, ["ok", "ok", "ok"])
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertIn("binding_0_model_id_not_server_issued", rejected["blocking_reasons"])
+        self.assertEqual(api_rejected["status"], "rejected")
+        self.assertIn(
+            "binding_0_model_id_not_server_issued",
+            api_rejected["blocking_reasons"],
+        )
 
     def test_custom_native_runtime_context_exports_persisted_agent_bindings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
