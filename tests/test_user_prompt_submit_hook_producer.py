@@ -390,6 +390,12 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertIn("UserPromptSubmit", hooks_document["hooks"])
             self.assertIn("PreToolUse", hooks_document["hooks"])
             self.assertIn("Stop", hooks_document["hooks"])
+            self.assertNotIn("matcher", hooks_document["hooks"]["UserPromptSubmit"][0])
+            self.assertEqual(
+                hooks_document["hooks"]["PreToolUse"][0]["matcher"],
+                producer.PRE_TOOL_USE_MATCHER,
+            )
+            self.assertNotIn("matcher", hooks_document["hooks"]["Stop"][0])
             self.assertEqual(
                 hooks_document["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
                 hooks_document["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],

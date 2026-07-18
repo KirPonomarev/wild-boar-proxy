@@ -76,6 +76,7 @@ STOP_ROUTER_GUARD_BLOCKED = "WBP_STOP_ROUTER_GUARD_BLOCKED"
 USER_PROMPT_SUBMIT_EVENT_NAME = "UserPromptSubmit"
 PRE_TOOL_USE_EVENT_NAME = "PreToolUse"
 STOP_EVENT_NAME = "Stop"
+PRE_TOOL_USE_MATCHER = "Bash"
 HOOK_EVENT_TRUST_KEYS = {
     USER_PROMPT_SUBMIT_EVENT_NAME: "user_prompt_submit",
     PRE_TOOL_USE_EVENT_NAME: "pre_tool_use",
@@ -542,7 +543,16 @@ def merge_wbp_hook_definition(
             for group in existing_groups
             if not _is_wbp_hook_group(group)
         ]
-        kept_groups.append({"hooks": [build_hook_definition(command)]})
+        wbp_group: dict[str, Any] = {
+            "hooks": [build_hook_definition(command)],
+        }
+        if event_name == PRE_TOOL_USE_EVENT_NAME:
+            # Codex exposes unified shell execution to PreToolUse as `Bash`.
+            # Keep this explicit because some desktop builds do not dispatch
+            # matcher-less PreToolUse groups even though omitted matchers are
+            # documented as matching every occurrence.
+            wbp_group["matcher"] = PRE_TOOL_USE_MATCHER
+        kept_groups.append(wbp_group)
         merged_hooks[event_name] = kept_groups
     document["hooks"] = merged_hooks
     return document
