@@ -274,6 +274,9 @@ def _direct_reply_summary_fields(packet: Mapping[str, Any]) -> dict[str, Any]:
         "api_agent_response_observed": _as_bool(
             packet.get("api_agent_response_observed")
         ),
+        "provider_response_proven": _as_bool(
+            packet.get("provider_response_proven")
+        ),
         "repo_bridge_evidence_response_proven": _as_bool(
             packet.get("repo_bridge_evidence_response_proven")
         ),
@@ -500,6 +503,34 @@ def _exact_plain_visible_output_allowed(packet: Mapping[str, Any]) -> bool:
     )
 
 
+def _direct_reply_visible_output_proven(
+    *,
+    direct_reply_ok: bool,
+    direct_summary: Mapping[str, Any],
+) -> bool:
+    return bool(
+        direct_reply_ok
+        and direct_summary.get("direct_reply_selected_alias_lane") == "api_route"
+        and _as_bool(direct_summary.get("direct_api_reply_block"))
+        and _as_bool(direct_summary.get("route_bound_dispatch_proven"))
+        and _as_bool(direct_summary.get("selected_route_id_allowed"))
+        and _as_bool(direct_summary.get("allowed_api_route_ids_enforced"))
+        and _as_bool(direct_summary.get("api_agent_provider_called"))
+        and _as_bool(direct_summary.get("api_agent_response_observed"))
+        and _as_bool(direct_summary.get("provider_response_proven"))
+        and _as_bool(direct_summary.get("direct_provider_response_observed"))
+        and _as_bool(direct_summary.get("provider_auth_ok"))
+        and _as_bool(direct_summary.get("positive_provider_proof_gate_satisfied"))
+        and bool(str(direct_summary.get("reply_text") or ""))
+        and not _as_bool(direct_summary.get("repo_bridge_used"))
+        and not _as_bool(direct_summary.get("final_answer_was_repo_tool_call"))
+        and not _as_bool(direct_summary.get("fallback_used"))
+        and not _as_bool(direct_summary.get("local_imitation_used"))
+        and not _as_bool(direct_summary.get("raw_backend_details_exposed"))
+        and not _as_bool(direct_summary.get("secret_value_exposed"))
+    )
+
+
 def _output_passthrough_fields(
     *,
     prompt_text: object,
@@ -656,6 +687,11 @@ def build_api_agent_auto_router_packet(
 
     direct_summary = _direct_reply_summary_fields(direct_packet)
     direct_reply_ok = bool(api_direct_selected and ok)
+    direct_reply_output_text = str(direct_packet.get("reply_text") or "")[:65536]
+    direct_reply_visible_output_proven = _direct_reply_visible_output_proven(
+        direct_reply_ok=direct_reply_ok,
+        direct_summary=direct_summary,
+    )
     dispatch_proven = direct_reply_ok
     route_bound_dispatch_proven = bool(
         direct_reply_ok and direct_summary["route_bound_dispatch_proven"]
@@ -812,6 +848,7 @@ def build_api_agent_auto_router_packet(
         ),
         "direct_reply_selected": api_direct_selected,
         "direct_reply_proven": direct_reply_ok,
+        "direct_reply_visible_output_proven": direct_reply_visible_output_proven,
         "gpt_lane_selected": gpt_lane_selected,
         "gpt_passthrough_to_native_chat": passthrough_to_gpt,
         "gpt_wrapper_bypassed": wrapper_bypassed,
@@ -824,7 +861,7 @@ def build_api_agent_auto_router_packet(
             else "api_agent_auto_router_to_gpt_lane"
         ),
         "output_text": (
-            direct_summary["reply_text"] if direct_reply_ok else ""
+            direct_reply_output_text if direct_reply_ok else ""
         ),
         "primary_exact_plain_reply_requested": primary_exact_reply_requested,
         "primary_exact_plain_reply_visible_output": primary_exact_reply_visible_output,

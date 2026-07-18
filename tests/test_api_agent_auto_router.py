@@ -1484,6 +1484,107 @@ class ApiAgentAutoRouterTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "WBP_ROUTER_OUTPUT_NOT_AVAILABLE\n")
         self.assertNotIn("WBP_DIRECT_TEXT_AVAILABLE_OK", stdout.getvalue())
 
+    def test_cli_auto_route_output_prints_proven_non_exact_api_reply(self) -> None:
+        prompt = "Builder: explain the selected implementation briefly"
+        expected = "### Result\n\n```python\nprint('provider')\n```"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(custom_alias="Builder"), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=lambda **kwargs: _live_result_from_kwargs(
+                    expected,
+                    **kwargs,
+                ),
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), expected + "\n")
+
+    def test_cli_auto_route_output_blocks_non_exact_reply_without_provider_proof(self) -> None:
+        prompt = "DIP: explain the selected implementation briefly"
+        expected = "must remain hidden"
+
+        def unproven_live_result(**kwargs: object) -> dict[str, object]:
+            result = _live_result_from_kwargs(expected, **kwargs)
+            result["direct_provider_response_observed"] = False
+            result["positive_provider_proof_gate_satisfied"] = False
+            return result
+
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            profile = root / "profile"
+            managed = root / "managed"
+            project = root / "project"
+            profile.mkdir()
+            managed.mkdir()
+            project.mkdir()
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": str(profile),
+                    "WBP_MANAGED_DIR": str(managed),
+                    "WBP_ACTIVE_PROJECT_ROOT": str(project),
+                },
+                clear=False,
+            ), mock.patch("sys.stdin", io.StringIO(prompt + "\n")), mock.patch(
+                "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                side_effect=unproven_live_result,
+            ):
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = cli.main(
+                        [
+                            "router-hook",
+                            "auto-route-output",
+                            "--runtime-context-file",
+                            str(context_file),
+                            "--active-project-root",
+                            str(project),
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "WBP_ROUTER_OUTPUT_NOT_AVAILABLE\n")
+        self.assertNotIn(expected, stdout.getvalue())
+
     def test_cli_auto_route_output_does_not_synthesize_primary_exact(self) -> None:
         prompt = "Codex: answer exactly WBP_PRIMARY_CLI_EXACT_OK"
         with tempfile.TemporaryDirectory() as raw_root:

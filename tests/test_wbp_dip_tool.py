@@ -2538,6 +2538,69 @@ class WbpDipToolTests(unittest.TestCase):
     @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
     @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
     @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
+    def test_request_live_result_rechecks_current_route_before_direct_dispatch(
+        self,
+        request_json_mock: mock.Mock,
+        find_route_mock: mock.Mock,
+        _load_routes_file_mock: mock.Mock,
+        provider_headers_mock: mock.Mock,
+    ) -> None:
+        find_route_mock.side_effect = [
+            {
+                "route_id": "route-ok",
+                "base_url": "https://example.invalid",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek-chat",
+                "provider": "deepseek",
+                "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "enabled": False,
+            },
+            RuntimeErrorInfo(
+                "Route not found: route-ok",
+                machine_error_code=errors.ROUTE_NOT_FOUND,
+                operator_action="user_action",
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as raw_root:
+            profile = Path(raw_root)
+            (profile / "wbp-agent-runtime-context.json").write_text(
+                json.dumps(
+                    {
+                        "alias_to_agent_id": {"DIP": "dip"},
+                        "agent_id_to_route": {"dip": "route-ok"},
+                        "allowed_api_route_ids": ["route-ok"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            disabled = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+            deleted = request_live_result(
+                task=TASK,
+                expected_alias="DIP",
+                profile_dir=profile,
+                timeout_seconds=0.01,
+            )
+
+        self.assertEqual(disabled["status"], "error")
+        self.assertEqual(disabled["machine_error_code"], errors.ROUTE_DISABLED)
+        self.assertFalse(disabled["provider_called"])
+        self.assertEqual(deleted["status"], "error")
+        self.assertEqual(deleted["machine_error_code"], errors.ROUTE_NOT_FOUND)
+        self.assertFalse(deleted["provider_called"])
+        provider_headers_mock.assert_not_called()
+        request_json_mock.assert_not_called()
+
+    @mock.patch("wild_boar_proxy.wbp_dip_tool._provider_headers", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.load_routes_file", return_value={})
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.find_route")
+    @mock.patch("wild_boar_proxy.wbp_dip_tool.request_json")
     def test_request_live_result_retries_transient_invalid_upstream_response(
         self,
         request_json_mock: mock.Mock,

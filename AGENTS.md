@@ -107,14 +107,18 @@ name route to direct API-agent reply. ChatGPT/primary aliases and prompts with
 no addressed runtime alias pass back to the native GPT lane. Unknown or
 ambiguous addressed aliases fail closed.
 
-`router-hook auto-route-output` is a visible-output helper for API-lane exact
-output and controlled repo-bridge output. It must not synthesize a primary
+`router-hook auto-route-output` is a visible-output helper for proof-bound
+API-lane output and controlled repo-bridge output. It must not synthesize a primary
 ChatGPT exact answer from the prompt; primary-lane physical proof comes from the
 visible native GPT response. For API-lane aliases it may print `output_text`
 only when the routed packet proves `exact_plain_reply_matched=true`,
 `output_passthrough_required=true`, or
-`repo_bridge_evidence_response_proven=true`; merely available non-exact direct
-reply text is not a visible-output proof.
+`repo_bridge_evidence_response_proven=true`, or
+`direct_reply_visible_output_proven=true`. The non-exact direct-reply proof
+requires route-bound allowlist enforcement plus a positive direct provider
+response and must reject fallback, local imitation, repo-tool final answers,
+repo-bridge output, raw backend exposure, and secret exposure; merely available
+non-exact text is not enough.
 
 For already-routed API-lane alias text, the lower-level direct reply entrypoint
 is:

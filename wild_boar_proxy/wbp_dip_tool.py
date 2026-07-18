@@ -4829,6 +4829,12 @@ def _direct_provider_live_result(
     try:
         paths = ExternalModelsPaths.from_env()
         route = find_route(load_routes_file(paths.routes_file), route_id)
+        if route.get("enabled") is not True:
+            raise RuntimeErrorInfo(
+                f"External-models route is disabled: {route_id}",
+                machine_error_code=errors.ROUTE_DISABLED,
+                operator_action="user_action",
+            )
         transforms.validate_route_transform_profiles(route)
         headers = _provider_headers(route, paths)
         request_payload, request_metadata = transforms.build_check_request(

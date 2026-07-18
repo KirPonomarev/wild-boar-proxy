@@ -137,8 +137,8 @@ ${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route \
   --json
 ```
 
-Canonical visible-output route for Custom UI API-lane exact prompts and
-controlled repo-bridge evidence output:
+Canonical visible-output route for Custom UI API-lane prompts and controlled
+repo-bridge evidence output:
 
 ```sh
 ${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output \
@@ -154,9 +154,13 @@ response must come from the native GPT lane itself.
 
 For API-lane aliases this command may print `output_text` only when the routed
 packet proves one of: `exact_plain_reply_matched=true`,
-`output_passthrough_required=true`, or
-`repo_bridge_evidence_response_proven=true`. A merely available non-exact
-direct reply text is not enough for visible output.
+`output_passthrough_required=true`,
+`repo_bridge_evidence_response_proven=true`, or
+`direct_reply_visible_output_proven=true`. The last proof requires a successful
+API-lane direct reply, route-bound allowlist enforcement, a positive direct
+provider response proof, non-empty output, and no fallback, local imitation,
+repo-tool final answer, repo bridge, raw backend exposure, or secret exposure.
+Merely available non-exact text remains insufficient.
 
 `router-hook direct-reply --prompt <text> --json` is the canonical short
 lower-level API-agent reply surface. It loads

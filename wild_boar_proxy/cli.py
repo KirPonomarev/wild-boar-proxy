@@ -2054,6 +2054,7 @@ def _auto_route_visible_output(packet: dict[str, Any]) -> str:
             exact_plain_visible
             or packet.get("output_passthrough_required") is True
             or packet.get("repo_bridge_evidence_response_proven") is True
+            or packet.get("direct_reply_visible_output_proven") is True
         )
         and packet.get("output_text") is not None
     )
