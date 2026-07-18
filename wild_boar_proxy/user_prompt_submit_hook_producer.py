@@ -181,8 +181,8 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _codex_app_server_binary() -> Path | None:
-    candidates = [
+def _codex_app_server_candidate_strings() -> tuple[str, ...]:
+    return (
         os.environ.get(CODEX_APP_SERVER_BIN_ENV, ""),
         os.environ.get(CODEX_BIN_ENV, ""),
         str(
@@ -193,9 +193,13 @@ def _codex_app_server_binary() -> Path | None:
             / "Resources"
             / "codex"
         ),
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
         "/Applications/Codex.app/Contents/Resources/codex",
-        shutil.which("codex") or "",
-    ]
+    )
+
+
+def _codex_app_server_binary() -> Path | None:
+    candidates = [*_codex_app_server_candidate_strings(), shutil.which("codex") or ""]
     for raw in candidates:
         if not raw:
             continue

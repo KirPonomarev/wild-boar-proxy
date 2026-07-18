@@ -308,6 +308,18 @@ def _assert_no_prompt_route_or_secret(
 
 
 class UserPromptSubmitHookProducerTests(unittest.TestCase):
+    def test_hook_current_hash_probe_considers_official_chatgpt_app_server(self) -> None:
+        candidates = producer._codex_app_server_candidate_strings()
+
+        self.assertIn(
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+            candidates,
+        )
+        self.assertLess(
+            candidates.index("/Applications/ChatGPT.app/Contents/Resources/codex"),
+            candidates.index("/Applications/Codex.app/Contents/Resources/codex"),
+        )
+
     def test_parent_process_classification_uses_executable_path_not_spoofed_args(self) -> None:
         spoofed_command = (
             "/usr/bin/python3 -c 'print(\"Codex WBP Clean.app/Contents/Resources/"
