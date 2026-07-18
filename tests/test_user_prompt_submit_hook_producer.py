@@ -1310,6 +1310,31 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
         self.assertIn("only the active user request text", additional_context)
         self.assertIn("router-hook auto-route-output", additional_context)
 
+    def test_custom_api_alias_context_marks_alias_as_server_proven(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            runtime_context = _runtime_context()
+            runtime_context["alias_to_agent_id"]["Scout"] = "dip"
+            runtime_context["agent_bindings"][1]["aliases"].append("Scout")
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+            prompt = "SCOUT: answer exactly WBP_CUSTOM_NAME_OK"
+
+            additional_context = producer._user_prompt_submit_additional_context(
+                prompt_text=prompt,
+                runtime_context=runtime_context,
+                runtime_context_file=context_file,
+            )
+
+        self.assertIn("server-proven known API alias", additional_context)
+        self.assertIn("WBP_ROUTER_PROMPT='<original prompt>'", additional_context)
+        self.assertIn(
+            "not output WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS unless COMMAND stdout",
+            additional_context,
+        )
+        self.assertIn("router-hook auto-route-output", additional_context)
+
     def test_pre_tool_use_guard_digest_uses_active_codex_desktop_request(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

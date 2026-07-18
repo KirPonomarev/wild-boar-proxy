@@ -1827,7 +1827,8 @@ def _router_command_additional_context(*, runtime_context_file: Path) -> str:
     quoted_runtime_context_file = shlex.quote(str(runtime_context_file))
     return (
         "WBP ROUTER HARD OVERRIDE. The active prompt is addressed to a WBP API "
-        "agent. This is a deterministic router handoff, not a native Codex task. "
+        "agent. The server classified its leading label as a server-proven known "
+        "API alias. This is a deterministic router handoff, not a native Codex task. "
         "Exact visible behavior: say nothing before running the command; run "
         "exactly one shell command: COMMAND below; then return only stdout. Copy "
         "COMMAND literally except replacing <original prompt> inside the "
@@ -1845,6 +1846,8 @@ def _router_command_additional_context(*, runtime_context_file: Path) -> str:
         "calls, mkdir, python3 -c, heredocs, mktemp, or wrapper shopping. If "
         "the command returns a machine error, times out, "
         "or prints nothing, output only that machine result/error and stop. Do "
+        "not output WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS unless COMMAND stdout "
+        "returns exactly that machine result. Do "
         "not retry through another path and do not run cleanup or helper "
         "commands. No prose, Markdown, table, recap, translation, or extra token "
         "is allowed. If you are about to run any command other than COMMAND, "
