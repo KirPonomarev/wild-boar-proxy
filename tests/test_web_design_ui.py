@@ -611,7 +611,15 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
             "setTimeout(() => controller.abort(), CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS)",
             js,
         )
-        self.assertIn('machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED"', js)
+        self.assertIn(
+            'const cancelledByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";',
+            js,
+        )
+        self.assertIn('? "UI_ACTION_WAIT_CANCELLED"', js)
+        self.assertIn(
+            '(timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED")',
+            js,
+        )
         self.assertIn("execution_mode: executionMode", js)
         self.assertIn("chatgpt_model_id: chatgptModelId", js)
         self.assertIn("api_model_id: apiModelId", js)
@@ -3102,6 +3110,71 @@ if (packet.visible_window_counts_as_model_truth !== false || packet.bridge_alive
         self.assertIn(".quick-start-alias-card", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
 
+    def test_c7_runtime_binding_metadata_requires_both_refresh_proofs(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    addEventListener() {},
+    getElementById() { return null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  setTimeout,
+  clearTimeout,
+  AbortController
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+const base = { status: "ok", machine_error_code: "OK" };
+const missing = vm.runInContext("agentBindingsPacketForAliasMetadata", sandbox)({ ...base });
+const refreshOnly = vm.runInContext("agentBindingsPacketForAliasMetadata", sandbox)({
+  ...base,
+  alias_runtime_context_refreshed: true,
+  alias_runtime_binding_proven: false
+});
+const bindingOnly = vm.runInContext("agentBindingsPacketForAliasMetadata", sandbox)({
+  ...base,
+  alias_runtime_context_refreshed: false,
+  alias_runtime_binding_proven: true
+});
+const proven = vm.runInContext("agentBindingsPacketForAliasMetadata", sandbox)({
+  ...base,
+  alias_runtime_context_refreshed: true,
+  alias_runtime_binding_proven: true
+});
+for (const packet of [missing, refreshOnly, bindingOnly]) {
+  if (
+    packet.alias_runtime_binding_present === true ||
+    packet.alias_runtime_binding_proven === true ||
+    packet.semantic_alias_routing_enabled === true
+  ) {
+    throw new Error("partial runtime proof was accepted: " + JSON.stringify(packet));
+  }
+}
+if (proven.status !== "ok" || proven.alias_runtime_binding_proven !== true) {
+  throw new Error("complete runtime proof was rejected: " + JSON.stringify(proven));
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_quick_start_alias_card_cannot_expand_its_route_column(self) -> None:
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
 
@@ -3533,6 +3606,9 @@ const sandbox = {
           status: "ok",
           machine_error_code: "OK",
           alias_scope: "server_agent_bindings",
+          runtime_context_refresh_required: true,
+          alias_runtime_context_refreshed: true,
+          alias_runtime_binding_proven: true,
           agent_bindings: body.agent_bindings,
           alias_to_agent_id: { Planner: "codex", Builder: "dip" },
           agent_id_to_route: { dip: "wbp-deepseek-chat" },
@@ -3599,6 +3675,33 @@ const sandbox = {
   }
   if (packetNode.dataset.aliasRuntimeBindingProven !== "true") {
     throw new Error("runtime binding proof lost after session save: " + JSON.stringify(packetNode.dataset));
+  }
+  sandbox.fetch = async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    if (String(url) === "/api/codex/custom/agent-bindings") {
+      return {
+        ok: true,
+        json: async () => ({
+          status: "ok",
+          machine_error_code: "OK",
+          alias_scope: "server_agent_bindings",
+          runtime_context_refresh_required: true,
+          alias_runtime_context_refreshed: true,
+          alias_runtime_binding_proven: true,
+          agent_bindings: body.agent_bindings
+        })
+      };
+    }
+    throw new Error("simulated stale selected session");
+  };
+  await vm.runInContext(`
+    (async () => {
+      codexCustomSelectedSessionId = "ccs-stale";
+      await saveCodexCustomAgentAliasesFromUi();
+    })()
+  `, sandbox);
+  if (packetNode.dataset.aliasRuntimeBindingProven !== "true") {
+    throw new Error("session alias failure erased proven runtime binding: " + JSON.stringify(packetNode.dataset));
   }
 })().catch((error) => {
   console.error(error);
@@ -5405,6 +5508,8 @@ const sandbox = {
         status: "ok",
         machine_error_code: "OK",
         alias_scope: "server_agent_bindings",
+        alias_runtime_context_refreshed: true,
+        alias_runtime_binding_proven: true,
         agent_bindings: body.agent_bindings,
         alias_to_agent_id: { Planner: "codex", Builder: "dip" },
         agent_id_to_route: { dip: "wbp-deepseek-chat" },
@@ -7040,6 +7145,8 @@ const sandbox = {
           status: "ok",
           machine_error_code: "OK",
           alias_scope: "server_agent_bindings",
+          alias_runtime_context_refreshed: true,
+          alias_runtime_binding_proven: true,
           agent_bindings: body.agent_bindings,
           alias_to_agent_id: { Planner: "codex", Builder: "dip" },
           agent_id_to_route: { dip: "wbp-deepseek-chat" },
@@ -7486,6 +7593,8 @@ const sandbox = {
           status: "ok",
           machine_error_code: "OK",
           alias_scope: "server_agent_bindings",
+          alias_runtime_context_refreshed: true,
+          alias_runtime_binding_proven: true,
           agent_bindings: body.agent_bindings,
           alias_to_agent_id: { Planner: "codex", Builder: "dip" },
           agent_id_to_route: { dip: "wbp-deepseek-chat" },
@@ -17979,6 +18088,10 @@ if (settingsLaunchAvailability.textContent.indexOf("native launch blocked") === 
         self.assertNotIn('id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch"', html)
         self.assertIn("launch_custom_client_native:", js)
         self.assertIn('uiAction === "launch_custom_client_native"', js)
+        self.assertIn(
+            'return runCodexCustomLaunch({ confirmationBound: true });',
+            js,
+        )
         self.assertIn("Запросить native запуск", js)
 
     def test_custom_launch_render_keeps_workbench_only_packets_non_green(self) -> None:

@@ -959,7 +959,12 @@ function agentBindingsPacketForAliasMetadata(packet) {
   if (!packet) {
     return null;
   }
-  const ok = packet.status === "ok" && packet.machine_error_code === "OK";
+  const ok = (
+    packet.status === "ok" &&
+    packet.machine_error_code === "OK" &&
+    packet.alias_runtime_context_refreshed === true &&
+    packet.alias_runtime_binding_proven === true
+  );
   return {
     ...packet,
     packet_kind: "codex_custom_agent_alias_runtime_binding",
@@ -1098,11 +1103,9 @@ async function saveCodexCustomAgentAliasesToSelectedSession(source = "operator_s
 async function saveCodexCustomAgentAliasesFromUi() {
   codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
   renderCodexCustomAgentAliases("operator_saved");
+  let runtimePacket = null;
   try {
-    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_saved");
-    if (runtimePacket?.alias_runtime_binding_proven === true) {
-      await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
-    }
+    runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_saved");
   } catch (error) {
     codexCustomAgentRuntimeBindingPacket = {
       status: "failed",
@@ -1116,6 +1119,23 @@ async function saveCodexCustomAgentAliasesFromUi() {
       does_not_prove_native_free_text_tool_bridge: true
     };
     renderCodexCustomAgentAliases("operator_save_failed");
+    return;
+  }
+  if (runtimePacket?.alias_runtime_binding_proven !== true) {
+    return;
+  }
+  try {
+    await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
+  } catch (error) {
+    codexCustomAgentAliasBindingPacket = {
+      status: "failed",
+      alias_scope: "session_alias_binding_failed",
+      alias_runtime_binding_present: false,
+      alias_runtime_binding_proven: false,
+      machine_error_code: "SESSION_AGENT_ALIAS_BINDING_FETCH_FAILED",
+      human_message: error.message
+    };
+    renderCodexCustomAgentAliases("operator_saved_runtime_only");
   }
 }
 
@@ -2179,7 +2199,7 @@ async function retryCodexCustomLaunchAfterStableBridgeRecovery(payload, blockedP
   };
 }
 
-async function runCodexCustomLaunch() {
+async function runCodexCustomLaunch({ confirmationBound = false } = {}) {
   if (codexLaunchDryRunInFlight) {
     return;
   }
@@ -2189,6 +2209,10 @@ async function runCodexCustomLaunch() {
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   codexLaunchSetChip("neutral", "launching");
   const controller = typeof AbortController === "function" ? new AbortController() : null;
+  if (confirmationBound && controller) {
+    activeActionAbortReason = "";
+    activeActionAbortController = controller;
+  }
   const timeoutHandle = controller
     ? setTimeout(() => controller.abort(), CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS)
     : null;
@@ -2262,11 +2286,16 @@ async function runCodexCustomLaunch() {
     const tracePacket = await refreshQuickStartMixedCoderTraceTruth(packet);
     await runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket);
   } catch (error) {
-    const timedOut = error?.name === "AbortError";
+    const cancelledByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";
+    const timedOut = error?.name === "AbortError" && !cancelledByUser;
     renderCodexCustomLaunch({
       status: "failed",
-      machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED",
-      human_message: timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message,
+      machine_error_code: cancelledByUser
+        ? "UI_ACTION_WAIT_CANCELLED"
+        : (timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED"),
+      human_message: cancelledByUser
+        ? "Custom Codex launch wait was cancelled in the browser. Refresh before retrying."
+        : (timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message),
       launch_admission: "blocked",
       session_created: false,
       running_status: false,
@@ -2298,6 +2327,10 @@ async function runCodexCustomLaunch() {
       clearTimeout(timeoutHandle);
     }
     codexLaunchDryRunInFlight = false;
+    if (confirmationBound && activeActionAbortController === controller) {
+      activeActionAbortController = null;
+      activeActionAbortReason = "";
+    }
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
   }
@@ -12099,6 +12132,9 @@ function actionRefreshLabel(payload, refreshState) {
 }
 
 async function runUiAction(uiAction, extraPayload = {}) {
+  if (uiAction === "launch_custom_client_native") {
+    return runCodexCustomLaunch({ confirmationBound: true });
+  }
   const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
   const requestKey = actionRequestKey(requestPayload);
   const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : onboardLoginWindowRef;
