@@ -66,6 +66,9 @@ REMOTE_DEBUGGING_PORT_FILENAME = "codex-remote-debugging-port.txt"
 DEFAULT_CUSTOM_NATIVE_MODEL = "gpt-5.5"
 STALE_CUSTOM_NATIVE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
 CUSTOM_NATIVE_MODEL_REPAIR_TARGETS = (
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
     DEFAULT_CUSTOM_NATIVE_MODEL,
     "gpt-5.4",
     "gpt-5.4-mini",
@@ -4569,7 +4572,14 @@ def build_configured_model_availability_packet(
         }
     model_ids = _extract_model_ids_from_models_payload(payload)
     requested_model_available = configured_model in model_ids
-    configured_model_stale = configured_model in STALE_CUSTOM_NATIVE_MODEL_IDS
+    configured_model_catalog_drift = (
+        configured_model == DEFAULT_CUSTOM_NATIVE_MODEL
+        and not requested_model_available
+    )
+    configured_model_stale = (
+        configured_model in STALE_CUSTOM_NATIVE_MODEL_IDS
+        or configured_model_catalog_drift
+    )
     repaired_model = (
         _repair_target_for_stale_custom_native_model(model_ids)
         if configured_model_stale
@@ -4592,6 +4602,7 @@ def build_configured_model_availability_packet(
             "requested_configured_model_available": requested_model_available,
             "effective_configured_model_id": "",
             "configured_model_stale": True,
+            "configured_model_catalog_drift": configured_model_catalog_drift,
             "configured_model_auto_repaired": False,
         }
     return {
@@ -4611,6 +4622,7 @@ def build_configured_model_availability_packet(
         "requested_configured_model_available": requested_model_available,
         "effective_configured_model_id": repaired_model if model_available else configured_model,
         "configured_model_stale": configured_model_stale,
+        "configured_model_catalog_drift": configured_model_catalog_drift,
         "configured_model_auto_repaired": configured_model_stale and model_available,
     }
 
@@ -4692,6 +4704,9 @@ def materialize_probe_profile(
         "effective_configured_model_id": effective_model,
         "configured_model_stale": (
             model_availability_packet.get("configured_model_stale") is True
+        ),
+        "configured_model_catalog_drift": (
+            model_availability_packet.get("configured_model_catalog_drift") is True
         ),
         "configured_model_auto_repaired": (
             model_availability_packet.get("configured_model_auto_repaired") is True
