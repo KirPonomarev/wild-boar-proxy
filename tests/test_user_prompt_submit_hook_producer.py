@@ -982,6 +982,97 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertEqual(packets.inspect_command_packet_semantics(blocked), [])
             self.assertEqual(packets.inspect_command_packet_semantics(allowed), [])
 
+    def test_hook_and_guard_packets_expose_distinct_router_proof_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            context_file = paths.profile_dir / hook_entry.RUNTIME_CONTEXT_FILENAME
+            prompt = "DIP: answer exactly WBP_STAGE_PROOF_OK"
+
+            hook_not_run = producer.build_user_prompt_submit_run_packet(
+                event={**_event(prompt=prompt), "hook_event_name": "Other"},
+                paths=paths,
+                ledger_file=root / "invalid-ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            context_not_emitted = producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt="Explain the current status."),
+                paths=paths,
+                ledger_file=root / "plain-ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            context_emitted = producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt=prompt),
+                paths=paths,
+                ledger_file=root / "api-ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            blocked = producer.build_pre_tool_use_guard_packet(
+                event={
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "shell",
+                    "input": {"cmd": "python3 -c 'print(123)'"},
+                },
+                paths=paths,
+            )
+            canonical_command = (
+                f"WBP_ROUTER_PROMPT='{prompt}'; "
+                'WBP_ROUTER_PROOF_DIR="$WBP_PROFILE_DIR/tmp/user-prompt-submit-router-proof"; '
+                "printf '%s\\n' \"$WBP_ROUTER_PROMPT\" | "
+                "python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file {shlex.quote(str(context_file))} "
+                '--active-project-root "$PWD" --repo-bridge auto '
+                "--work-mode full --timeout-seconds 300 "
+                '--proof-dir "$WBP_ROUTER_PROOF_DIR" --prompt-file -'
+            )
+            admitted = producer.build_pre_tool_use_guard_packet(
+                event={
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "shell",
+                    "input": {"cmd": canonical_command},
+                },
+                paths=paths,
+            )
+
+        self.assertFalse(hook_not_run["user_prompt_submit_hook_ran"])
+        self.assertFalse(hook_not_run["additional_context_emitted"])
+        self.assertFalse(context_not_emitted["additional_context_emitted"])
+        self.assertTrue(context_emitted["additional_context_emitted"])
+        self.assertFalse(context_emitted["canonical_command_attempted"])
+        self.assertFalse(context_emitted["canonical_command_admitted"])
+        self.assertTrue(blocked["canonical_command_attempted"])
+        self.assertFalse(blocked["canonical_command_admitted"])
+        self.assertEqual(blocked["pre_tool_use_decision"], "block")
+        self.assertTrue(admitted["canonical_command_attempted"])
+        self.assertTrue(admitted["canonical_command_admitted"])
+        self.assertEqual(admitted["pre_tool_use_decision"], "allow")
+        for packet in (
+            hook_not_run,
+            context_not_emitted,
+            context_emitted,
+            blocked,
+            admitted,
+        ):
+            self.assertFalse(packet["visible_output_proven"])
+            self.assertEqual(
+                packet["visible_output_provenance"],
+                "not_proven_at_hook_or_guard_stage",
+            )
+            self.assertFalse(packet["raw_prompt_recorded"])
+            self.assertFalse(packet["raw_route_id_recorded"])
+
     def test_pre_tool_use_guard_blocks_router_output_command_with_wrong_bound_inputs_or_tail(
         self,
     ) -> None:
