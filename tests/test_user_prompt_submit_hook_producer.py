@@ -389,8 +389,13 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             )
             self.assertIn("UserPromptSubmit", hooks_document["hooks"])
             self.assertIn("PreToolUse", hooks_document["hooks"])
+            self.assertIn("Stop", hooks_document["hooks"])
             self.assertEqual(
                 hooks_document["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+                hooks_document["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
+            )
+            self.assertEqual(
+                hooks_document["hooks"]["Stop"][0]["hooks"][0]["command"],
                 hooks_document["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
             )
             self.assertTrue(os.access(producer.hook_script_path(paths), os.X_OK))
@@ -1194,6 +1199,168 @@ class UserPromptSubmitHookProducerTests(unittest.TestCase):
             self.assertTrue(cleared["pre_tool_use_guard_cleared"])
             self.assertFalse(cleared["pre_tool_use_guard_required"])
             self.assertFalse(producer.pre_tool_use_guard_path(paths).exists())
+
+    def test_stop_guard_forces_canonical_router_before_api_alias_turn_can_finish(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            prompt = "DIP: answer exactly WBP_STOP_GUARD_OK"
+            stale_proof_path = producer.router_output_proof_path(paths)
+            stale_proof_path.parent.mkdir(parents=True, exist_ok=True)
+            stale_proof_path.write_text(
+                json.dumps(
+                    {
+                        "packet_kind": producer.API_AGENT_AUTO_ROUTER_PACKET_KIND,
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_digest": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                        "proof_file_written": True,
+                        "evidence_written": True,
+                        "auto_router_used": True,
+                        "auto_router_decision": "api_direct_reply",
+                        "auto_router_fail_closed": False,
+                        "secret_value_exposed": False,
+                        "fallback_used": False,
+                        "local_imitation_used": False,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.utime(stale_proof_path, (1, 1))
+            producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt=prompt),
+                paths=paths,
+                ledger_file=root / "ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            stop_event = {
+                **_event(prompt=prompt),
+                "hook_event_name": "Stop",
+            }
+
+            packet = producer.build_stop_router_guard_packet(
+                event=stop_event,
+                paths=paths,
+            )
+            output = producer.build_user_prompt_submit_hook_output(packet)
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                producer.STOP_ROUTER_GUARD_BLOCKED,
+            )
+            self.assertTrue(packet["stop_guard_identity_bound"])
+            self.assertTrue(packet["stop_guard_applies"])
+            self.assertFalse(packet["stop_guard_canonical_router_proven"])
+            self.assertTrue(packet["router_output_proof_packet_present"])
+            self.assertEqual(packet["stop_guard_decision"], "block")
+            self.assertEqual(output["decision"], "block")
+            self.assertIn("reason", output)
+            self.assertNotIn("continue", output)
+            self.assertTrue(producer.pre_tool_use_guard_path(paths).exists())
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "WBP_PROFILE_DIR": str(paths.profile_dir),
+                    "WBP_MANAGED_DIR": str(paths.managed_dir),
+                    "WBP_CONFIG_TOML": str(paths.config_toml),
+                }
+            )
+            cli_result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy.user_prompt_submit_hook_producer",
+                    "run-hook",
+                    "--trusted-hook-config-sha256",
+                    hook_hash,
+                    "--loaded-hook-config-sha256",
+                    hook_hash,
+                    "--origin-state",
+                    proof.ORIGIN_STATE_SYNTHETIC_HOOK_FLOW,
+                    "--hook-output",
+                ],
+                input=json.dumps(stop_event),
+                text=True,
+                capture_output=True,
+                check=False,
+                cwd=ROOT,
+                env=env,
+            )
+            cli_output = json.loads(cli_result.stdout)
+            self.assertEqual(cli_result.returncode, 0)
+            self.assertEqual(cli_output["decision"], "block")
+            self.assertTrue(str(cli_output["reason"]).strip())
+
+    def test_stop_guard_accepts_fresh_prompt_bound_router_proof_and_clears_guard(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _paths(root)
+            _write_context(paths)
+            install = producer.build_user_prompt_submit_install_packet(paths=paths, apply=True)
+            hook_hash = str(install["hook_definition_digest"])
+            prompt = "DIP: answer exactly WBP_STOP_GUARD_OK"
+            producer.build_user_prompt_submit_run_packet(
+                event=_event(prompt=prompt),
+                paths=paths,
+                ledger_file=root / "ledger.json",
+                trusted_hook_config_sha256=hook_hash,
+                loaded_hook_config_sha256=hook_hash,
+                origin_state=proof.ORIGIN_STATE_CUSTOM_CODEX_FLOW_PROVEN,
+                event_metadata={"hook_event_stdin_read": True},
+            )
+            proof_path = producer.router_output_proof_path(paths)
+            proof_path.parent.mkdir(parents=True, exist_ok=True)
+            proof_path.write_text(
+                json.dumps(
+                    {
+                        "packet_kind": producer.API_AGENT_AUTO_ROUTER_PACKET_KIND,
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "prompt_digest": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                        "proof_file_written": True,
+                        "evidence_written": True,
+                        "auto_router_used": True,
+                        "auto_router_decision": "api_direct_reply",
+                        "auto_router_fail_closed": False,
+                        "secret_value_exposed": False,
+                        "fallback_used": False,
+                        "local_imitation_used": False,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            stop_event = {
+                **_event(prompt=prompt),
+                "hook_event_name": "Stop",
+            }
+
+            packet = producer.build_stop_router_guard_packet(
+                event=stop_event,
+                paths=paths,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["stop_guard_canonical_router_proven"])
+            self.assertTrue(packet["stop_guard_cleared"])
+            self.assertEqual(packet["stop_guard_decision"], "allow")
+            self.assertEqual(producer.build_user_prompt_submit_hook_output(packet), {})
+            self.assertFalse(producer.pre_tool_use_guard_path(paths).exists())
+            self.assertEqual(packets.inspect_command_packet_semantics(packet), [])
 
     def test_additional_context_handles_primary_api_and_parser_api_targets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
