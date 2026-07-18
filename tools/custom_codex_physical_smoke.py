@@ -184,8 +184,11 @@ def prove_cdp_owner(
     proof["candidate_pid_count"] = len(pids)
     proof["candidate_pid_sha256"] = sha256_text(",".join(str(pid) for pid in pids))
     expected_user_data_arg = f"--user-data-dir={user_data_dir.resolve(strict=False)}"
-    required_markers = (
+    executable_markers = (
         "Codex WBP Clean.app/Contents/MacOS/Codex",
+        "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+    )
+    required_markers = (
         "--remote-debugging-address=127.0.0.1",
         f"--remote-debugging-port={port}",
         expected_user_data_arg,
@@ -193,7 +196,8 @@ def prove_cdp_owner(
     owner_candidates: list[tuple[int, str]] = []
     for pid in pids:
         command = _process_command(pid)
-        if all(marker in command for marker in required_markers):
+        executable_proven = any(marker in command for marker in executable_markers)
+        if executable_proven and all(marker in command for marker in required_markers):
             owner_candidates.append((pid, command))
     proof["owner_candidate_pid_count"] = len(owner_candidates)
     proof["owner_candidate_pid_sha256"] = sha256_text(
@@ -206,6 +210,8 @@ def prove_cdp_owner(
     proof["cdp_owner_pid"] = pid
     proof["owner_process_command_sha256"] = sha256_text(command)
     missing = [marker for marker in required_markers if marker not in command]
+    if not any(marker in command for marker in executable_markers):
+        missing.append("approved_custom_codex_executable")
     if missing:
         proof["owner_block_reason"] = "cdp_listener_command_mismatch"
         proof["missing_marker_count"] = len(missing)

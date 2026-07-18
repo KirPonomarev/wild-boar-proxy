@@ -95,6 +95,36 @@ class CustomCodexPhysicalSmokeTests(unittest.TestCase):
         self.assertEqual(proof["owner_candidate_pid_count"], 1)
         self.assertEqual(proof["cdp_owner_pid"], 100)
 
+    def test_owner_proof_accepts_official_chatgpt_root_with_isolated_profile(self) -> None:
+        profile_dir = Path("/tmp/wbp-profile")
+        user_data_dir = profile_dir / "electron-user-data"
+        command = (
+            "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT "
+            "--remote-debugging-address=127.0.0.1 "
+            "--remote-debugging-port=53962 "
+            f"--user-data-dir={user_data_dir.resolve(strict=False)}"
+        )
+
+        with mock.patch.object(
+            smoke,
+            "_listening_pids_for_port",
+            return_value=[100],
+        ), mock.patch.object(
+            smoke,
+            "_process_command",
+            return_value=command,
+        ):
+            proof = smoke.prove_cdp_owner(
+                cdp_url="http://127.0.0.1:53962",
+                profile_dir=profile_dir,
+                user_data_dir=user_data_dir,
+                allow_unbound_cdp=False,
+            )
+
+        self.assertEqual(proof["status"], "ok")
+        self.assertTrue(proof["cdp_owner_proven"])
+        self.assertEqual(proof["owner_candidate_pid_count"], 1)
+
     def test_packet_does_not_record_screenshot_path_by_default(self) -> None:
         prompt = "DIP: answer exactly WBP_PHYSICAL_PACKET_OK"
         expected = "WBP_PHYSICAL_PACKET_OK"
