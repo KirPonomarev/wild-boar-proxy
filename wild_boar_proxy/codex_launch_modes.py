@@ -180,8 +180,9 @@ def build_launch_modes_packet(operator_status: dict[str, Any] | None = None) -> 
                 "proxy_enabled": False,
                 "custom_codex_home_allowed": False,
                 "custom_home": False,
-                "dispatch_available": True,
-                "live_launch_available": True,
+                "dispatch_available": False,
+                "live_launch_available": False,
+                "original_codex_opener_disabled": True,
                 "launch_claim_scope": "owner_authorized_baseline_launch",
             },
             {

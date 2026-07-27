@@ -187,7 +187,6 @@ from wild_boar_proxy.web_ingress import (
     unsafe_bind_requested,
     web_ingress_rejection_packet,
 )
-from wild_boar_proxy.voice_draft import build_voice_draft_contract_packet
 from wild_boar_proxy.web_rate_limit import (
     DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
     WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
@@ -1253,7 +1252,6 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/operator/transcript"),
     _get_route("/api/review-surface"),
     _get_route("/api/review-commands"),
-    _get_route("/api/wbp/voice-draft"),
     _get_route("/api/codex/launch-modes"),
     _get_route("/api/codex/original/status"),
     _get_route("/api/codex/custom/status"),
@@ -10567,6 +10565,12 @@ def _launch_original_codex_packet(
     owner_authorized: bool,
     app_bundle_path: Path | None = None,
 ) -> dict[str, Any]:
+    # The WBP web control surface must not open or launch the official Codex
+    # application. This endpoint is intentionally fail-closed: it always
+    # rejects the launch and never dispatches a subprocess to Original Codex.
+    # The owner launches Original Codex independently; WBP does not own that
+    # action. This keeps the route contract stable (callers get a
+    # machine-readable rejection) while removing the opener behavior.
     forbidden = forbidden_original_fields(payload)
     base = {
         "schema_version": 1,
@@ -10582,6 +10586,7 @@ def _launch_original_codex_packet(
         "running_status": False,
         "launch_claim_scope": "owner_authorized_baseline_launch",
         "browser_payload_allowed_keys": [],
+        "original_codex_opener_disabled": True,
     }
     if forbidden:
         return {
@@ -10592,80 +10597,15 @@ def _launch_original_codex_packet(
             "forbidden_fields": forbidden,
             "next_action": "remove_browser_payload_fields",
         }
-    if not owner_authorized:
-        return {
-            **base,
-            **_owner_authorization_required_packet(
-                mode_id="original_codex",
-                next_action="provide_exact_owner_authorization_phrase",
-            ),
-        }
-    app_bundle = app_bundle_path or Path(DEFAULT_CODEX_BIN).resolve().parents[2]
-    if not app_bundle.exists():
-        return {
-            **base,
-            "status": "blocked",
-            "machine_error_code": "ORIGINAL_CODEX_APP_UNAVAILABLE",
-            "human_message": "Original Codex app bundle is unavailable on this host.",
-            "next_action": "repair_original_codex_bundle_path",
-        }
-    open_bin = Path("/usr/bin/open")
-    if not open_bin.exists():
-        return {
-            **base,
-            "status": "blocked",
-            "machine_error_code": "SYSTEM_OPEN_UNAVAILABLE",
-            "human_message": "System app launch helper is unavailable on this host.",
-            "next_action": "repair_system_open_binary",
-        }
-    env = clean_env()
-    for key in list(env):
-        if key == "HOME" or key.startswith("WBP_") or key.startswith("OPENAI_"):
-            env.pop(key, None)
-    env.pop("CODEX_HOME", None)
-    before = protected_snapshot()
-    try:
-        launch = subprocess.run(
-            [str(open_bin), "-a", str(app_bundle)],
-            capture_output=True,
-            text=True,
-            env=env,
-            check=False,
-        )
-    except OSError as exc:
-        return {
-            **base,
-            "status": "failed",
-            "machine_error_code": "ORIGINAL_CODEX_LAUNCH_FAILED",
-            "human_message": f"Original Codex launch failed: {type(exc).__name__}.",
-            "error_class": type(exc).__name__,
-            "next_action": "retry_original_launch",
-        }
-    after = protected_snapshot()
-    comparisons = compare_snapshots(before, after)
-    untouched = protected_surfaces_unchanged(comparisons)
-    running_status = launch.returncode == 0 and untouched
     return {
         **base,
-        "status": "ok" if running_status else "blocked",
-        "machine_error_code": "OK" if running_status else ("CURRENT_CODEX_TOUCHED" if not untouched else "ORIGINAL_CODEX_LAUNCH_FAILED"),
+        "status": "rejected",
+        "machine_error_code": "ORIGINAL_CODEX_OPENER_DISABLED",
         "human_message": (
-            "Original Codex launch dispatched without proxy/custom env injection."
-            if running_status
-            else "Original Codex launch did not satisfy protected-baseline proof."
+            "WBP does not open the official Codex application. Launch Codex "
+            "directly from the operating system."
         ),
-        "owner_authorization_phrase_present": True,
-        "dispatch_observed": launch.returncode == 0,
-        "dispatch_exit_code": launch.returncode,
-        "running_status": running_status,
-        "proxy_env_present": False,
-        "wbp_endpoint_injected": False,
-        "custom_home_present": False,
-        "custom_codex_home_present": False,
-        "current_codex_touched": not untouched,
-        "protected_surfaces_unchanged": untouched,
-        "protected_surface_comparisons": comparisons,
-        "next_action": "none" if running_status else ("stop_and_diagnose_current_codex_touch" if not untouched else "retry_original_launch"),
+        "next_action": "launch_original_codex_directly_from_os",
     }
 
 
@@ -18542,11 +18482,6 @@ def build_handler(
                     "commands": review_allowlist_metadata(),
                 }
             )
-            return
-
-        def _handle_get_api_wbp_voice_draft(self, request_path: str) -> None:
-            parsed = urlparse(request_path)
-            self._send_json(build_voice_draft_contract_packet())
             return
 
         def _handle_get_api_codex_launch_modes(self, request_path: str) -> None:
