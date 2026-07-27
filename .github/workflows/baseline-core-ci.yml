@@ -1,0 +1,54 @@
+name: Baseline Core CI
+
+# Baseline test gate required by the WBP master plan (W03) before PR #78 merge.
+# Provides make check + make test-core + make test-custom-stability on push and
+# pull_request. The full `make test-full` gate remains a local release contract
+# until W12 admits it as a deterministic CI runner job.
+#
+# Plan-ID: WBP-WEB-FIRST-GLM-KIMI-DESKTOP-V3.6
+# Stage-ID: W03_PR78_BASELINE_SETTLEMENT
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline-core:
+    name: make check + test-core + test-custom-stability
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and test deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
+          python3 -m pip install --upgrade pytest
+
+      - name: Install repo hygiene hook (git config for range guard)
+        run: |
+          # The repo hygiene hook is enforced by a separate workflow; this step
+          # only ensures git identity is present for any tool that shells out.
+          git config --global user.email "baseline-ci@example.com"
+          git config --global user.name "Baseline Core CI"
+
+      - name: make check (compile + collect)
+        run: make check
+
+      - name: make test-core
+        run: make test-core
+
+      - name: make test-custom-stability
+        # Custom-stability exercises a constrained PATH and a runtime python;
+        # run it under the same constrained environment as the Makefile target.
+        run: make test-custom-stability
