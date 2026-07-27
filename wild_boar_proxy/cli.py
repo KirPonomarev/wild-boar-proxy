@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import pathlib
 import sys
 import threading
 import time
@@ -51,6 +52,7 @@ from .gpt_api_dip_product_ready_gate import (
 from .e2e_mode_matrix import run_e2e_mode_matrix_command
 from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
+from . import web_lifecycle
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -2014,6 +2016,38 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_evidence_capture.add_argument("--route", required=True)
     external_models_evidence_capture.add_argument("--json", action="store_true", required=True)
 
+    web = subparsers.add_parser(
+        "web",
+        help="Управлять локальным loopback web control surface (start/status/stop/open)",
+    )
+    web_subparsers = web.add_subparsers(dest="web_command", required=True)
+    web_start_p = web_subparsers.add_parser("start")
+    web_start_p.add_argument(
+        "--host",
+        default=web_lifecycle.DEFAULT_WEB_HOST,
+    )
+    web_start_p.add_argument(
+        "--port",
+        type=int,
+        default=web_lifecycle.DEFAULT_WEB_PORT,
+    )
+    web_start_p.add_argument(
+        "--action-phase",
+        default="live_readonly",
+        choices=("live_readonly",),
+    )
+    web_start_p.add_argument("--owner-authorization-phrase")
+    web_start_p.add_argument("--active-project-root")
+    web_start_p.add_argument("--json", action="store_true", required=True)
+    web_status_p = web_subparsers.add_parser("status")
+    web_status_p.add_argument("--json", action="store_true", required=True)
+    web_stop_p = web_subparsers.add_parser("stop")
+    web_stop_p.add_argument("--json", action="store_true", required=True)
+    web_open_p = web_subparsers.add_parser("open")
+    web_open_p.add_argument("--json", action="store_true", required=True)
+    web_clear_stale_p = web_subparsers.add_parser("clear-stale-ledger")
+    web_clear_stale_p.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -3598,6 +3632,35 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_companion_reset(paths, uninstall=False))
         if args.command == "companion" and args.companion_command == "uninstall":
             return emit_json(run_companion_reset(paths, uninstall=True))
+        if args.command == "web":
+            web_paths = web_lifecycle.WebLifecyclePaths.from_managed_dir(
+                paths.managed_dir
+            )
+            if args.web_command == "start":
+                payload = web_lifecycle.web_start(
+                    web_paths,
+                    host=args.host,
+                    port=args.port,
+                    action_phase=args.action_phase,
+                    owner_authorization_phrase=args.owner_authorization_phrase,
+                    active_project_root=(
+                        pathlib.Path(args.active_project_root)
+                        if args.active_project_root
+                        else None
+                    ),
+                )
+            elif args.web_command == "status":
+                payload = web_lifecycle.web_status(web_paths)
+            elif args.web_command == "stop":
+                payload = web_lifecycle.web_stop(web_paths)
+            elif args.web_command == "open":
+                payload = web_lifecycle.web_open(web_paths)
+            elif args.web_command == "clear-stale-ledger":
+                payload = web_lifecycle.clear_stale_ledger(web_paths)
+            else:  # pragma: no cover - argparse required=True guarantees a choice
+                raise SystemExit(2)
+            web_lifecycle._mark_failed(payload)
+            return emit_json(payload)
         if args.command == "mode" and args.mode_command == "get":
             return emit_json(mode_get(paths))
         if args.command == "mode" and args.mode_command == "set":

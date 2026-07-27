@@ -1207,6 +1207,46 @@ The plain `token` surface is allowed to emit the bearer token only to stdout for
 its trusted machine consumer. It is not a packet truth surface and must not be
 used as evidence by itself.
 
+## Additional web control-surface lifecycle owner surface
+
+`web start --json`, `web status --json`, `web stop --json`, `web open --json`,
+and `web clear-stale-ledger --json` are the owner surfaces for the local
+loopback WBP web control surface.
+
+The lifecycle layer owns only start/status/stop/open of the WBP web server. It
+does not own runtime health, account lifecycle, provider truth, or any other
+control-surface packet; those remain on their canonical owner paths.
+
+`web start`:
+
+- binds to loopback only (`127.0.0.1` / `::1` / `localhost`); any other host is
+  rejected with `WEB_PUBLIC_BIND_REJECTED`;
+- refuses to clobber a server already recorded as running on the same loopback
+  port (`WEB_ALREADY_RUNNING`);
+- refuses to grab a loopback port already owned by a foreign listener
+  (`WEB_PORT_OCCUPIED`);
+- spawns the existing `web_design_live_server` entrypoint in `live_readonly`
+  action phase as a background child;
+- writes an exact PID/port ledger (`web_server.pid`) and a startup receipt
+  (`web_server_startup_receipt.json`) under the managed dir;
+- probes loopback listener readiness and `/api/live-readonly` HTTP 200 within a
+  bounded startup window (no retry storm);
+- never exposes the raw web token value; ledger records `token_present` only.
+
+`web status` is read-only: it classifies the recorded ledger as `no_ledger`,
+`running`, `stale_missing_process`, `stale_port_closed`, or `foreign_owner`,
+and never mutates runtime truth.
+
+`web stop` signals only the exact PID recorded in the ledger after a fresh
+pre-signal identity readback; it refuses foreign-owner PIDs
+(`WEB_PID_FOREIGN_OWNER`) and clears the ledger after readback.
+
+`web open` reports the loopback deep-link URL for the running server and never
+dispatches an OS `open` action; the operator opens the URL deliberately.
+
+`web clear-stale-ledger` clears a stale ledger without signalling any process
+and refuses when the ledger still records a running server (`WEB_STILL_RUNNING`).
+
 ## Additional Codex CLI runner surface
 
 `codex-runner smoke --json --prompt <text>` is a bounded non-native Codex CLI
