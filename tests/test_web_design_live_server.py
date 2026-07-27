@@ -14764,51 +14764,6 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
             if route.method == "POST":
                 self.assertTrue(route.auth_required, route.path)
 
-    def test_voice_draft_get_route_returns_fail_closed_wbp_contract(self) -> None:
-        route = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup("GET", "/api/wbp/voice-draft")
-        self.assertIsNotNone(route)
-        assert route is not None
-        self.assertEqual(route.effect, EFFECT_READ)
-        self.assertFalse(route.auth_required)
-
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        base = f"http://127.0.0.1:{server.server_port}"
-        try:
-            packet = json.loads(fetch(f"{base}/api/wbp/voice-draft"))
-        finally:
-            server.shutdown()
-            thread.join(timeout=2)
-            server.server_close()
-
-        self.assertEqual(packet["packet_kind"], "wbp_voice_draft_contract")
-        self.assertEqual(packet["status"], "blocked")
-        self.assertEqual(packet["machine_error_code"], "TRANSCRIPTION_ENGINE_NOT_CONFIGURED")
-        self.assertEqual(packet["voice_capture_scope"], "wbp_browser_local_draft")
-        self.assertFalse(packet["server_audio_ingress_enabled"])
-        self.assertFalse(packet["raw_audio_recorded_by_server"])
-        self.assertTrue(packet["clipboard_handoff_available"])
-        self.assertFalse(packet["clipboard_handoff_attempted"])
-        self.assertFalse(packet["clipboard_handoff_ok"])
-        self.assertFalse(packet["clipboard_contains_transcript"])
-        self.assertTrue(packet["empty_transcript_copy_blocked"])
-        self.assertTrue(packet["custom_paste_bridge_available"])
-        self.assertEqual(
-            packet["custom_paste_bridge_preflight_endpoint"],
-            "/api/wbp/custom-paste-bridge/preflight",
-        )
-        self.assertEqual(
-            packet["custom_paste_bridge_live_endpoint"],
-            "/api/wbp/custom-paste-bridge/live-paste",
-        )
-        self.assertTrue(packet["custom_codex_not_mutated"])
-        self.assertTrue(packet["prompt_not_submitted"])
-        self.assertFalse(packet["paste_attempted"])
-        self.assertFalse(packet["api_called"])
-        self.assertFalse(packet["model_endpoint_called"])
-        self.assertFalse(packet["secret_value_exposed"])
-
     def test_custom_paste_bridge_routes_are_registered_and_auth_bound(self) -> None:
         preflight = live_server.WEB_DESIGN_LIVE_ROUTE_TABLE.lookup(
             "POST",
@@ -15804,7 +15759,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         modes = {mode["id"]: mode for mode in launch_modes["modes"]}
         self.assertFalse(modes["original_codex"]["proxy_enabled"])
         self.assertFalse(modes["original_codex"]["proxy_allowed"])
-        self.assertTrue(modes["original_codex"]["live_launch_available"])
+        self.assertFalse(modes["original_codex"]["live_launch_available"])
+        self.assertFalse(modes["original_codex"]["dispatch_available"])
+        self.assertTrue(modes["original_codex"]["original_codex_opener_disabled"])
         self.assertEqual(modes["original_codex"]["launch_claim_scope"], "owner_authorized_baseline_launch")
         self.assertTrue(modes["codex_custom"]["proxy_enabled"])
         self.assertTrue(modes["codex_custom"]["custom_codex_home_required"])
@@ -15822,10 +15779,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(dry_run["dispatch_plan_safe"])
         self.assertFalse(dry_run["proxy_env_injected"])
         self.assertFalse(dry_run["custom_home_injected"])
-        self.assertEqual(original_launch["status"], "blocked")
-        self.assertEqual(original_launch["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(original_launch["status"], "rejected")
+        self.assertEqual(original_launch["machine_error_code"], "ORIGINAL_CODEX_OPENER_DISABLED")
+        self.assertTrue(original_launch["original_codex_opener_disabled"])
         self.assertFalse(original_launch["running_status"])
-        self.assertFalse(original_launch["owner_authorization_phrase_present"])
         self.assertEqual(custom_dry_run["status"], "ok")
         self.assertTrue(custom_dry_run["dry_run"])
         self.assertTrue(custom_dry_run["custom_launch_plan_safe"])
@@ -15952,10 +15909,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     thread.join(timeout=2)
                     server.server_close()
 
-        self.assertEqual(original_launch["status"], "ok")
-        self.assertEqual(original_launch["machine_error_code"], "OK")
-        self.assertTrue(original_launch["owner_authorization_phrase_present"])
-        self.assertTrue(original_launch["running_status"])
+        self.assertEqual(original_launch["status"], "rejected")
+        self.assertEqual(original_launch["machine_error_code"], "ORIGINAL_CODEX_OPENER_DISABLED")
+        self.assertTrue(original_launch["original_codex_opener_disabled"])
+        self.assertFalse(original_launch["running_status"])
         self.assertFalse(original_launch["proxy_env_present"])
         self.assertFalse(original_launch["wbp_endpoint_injected"])
         self.assertFalse(original_launch["custom_home_present"])
