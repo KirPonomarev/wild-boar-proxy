@@ -54,6 +54,7 @@ from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from . import web_lifecycle
 from . import account_pool_failover
+from . import deepseek_route_profile
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -2022,6 +2023,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     external_models_evidence_capture.add_argument("--route", required=True)
     external_models_evidence_capture.add_argument("--json", action="store_true", required=True)
+    external_models_deepseek_profile = external_models_subparsers.add_parser(
+        "deepseek-profile",
+        help="DeepSeek route profile + credential provenance + dispatch test matrix",
+    )
+    external_models_deepseek_profile.add_argument("--json", action="store_true", required=True)
 
     web = subparsers.add_parser(
         "web",
@@ -3782,6 +3788,11 @@ def main(argv: list[str] | None = None) -> int:
             and args.package_launchable_command == "verify"
         ):
             return emit_json(run_package_launchable_verify(paths, args.manifest))
+        if (
+            args.command == "external-models"
+            and getattr(args, "external_models_command", None) == "deepseek-profile"
+        ):
+            return emit_json(deepseek_route_profile.run_deepseek_synthetic_profile_proof())
         if args.command == "external-models":
             return emit_json(run_external_models_command(args))
         raise RuntimeErrorInfo(
