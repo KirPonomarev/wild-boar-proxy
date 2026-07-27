@@ -3659,7 +3659,6 @@ def main(argv: list[str] | None = None) -> int:
                 payload = web_lifecycle.clear_stale_ledger(web_paths)
             else:  # pragma: no cover - argparse required=True guarantees a choice
                 raise SystemExit(2)
-            web_lifecycle._mark_failed(payload)
             return emit_json(payload)
         if args.command == "mode" and args.mode_command == "get":
             return emit_json(mode_get(paths))
