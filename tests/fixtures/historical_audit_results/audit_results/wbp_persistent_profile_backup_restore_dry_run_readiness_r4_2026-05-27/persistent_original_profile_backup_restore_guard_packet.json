@@ -1,0 +1,24 @@
+{
+  "backup_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfileBackups/wbp-custom-main",
+  "backup_root_overlaps_original_codex": false,
+  "captured_at_utc": "2026-05-27T06:21:14.408360Z",
+  "original_codex_profile_mutated": false,
+  "original_codex_runtime_dependency": false,
+  "original_codex_used_as_source": false,
+  "original_codex_used_as_target": false,
+  "original_surfaces": {
+    "codex_dir": "<redacted_user_home>/.codex",
+    "default_app_support_codex": "<redacted_user_home>/Library/Application Support/Codex",
+    "default_cache_codex": "<redacted_user_home>/Library/Caches/com.openai.codex",
+    "default_httpstorage_codex": "<redacted_user_home>/Library/HTTPStorages/com.openai.codex",
+    "original_app_support_dir": "<redacted_user_home>/Library/Application Support/Codex",
+    "original_codex_home": "<redacted_user_home>/.codex"
+  },
+  "packet_kind": "persistent_original_profile_backup_restore_guard",
+  "persistent_profile_overlaps_original_codex": false,
+  "persistent_profile_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "reason_class": "",
+  "restore_target_overlaps_original_codex": false,
+  "restore_target_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "status": "ok"
+}

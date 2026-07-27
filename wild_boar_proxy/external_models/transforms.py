@@ -11,7 +11,10 @@ from . import errors
 DEFAULT_REQUEST_TRANSFORM = "openai_chat_passthrough"
 DEFAULT_RESPONSE_PROFILE = "openai_chat_choices_message"
 CHECK_REQUEST_COMPLETION_BUDGET = 96
+THINKING_CHECK_REQUEST_COMPLETION_BUDGET = 2048
 THINKING_REASONING_EFFORTS = frozenset({"high", "max"})
+MIN_CHECK_REQUEST_COMPLETION_BUDGET = 1
+MAX_CHECK_REQUEST_COMPLETION_BUDGET = 32768
 
 REQUEST_TRANSFORM_PROFILES = frozenset(
     {
@@ -45,6 +48,24 @@ def validate_route_transform_profiles(route: dict[str, Any]) -> None:
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )
+    check_max_tokens = route.get("check_max_tokens")
+    if check_max_tokens is not None:
+        if not isinstance(check_max_tokens, int) or isinstance(check_max_tokens, bool):
+            raise RuntimeErrorInfo(
+                "check_max_tokens must be an integer.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="user_action",
+            )
+        if not (
+            MIN_CHECK_REQUEST_COMPLETION_BUDGET
+            <= check_max_tokens
+            <= MAX_CHECK_REQUEST_COMPLETION_BUDGET
+        ):
+            raise RuntimeErrorInfo(
+                "check_max_tokens is outside the supported range.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="user_action",
+            )
     thinking = route.get("thinking")
     if thinking is None:
         return
@@ -147,15 +168,31 @@ def route_transform_metadata(route: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def route_check_completion_budget(route: dict[str, Any]) -> int:
+    value = route.get("check_max_tokens")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return CHECK_REQUEST_COMPLETION_BUDGET
+
+
 def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dict[str, Any], dict[str, Any]]:
     metadata = route_transform_metadata(route)
+    completion_budget = route_check_completion_budget(route)
     base_payload = {
         "model": route["upstream_model"],
         "messages": [{"role": "user", "content": user_prompt}],
-        "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+        "max_tokens": completion_budget,
     }
     thinking_metadata = apply_route_thinking_policy(base_payload, route)
     metadata = metadata | thinking_metadata
+    if (
+        isinstance(thinking_metadata.get("thinking"), dict)
+        and thinking_metadata["thinking"].get("type") == "enabled"
+    ):
+        base_payload["max_tokens"] = max(
+            int(base_payload["max_tokens"]),
+            THINKING_CHECK_REQUEST_COMPLETION_BUDGET,
+        )
     transform_profile = metadata["transform_profile"]
     if transform_profile == DEFAULT_REQUEST_TRANSFORM:
         return base_payload, metadata | {"request_shape": "openai_chat_messages"}
@@ -167,7 +204,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         payload = {
             "model": route["upstream_model"],
             "messages": transformed_messages,
-            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+            "max_tokens": base_payload["max_tokens"],
         }
         if "thinking" in base_payload:
             payload["thinking"] = base_payload["thinking"]
@@ -180,7 +217,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
         payload = {
             "model": route["upstream_model"],
             "messages": transformed_messages,
-            "max_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+            "max_tokens": base_payload["max_tokens"],
         }
         if "thinking" in base_payload:
             payload["thinking"] = base_payload["thinking"]
@@ -192,7 +229,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
             {
                 "model": route["upstream_model"],
                 "input_text": input_text,
-                "max_output_tokens": CHECK_REQUEST_COMPLETION_BUDGET,
+                "max_output_tokens": base_payload["max_tokens"],
             },
             metadata | {"request_shape": "input_text"},
         )
@@ -224,13 +261,20 @@ def extract_check_response(
                 operator_action="retry",
             )
         message = first.get("message")
-        if not isinstance(message, dict) or not str(message.get("content", "")).strip():
+        if not isinstance(message, dict):
             raise RuntimeErrorInfo(
                 "Provider smoke-check message did not contain text.",
                 machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
                 operator_action="retry",
             )
-        return str(message["content"]).strip(), metadata | {"response_shape": "choices_message"}
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeErrorInfo(
+                "Provider smoke-check message did not contain text.",
+                machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
+                operator_action="retry",
+            )
+        return content.strip(), metadata | {"response_shape": "choices_message"}
     if response_profile == "top_level_output_text":
         if not isinstance(payload, dict) or not str(payload.get("output_text", "")).strip():
             raise RuntimeErrorInfo(

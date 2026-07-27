@@ -214,7 +214,7 @@
               </div>
 
               <div class="quick-start-card-actions">
-                <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled title="Массовая проверка требует отдельного admitted action mapping.">
+                <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled data-action-state="deferred" data-disabled-reason-code="UI_ACTION_MAPPING_NOT_ADMITTED" title="Массовая проверка требует отдельного admitted action mapping.">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                   <span>Проверить</span>
                 </button>
@@ -288,10 +288,44 @@
                   <span>Режим</span>
                   <select id="quickStartExecutionModeSelect" aria-label="Quick Start execution mode">
                     <option value="chatgpt_only">ChatGPT</option>
-                    <option value="chatgpt_plus_api">ChatGPT + API</option>
+                    <option value="chatgpt_plus_api" selected>ChatGPT + API</option>
                     <option value="api_only">API</option>
                   </select>
                 </label>
+              </div>
+
+              <div class="quick-start-alias-card" data-c7-minimal-shell="agent-alias-display-metadata">
+                <div class="quick-start-alias-head">
+                  <div>
+                    <strong>Имена агентов</strong>
+                    <span>Имена сохраняются в server-owned runtime bindings; route и provider остаются server-issued.</span>
+                  </div>
+                  <span id="quickStartAgentAliasScope" class="chip neutral"><span class="dot"></span><span>binding pending</span></span>
+                </div>
+                <div class="quick-start-alias-grid" aria-label="Имена агентов Custom Codex">
+                  <label for="quickStartPrimaryAgentAliasInput">
+                    <span>ChatGPT</span>
+                    <input id="quickStartPrimaryAgentAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="Codex" data-agent-alias-slot="primary_model_slot">
+                  </label>
+                  <label for="quickStartCodingAgentAliasInput">
+                    <span>DeepSeek</span>
+                    <input id="quickStartCodingAgentAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="DIP" data-agent-alias-slot="coding_agent_model_slot">
+                  </label>
+                  <label for="quickStartAgentOneAliasInput">
+                    <span>Агент 1</span>
+                    <input id="quickStartAgentOneAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="1" data-agent-alias-slot="agent_1_display">
+                  </label>
+                  <label for="quickStartAgentTwoAliasInput">
+                    <span>Агент 2</span>
+                    <input id="quickStartAgentTwoAliasInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="2" data-agent-alias-slot="agent_2_display">
+                  </label>
+                </div>
+                <div class="quick-start-alias-actions">
+                  <button id="quickStartAgentAliasesSaveAction" class="button small ghost" type="button">Применить имена</button>
+                  <button id="quickStartAgentAliasesResetAction" class="button small ghost" type="button">Сбросить</button>
+                </div>
+                <div id="quickStartAgentAliasPreview" class="quick-start-alias-preview">Codex -> ChatGPT · DIP -> DeepSeek · 1 / 2 -> display labels</div>
+                <div id="quickStartAgentAliasPacket" class="quick-start-alias-packet mono-value">alias metadata pending</div>
               </div>
 
               <div class="quick-start-api-checklist" aria-label="Проверка рабочего маршрута">
@@ -300,7 +334,19 @@
                   <span id="quickStartExecutionModeState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
                 </div>
                 <div class="quick-start-check-row">
-                  <span><img class="ui-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">запуск</span>
+                  <span><img class="ui-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true">ChatGPT</span>
+                  <span id="quickStartChatSlotState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">API / DeepSeek</span>
+                  <span id="quickStartApiSlotState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">owner auth</span>
+                  <span id="quickStartOwnerAuthState" class="chip neutral"><span class="dot"></span><span>preflight</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">допуск</span>
                   <span id="quickStartLaunchState" class="chip neutral"><span class="dot"></span><span>не запускался</span></span>
                 </div>
                 <div class="quick-start-check-row">
@@ -318,6 +364,10 @@
                 <div class="quick-start-check-row">
                   <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">история</span>
                   <span id="quickStartVisibleHistoryState" class="chip neutral"><span class="dot"></span><span>не проверена</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">следующий шаг</span>
+                  <span id="quickStartNextActionState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
                 </div>
               </div>
 
@@ -344,7 +394,19 @@
                 </button>
                 <button id="quickStartCustomLaunchAction" class="button primary" type="button">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
-                  <span>Запустить Codex Custom</span>
+                  <span>Проверить GPT+API</span>
+                </button>
+                <button id="quickStartNativeFreeTextProofAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Проверить native GPT+API</span>
+                </button>
+                <button id="quickStartModelReasoningMatrixAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                  <span>Проверить matrix</span>
+                </button>
+                <button id="quickStartManualFreeChatRouterRealityAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Проверить manual router</span>
                 </button>
                 <button id="quickStartShowCustomWindowAction" class="button small ghost" type="button">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
@@ -365,6 +427,92 @@
               </div>
 
               <div id="quickStartRouteResponse" class="quick-start-route-response mono-value">пакет рабочего маршрута ожидает проверки</div>
+
+              <div id="quickStartProofBoard" class="quick-start-proof-board" aria-label="Proof board GPT API">
+                <div class="quick-start-proof-head">
+                  <strong>Proof board</strong>
+                  <span id="quickStartProofRankChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+                </div>
+                <div class="quick-start-proof-section">
+                  <div class="quick-start-proof-section-title">Режимы</div>
+                  <div id="quickStartProofModeRows" class="quick-start-proof-rows mono-value">pending</div>
+                </div>
+                <div class="quick-start-proof-section">
+                  <div class="quick-start-proof-section-title">Мышление</div>
+                  <div id="quickStartProofReasoningRows" class="quick-start-proof-rows mono-value">pending</div>
+                </div>
+                <div class="quick-start-proof-section">
+                  <div class="quick-start-proof-section-title">Роли</div>
+                  <div id="quickStartProofAgentRows" class="quick-start-proof-rows mono-value">pending</div>
+                </div>
+              </div>
+            </section>
+
+            <section class="card quick-start-card quick-start-voice-card" data-quick-start-card="voice-draft">
+              <div class="quick-start-card-head">
+                <div>
+                  <div class="quick-start-title-row">
+                    <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                    <h2>Голосовой черновик</h2>
+                  </div>
+                  <p>Диктовка остаётся в WBP draft; Custom Codex не получает текст автоматически.</p>
+                </div>
+                <span id="quickStartVoiceDraftChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+              </div>
+
+              <div class="quick-start-voice-actions" aria-label="Голосовой черновик WBP">
+                <button id="quickStartVoiceRecordAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                  <span>Надиктовать</span>
+                </button>
+                <button id="quickStartVoiceClearAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+                  <span>Очистить</span>
+                </button>
+                <button id="quickStartVoiceCopyAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
+                  <span>Скопировать</span>
+                </button>
+                <button id="quickStartVoicePastePreflightAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить вставку</span>
+                </button>
+                <button id="quickStartVoicePasteCustomAction" class="button small ghost" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Вставить в Custom</span>
+                </button>
+              </div>
+
+              <textarea id="quickStartVoiceDraftText" class="quick-start-voice-draft" readonly spellcheck="false" placeholder="Черновик появится здесь" aria-label="Текст голосового черновика"></textarea>
+
+              <div class="quick-start-api-checklist quick-start-voice-checklist" aria-label="Контракт голосового черновика">
+                <div class="quick-start-check-row">
+                  <span>движок</span>
+                  <span id="quickStartVoiceEngineState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>scope</span>
+                  <span id="quickStartVoiceScopeState" class="chip neutral"><span class="dot"></span><span>WBP draft</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>Custom</span>
+                  <span id="quickStartVoiceCustomState" class="chip neutral"><span class="dot"></span><span>не тронут</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>audio</span>
+                  <span id="quickStartVoiceAudioState" class="chip neutral"><span class="dot"></span><span>не хранится</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>paste</span>
+                  <span id="quickStartVoicePasteState" class="chip neutral"><span class="dot"></span><span>не проверен</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span>submit</span>
+                  <span id="quickStartVoiceSubmitState" class="chip neutral"><span class="dot"></span><span>запрещен</span></span>
+                </div>
+              </div>
+
+              <div id="quickStartVoiceDraftPacket" class="quick-start-voice-packet mono-value" aria-live="polite">voice draft packet pending</div>
             </section>
           </div>
 
@@ -777,6 +925,14 @@
                 <span>Cleanup</span>
               </button>
             </div>
+          </div>
+          <div id="codexCustomAgentReplyBlock" class="agent-reply-block" hidden>
+            <div class="agent-reply-head">
+              <div id="codexCustomAgentReplyTitle" class="agent-reply-title">API agent</div>
+              <span id="codexCustomAgentReplyChip" class="chip neutral"><span class="dot"></span><span>direct reply</span></span>
+            </div>
+            <pre id="codexCustomAgentReplyText" class="agent-reply-text mono-value"></pre>
+            <div id="codexCustomAgentReplyProof" class="agent-reply-proof mono-value">proof pending</div>
           </div>
           <pre id="codexCustomSessionResponse" class="mono-value">session packet pending</pre>
           <pre id="codexCustomSessionTranscript" class="mono-value">service ledger pending</pre>
@@ -1496,7 +1652,7 @@
             <div>Live-action chain</div><div id="uiLaneExitLiveChain">parked</div>
             <div>Action metadata</div><div id="uiLaneExitMetadataStatus">metadata pending</div>
             <div>Safe now</div><div id="uiLaneExitSafeSummary">read-only inspection only</div>
-            <div>Next contour</div><div id="uiLaneExitNextContour" class="mono-value">STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION</div>
+            <div>Forward plan</div><div id="uiLaneExitForwardPlan" class="mono-value">NO_ACTIVE_REPO_FORWARD_PLAN</div>
           </div>
           <div class="action-ledger-head">
             <div>

@@ -28,6 +28,7 @@ from wild_boar_proxy.model_availability import (
     sha256_text,
 )
 from wild_boar_proxy.native_filesystem_probe import json_write
+from tools.historical_audit_fixtures import historical_audit_path
 
 
 TARGET_STATUS = (
@@ -193,7 +194,7 @@ def build_candidate_source_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
     native_ids = {str(model.get("model_id") or "") for model in native_models}
     wbp_ids = {str(model.get("model_id") or "") for model in wbp_models}
     seed_specs = [
-        ("current stable default backend model", "gpt-5.3-codex"),
+        ("current stable default backend model", "gpt-5.5"),
         ("canonical sample", "gpt-5.4-mini"),
         ("canonical sample", "gpt-5.4"),
         ("conditional sample", "gpt-5.5"),
@@ -245,7 +246,7 @@ def build_candidate_matrix_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
     catalog_packet = _candidate_catalog_packet(catalog_rows)
     routes_packet = _candidate_routes_packet(route_rows)
     candidate_list = build_candidate_model_list(
-        configured_model="gpt-5.3-codex",
+        configured_model="gpt-5.5",
         catalog_packet=catalog_packet,
         routes_packet=routes_packet,
     )
@@ -318,8 +319,12 @@ def build_candidate_matrix_packet(fidelity: dict[str, dict[str, Any]]) -> dict[s
 
 
 def build_auth_precondition_packet() -> dict[str, Any]:
-    auth_summary_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
-    auth_contract_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_precedence_contract_packet.json"
+    auth_summary_path = historical_audit_path(
+        REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+    )
+    auth_contract_path = historical_audit_path(
+        REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_precedence_contract_packet.json"
+    )
     summary = read_json(auth_summary_path)
     contract = read_json(auth_contract_path)
     selected_strategy = str(
@@ -347,15 +352,17 @@ def build_auth_precondition_packet() -> dict[str, Any]:
 
 
 def build_prior_evidence_reference_packet() -> dict[str, Any]:
-    auth_summary_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_summary_packet.json"
+    auth_summary_path = historical_audit_path(
+        REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_summary_packet.json"
+    )
     auth_strategy_summary_path = (
-        REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
+        historical_audit_path(REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json")
     )
     responses_summary_path = (
-        REPO_ROOT / RESPONSES_NO_LIVE_DIR / "responses_no_live_summary_packet.json"
+        historical_audit_path(REPO_ROOT, f"{RESPONSES_NO_LIVE_DIR}/responses_no_live_summary_packet.json")
     )
     responses_wire_summary_path = (
-        REPO_ROOT / RESPONSES_NO_LIVE_DIR / "responses_wire_prep_summary_packet.json"
+        historical_audit_path(REPO_ROOT, f"{RESPONSES_NO_LIVE_DIR}/responses_wire_prep_summary_packet.json")
     )
     auth_summary = read_json(auth_summary_path)
     auth_strategy_summary = read_json(auth_strategy_summary_path)

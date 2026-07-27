@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
+from . import mcp_delegate
 from .cli_runner_via_wbp import PRIMARY_MODEL_ID, build_codex_auth_command_config, remove_tree
 from .codex_account_selection import build_account_selection_packet
 from .codex_custom_sessions import CodexCustomSessionManager
@@ -20,6 +20,12 @@ from .codex_model_registry import (
     model_lane_classification_from_registry,
 )
 from .operator_surface import DEFAULT_ENDPOINT, OperatorSurfaceSession, WbpTraceObserver, clean_env, stat_hash
+from .process_runner import (
+    PROCESS_OK,
+    PROCESS_TIMEOUT,
+    BoundedProcessResult,
+    run_bounded_process,
+)
 from .runtime import RuntimePaths, build_command_payload, build_launcher_subprocess_env
 
 
@@ -118,6 +124,7 @@ def _run_wbp_cli_prompt(
     codex_bin: Path,
     model_id: str,
     prompt: str,
+    expected_delegate_arguments: dict[str, Any] | None = None,
     timeout_seconds: int = 120,
 ) -> dict[str, Any]:
     auth_command_path = REPO_ROOT / "wbp_codex_auth_command.py"
@@ -133,42 +140,88 @@ def _run_wbp_cli_prompt(
     env = _build_runner_env(paths, home=home, codex_home=codex_home, auth_stamp=auth_stamp)
     config_path = codex_home / "config.toml"
     config_text = ""
-    completed: subprocess.CompletedProcess[str] | None = None
+    process_result: BoundedProcessResult | None = None
     trace_packet: dict[str, Any] = {}
+    prompt_observation_packet: dict[str, Any] = {}
+    submit_boundary_probe_packet: dict[str, Any] = {}
     started = time.time()
-    try:
-        with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
-            config_text = build_codex_auth_command_config(
-                base_url=trace.listen_endpoint,
-                auth_command_path=str(auth_command_path),
-                model_id=model_id,
+    with WbpTraceObserver(downstream_endpoint=DEFAULT_ENDPOINT) as trace:
+        config_text = build_codex_auth_command_config(
+            base_url=trace.listen_endpoint,
+            auth_command_path=str(auth_command_path),
+            model_id=model_id,
+        )
+        config_path.write_text(config_text, encoding="utf-8")
+        prompt_observation_packet = mcp_delegate.build_prompt_observation_packet(
+            prompt,
+            source="controlled_codex_exec_stdin_submit",
+            expected_delegate_arguments=expected_delegate_arguments,
+        )
+        submit_boundary_probe_packet = (
+            mcp_delegate.build_exec_wrapper_submit_boundary_probe_packet(
+                prompt_packet=prompt_observation_packet,
+                submit_entrypoint_packet={
+                    "entrypoint_kind": "codex_cli_runner_stdin_submit",
+                    "wbp_owned_entrypoint": True,
+                    "prompt_digest_observed": True,
+                    "prompt_sha256": prompt_observation_packet.get("prompt_sha256"),
+                    "pre_codex_decision": True,
+                    "post_factum_only": False,
+                    "router_delegate_prompt_contract_bound": bool(
+                        expected_delegate_arguments
+                    ),
+                    "stdin_prompt_used": True,
+                    "command_uses_stdin_dash": True,
+                    "command_json_mode": True,
+                    "env_codex_home_is_temp": True,
+                    "env_home_is_temp": True,
+                    "workdir_is_temp": True,
+                    "command_workdir_is_temp": True,
+                    "command_output_file_is_temp": True,
+                    "current_codex_home_used": False,
+                    "submit_boundary_sequence": (
+                        mcp_delegate.CONTROLLED_EXEC_SUBMIT_BOUNDARY_SEQUENCE
+                    ),
+                    "owned_temp_config_written": True,
+                    "owned_temp_output_file_reserved": True,
+                    "effective_config_written": False,
+                    "state_written": False,
+                    "profile_written": False,
+                    "config_written": False,
+                    "route_registry_written": False,
+                    "credential_written": False,
+                    "runtime_state_written": False,
+                    "raw_prompt_recorded": False,
+                    "raw_route_id_recorded": False,
+                    "raw_backend_details_exposed": False,
+                    "secret_value_exposed": False,
+                    "product_ready": False,
+                    "native_free_chat_router_proven": False,
+                },
             )
-            config_path.write_text(config_text, encoding="utf-8")
-            completed = subprocess.run(
-                [
-                    str(codex_bin),
-                    "exec",
-                    "--skip-git-repo-check",
-                    "--ephemeral",
-                    "--ignore-rules",
-                    "--sandbox",
-                    "read-only",
-                    "-C",
-                    str(workdir),
-                    "--json",
-                    "-o",
-                    str(output_file),
-                    "-",
-                ],
-                input=prompt,
-                text=True,
-                capture_output=True,
-                timeout=timeout_seconds,
-                check=False,
-                env=env,
-            )
-            trace_packet = trace.packet()
-    except subprocess.TimeoutExpired as exc:
+        )
+        process_result = run_bounded_process(
+            [
+                str(codex_bin),
+                "exec",
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--ignore-rules",
+                "--sandbox",
+                "read-only",
+                "-C",
+                str(workdir),
+                "--json",
+                "-o",
+                str(output_file),
+                "-",
+            ],
+            env=env,
+            stdin_text=prompt,
+            timeout_seconds=timeout_seconds,
+        )
+        trace_packet = trace.packet()
+    if process_result.timed_out or process_result.machine_error_code == PROCESS_TIMEOUT:
         cleanup_packet = remove_tree(tmp_root)
         return {
             "status": "failed",
@@ -196,19 +249,24 @@ def _run_wbp_cli_prompt(
             "independent_wbp_trace_observed": False,
             "trace_observer_packet": trace_packet,
             "process_network_observation_packet": _default_process_network_observation(),
-            "warning_classes": _runner_warning_classes(str(exc.stderr or "")),
+            "prompt_observation_packet": prompt_observation_packet,
+            "router_hook_control_boundary_evidence_packet": (
+                submit_boundary_probe_packet
+            ),
+            "warning_classes": _runner_warning_classes(process_result.stderr),
             "auth_command_invoked": auth_stamp.exists(),
         }
 
-    stdout = completed.stdout if completed is not None else ""
-    stderr = completed.stderr if completed is not None else ""
+    stdout = process_result.stdout if process_result is not None else ""
+    stderr = process_result.stderr if process_result is not None else ""
     final_message = output_file.read_text(encoding="utf-8", errors="replace").strip() if output_file.exists() else ""
     auth_command_invoked = auth_stamp.exists()
     cleanup_packet = remove_tree(tmp_root)
+    process_ok = process_result is not None and process_result.machine_error_code == PROCESS_OK
     return {
-        "status": "ok" if completed is not None and completed.returncode == 0 and bool(final_message) else "failed",
-        "machine_error_code": "OK" if completed is not None and completed.returncode == 0 and bool(final_message) else str(trace_packet.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
-        "human_message": "Codex CLI runner prompt completed." if completed is not None and completed.returncode == 0 and bool(final_message) else "Codex CLI runner prompt failed.",
+        "status": "ok" if process_ok and bool(final_message) else "failed",
+        "machine_error_code": "OK" if process_ok and bool(final_message) else str(trace_packet.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
+        "human_message": "Codex CLI runner prompt completed." if process_ok and bool(final_message) else "Codex CLI runner prompt failed.",
         "final_message": final_message,
         "duration_seconds": round(time.time() - started, 3),
         "stdin_prompt_used": True,
@@ -241,6 +299,10 @@ def _run_wbp_cli_prompt(
         ),
         "trace_observer_packet": trace_packet,
         "process_network_observation_packet": _default_process_network_observation(),
+        "prompt_observation_packet": prompt_observation_packet,
+        "router_hook_control_boundary_evidence_packet": (
+            submit_boundary_probe_packet
+        ),
         "warning_classes": _runner_warning_classes(stderr),
         "auth_command_invoked": auth_command_invoked,
         "stdout_sha256_present": bool(stdout),
@@ -319,6 +381,40 @@ def _api_snapshot_from_commands(commands: dict[str, dict[str, Any]]) -> dict[str
         "primary_truth_ok": True,
         "routes": snapshot_routes,
     }
+
+
+def _api_snapshot_has_server_routes(api_snapshot: dict[str, Any] | None) -> bool:
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else None
+    return any(
+        isinstance(route, dict) and bool(str(route.get("route_id") or ""))
+        for route in (routes if isinstance(routes, list) else [])
+    )
+
+
+def _cli_runner_model_gate_error(
+    operator_status: dict[str, Any],
+    api_snapshot: dict[str, Any] | None,
+) -> str:
+    if _api_snapshot_has_server_routes(api_snapshot):
+        return ""
+    models = operator_status.get("models") if isinstance(operator_status, dict) else None
+    if not isinstance(models, dict):
+        return "SERVER_ISSUED_MODEL_REQUIRED"
+    raw_model_ids = models.get("model_ids")
+    model_ids = [
+        str(model_id)
+        for model_id in (raw_model_ids if isinstance(raw_model_ids, list) else [])
+        if str(model_id)
+    ]
+    if not model_ids:
+        return (
+            "NO_SERVER_MODELS_VISIBLE"
+            if models.get("server_issued") is True
+            else "SERVER_ISSUED_MODEL_REQUIRED"
+        )
+    if models.get("ok") is not True:
+        return "CUSTOM_MODELS_NOT_VISIBLE"
+    return ""
 
 
 def _selection_packet_for_external_route(
@@ -469,7 +565,8 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
     operator_status = operator.status_payload()
     commands = _selection_commands(operator)
     api_snapshot = _api_snapshot_from_commands(commands)
-    model_id = _choose_server_model_id(operator_status, api_snapshot)
+    model_gate_error = _cli_runner_model_gate_error(operator_status, api_snapshot)
+    model_id = "" if model_gate_error else _choose_server_model_id(operator_status, api_snapshot)
     launch_packet: dict[str, Any]
     prompt_packet: dict[str, Any] = {}
     transcript_packet: dict[str, Any] = {}
@@ -488,13 +585,16 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
             ok=False,
             human_message="Codex CLI runner has no server-issued model to launch.",
             machine_error_code=str(
-                registry.get("machine_error_code") or "SERVER_ISSUED_MODEL_REQUIRED"
+                model_gate_error
+                or registry.get("machine_error_code")
+                or "SERVER_ISSUED_MODEL_REQUIRED"
             ),
             liveness="unknown",
             severity="recoverable",
-            operator_action="repair_model_registry_truth",
+            operator_action="user_action",
             changed_files=[],
             extra={
+                "next_action": "repair_model_registry_truth",
                 "consumer_kind": "codex_cli_runner",
                 "native_app_claimed": False,
                 "runner_launch_surface": RUNNER_SURFACE,
@@ -596,9 +696,10 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
         machine_error_code=machine_error_code,
         liveness="healthy" if not failed_checks else "degraded",
         severity="recoverable",
-        operator_action="none" if not failed_checks else "stop_and_diagnose",
+        operator_action="none" if not failed_checks else "stop",
         changed_files=[],
         extra={
+            "next_action": "none" if not failed_checks else "stop_and_diagnose",
             "consumer_kind": "codex_cli_runner",
             "native_app_claimed": False,
             "runner_launch_surface": RUNNER_SURFACE,

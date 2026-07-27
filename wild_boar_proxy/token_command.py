@@ -14,6 +14,7 @@ from .runtime import RuntimeErrorInfo, RuntimePaths, build_command_payload
 TOKEN_OUTPUT_SHAPE = "plain_token_stdout"
 TOKEN_SCOPE = "owner_local_listener"
 TOKEN_SOURCE_KIND = "stable_runtime_generated_config"
+TOKEN_SOURCE_KIND_PROFILE_CONFIG = "custom_profile_config_toml_experimental_bearer_token"
 TOKEN_AUDIT_STAMP_ENV = "WBP_TOKEN_COMMAND_AUDIT_STAMP_PATH"
 
 
@@ -34,34 +35,74 @@ def _extract_local_listener_token(config_path: Path) -> str:
     raise RuntimeErrorInfo(
         "Stable runtime generated config does not contain a bounded local listener token shape.",
         machine_error_code="WBP_TOKEN_SOURCE_INVALID",
-        operator_action="repair_runtime",
+        operator_action="user_action",
+        next_action="repair_runtime",
         severity="high",
     )
 
 
-def emit_local_token(paths: RuntimePaths) -> str:
-    config_path = paths.stable_runtime_generated_config_file.expanduser()
+def _extract_profile_bearer_token(config_path: Path) -> str:
+    text = config_path.read_text(encoding="utf-8", errors="replace")
+    match = re.search(
+        r"^\s*experimental_bearer_token\s*=\s*[\"']([^\"']{8,})[\"']\s*$",
+        text,
+        re.MULTILINE,
+    )
+    if match:
+        return match.group(1).strip()
+    raise RuntimeErrorInfo(
+        "Custom profile config does not contain a bounded experimental_bearer_token shape.",
+        machine_error_code="WBP_TOKEN_SOURCE_INVALID",
+        operator_action="user_action",
+        next_action="repair_runtime",
+        severity="high",
+    )
+
+
+def _resolve_local_token(paths: RuntimePaths) -> tuple[str, str]:
+    generated_config_path = paths.stable_runtime_generated_config_file.expanduser()
+    if generated_config_path.exists():
+        return (
+            _extract_local_listener_token(generated_config_path),
+            TOKEN_SOURCE_KIND,
+        )
+    profile_config_path = paths.config_toml.expanduser()
+    if profile_config_path.exists():
+        return (
+            _extract_profile_bearer_token(profile_config_path),
+            TOKEN_SOURCE_KIND_PROFILE_CONFIG,
+        )
+    raise RuntimeErrorInfo(
+        "Stable runtime generated config is missing for token command.",
+        machine_error_code="WBP_TOKEN_SOURCE_UNAVAILABLE",
+        operator_action="user_action",
+        next_action="repair_runtime",
+        severity="high",
+    )
+
+
+def emit_local_token_from_config_path(config_path: Path) -> str:
+    config_path = config_path.expanduser()
     if not config_path.exists():
         raise RuntimeErrorInfo(
             "Stable runtime generated config is missing for token command.",
             machine_error_code="WBP_TOKEN_SOURCE_UNAVAILABLE",
-            operator_action="repair_runtime",
+            operator_action="user_action",
+            next_action="repair_runtime",
             severity="high",
         )
     _write_audit_stamp_if_requested()
     return _extract_local_listener_token(config_path)
 
 
+def emit_local_token(paths: RuntimePaths) -> str:
+    token, _source_kind = _resolve_local_token(paths)
+    _write_audit_stamp_if_requested()
+    return token
+
+
 def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:
-    config_path = paths.stable_runtime_generated_config_file.expanduser()
-    if not config_path.exists():
-        raise RuntimeErrorInfo(
-            "Stable runtime generated config is missing for token command.",
-            machine_error_code="WBP_TOKEN_SOURCE_UNAVAILABLE",
-            operator_action="repair_runtime",
-            severity="high",
-        )
-    _token = _extract_local_listener_token(config_path)
+    _token, source_kind = _resolve_local_token(paths)
     return build_command_payload(
         ok=True,
         human_message="Local WBP token contract collected without exposing bearer material.",
@@ -72,7 +113,7 @@ def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:
         changed_files=[],
         extra={
             "data": {
-                "token_source_kind": TOKEN_SOURCE_KIND,
+                "token_source_kind": source_kind,
                 "token_output_shape": TOKEN_OUTPUT_SHAPE,
                 "token_present": True,
                 "token_emitted": False,
@@ -82,9 +123,9 @@ def token_status_payload(paths: RuntimePaths) -> dict[str, Any]:
                 "scope": TOKEN_SCOPE,
                 "local_only": True,
                 "short_lived": False,
-                "config_path": str(config_path),
             }
         },
+        secret_values=[_token],
     )
 
 

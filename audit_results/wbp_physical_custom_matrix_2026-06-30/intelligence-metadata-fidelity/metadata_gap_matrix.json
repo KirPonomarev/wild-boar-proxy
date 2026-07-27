@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-06-29T22:25:15.708054Z",
+  "gaps": [
+    {
+      "id": "native_visible_labels_do_not_prove_internal_ranking_semantics",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "api_lane_intelligence_parity_with_codex_high_not_proven",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "speed_metadata_remains_unmeasured_catalog_truth_only",
+      "severity": "medium",
+      "status": "open"
+    },
+    {
+      "id": "current_metadata_rows_remain_unknown_unproven_not_strengthened",
+      "severity": "high",
+      "status": "open"
+    },
+    {
+      "id": "metadata_fidelity_does_not_close_historical_item_0",
+      "severity": "medium",
+      "status": "open"
+    }
+  ],
+  "packet_kind": "metadata_gap_matrix",
+  "status": "ok"
+}

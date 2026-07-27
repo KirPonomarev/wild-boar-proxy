@@ -110,8 +110,45 @@ def load_routes_file(routes_file: Path) -> dict[str, Any]:
     return payload
 
 
+def validate_routes_payload(payload: dict[str, Any]) -> None:
+    missing = sorted(contracts.ROUTES_TOP_LEVEL_FIELDS - payload.keys())
+    unexpected = sorted(set(payload.keys()) - contracts.ROUTES_TOP_LEVEL_FIELDS)
+    if missing or unexpected:
+        details = []
+        if missing:
+            details.append(f"missing={missing}")
+        if unexpected:
+            details.append(f"unexpected={unexpected}")
+        raise RuntimeErrorInfo(
+            "routes.json payload is invalid: " + ", ".join(details),
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="stop",
+        )
+    if payload.get("schema_version") != contracts.ROUTE_SCHEMA_VERSION:
+        raise RuntimeErrorInfo(
+            "Unsupported external-models routes schema version.",
+            machine_error_code=errors.UNSUPPORTED_SCHEMA_VERSION,
+            operator_action="stop",
+        )
+    routes_payload = payload.get("routes")
+    if not isinstance(routes_payload, list):
+        raise RuntimeErrorInfo(
+            "routes.json must contain a list under routes.",
+            machine_error_code=errors.SCHEMA_INVALID,
+            operator_action="stop",
+        )
+    for route in routes_payload:
+        if not isinstance(route, dict):
+            raise RuntimeErrorInfo(
+                "routes.json routes entries must be JSON objects.",
+                machine_error_code=errors.SCHEMA_INVALID,
+                operator_action="stop",
+            )
+        validate_route_schema(route)
+
+
 def write_routes_file(routes_file: Path, payload: dict[str, Any]) -> None:
-    atomic_write_json(routes_file, payload)
+    atomic_write_json(routes_file, payload, validator=validate_routes_payload)
 
 
 def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:
@@ -135,15 +172,10 @@ def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:
             operator_action="user_action",
         )
     route_id = route.get("route_id")
-    if not isinstance(route_id, str) or not route_id.strip():
+    route_id_error = contracts.route_id_validation_error(route_id)
+    if route_id_error:
         raise RuntimeErrorInfo(
-            "route_id is required.",
-            machine_error_code=errors.SCHEMA_INVALID,
-            operator_action="user_action",
-        )
-    if not route_id.startswith("wbp-"):
-        raise RuntimeErrorInfo(
-            "route_id must use the wbp- prefix.",
+            route_id_error,
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )
@@ -197,6 +229,7 @@ def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
         "transform_profile": route.get("transform_profile"),
         "response_profile": route.get("response_profile"),
         "thinking": route.get("thinking"),
+        "check_max_tokens": route.get("check_max_tokens"),
     }
 
 

@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T20:50:43.297602Z",
-  "classification": "upstream_disconnect_error_shape_returned",
-  "http_status": 502,
-  "packet_kind": "failure_semantics_disconnect",
-  "retry_behavior": "not_retried_by_adapter",
-  "retryable": true,
-  "status": "ok"
-}

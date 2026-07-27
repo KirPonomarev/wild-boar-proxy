@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-28T23:01:34.293193Z",
-  "non_claims": [
-    "sync success does not prove runnable native auth",
-    "selected backend snapshot does not prove runtime-loaded auth",
-    "owner_action_required hint does not prove launched Custom Codex native recovery",
-    "static accounts validate does not prove live /v1/responses success"
-  ]
-}

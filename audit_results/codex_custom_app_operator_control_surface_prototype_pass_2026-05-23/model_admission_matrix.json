@@ -1,8 +1,0 @@
-{
-  "allowed_model_scope": "GPT-facing WBP models; not DeepSeek-only",
-  "chosen_model": "gpt-5.3-codex",
-  "chosen_model_visible": true,
-  "deepseek_only_success_path": false,
-  "model_ids_count": 8,
-  "models_status_code": 200
-}

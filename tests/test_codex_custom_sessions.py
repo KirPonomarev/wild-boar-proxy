@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy.codex_custom_sessions import (
     CodexCustomSessionManager,
@@ -84,7 +87,7 @@ def operator_status() -> dict[str, object]:
         "models": {
             "ok": True,
             "server_issued": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.5"],
         },
     }
 
@@ -118,13 +121,101 @@ def api_snapshot(route_id: str = "wbp-web-primary-openrouter") -> dict[str, obje
     }
 
 
+def deepseek_api_snapshot(route_id: str = "wbp-deepseek-v4-pro-max") -> dict[str, object]:
+    return {
+        "status": "ok",
+        "source": "api_connections_readonly",
+        "primary_truth_ok": True,
+        "routes": [
+            {
+                "route_id": route_id,
+                "provider": "deepseek",
+                "upstream_model": "deepseek-v4-pro",
+                "enabled": True,
+                "secret_ref": "DEEPSEEK_API_KEY",
+                "thinking": {"type": "enabled", "reasoning_effort": "max"},
+                "api_parameter_sent": True,
+            }
+        ],
+    }
+
+
+def direct_live_result(text: str, **overrides: object) -> dict[str, object]:
+    result: dict[str, object] = {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "provider_called": True,
+        "result_available": True,
+        "result_text": text,
+        "result_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "result_text_length": len(text),
+        "result_text_truncated": False,
+        "source": "external_models_direct",
+        "route_allowed": True,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "runtime_context_bridge_used": False,
+        "runtime_context_file_bridge_used": False,
+        "bridge_or_file_bridge_used": False,
+        "direct_provider_auth_proven": True,
+        "direct_provider_response_observed": True,
+        "provider_auth_ok": True,
+        "positive_provider_proof_gate_satisfied": True,
+        "dip_work_mode": "full",
+        "dip_full_work_mode": True,
+        "live_result_text_limit": 64000,
+        "live_result_output_token_limit": 32768,
+        "repo_bridge_required": False,
+        "repo_bridge_available": False,
+        "repo_bridge_used": False,
+    }
+    result.update(overrides)
+    return result
+
+
+def proven_prompt_result(payload: dict[str, object], text: str = "CODEX_OK") -> dict[str, object]:
+    model_id = str(payload.get("model_id") or "")
+    route_backed = model_id.startswith("wbp-")
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "selected_model": model_id,
+        "runtime_model": model_id,
+        "slot_id": payload.get("slot_id"),
+        "final_message": text,
+        "secret_value_recorded": False,
+        "configured_provider": "external_route" if route_backed else "cliproxy",
+        "configured_wire_api": "responses",
+        "wbp_endpoint_configured": True,
+        "config_endpoint_matches": True,
+        "config_provider_matches": True,
+        "config_wire_api_matches": True,
+        "command_uses_stdin_dash": True,
+        "command_json_mode": True,
+        "env_codex_home_is_temp": True,
+        "env_home_is_temp": True,
+        "workdir_is_temp": True,
+        "command_workdir_is_temp": True,
+        "command_output_file_is_temp": True,
+        "current_codex_home_used": False,
+        "independent_wbp_trace_observed": True,
+        "trace_observer_packet": {
+            "path": "/v1/responses",
+            "upstream_status": 200,
+            "forwarded_to_wbp": True,
+        },
+    }
+
+
 class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_create_session_binds_server_model_and_selection_without_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -138,7 +229,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["current_codex_home_used"])
             self.assertTrue(packet["selected_backend_id_redacted"])
             self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.5")
             self.assertEqual(packet["current_execution_path_source"], "session_primary_model_slot")
             session = packet["session"]
             self.assertEqual(session["session_schema_version"], 3)
@@ -150,7 +241,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(session["current_execution_path_source"], "session_primary_model_slot")
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["model_id"],
-                "gpt-5.3-codex",
+                "gpt-5.5",
             )
             self.assertEqual(
                 session["role_slots"]["coding_agent_model_slot"]["model_id"],
@@ -225,7 +316,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "created_at_utc": "2026-05-28T00:00:00Z",
                     "updated_at_utc": "2026-05-28T00:00:00Z",
                     "status": "ready",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "model_server_issued": True,
                     "selected_source_class": "gpt_account",
                     "selected_backend_digest": "digest-acct-a",
@@ -270,14 +361,14 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(session["session_schema_version"], 3)
             self.assertTrue(session["legacy_single_model_migrated"])
             self.assertEqual(session["migration_status"], "legacy_single_model_migrated")
-            self.assertEqual(session["model_id"], "gpt-5.3-codex")
+            self.assertEqual(session["model_id"], "gpt-5.5")
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["binding_source"],
                 "legacy_single_model_migration",
             )
             self.assertEqual(
                 session["role_slots"]["primary_model_slot"]["model_id"],
-                "gpt-5.3-codex",
+                "gpt-5.5",
             )
             self.assertEqual(
                 session["role_slots"]["coding_agent_model_slot"]["binding_status"],
@@ -299,7 +390,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
             bad_fields = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "account_id": "acct-a",
                     "backend_id": "acct-a",
                     "route_id": "route",
@@ -335,7 +426,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet({}, commands(), operator_status(), api_snapshot=api_snapshot())
             legacy_alias = manager.create_packet(
-                {"model_id": "gpt-5.3-codex"},
+                {"model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 api_snapshot=api_snapshot(),
@@ -472,7 +563,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 selection={
@@ -507,11 +598,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
-                    "reviewer_model_id": "gpt-5.4",
-                    "cheap_scanner_model_id": "gpt-5.4",
-                    "deep_reasoning_model_id": "gpt-5.4",
+                    "reviewer_model_id": "gpt-5.5",
+                    "cheap_scanner_model_id": "gpt-5.5",
+                    "deep_reasoning_model_id": "gpt-5.5",
                 },
                 commands(),
                 operator_status(),
@@ -522,15 +613,15 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["session"]["role_slot_binding_count"], 5)
             self.assertEqual(
                 packet["session"]["role_slots"]["reviewer_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
             self.assertEqual(
                 packet["session"]["role_slots"]["cheap_scanner_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
             self.assertEqual(
                 packet["session"]["role_slots"]["deep_reasoning_model_slot"]["model_id"],
-                "gpt-5.4",
+                "gpt-5.5",
             )
 
     def test_create_session_rejects_when_account_selection_is_not_proven(self) -> None:
@@ -539,7 +630,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             packet = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 weak_commands,
                 operator_status(),
             )
@@ -557,7 +648,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -625,7 +716,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -666,7 +757,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(revalidated["same_provider_account_selection_proven"])
             self.assertEqual(revalidated["revalidated_bound_slot_count"], 2)
             self.assertEqual(primary["status"], "ok")
-            self.assertEqual(primary["runtime_selected_model"], "gpt-5.3-codex")
+            self.assertEqual(primary["runtime_selected_model"], "gpt-5.5")
             self.assertTrue(primary["runtime_selected_model_matches_bound_model"])
             self.assertEqual(primary["selected_source_provenance"], "backend_proven")
             self.assertEqual(primary["configured_provider"], "cliproxy")
@@ -680,7 +771,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "PRIMARY",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                     },
                     {
@@ -697,7 +788,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(root)
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -728,7 +819,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_hashes_prompt_and_does_not_claim_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(session_id, {"prompt": "Reply with exactly OK."})
             transcript = manager.transcript_packet(session_id)
@@ -791,7 +882,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -833,7 +924,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(primary["slot_source_revalidated"])
             self.assertTrue(primary["slot_admission_passed"])
             self.assertEqual(primary["wbp_runner_payload_slot_id"], "primary_model_slot")
-            self.assertEqual(primary["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(primary["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(primary["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(primary["wbp_session_manager_slot_dispatch_proven"])
@@ -845,13 +936,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(primary["downstream_runner_slot_echo"], "primary_model_slot")
             self.assertTrue(primary["downstream_runner_slot_echo_matches_requested"])
             self.assertEqual(primary["executed_slot_id"], "primary_model_slot")
-            self.assertEqual(primary["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["executed_slot_model_id"], "gpt-5.5")
             self.assertTrue(primary["runtime_slot_dispatch_proven"])
             self.assertTrue(primary["slot_binding_runtime_dispatch_claimed"])
             self.assertFalse(primary["parallel_slot_execution_proven"])
             self.assertFalse(primary["fanout_execution_proven"])
             self.assertEqual(primary["current_execution_path_source"], "session_bound_slot_runtime")
-            self.assertEqual(primary["model_id"], "gpt-5.3-codex")
+            self.assertEqual(primary["model_id"], "gpt-5.5")
             self.assertEqual(primary["selected_source_class"], "gpt_account")
             self.assertEqual(primary["selected_source_provenance"], "backend_proven")
             self.assertTrue(primary["selected_backend_server_issued"])
@@ -904,7 +995,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Reply primary OK.",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                     },
                     {
@@ -967,7 +1058,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -980,6 +1071,9 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 runner,
                 owner_authorized=True,
             )
+            detail = manager.get_packet(created["session"]["session_id"])
+            reloaded = CodexCustomSessionManager(Path(temp_dir))
+            reloaded_detail = reloaded.get_packet(created["session"]["session_id"])
 
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(
@@ -989,16 +1083,19 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["same_session_dispatch_proven"])
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertTrue(packet["coding_dispatch_proven"])
-        self.assertEqual(packet["primary_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_model_id"], "gpt-5.5")
         self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_executed_slot_id"], "primary_model_slot")
         self.assertEqual(packet["coding_executed_slot_id"], "coding_agent_model_slot")
-        self.assertEqual(packet["primary_runtime_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_runtime_model"], "gpt-5.5")
         self.assertEqual(packet["coding_runtime_model"], "wbp-deepseek-v3")
         self.assertEqual(packet["primary_configured_provider"], "cliproxy")
         self.assertEqual(packet["coding_configured_provider"], "external_route")
         self.assertEqual(packet["primary_selected_source_provenance"], "backend_proven")
         self.assertEqual(packet["coding_selected_source_provenance"], "route_proven")
+        self.assertTrue(packet["primary_prompt_runner_called"])
+        self.assertTrue(packet["coding_prompt_runner_called"])
+        self.assertTrue(packet["prompt_runner_called"])
         self.assertFalse(packet["fallback_used"])
         self.assertFalse(packet["parallel_slot_execution_proven"])
         self.assertFalse(packet["fanout_execution_proven"])
@@ -1011,12 +1108,44 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertFalse(packet["model_self_report_counts_as_runtime_truth"])
         self.assertFalse(packet["raw_backend_details_exposed"])
         self.assertFalse(packet["secret_value_exposed"])
+        bounded = packet["session_dual_lane_dispatch"]
+        self.assertEqual(bounded["status"], "ok")
+        self.assertEqual(bounded["machine_error_code"], "OK")
+        self.assertEqual(
+            bounded["final_status"],
+            "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(bounded["proof_status"], "proven_with_limits")
+        self.assertTrue(bounded["same_session_dispatch_proven"])
+        self.assertTrue(bounded["primary_dispatch_proven"])
+        self.assertTrue(bounded["coding_dispatch_proven"])
+        self.assertFalse(bounded["fallback_used"])
+        self.assertEqual(bounded["primary_provider"], "cliproxy")
+        self.assertEqual(bounded["coding_provider"], "external_route")
+        self.assertTrue(bounded["does_not_prove_native_launch"])
+        self.assertTrue(bounded["does_not_claim_product_readiness"])
+        self.assertTrue(bounded["native_primary_trace_still_required_for_native_pass"])
+        self.assertFalse(bounded["runtime_readiness_claimed"])
+        self.assertFalse(bounded["ui_label_counts_as_proof"])
+        self.assertFalse(bounded["model_self_report_counts_as_runtime_truth"])
+        self.assertEqual(
+            detail["session"]["session_dual_lane_dispatch"],
+            bounded,
+        )
+        self.assertEqual(
+            detail["role_slot_binding_packet"]["session_dual_lane_dispatch"],
+            bounded,
+        )
+        self.assertEqual(
+            reloaded_detail["session"]["session_dual_lane_dispatch"],
+            bounded,
+        )
         self.assertEqual(
             calls,
             [
                 {
                     "prompt": "Ответь одной строкой: WBP_MIXED_PRIMARY_SLOT_OK",
-                    "model_id": "gpt-5.3-codex",
+                    "model_id": "gpt-5.5",
                     "slot_id": "primary_model_slot",
                 },
                 {
@@ -1027,11 +1156,392 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             ],
         )
 
+    def test_agent_alias_dispatch_proof_binds_codex_and_dip_to_same_session_slots(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id == "wbp-deepseek-v3"
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_ALIAS_RUNTIME_ACTIVATION_OK"
+                if route_backed
+                else "ALIAS_ORCHESTRATOR_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            binding = manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "expected_coding_response": "WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                },
+                runner,
+                owner_authorized=True,
+            )
+            reloaded = CodexCustomSessionManager(Path(temp_dir))
+            reloaded_detail = reloaded.get_packet(session_id)
+
+        self.assertEqual(binding["status"], "ok")
+        self.assertEqual(binding["machine_error_code"], "OK")
+        self.assertEqual(binding["alias_scope"], "server_runtime_binding")
+        self.assertTrue(binding["alias_runtime_binding_proven"])
+        self.assertTrue(binding["semantic_alias_routing_enabled"])
+        self.assertFalse(binding["browser_can_supply_route_authority"])
+        self.assertFalse(binding["browser_backend_intake"])
+        self.assertFalse(binding["browser_secret_intake"])
+        self.assertEqual(binding["labels"]["primary_alias"], "Codex")
+        self.assertEqual(binding["labels"]["coding_alias"], "DIP")
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(
+            packet["final_status"],
+            "ALIAS_RUNTIME_ACTIVATION_PROVEN_WITH_LIMITS",
+        )
+        self.assertEqual(packet["manual_activation_surface"], "wbp_server_command_surface")
+        self.assertTrue(packet["manual_activation_proven"])
+        self.assertTrue(packet["alias_runtime_binding_proven"])
+        self.assertTrue(packet["alias_prompt_seen"])
+        self.assertTrue(packet["primary_alias_prompt_seen"])
+        self.assertTrue(packet["coding_alias_prompt_seen"])
+        self.assertTrue(packet["session_dispatch_proven"])
+        self.assertTrue(packet["same_session_dispatch_proven"])
+        self.assertTrue(packet["primary_alias_resolved"])
+        self.assertTrue(packet["coding_alias_resolved"])
+        self.assertTrue(packet["primary_alias_not_api_route"])
+        self.assertTrue(packet["coding_alias_api_route_proven"])
+        self.assertTrue(packet["api_lane_used"])
+        self.assertTrue(packet["primary_orchestration_trace_proven"])
+        self.assertTrue(packet["primary_dispatch_proven"])
+        self.assertTrue(packet["coding_dispatch_proven"])
+        self.assertTrue(packet["deepseek_response_token_matched"])
+        self.assertTrue(packet["exact_token_matched"])
+        self.assertEqual(packet["response_match_basis"], "response_digest_exact")
+        self.assertEqual(packet["primary_model_id"], "gpt-5.5")
+        self.assertEqual(packet["coding_agent_model_id"], "wbp-deepseek-v3")
+        self.assertFalse(packet["fallback_used"])
+        self.assertFalse(packet["local_imitation_used"])
+        self.assertFalse(packet["native_free_text_activation_proven"])
+        self.assertFalse(packet["native_free_text_tool_bridge_proven"])
+        self.assertTrue(packet["does_not_prove_native_free_text_tool_bridge"])
+        self.assertFalse(packet["ui_label_counts_as_runtime_truth"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertEqual(packet["next_action"], "none")
+        self.assertEqual(
+            reloaded_detail["agent_alias_binding_packet"]["labels"]["coding_alias"],
+            "DIP",
+        )
+        self.assertTrue(
+            reloaded_detail["agent_alias_binding_packet"]["alias_runtime_binding_proven"]
+        )
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "prompt": "Alias activation check. Confirm orchestration intent for: Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "model_id": "gpt-5.5",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Ответь одной строкой: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
+
+    def test_agent_alias_dispatch_proof_accepts_arbitrary_saved_aliases(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id == "wbp-deepseek-v3"
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_RANDOM_ALIAS_OK" if route_backed else "ORCH_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Агент Шмель",
+                    "coding_alias": "Агент Птичка",
+                    "agent_1_alias": "Оркестратор",
+                    "agent_2_alias": "Кодовый агент",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Оркестратор, дай Агент Птичка команду ответить ровно: WBP_RANDOM_ALIAS_OK",
+                    "expected_coding_response": "WBP_RANDOM_ALIAS_OK",
+                },
+                runner,
+                owner_authorized=True,
+            )
+            detail = manager.get_packet(session_id)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["session_dispatch_proven"])
+        self.assertTrue(packet["primary_alias_resolved"])
+        self.assertTrue(packet["coding_alias_resolved"])
+        self.assertTrue(packet["primary_alias_not_api_route"])
+        self.assertTrue(packet["coding_alias_api_route_proven"])
+        self.assertTrue(packet["exact_token_matched"])
+        self.assertEqual(
+            detail["agent_alias_binding_packet"]["labels"]["primary_alias"],
+            "Агент Шмель",
+        )
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "prompt": "Alias activation check. Confirm orchestration intent for: Оркестратор, дай Агент Птичка команду ответить ровно: WBP_RANDOM_ALIAS_OK",
+                    "model_id": "gpt-5.5",
+                    "slot_id": "primary_model_slot",
+                },
+                {
+                    "prompt": "Ответь одной строкой: WBP_RANDOM_ALIAS_OK",
+                    "model_id": "wbp-deepseek-v3",
+                    "slot_id": "coding_agent_model_slot",
+                },
+            ],
+        )
+
+    def test_agent_alias_dispatch_proof_rejects_missing_expected_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "expected_coding_response": " ",
+                },
+                lambda _payload: self.fail("runner must not be called"),
+                owner_authorized=True,
+            )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "EXPECTED_CODING_RESPONSE_MISSING")
+        self.assertFalse(packet["prompt_runner_called"])
+        self.assertFalse(packet["exact_token_matched"])
+        self.assertFalse(packet["fallback_used"])
+
+    def test_agent_alias_dispatch_proof_blocks_non_exact_coding_response(self) -> None:
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id == "wbp-deepseek-v3"
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "prefix WBP_ALIAS_RUNTIME_ACTIVATION_OK suffix"
+                if route_backed
+                else "ALIAS_ORCHESTRATOR_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            session_id = created["session"]["session_id"]
+            manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.agent_alias_dispatch_proof_packet(
+                session_id,
+                {
+                    "prompt": "Codex, попроси DIP ответить ровно: WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                    "expected_coding_response": "WBP_ALIAS_RUNTIME_ACTIVATION_OK",
+                },
+                runner,
+                owner_authorized=True,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "DEEPSEEK_ALIAS_RESPONSE_NOT_EXACT")
+        self.assertTrue(packet["session_dispatch_proven"])
+        self.assertFalse(packet["deepseek_response_token_matched"])
+        self.assertFalse(packet["exact_token_matched"])
+        self.assertFalse(packet["manual_activation_proven"])
+
+    def test_agent_alias_dispatch_proof_rejects_browser_route_authority_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v3",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=api_snapshot("wbp-deepseek-v3"),
+            )
+            packet = manager.agent_alias_binding_packet(
+                created["session"]["session_id"],
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "DIP",
+                    "route_id": "raw-route",
+                    "base_url": "https://example.invalid/v1",
+                },
+            )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("route_id", packet["forbidden_fields"])
+        self.assertIn("base_url", packet["forbidden_fields"])
+        self.assertFalse(packet["alias_runtime_binding_proven"])
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertFalse(packet["browser_backend_intake"])
+        self.assertFalse(packet["browser_secret_intake"])
+
     def test_mixed_slot_dispatch_probe_blocks_chatgpt_only_without_api_slot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
             )
@@ -1057,7 +1567,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1089,7 +1599,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         def runner(payload: dict[str, object]) -> dict[str, object]:
             model_id = str(payload.get("model_id") or "")
             route_backed = model_id == "wbp-deepseek-v3"
-            runtime_model = "gpt-5.3-codex" if route_backed else model_id
+            runtime_model = "gpt-5.5" if route_backed else model_id
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
@@ -1124,7 +1634,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-deepseek-v3",
                 },
                 commands(),
@@ -1147,9 +1657,233 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         self.assertTrue(packet["primary_dispatch_proven"])
         self.assertFalse(packet["coding_dispatch_proven"])
         self.assertFalse(packet["same_session_dispatch_proven"])
+        bounded = packet["session_dual_lane_dispatch"]
+        self.assertEqual(bounded["status"], "blocked")
+        self.assertEqual(bounded["machine_error_code"], "MIXED_SLOT_DISPATCH_NOT_PROVEN")
+        self.assertEqual(
+            bounded["final_status"],
+            "SESSION_DUAL_LANE_DISPATCH_NOT_PROVEN",
+        )
+        self.assertEqual(bounded["proof_status"], "not_proven")
+        self.assertFalse(bounded["same_session_dispatch_proven"])
+        self.assertTrue(bounded["does_not_prove_native_launch"])
+        self.assertTrue(bounded["does_not_claim_product_readiness"])
+        self.assertFalse(bounded["runtime_readiness_claimed"])
         self.assertEqual(
             packet["coding_packet_summary"]["machine_error_code"],
             "RUNTIME_MODEL_ID_MISMATCH",
+        )
+
+    def test_custom_codex_three_modes_prove_session_slot_dispatch_without_fallback(
+        self,
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(dict(payload))
+            model_id = str(payload.get("model_id") or "")
+            route_backed = model_id.startswith("wbp-deepseek")
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "requested_slot_id": payload.get("slot_id"),
+                "selected_model": model_id,
+                "runtime_model": model_id,
+                "final_message": "WBP_C6_DEEPSEEK_OK"
+                if route_backed
+                else "WBP_C6_CHATGPT_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "external_route" if route_backed else "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            chatgpt_only = manager.create_packet(
+                {"primary_model_id": "gpt-5.5"},
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            api_only = manager.create_packet(
+                {"primary_model_id": "wbp-deepseek-v4-pro-max"},
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            mixed = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+
+            chatgpt_packet = manager.prompt_packet(
+                chatgpt_only["session"]["session_id"],
+                {"prompt": "Reply ChatGPT only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+            api_blocked_without_owner = manager.prompt_packet(
+                api_only["session"]["session_id"],
+                {"prompt": "Reply DeepSeek only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=False,
+            )
+            api_packet = manager.prompt_packet(
+                api_only["session"]["session_id"],
+                {"prompt": "Reply DeepSeek only OK.", "slot_id": "primary_model_slot"},
+                runner,
+                owner_authorized=True,
+            )
+            mixed_packet = manager.mixed_slot_dispatch_probe_packet(
+                mixed["session"]["session_id"],
+                {},
+                runner,
+                owner_authorized=True,
+            )
+
+        self.assertEqual(chatgpt_only["status"], "ok")
+        self.assertEqual(api_only["status"], "ok")
+        self.assertEqual(mixed["status"], "ok")
+        self.assertEqual(chatgpt_only["session"]["role_slot_binding_count"], 1)
+        self.assertEqual(api_only["session"]["role_slot_binding_count"], 1)
+        self.assertEqual(mixed["session"]["role_slot_binding_count"], 2)
+        self.assertEqual(
+            chatgpt_only["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "gpt_account",
+        )
+        self.assertEqual(
+            chatgpt_only["session"]["role_slots"]["coding_agent_model_slot"][
+                "binding_status"
+            ],
+            "unbound",
+        )
+        self.assertEqual(
+            api_only["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "route_backed",
+        )
+        self.assertEqual(
+            api_only["session"]["role_slots"]["coding_agent_model_slot"][
+                "binding_status"
+            ],
+            "unbound",
+        )
+        self.assertEqual(
+            mixed["session"]["role_slots"]["primary_model_slot"][
+                "selected_source_class"
+            ],
+            "gpt_account",
+        )
+        self.assertEqual(
+            mixed["session"]["role_slots"]["coding_agent_model_slot"][
+                "selected_source_class"
+            ],
+            "route_backed",
+        )
+
+        for packet in (chatgpt_packet, api_packet):
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["live_prompt_full_success"])
+            self.assertTrue(packet["runtime_slot_dispatch_proven"])
+            self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertFalse(packet["fallback_attempted"])
+            self.assertFalse(packet["raw_backend_exposed"])
+            self.assertFalse(packet["raw_backend_id_exposed"])
+            self.assertFalse(packet["raw_auth_ref_exposed"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertFalse(packet["current_codex_touched"])
+
+        self.assertEqual(api_blocked_without_owner["status"], "blocked")
+        self.assertEqual(
+            api_blocked_without_owner["machine_error_code"],
+            "OWNER_AUTHORIZATION_REQUIRED",
+        )
+        self.assertFalse(api_blocked_without_owner["live_prompt_admitted"])
+        self.assertFalse(api_blocked_without_owner["live_prompt_executed"])
+        self.assertFalse(api_blocked_without_owner["prompt_runner_called"])
+        self.assertFalse(api_blocked_without_owner["fallback_attempted"])
+
+        self.assertEqual(chatgpt_packet["model_id"], "gpt-5.5")
+        self.assertEqual(chatgpt_packet["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(chatgpt_packet["configured_provider"], "cliproxy")
+        self.assertEqual(chatgpt_packet["selected_source_class"], "gpt_account")
+        self.assertEqual(chatgpt_packet["selected_source_provenance"], "backend_proven")
+        self.assertTrue(chatgpt_packet["selected_backend_server_issued"])
+        self.assertFalse(chatgpt_packet["selected_route_server_issued"])
+
+        self.assertEqual(api_packet["model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(api_packet["current_execution_slot_id"], "primary_model_slot")
+        self.assertEqual(api_packet["configured_provider"], "external_route")
+        self.assertEqual(api_packet["selected_source_class"], "route_backed")
+        self.assertEqual(api_packet["selected_source_provenance"], "route_proven")
+        self.assertFalse(api_packet["selected_backend_server_issued"])
+        self.assertTrue(api_packet["selected_route_server_issued"])
+
+        self.assertEqual(mixed_packet["status"], "ok")
+        self.assertEqual(
+            mixed_packet["final_status"],
+            "CHATGPT_PLUS_API_SLOT_DISPATCH_PROVEN_WITH_LIMITS",
+        )
+        self.assertTrue(mixed_packet["same_session_dispatch_proven"])
+        self.assertTrue(mixed_packet["primary_dispatch_proven"])
+        self.assertTrue(mixed_packet["coding_dispatch_proven"])
+        self.assertEqual(mixed_packet["primary_model_id"], "gpt-5.5")
+        self.assertEqual(mixed_packet["coding_agent_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(mixed_packet["primary_executed_slot_id"], "primary_model_slot")
+        self.assertEqual(mixed_packet["coding_executed_slot_id"], "coding_agent_model_slot")
+        self.assertEqual(mixed_packet["primary_configured_provider"], "cliproxy")
+        self.assertEqual(mixed_packet["coding_configured_provider"], "external_route")
+        self.assertEqual(mixed_packet["primary_selected_source_provenance"], "backend_proven")
+        self.assertEqual(mixed_packet["coding_selected_source_provenance"], "route_proven")
+        self.assertTrue(mixed_packet["primary_prompt_runner_called"])
+        self.assertTrue(mixed_packet["coding_prompt_runner_called"])
+        self.assertTrue(mixed_packet["prompt_runner_called"])
+        self.assertFalse(mixed_packet["chatgpt_only_calls_api"])
+        self.assertFalse(mixed_packet["api_only_calls_chatgpt"])
+        self.assertFalse(mixed_packet["fallback_used"])
+        self.assertFalse(mixed_packet["fallback_attempted"])
+        self.assertFalse(mixed_packet["parallel_slot_execution_proven"])
+        self.assertFalse(mixed_packet["fanout_execution_proven"])
+        self.assertFalse(mixed_packet["ui_label_counts_as_runtime_truth"])
+        self.assertFalse(mixed_packet["model_self_report_counts_as_runtime_truth"])
+        self.assertFalse(mixed_packet["raw_backend_details_exposed"])
+        self.assertFalse(mixed_packet["secret_value_exposed"])
+
+        self.assertEqual(
+            [(call["model_id"], call["slot_id"]) for call in calls],
+            [
+                ("gpt-5.5", "primary_model_slot"),
+                ("wbp-deepseek-v4-pro-max", "primary_model_slot"),
+                ("gpt-5.5", "primary_model_slot"),
+                ("wbp-deepseek-v4-pro-max", "coding_agent_model_slot"),
+            ],
         )
 
     def test_prompt_run_can_dispatch_bound_reviewer_slot_without_primary_swap(self) -> None:
@@ -1192,8 +1926,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
-                    "reviewer_model_id": "gpt-5.4",
+                    "primary_model_id": "gpt-5.5",
+                    "reviewer_model_id": "gpt-5.5",
                 },
                 commands(),
                 operator_status(),
@@ -1208,11 +1942,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["status"], "ok")
             self.assertEqual(packet["current_execution_slot_id"], "reviewer_model_slot")
             self.assertEqual(packet["requested_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["model_id"], "gpt-5.4")
+            self.assertEqual(packet["model_id"], "gpt-5.5")
             self.assertEqual(packet["executed_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.4")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.5")
             self.assertEqual(packet["wbp_runner_payload_slot_id"], "reviewer_model_slot")
-            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.4")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
@@ -1225,7 +1959,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Review this.",
-                        "model_id": "gpt-5.4",
+                        "model_id": "gpt-5.5",
                         "slot_id": "reviewer_model_slot",
                     }
                 ],
@@ -1238,7 +1972,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -1278,7 +2012,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
             )
@@ -1298,7 +2032,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_dry_run_rejects_forbidden_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_dry_run_packet(
                 session_id,
@@ -1313,7 +2047,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_live_prompt_not_admitted_packet_never_calls_runner_or_claims_inference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_not_admitted_packet(
                 session_id,
@@ -1371,7 +2105,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -1387,7 +2121,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 [
                     {
                         "prompt": "Reply real OK.",
-                        "model_id": "gpt-5.3-codex",
+                        "model_id": "gpt-5.5",
                         "slot_id": "primary_model_slot",
                         "slot_id_explicit": False,
                     }
@@ -1426,13 +2160,27 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["configured_wire_api"], "responses")
             self.assertFalse(packet["fallback_attempted"])
             self.assertEqual(packet["response_preview_bounded"], "SESSION_REAL_OK")
+            self.assertTrue(packet["agent_reply_block"])
+            self.assertEqual(packet["reply_block_kind"], "session_agent_reply")
+            self.assertEqual(packet["reply_author_alias"], "Codex")
+            self.assertEqual(packet["reply_agent_id"], "codex")
+            self.assertEqual(packet["reply_lane"], "primary_chatgpt")
+            self.assertEqual(packet["reply_provider_label"], "ChatGPT")
+            self.assertEqual(packet["reply_preview_bounded"], "SESSION_REAL_OK")
+            self.assertEqual(packet["reply_text"], "")
+            self.assertTrue(packet["reply_proof_summary"]["reply_visible"])
+            self.assertTrue(packet["reply_proof_summary"]["inference_proven"])
+            self.assertFalse(packet["reply_proof_summary"]["runtime_lane_proven"])
+            self.assertTrue(packet["reply_proof_summary"]["prompt_runner_called"])
+            self.assertFalse(packet["reply_proof_summary"]["fallback_used"])
+            self.assertFalse(packet["reply_proof_summary"]["local_imitation_used"])
             self.assertEqual(len(packet["response_digest"]), 64)
             self.assertFalse(packet["token_usage_present"])
             self.assertIsNone(packet["token_burn"])
             self.assertEqual(packet["latency_ms"], 125)
             self.assertTrue(packet["requested_slot_defaulted_to_primary"])
             self.assertEqual(packet["wbp_runner_payload_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["wbp_runner_payload_model_id"], "gpt-5.5")
             self.assertTrue(packet["wbp_runner_payload_slot_matches_requested"])
             self.assertTrue(packet["wbp_runner_payload_model_matches_slot"])
             self.assertTrue(packet["wbp_session_manager_slot_dispatch_proven"])
@@ -1444,7 +2192,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["downstream_runner_slot_echo"], "")
             self.assertFalse(packet["downstream_runner_slot_echo_matches_requested"])
             self.assertEqual(packet["executed_slot_id"], "primary_model_slot")
-            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.3-codex")
+            self.assertEqual(packet["executed_slot_model_id"], "gpt-5.5")
             self.assertFalse(packet["runtime_slot_dispatch_proven"])
             self.assertFalse(packet["slot_binding_runtime_dispatch_claimed"])
             self.assertFalse(packet["parallel_slot_execution_proven"])
@@ -1456,13 +2204,27 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(detail["session"]["inference_proven"])
             self.assertTrue(transcript["model_response_present"])
             self.assertFalse(transcript["inference_proven"])
+            self.assertTrue(transcript["agent_reply_entries_present"])
+            self.assertEqual(transcript["agent_reply_entry_count"], 1)
+            self.assertEqual(transcript["agent_reply_authors"], ["Codex"])
+            self.assertEqual(transcript["entries"][-1]["entry_kind"], "agent_reply")
+            self.assertEqual(transcript["entries"][-1]["reply_block_kind"], "session_agent_reply")
+            self.assertEqual(transcript["entries"][-1]["reply_author_alias"], "Codex")
+            self.assertEqual(transcript["entries"][-1]["reply_agent_id"], "codex")
+            self.assertEqual(transcript["entries"][-1]["reply_lane"], "primary_chatgpt")
+            self.assertEqual(transcript["entries"][-1]["reply_provider_label"], "ChatGPT")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_preview_bounded"],
+                "SESSION_REAL_OK",
+            )
+            self.assertFalse(transcript["entries"][-1]["reply_text_recorded_in_transcript"])
             self.assertNotIn("Reply real OK.", json.dumps(transcript))
 
     def test_prompt_run_defaults_to_owner_authorization_block(self) -> None:
         calls: list[dict[str, object]] = []
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             packet = manager.prompt_packet(
                 session_id,
@@ -1481,7 +2243,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_forbidden_fields_and_failed_runner_does_not_overclaim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             rejected = manager.prompt_packet(
                 session_id,
@@ -1517,8 +2279,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
-                "selected_model": "gpt-5.3-codex",
-                "runtime_model": "gpt-5.3-codex",
+                "selected_model": "gpt-5.5",
+                "runtime_model": "gpt-5.5",
                 "final_message": "TRACE_OK",
                 "secret_value_recorded": False,
                 "configured_provider": "cliproxy",
@@ -1549,7 +2311,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -1591,6 +2353,395 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["path_proof_status"], "independently_observed")
             self.assertTrue(packet["runtime_selected_model_recorded"])
             self.assertTrue(packet["runtime_selected_model_matches_bound_model"])
+
+    def test_prompt_ingress_routes_dip_alias_to_direct_api_without_codex_runner(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("DIP_DIRECT_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "DIP: ответь ровно DIP_DIRECT_OK."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+            transcript = manager.transcript_packet(session_id)
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+            self.assertTrue(packet["auto_router_used"])
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "DIP_DIRECT_OK")
+            self.assertEqual(packet["response_preview_bounded"], "DIP_DIRECT_OK")
+            self.assertTrue(packet["direct_api_reply_block"])
+            self.assertEqual(packet["reply_block_kind"], "api_agent_direct_reply")
+            self.assertEqual(packet["reply_author_alias"], "DIP")
+            self.assertEqual(packet["reply_agent_id"], "dip")
+            self.assertEqual(packet["reply_lane"], "api_route")
+            self.assertEqual(packet["reply_provider_label"], "deepseek")
+            self.assertEqual(packet["reply_preview_bounded"], "DIP_DIRECT_OK")
+            self.assertEqual(packet["reply_text"], "DIP_DIRECT_OK")
+            self.assertEqual(
+                packet["reply_text_sha256"],
+                hashlib.sha256(b"DIP_DIRECT_OK").hexdigest(),
+            )
+            self.assertFalse(packet["reply_proof_summary"]["prompt_runner_called"])
+            self.assertFalse(packet["reply_proof_summary"]["tools_wbp_dip_invoked"])
+            self.assertFalse(packet["reply_proof_summary"]["dip_run_invoked"])
+            self.assertFalse(
+                packet["reply_proof_summary"]["final_answer_was_repo_tool_call"]
+            )
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(packet["requested_slot_id"], "coding_agent_model_slot")
+            self.assertTrue(packet["requested_slot_auto_routed"])
+            self.assertFalse(packet["requested_slot_explicit"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertFalse(packet["codex_exec_invoked"])
+            self.assertFalse(packet["tools_wbp_dip_invoked"])
+            self.assertFalse(packet["dip_run_invoked"])
+            self.assertFalse(packet["fallback_used"])
+            self.assertFalse(packet["local_imitation_used"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertFalse(packet["chatgpt_lane_called"])
+            self.assertTrue(packet["model_response_present"])
+            self.assertTrue(packet["inference_proven"])
+            self.assertTrue(packet["route_bound_dispatch_proven"])
+            self.assertFalse(packet["active_project_root_required"])
+            self.assertTrue(packet["active_project_root_available"])
+            self.assertEqual(
+                packet["active_project_root_source"],
+                "test_selected_active_project_root",
+            )
+            self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertFalse(packet["active_project_root_is_wbp_repo"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+            self.assertEqual(direct_calls[0]["expected_alias"], "DIP")
+            self.assertEqual(direct_calls[0]["repo_root"], Path(temp_dir).resolve())
+            self.assertEqual(direct_calls[0]["dip_work_mode"], "full")
+            self.assertEqual(direct_calls[0]["repo_bridge_mode"], "off")
+            self.assertTrue(transcript["agent_reply_entries_present"])
+            self.assertEqual(transcript["agent_reply_entry_count"], 1)
+            self.assertEqual(transcript["agent_reply_authors"], ["DIP"])
+            self.assertEqual(transcript["entries"][-1]["entry_kind"], "agent_reply")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_block_kind"],
+                "api_agent_direct_reply",
+            )
+            self.assertEqual(transcript["entries"][-1]["reply_author_alias"], "DIP")
+            self.assertEqual(transcript["entries"][-1]["reply_agent_id"], "dip")
+            self.assertEqual(transcript["entries"][-1]["reply_lane"], "api_route")
+            self.assertEqual(transcript["entries"][-1]["reply_provider_label"], "deepseek")
+            self.assertEqual(
+                transcript["entries"][-1]["reply_preview_bounded"],
+                "DIP_DIRECT_OK",
+            )
+            self.assertFalse(transcript["entries"][-1]["reply_text_recorded_in_transcript"])
+
+    def test_prompt_ingress_dip_alias_bypasses_primary_slot_precondition(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("DIP_PRIMARY_BROKEN_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            manager._sessions[session_id]["role_slots"]["primary_model_slot"][
+                "server_issued"
+            ] = False
+
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "DIP: ответь ровно DIP_PRIMARY_BROKEN_OK."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "DIP_PRIMARY_BROKEN_OK")
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertFalse(packet["chatgpt_lane_called"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+
+    def test_prompt_ingress_routes_custom_api_alias_from_session_binding(self) -> None:
+        direct_aliases: list[str] = []
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_aliases.append(str(kwargs.get("expected_alias") or ""))
+            return direct_live_result("CUSTOM_ALIAS_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            session_id = created["session"]["session_id"]
+            binding = manager.agent_alias_binding_packet(
+                session_id,
+                {
+                    "primary_alias": "Codex",
+                    "coding_alias": "Кодер",
+                    "agent_1_alias": "Agent 1",
+                    "agent_2_alias": "Agent 2",
+                },
+            )
+            packet = manager.prompt_ingress_packet(
+                session_id,
+                {"prompt": "Кодер: ответь."},
+                proven_prompt_result,
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(binding["status"], "ok")
+            self.assertTrue(binding["alias_runtime_binding_proven"])
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["selected_alias"], "Кодер")
+            self.assertEqual(packet["selected_slot"], "dip")
+            self.assertEqual(packet["current_execution_slot_id"], "coding_agent_model_slot")
+            self.assertEqual(packet["direct_reply_text"], "CUSTOM_ALIAS_OK")
+            self.assertEqual(packet["reply_author_alias"], "Кодер")
+            self.assertEqual(packet["reply_agent_id"], "dip")
+            self.assertEqual(packet["reply_lane"], "api_route")
+            self.assertEqual(packet["reply_provider_label"], "deepseek")
+            self.assertEqual(packet["reply_text"], "CUSTOM_ALIAS_OK")
+            self.assertEqual(direct_aliases, ["Кодер"])
+
+    def test_prompt_ingress_keeps_codex_alias_on_gpt_runner_path(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def prompt_runner(payload: dict[str, object]) -> dict[str, object]:
+            prompt_calls.append(dict(payload))
+            return proven_prompt_result(payload, "CODEX_ALIAS_OK")
+
+        def direct_runner(**kwargs: object) -> dict[str, object]:
+            direct_calls.append(dict(kwargs))
+            return direct_live_result("MUST_NOT_RUN")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "Codex: ответь сам."},
+                prompt_runner,
+                owner_authorized=True,
+                auto_route_live_result_runner=direct_runner,
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["custom_codex_prompt_ingress_packet"])
+            self.assertEqual(packet["auto_router_decision"], "gpt_lane")
+            self.assertTrue(packet["active_project_root_available"])
+            self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertTrue(packet["gpt_lane_selected"])
+            self.assertFalse(packet["direct_reply_selected"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertFalse(packet["api_lane_called"])
+            self.assertEqual(packet["response_preview_bounded"], "CODEX_ALIAS_OK")
+            self.assertEqual(
+                prompt_calls,
+                [
+                    {
+                        "prompt": "Codex: ответь сам.",
+                        "model_id": "gpt-5.5",
+                        "slot_id": "primary_model_slot",
+                        "slot_id_explicit": False,
+                    }
+                ],
+            )
+            self.assertEqual(direct_calls, [])
+
+    def test_prompt_ingress_dip_alias_allows_plain_reply_without_active_project_root(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir, mock.patch.dict(os.environ, {}, clear=True):
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "DIP: ответь."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertFalse(packet["active_project_root_required"])
+            self.assertFalse(packet["active_project_root_available"])
+            self.assertEqual(packet["active_project_root_source"], "missing")
+            self.assertFalse(packet["active_project_root_path_recorded"])
+            self.assertTrue(packet["auto_router_used"])
+            self.assertEqual(packet["auto_router_decision"], "api_direct_reply")
+            self.assertTrue(packet["direct_reply_selected"])
+            self.assertTrue(packet["direct_reply_proven"])
+            self.assertEqual(packet["direct_reply_text"], "MUST_NOT_RUN")
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertTrue(packet["api_lane_called"])
+            self.assertTrue(packet["model_response_present"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(len(direct_calls), 1)
+            self.assertIsNone(direct_calls[0]["repo_root"])
+
+    def test_prompt_ingress_unknown_alias_fails_closed_without_any_runner(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {"prompt": "Ghost: ответь."},
+                lambda payload: prompt_calls.append(payload) or proven_prompt_result(payload),
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(packet["status"], "error")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS",
+            )
+            self.assertTrue(packet["auto_router_fail_closed"])
+            self.assertTrue(packet["auto_router_unknown_alias_blocked"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertFalse(packet["model_response_present"])
+            self.assertFalse(packet["inference_proven"])
+            self.assertEqual(prompt_calls, [])
+            self.assertEqual(direct_calls, [])
+
+    def test_prompt_ingress_preserves_explicit_slot_even_when_prompt_names_dip(self) -> None:
+        prompt_calls: list[dict[str, object]] = []
+        direct_calls: list[dict[str, object]] = []
+
+        def prompt_runner(payload: dict[str, object]) -> dict[str, object]:
+            prompt_calls.append(dict(payload))
+            return proven_prompt_result(payload, "EXPLICIT_PRIMARY_OK")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet(
+                {
+                    "primary_model_id": "gpt-5.5",
+                    "coding_agent_model_id": "wbp-deepseek-v4-pro-max",
+                },
+                commands(),
+                operator_status(),
+                api_snapshot=deepseek_api_snapshot(),
+            )
+            packet = manager.prompt_ingress_packet(
+                created["session"]["session_id"],
+                {
+                    "prompt": "DIP: это explicit primary compatibility check.",
+                    "slot_id": "primary_model_slot",
+                },
+                prompt_runner,
+                owner_authorized=True,
+                auto_route_live_result_runner=lambda **kwargs: direct_calls.append(dict(kwargs))
+                or direct_live_result("MUST_NOT_RUN"),
+                profile_dir=Path(temp_dir),
+                active_project_root=Path(temp_dir),
+                active_project_root_source="test_selected_active_project_root",
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertFalse(packet["auto_router_used"])
+            self.assertTrue(packet["explicit_slot_preserved"])
+            self.assertEqual(packet["current_execution_slot_id"], "primary_model_slot")
+            self.assertTrue(packet["requested_slot_explicit"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertEqual(len(prompt_calls), 1)
+            self.assertEqual(prompt_calls[0]["slot_id"], "primary_model_slot")
+            self.assertEqual(direct_calls, [])
 
     def test_api_only_temp_write_probe_requires_owner_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1912,7 +3063,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             init_git_repo(repo)
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
-                {"primary_model_id": "gpt-5.3-codex"},
+                {"primary_model_id": "gpt-5.5"},
                 commands(),
                 operator_status(),
                 api_snapshot=api_snapshot("wbp-deepseek-v3"),
@@ -1920,7 +3071,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
             packet = manager.repo_tmp_edit_probe_packet(
                 created["session"]["session_id"],
-                {"api_model_id": "gpt-5.3-codex"},
+                {"api_model_id": "gpt-5.5"},
                 lambda _payload, _writable_dir: self.fail("runner must not be called"),
                 owner_authorized=True,
                 repo_root=repo,
@@ -2072,8 +3223,8 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             return {
                 "status": "ok",
                 "machine_error_code": "OK",
-                "selected_model": "gpt-5.3-codex",
-                "runtime_model": "gpt-5.3-codex",
+                "selected_model": "gpt-5.5",
+                "runtime_model": "gpt-5.5",
                 "final_message": "MISMATCH_OK",
                 "secret_value_recorded": False,
                 "configured_provider": "external_route",
@@ -2102,7 +3253,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -2118,7 +3269,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
             self.assertEqual(packet["status"], "blocked")
             self.assertEqual(packet["machine_error_code"], "RUNTIME_MODEL_ID_MISMATCH")
-            self.assertEqual(packet["runtime_selected_model"], "gpt-5.3-codex")
+            self.assertEqual(packet["runtime_selected_model"], "gpt-5.5")
             self.assertTrue(packet["runtime_selected_model_recorded"])
             self.assertFalse(packet["runtime_selected_model_matches_bound_model"])
             self.assertEqual(packet["path_proof_status"], "runtime_model_mismatch_after_observation")
@@ -2155,7 +3306,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             packet = manager.prompt_packet(
                 created["session"]["session_id"],
                 {"prompt": "OK"},
@@ -2178,7 +3329,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -2247,7 +3398,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             session = manager._sessions[session_id]
             session.update(
@@ -2333,7 +3484,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet(
                 {
-                    "primary_model_id": "gpt-5.3-codex",
+                    "primary_model_id": "gpt-5.5",
                     "coding_agent_model_id": "wbp-web-primary-openrouter",
                 },
                 commands(),
@@ -2359,7 +3510,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             manager.cleanup_packet(session_id)
             packet = manager.prompt_packet(
@@ -2377,7 +3528,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_cancel_and_cleanup_are_session_owned_without_process_kill_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
-            created = manager.create_packet({"primary_model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            created = manager.create_packet({"primary_model_id": "gpt-5.5"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
             before_cleanup = list(Path(temp_dir).iterdir())
 
@@ -2402,11 +3553,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(list(Path(temp_dir).iterdir()), [])
 
     def test_forbidden_helpers_allow_only_declared_top_level_fields(self) -> None:
-        self.assertEqual(forbidden_session_create_fields({"primary_model_id": "gpt-5.3-codex"}), [])
-        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.3-codex"}), ["model_id"])
+        self.assertEqual(forbidden_session_create_fields({"primary_model_id": "gpt-5.5"}), [])
+        self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.5"}), ["model_id"])
         self.assertEqual(
             forbidden_session_create_fields(
-                {"primary_model_id": "gpt-5.3-codex", "model_lane": "api_route_lane"}
+                {"primary_model_id": "gpt-5.5", "model_lane": "api_route_lane"}
             ),
             ["model_lane"],
         )

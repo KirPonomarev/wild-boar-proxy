@@ -1,9 +1,0 @@
-{
-  "artifact_payload_sha256": "1f69f0be3209a39b49bfe94a294446bfdda185dd72836ec0c391a5c0b76820ca",
-  "findings": [],
-  "schema_version": 1,
-  "secret_leak": false,
-  "secret_value_recorded": false,
-  "source": "artifact_redaction_scan_support_packet",
-  "status": "passed"
-}

@@ -20,6 +20,9 @@ All operator commands must support `--json`.
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
+- `healthcheck --repair --json`
+- `rollback --latest --dry-run --json`
+- `rollback --latest --apply --json`
 - `mode get --json`
 - `mode set stable --json`
 - `mode set managed --json`
@@ -36,6 +39,7 @@ All operator commands must support `--json`.
 - `accounts promote <id> --json`
 - `accounts demote <id> --json`
 - `accounts hold <id> --json`
+- `accounts hold <id> --dry-run --json`
 - `accounts release <id> --json`
 - `accounts retire <id> --json`
 - `accounts onboard --json`
@@ -56,6 +60,540 @@ All operator commands must support `--json`.
 - `package experimental verify --manifest <path> --json`
 - `package launchable build --output-dir <path> [--runtime-executable <path>] --json`
 - `package launchable verify --manifest <path> --json`
+
+## Auxiliary working-tool surfaces
+
+- `router-hook auto-route --prompt <text> --json`
+- `router-hook direct-reply --prompt <text> --json`
+- `tools/wbp_dip --json <task>`
+
+`router-hook auto-route --prompt <text> --json` is the canonical inbound
+alias router for Custom Codex prompt text. It loads
+`wbp-agent-runtime-context.json`, parses the addressed name from server-issued
+runtime truth, and chooses exactly one lane:
+
+- API-lane aliases such as `DIP`, `Agent 2`, or a WBP-defined API name route to
+  the direct API-agent reply surface.
+- ChatGPT/primary-lane aliases such as `Codex` pass back to the native GPT lane
+  without calling an API route.
+- Prompts with no addressed runtime alias pass back to the native GPT lane.
+- Unknown or ambiguous addressed aliases fail closed.
+
+Callers must treat a short agent-like leading label followed by `:` as an
+addressed-alias prompt even when the label is unknown or misspelled. Examples
+include `DIP:`, `DIPP:`, `Agent 2:`, `Ghost:`, and custom single-token Latin
+agent labels. The caller must still invoke `auto-route` with the original prompt;
+it must not satisfy the request locally before the router has either admitted the
+alias or produced the fail-closed packet.
+
+`auto-route` is the short path that prevents wrapper shopping. It must not
+invoke `codex exec`, `tools/wbp_dip`, `dip run`, ordinary Codex subagents,
+fallback chains, or local imitation. Required success fields include
+`auto_router_proven=true`, `auto_router_decision`, `direct_reply_selected` or
+`gpt_lane_selected`, `tools_wbp_dip_invoked=false`, `dip_run_invoked=false`, and
+`codex_exec_invoked=false`.
+
+With `--proof-dir <path>`, `auto-route` may write only its own
+`api-agent-auto-router.packet.json` packet. Stdout remains exactly one JSON
+object. The packet must set `evidence_written=true`, keep
+`proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
+only the proof packet filename in `changed_files` for no-repo-write paths, with
+`effect=mutate` and `file_mutation_attempted=false`. It must not write a nested
+direct-reply packet.
+Proof write failure must fail closed as JSON with
+`machine_error_code=WBP_API_AGENT_AUTO_ROUTER_PROOF_WRITE_FAILED`.
+
+Callers must not manually pre-read or summarize
+`wbp-agent-runtime-context.json` before normal `auto-route` handling. The
+router owns that read; manual context inspection is only for diagnostics of the
+router or runtime-context file itself.
+
+Callers must pass the original bounded operator prompt into `auto-route`,
+including the leading addressed alias such as `DIP:` or `Agent 2:`. They must
+not strip or rewrite that alias before routing; doing so changes an API-lane
+command into a native ChatGPT passthrough.
+
+For direct exact-answer prompts such as `DIP: ответь ровно ...`, callers should
+not narrate the routing step. They should call `auto-route`, then display only
+packet `output_text` when `status=ok`, `auto_router_proven=true`, and either
+`exact_plain_reply_matched=true` or `output_passthrough_required=true`.
+`output_passthrough_required=true` is the display contract for exact JSON
+requests such as `ответь ровно JSON ...`; callers must not add acknowledgements,
+summaries, code fences, Markdown, or extra prose around `output_text`.
+
+For exact-answer prompts addressed to the ChatGPT/primary lane, such as
+`Codex: answer exactly ...` or an operator-renamed primary alias, callers should
+preserve the native GPT lane. UserPromptSubmit may add primary-alias context,
+but it must not turn this into an API-route request or local deterministic
+imitation. Physical Custom proof for this case requires the visible native GPT
+response itself to match the requested exact answer. Non-exact primary-alias
+prompts continue to pass back to the native GPT lane.
+
+Canonical auto route:
+
+```sh
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route \
+  --prompt "DIP: ответь коротко." \
+  --json
+```
+
+Canonical visible-output route for Custom UI API-lane prompts and controlled
+repo-bridge evidence output:
+
+```sh
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook auto-route-output \
+  --prompt-file - \
+  --repo-bridge auto \
+  --work-mode full
+```
+
+If the selected alias is the ChatGPT/primary lane, this command must not
+synthesize an answer from the prompt. It should return a machine-readable
+"output not available" code for visible-output callers; the physical Custom
+response must come from the native GPT lane itself.
+
+For API-lane aliases this command may print `output_text` only when the routed
+packet proves one of: `exact_plain_reply_matched=true`,
+`output_passthrough_required=true`,
+`repo_bridge_evidence_response_proven=true`, or
+`direct_reply_visible_output_proven=true`. The last proof requires a successful
+API-lane direct reply, route-bound allowlist enforcement, a positive direct
+provider response proof, non-empty output, and no fallback, local imitation,
+repo-tool final answer, repo bridge, raw backend exposure, or secret exposure.
+Merely available non-exact text remains insufficient.
+
+`router-hook direct-reply --prompt <text> --json` is the canonical short
+lower-level API-agent reply surface. It loads
+`wbp-agent-runtime-context.json`, resolves the addressed alias from server-issued
+runtime truth, admits only API-lane aliases through the route allowlist and stale
+route guard, performs one WBP-owned live-result turn through the selected API
+route, and returns the final API-agent answer in the packet.
+
+This command is for already-routed direct API-agent replies such as `DIP: answer ...`,
+`Agent 2: inspect ...`, or any operator-defined API alias projected into the
+runtime context. It must not invoke `codex exec`, `tools/wbp_dip`, `dip run`,
+ordinary Codex subagents, wrapper substitution, fallback chains, or local
+imitation. It must fail closed if the alias is missing, resolves to the
+ChatGPT/primary lane, uses a route outside `allowed_api_route_ids`, or returns a
+repo-tool JSON call as the final answer.
+
+The phrase `repo bridge` inside an ordinary addressed prompt is not permission
+to switch to `tools/wbp_dip`; it is interpreted by the canonical API-agent route
+as a request for its controlled repository bridge.
+
+By default, `direct-reply` runs with `--work-mode standard` and `--repo-bridge off`.
+That keeps normal direct answers short-path and no-write. Use
+`--work-mode full` only for deep investigation, long reports, or explicit
+implementation work. If an operator explicitly enables
+`--repo-bridge auto|on`, the command is classified as potentially mutating and
+the packet must expose any controlled code mutation through `effect=mutate`,
+`file_mutation_attempted`, `changed_files`, and `dip_action_mutated_files`.
+
+With `--proof-dir <path>`, `direct-reply` may write only its own
+`api-agent-direct-reply.packet.json` packet. Stdout remains exactly one JSON
+object. The packet must set `evidence_written=true`, keep
+`proof_file_path_recorded=false` and `proof_dir_path_recorded=false`, and include
+only the proof packet filename in `changed_files` for no-repo-write paths, with
+`effect=mutate` and `file_mutation_attempted=false`. Proof write failure must
+fail closed as JSON with
+`machine_error_code=WBP_API_AGENT_DIRECT_REPLY_PROOF_WRITE_FAILED`.
+
+Required success fields include:
+
+- `api_agent_direct_reply_proven=true`
+- `selected_alias_lane="api_route"`
+- `route_bound_dispatch_proven=true`
+- `api_agent_provider_called=true`
+- `direct_reply_text` present
+- `final_answer_was_repo_tool_call=false`
+- `gpt_orchestrator_used=false`
+- `codex_exec_invoked=false`
+- `tools_wbp_dip_invoked=false`
+- `dip_run_invoked=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `raw_prompt_recorded=false`
+- `selected_api_route_id_recorded=false`
+- `product_ready=false`
+
+Canonical direct reply:
+
+```sh
+${WBP_PYTHON_BIN:-python3} -m wild_boar_proxy router-hook direct-reply \
+  --prompt "DIP: ответь коротко." \
+  --json
+```
+
+`tools/wbp_dip --json <task>` is a bounded Custom Codex working-tool launcher.
+It invokes the WBP-owned `delegate_to_dip` MCP tool through the Custom Codex
+CLI flow, then requires a bounded live result from the runtime-context allowed
+API route before returning success. It emits one JSON packet.
+
+For repository and development tasks, `tools/wbp_dip` also owns the WBP-mediated
+repo/action bridge. The bridge is enabled by default in `auto` mode for
+repo/project/code/audit/report/fix/test prompts and can be controlled with
+`--repo-bridge auto|on|off`. The remote DIP route never receives direct local
+filesystem or shell authority; it must request approved WBP tools through strict
+JSON tool-call text, and WBP executes those tools locally.
+
+The repository inspected or mutated by that bridge is the server-owned active
+project root, not implicitly the WBP checkout and not the `--cd` execution
+directory. Operators may pass `--active-project-root <path>`; WBP may also
+provide `WBP_ACTIVE_PROJECT_ROOT` from the active runtime context. `--target-repo`
+and `WBP_TARGET_REPO` remain legacy compatibility aliases only. Missing,
+non-directory, system-root, or sensitive-name active roots fail closed before any
+provider turn. Packets must expose active-root proof fields such as
+`active_project_root_available`, `active_project_root_source`,
+`active_project_root_sha256`, `active_project_root_is_wbp_repo`, and
+`active_project_root_fallback_used=false`, while keeping
+`active_project_root_path_recorded=false`. Legacy `target_repo_*` fields may be
+emitted as aliases, but they are not the primary truth surface.
+
+`--work-mode full` raises the live-result budget for deep investigation and
+large reports. A successful live result must also write
+`live-result-full-text.txt` inside the proof directory and expose only artifact
+metadata in the packet (`live_result_text_artifact_written=true`,
+`live_result_text_artifact_path_recorded=false`).
+
+Before and after the `codex exec` hop, `tools/wbp_dip` must repair a known stale
+Custom Codex profile model (`gpt-5.3-codex`) back to the requested working model
+(`gpt-5.5` by default). The packet must record the repair booleans without
+recording the profile config path.
+
+WBP may also perform bounded repo bootstrap reads before the first provider
+turn, such as reading explicitly named files or listing files for broad repo
+tasks. If DIP answers with prose before required repo/action/code/verification
+facts exist, WBP must issue an in-run corrective gate prompt and continue until
+the required fact exists or the bounded step budget is exhausted.
+
+Admitted bridge tools:
+
+- `list_files`, `read_file`, `search`, `git_status`
+- `propose_patch`, `apply_patch`
+- `run_tests`, `run_command`
+
+A repo-inspection claim must not succeed unless at least one repo bridge tool
+call succeeds. A fix/implementation/test claim must not succeed unless at least
+one action bridge tool call succeeds. A fix/implementation/edit/code-writing
+claim must not succeed unless an `apply_patch` tool call actually mutates code
+and a subsequent `run_tests` or `run_command` verification succeeds.
+Patches are accepted only as bounded unified diffs and are checked with
+`git apply --check` before any apply. Commands are allowlisted and executed
+without shell interpolation.
+
+Canonical operator entry:
+
+```sh
+tools/wbp_dip "DIP: <bounded task>"
+```
+
+Canonical Custom Codex DIP entry for repository work:
+
+```sh
+tools/wbp_dip --json --work-mode full --repo-bridge on --active-project-root "$PWD" "DIP: <bounded repository task>"
+```
+
+This is the only admitted Custom Codex operator path for `DIP` repository
+analysis, coding, testing, and audit tasks when the requested proof is the
+Custom Codex MCP/delegate working-tool path. For direct API-agent reply blocks
+from raw prompt text, use `router-hook auto-route`; use
+`router-hook direct-reply` only after the caller has already selected the
+API-lane alias. `dip run` is a lower-level operator wrapper for
+readiness/work/chain-join proof and must not be used as a substitute for either
+direct API-agent replies or Custom Codex free-chat DIP delegation. If the
+canonical entrypoint returns a
+provider/network/auth failure, callers must surface the packet
+`machine_error_code` and stop; they must not silently switch to another wrapper,
+ordinary Codex subagent, direct provider request, or local imitation.
+
+Canonical repeatable smoke:
+
+```sh
+PROOF_DIR="$(mktemp -d /tmp/wbp-dip-smoke.XXXXXX)"
+tools/wbp_dip --json --proof-dir "$PROOF_DIR" \
+  "DIP: ответь одним коротким пунктом: WBP operator path работает без локальной имитации."
+```
+
+It must not write runtime truth, must not set `product_ready=true`, and must not
+claim working-tool success unless both conditions are true:
+
+- the captured Codex JSONL contains a successful `delegate_to_dip` tool result
+  with API-lane dispatch and no fallback/local imitation;
+- `live_result_available=true` with no raw prompt, route id, secret, fallback,
+  local imitation, or backend detail exposure in the emitted packet.
+
+Without `--json`, stdout is the bounded live result text for the operator.
+With `--json`, stdout is exactly one JSON object and must include:
+
+- `delegate_to_dip_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `raw_prompt_recorded=false`
+- `prompt_text_recorded=false`
+- `live_result_route_id_recorded=false`
+- `dip_repo_direct_access=false`
+- `dip_repo_tool_bridge_used=true` for repo-inspection success paths
+- `dip_action_bridge_used=true` for fix/implementation/test success paths
+- `dip_code_written=true` for fix/implementation/edit/code-writing success paths
+- `dip_code_verified=true` for fix/implementation/edit/code-writing success paths
+- `dip_action_raw_patch_recorded=false`
+- `dip_action_raw_command_recorded=false`
+- `repo_bridge_mutation_controlled=true`
+- `repo_bridge_direct_shell_access=false`
+- `repo_bridge_bootstrap_used=true|false`
+- `repo_bridge_tool_names=[...]`
+- `dip_action_tool_names=[...]`
+- `repo_bridge_context_pack_recorded=false`
+- `repo_bridge_raw_tool_results_recorded=false`
+- `live_result_text_artifact_written=true` for working-result success paths
+- `live_result_text_artifact_path_recorded=false`
+- `profile_config_model_repaired_before_codex_exec=true|false`
+- `profile_config_model_repaired_after_codex_exec=true|false`
+- `profile_config_path_recorded=false`
+
+`tools/wbp_dip --proof-only --json <task>` is admitted only for dispatch-proof
+diagnostics. It is not a working-result success path.
+
+## DIP run operator wrapper
+
+`dip run --prompt <prompt> --json` is a bounded operator wrapper over the
+existing DIP readiness, work, and chain-join command surfaces.
+
+It emits exactly one JSON packet and must not print prose before or after that
+packet. Its effect is `mutate` because it runs the work path and writes evidence
+packets.
+
+The wrapper must preserve command-surface ownership:
+
+- `dip status` remains a read-only readiness snapshot and must not become an
+  auth grant;
+- `dip work` owns the fresh preflight and live work path;
+- `dip chain-join` remains a read-only join and must not run status, work, API
+  calls, or dispatch;
+- `dip run` orchestrates those surfaces and summarizes their packet truth.
+
+Readiness status may contribute to the final proof result, but it must not by
+itself authorize or prevent the work path. Dispatch eligibility remains owned by
+the fresh `dip work` preflight; unsafe readiness packets or evidence-write
+failures may still stop the wrapper fail-closed.
+
+On success the `dip run --json` packet must include:
+
+- `operator_command_surface="wild-boar-proxy dip run"`
+- `operator_command_mode="run"`
+- `effect="mutate"`
+- `status_packet_used_as_auth_grant=false`
+- `work_mode_proven=true`
+- `single_work_run_proven=true`
+- `explicit_dip_work_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `delivery_proven=true`
+- `full_custom_codex_working_flow_proven=true`
+- `product_ready=false`
+- `custom_codex_ui_visibility_proven=false`
+- `raw_prompt_recorded=false`
+- `prompt_text_recorded=false`
+- `raw_route_id_recorded=false`
+- `selected_api_route_id_recorded=false`
+- `raw_backend_details_exposed=false`
+- `secret_value_exposed=false`
+- `blocking_reasons=[]`
+
+If readiness, work, chain-join, evidence writes, or safety checks fail, `dip run`
+must fail closed with machine-readable `blocking_reasons` and must not start an
+acceptance loop or product-readiness claim by default.
+
+## API-backed Custom Codex manual gate
+
+`codex-runner real-custom-dip-proof --mode work --api-backed-gate --prompt <prompt> --json`
+is the bounded live gate for the API-key-backed Custom Codex flow.
+
+This gate is not a ChatGPT UI-session admission and must not be treated as
+product readiness. It joins two live facts:
+
+- `router-hook custom-codex-auth-session-readiness` reports the expected Custom
+  Codex process/user-data binding and `session_state="API_KEY_ONLY"`;
+- the work-mode DIP runner proves one full Custom Codex hook-origin dispatch to
+  DIP through the allowed API route with a live API-route response.
+
+When the Custom runtime context advertises a server-owned bridge or file bridge,
+this gate may use that bridge as live API-route response evidence. That bridge
+evidence must not be reported as direct-provider auth: `direct_provider_*` fields
+remain diagnostic, and `bridge_green_counts_as_provider_proof` must stay `false`.
+Working-flow delivery for release acceptance is supplied by the fresh-sealed E2E
+gate; in `--mode work --api-backed-gate`, legacy MCP working-flow delivery
+diagnostics are non-blocking for this DIP feature gate.
+
+On success the packet must include:
+
+- `api_backed_custom_codex_auth_session_proven=true`
+- `api_backed_custom_codex_flow_proven=true`
+- `custom_codex_dip_feature_ready=true`
+- `feature_ready=true`
+- `feature_ready_mode="api_key_backed_custom_codex_dip"`
+- `feature_ready_does_not_require_ui_session=true`
+- `feature_ready_does_not_prove_product_ready=true`
+- `auth_session_machine_error_code="WBP_CUSTOM_CODEX_API_KEY_ONLY"`
+- `api_key_only=true`
+- `api_key_only_counts_as_ui_session=false`
+- `logged_in_ui_session_proven=false`
+- `custom_codex_ui_session_ready=false`
+- `work_mode_proven=true`
+- `work_mode_uses_full_dip_work_mode=true`
+- `delegate_to_dip_proven=true`
+- `api_lane_called=true`
+- `route_bound_dispatch_proven=true`
+- `live_result_available=true`
+- `api_route_live_response_proven=true`
+- `positive_api_route_response_gate_satisfied=true`
+- either direct-provider proof is true or
+  `server_owned_bridge_or_file_bridge_response_proven=true`
+- `bridge_green_counts_as_provider_proof=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `native_codex_subagent_used_as_dip=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If the auth readiness is not exactly API-key-only, if the Custom Codex process
+is not bound to the expected user-data directory, or if the work runner does not
+prove live API-backed DIP dispatch, the gate must fail closed.
+
+## GPT+API+DIP technical acceptance gate
+
+`codex-runner gpt-api-dip-acceptance-gate --fresh-sealed-proof-file <packet> --dip-feature-proof-file <packet> --dip-action-proof-file <packet> --json`
+is a read-only join gate over existing machine-readable proof packets. With
+`--proof-dir`, it may write only its own acceptance packet.
+
+It must not run live dispatch, read audit history, infer from narrative, or
+claim product readiness. The gate passes only when all three owner surfaces are
+simultaneously proven:
+
+- `fresh-sealed-e2e-proof` proves the full Custom Codex runtime/UI dispatch
+  chain, sealed admission, external freshness, and wrong-digest negative;
+- `real-custom-dip-proof --mode work --api-backed-gate` proves API-backed
+  Custom Codex DIP feature readiness without UI-session admission;
+- `tools/wbp_dip --json` proves the controlled action bridge, code mutation, and
+  verification without raw patch/command leakage or direct shell access.
+
+On success the packet must include:
+
+- `feature_ready=true`
+- `feature_ready_mode="gpt_api_dip_custom_codex"`
+- `gpt_api_dip_ready=true`
+- `custom_codex_ui_visibility_proven=true`
+- `native_custom_codex_visible_flow_proven=true`
+- `full_runtime_dispatch_proven=true`
+- `api_backed_custom_codex_dip_feature_ready=true`
+- `api_key_only=true`
+- `api_key_only_counts_as_ui_session=false`
+- `logged_in_ui_session_proven=false`
+- `custom_codex_ui_session_ready=false`
+- `dip_action_bridge_proven=true`
+- `dip_code_written=true`
+- `dip_code_verified=true`
+- `gate_runs_live_dispatch=false`
+- `gate_reads_audit_history=false`
+- `input_file_paths_recorded=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If any input packet has the wrong `packet_kind`, misses a required positive
+claim, overclaims UI-session/product readiness, records raw sensitive material,
+or lacks controlled DIP code-write verification, the gate must fail closed.
+
+## E2E mode matrix gate
+
+`codex-runner e2e-mode-matrix --gpt-proof-file <packet> --api-proof-file <packet> --gpt-api-proof-file <packet> --dip-ping-proof-file <packet> --dip-repo-audit-dummy-proof-file <packet> --dip-repo-audit-wbp-proof-file <packet> --dip-code-edit-tests-dummy-proof-file <packet> --api-agent-direct-reply-proof-file <packet> --api-agent-custom-alias-proof-file <packet> --json`
+is a read-only join gate over existing machine-readable proof packets. With
+`--proof-dir`, it may write only its own matrix packet.
+
+It must not run live dispatch, invoke DIP, read audit history, infer from
+narrative, or claim product readiness. The gate passes only when every required
+row is proven by its owner packet:
+
+- `gpt`: Custom Codex native response matrix, `chatgpt_only`;
+- `api`: controlled API dispatch proof, `api_only`;
+- `gpt_api`: GPT+API+DIP acceptance gate, `chatgpt_plus_api`;
+- `dip_ping`: `tools/wbp_dip` exact-response path without repo authority;
+- `dip_repo_audit_dummy`: read-only repo bridge against a non-WBP dummy repo;
+- `dip_repo_audit_wbp`: read-only repo bridge against the WBP repo;
+- `dip_code_edit_tests_dummy`: controlled code edit and verification against a
+  non-WBP dummy repo only.
+- `api_agent_direct_reply`: canonical short API-agent direct reply for `DIP`,
+  without `codex exec`, `tools/wbp_dip`, or `dip run`;
+- `api_agent_custom_alias`: auto-router proof that an operator-defined API alias
+  routes to the same direct API-agent reply lane.
+
+On success the packet must include:
+
+- `e2e_mode_matrix_ready=true`
+- `feature_ready=true`
+- `feature_ready_mode="e2e_mode_matrix"`
+- `all_required_rows_green=true`
+- `row_count=9`
+- `dummy_and_wbp_roots_distinct=true`
+- `wbp_repo_mutation_allowed=false`
+- `wbp_repo_mutation_observed=false`
+- `gate_runs_live_dispatch=false`
+- `gate_reads_audit_history=false`
+- `input_file_paths_recorded=false`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `wrapper_substitution_used=false`
+- `product_ready=false`
+- `blocking_reasons=[]`
+
+If any row is missing, has the wrong dispatch mode, records raw path/backend
+details, uses fallback/local imitation/wrapper substitution, mutates WBP, or
+claims a write where only read-only audit is admitted, the matrix must fail
+closed.
+
+## GPT+API+DIP product readiness gate
+
+`codex-runner gpt-api-dip-product-ready-gate --acceptance-gate-file <packet> --json`
+is the final product-readiness owner surface for the feature-scoped Custom Codex
+GPT+API+DIP workflow. With `--proof-dir`, it may write only its own
+product-readiness packet.
+
+It must not run live dispatch, read audit history, infer from narrative, or
+claim production/distribution release readiness. It may set `product_ready=true`
+only when the input `gpt-api-dip-acceptance-gate` packet is already green,
+feature-scoped, non-overclaiming, and free of sensitive raw material.
+
+On success the packet must include:
+
+- `feature_ready=true`
+- `feature_ready_mode="gpt_api_dip_custom_codex"`
+- `gpt_api_dip_ready=true`
+- `product_ready=true`
+- `product_ready_scope="gpt_api_dip_custom_codex_feature"`
+- `product_ready_is_feature_scoped=true`
+- `production_release_ready=false`
+- `production_release_claim="not_made"`
+- `distribution_release_ready=false`
+- `signing_status="not_proven"`
+- `notarization_status="not_proven"`
+- `dmg_status="not_proven"`
+- `pkg_status="not_proven"`
+- `does_not_prove_distribution_release=true`
+- `dip_code_written=true`
+- `dip_code_verified=true`
+- `fallback_used=false`
+- `local_imitation_used=false`
+- `blocking_reasons=[]`
+
+If the acceptance packet is not green, preclaims `product_ready=true`, records
+raw sensitive material, lacks Custom Codex UI visibility, or lacks controlled DIP
+code-write verification, the product-readiness gate must fail closed and must not
+set `product_ready=true`.
 
 ## Runtime invariant check owner surface
 
@@ -119,13 +657,169 @@ Every command response must include all required fields on both success and fail
 - `machine_error_code` must be stable enough for UI and automation branching
 - `changed_files` must be an array and may be empty
 - `next_action` must be present even when the correct action is `none`
-- `next_action` must use documented machine-readable tokens such as `none`,
-  `retry`, `user_action`, or `stop`
+- `operator_action` must use the generic operator-action vocabulary such as
+  `none`, `retry`, `user_action`, or `stop`
+- `next_action` must be a machine-readable next-step token. The core generic
+  tokens are `none`, `retry`, `user_action`, and `stop`. Command-specific
+  tokens such as `wait_for_login`, `accounts_onboard`,
+  `accounts_refresh`, `api_route_connect`, and `login_complete` are the
+  documented active examples.
+- For compatibility, the shared semantic validator accepts other token-shaped
+  `next_action` values as legacy values. That compatibility acceptance is not
+  new command authority: command owners must document any new command-specific
+  token with the surface that emits it.
+- `next_action` values must use token shape
+  `^[A-Za-z][A-Za-z0-9_]{0,127}$`. They must not contain prose, whitespace,
+  path fragments, slashes, shell snippets, secret material, or free-form error
+  details.
+- `next_action=operator_action` is a reserved placeholder and must not be
+  emitted as a positive command result.
+- new command surfaces should prefer the core generic `next_action` values
+  unless domain-specific machine branching is required; any new
+  command-specific token must be documented with the surface that emits it
 - commands that report runtime health must expose `liveness`, `severity`, and
   `operator_action` as separate top-level fields instead of overloading
   `status`
 - commands that carry runtime attestation must expose an `attestation` object
   containing the required attestation fields from `RUNTIME_CONTRACT.md`
+
+## Effect field
+
+Command packets may include additive field `effect`.
+
+Allowed values:
+
+- `read`
+- `probe`
+- `mutate`
+- `repair`
+
+The field describes the command path effect class, not command success,
+liveness, severity, readiness, or attestation quality.
+
+Current `read` surfaces:
+
+- `invariant-check --json`
+- `status --json`
+- `mode get --json`
+- `rollback --latest --dry-run --json`
+- `accounts list --json`
+- `external-models credentials status --provider <provider> --json`
+
+When `effect=read`, `changed_files` must be `[]` and the command must not write
+runtime truth state.
+
+`sync --json` is a `mutate` surface. It may refresh runtime truth state, managed
+config, runtime effective-mode artifacts, selected-backend snapshots, and
+managed pid files. Any real mutation must be reported through `changed_files`;
+lock/preflight failures that do not mutate still keep `effect=mutate` because
+the command path is mutation-capable.
+
+Account owner surfaces use the same command-path effect rule:
+
+- `accounts validate <id> --json` is `probe`
+- `accounts onboard --json` is `mutate`
+- `accounts login start --provider <provider> ... --json` is `mutate`
+- `accounts login status --session <id> --json` is `read`
+- `accounts login complete --session <id> ... --json` is `mutate`
+- `accounts login cancel --session <id> --json` is `mutate`
+- `accounts promote|demote|hold|release|retire <id> --json` are `mutate`
+
+`accounts login status --session <id> --json` must not persist session refresh
+observations or terminate session processes. It may report device handoff,
+stale-process, expiry, and auth-materialization observations from owner-managed
+session/log/auth surfaces, but persisted session mutation belongs to the
+`start`, `complete`, and `cancel` owner surfaces.
+
+`status --json` is a read-only snapshot surface. It may summarize persisted
+state, registry, config, and cached contract surfaces, but it must not delegate
+to live healthcheck, recovery, launcher, or owner-path mutation. Its
+`changed_files` value must be `[]`.
+
+`healthcheck --json` must not be labeled `read` merely because it is
+observational. It is a `probe` surface: it may run live attestation but must not
+write runtime truth state, clean stale pid files, run fallback reconciliation,
+launch recovery, adopt current proxy, refresh last-known-good proxy, or report
+repair writes. Its `changed_files` value must be `[]`.
+
+`healthcheck --repair --json` is the explicit `repair` surface for bounded
+healthcheck owner-path recovery, fallback reconciliation, current-proxy
+adoption, last-known-good refresh, and stale pid cleanup. Any real mutation must
+be reported through `changed_files`.
+
+For Phase 1 mutation-ledger evidence, `healthcheck --repair --json` also emits
+packet-only additive fields:
+
+- `mutation_id`
+- `mutation_ledger`
+
+`changed_files` remains the compatibility field and stays `list[str]`.
+`mutation_ledger.changed_files` is the structured evidence surface with one
+record per top-level changed path. Regular files expose before/after SHA-256
+where available. Directories, missing paths, and other path kinds must not fake
+file hashes.
+
+Phase 1 does not add a persisted mutation store or rollback API. Rollback fields
+must remain non-actionable:
+
+- `rollback_available=false`
+- `rollback_id=null`
+- `rollback_phase=ledger_only`
+
+Phase 2 may expose rollback readiness for a narrow command-owned P0 transaction
+only when the command packet, mutation ledger, and transaction metadata all
+refer to the same mutation:
+
+- `mutation_id` equals transaction metadata `mutation_id`
+- `mutation_ledger.rollback_available=true`
+- `mutation_ledger.rollback_id` equals transaction metadata `rollback_id`
+- `mutation_ledger.rollback_phase=last_transaction`
+- `mutation_ledger.transaction_id` names the committed transaction metadata
+
+For Phase 2 healthcheck repair wiring, this currently applies only to the
+`healthcheck_last_known_good_proxy_refresh` scope. The compatibility
+`changed_files` field remains a `list[str]` of top-level owner truth-state
+changes. Transaction-store writes are accounted separately through
+`mutation_ledger.transaction_store_artifacts`; they must not be hidden, but they
+also must not be treated as owner truth-state changes.
+
+If a repair packet includes any changed top-level path that is not covered by
+the rollback-eligible transaction metadata, rollback fields must stay
+non-actionable (`rollback_available=false`, `rollback_id=null`,
+`rollback_phase=ledger_only`) and `mutation_ledger.transaction_id` must be
+absent.
+
+`rollback --latest --dry-run --json` is a read-only transaction preflight
+surface. It must emit `effect=read`, `changed_files=[]`, and must not call the
+mutating rollback helper. It may expose:
+
+- `rollback_available`
+- `rollback_id`
+- `transaction_id`
+- `mutation_id`
+- `rollback_status`
+- `rollback_blocked_reasons`
+- `would_change_files`
+- `rollback_files`
+
+`rollback --latest --apply --json` is the only rollback apply surface admitted
+in this phase. It is an explicit `repair` command and must select only the
+latest rollback-eligible committed transaction. It must not accept
+`--mutation-id`, arbitrary transaction ids, or history selection. Apply must run
+the same transaction-layer preflight before writes, and a green packet requires
+both:
+
+- `state_transaction.rollback_latest_state_transaction(...)` completed
+- post-rollback filesystem verification proves each target returned to
+  `sha256_before`, or is absent when the transaction created it
+
+If preflight is blocked, no transaction is eligible, the target has drifted, a
+backup is missing, the transaction store is dirty, or the rollback is repeated
+after success, the command must emit an error packet with `changed_files=[]`.
+If post-rollback verification fails after writes occurred, the command must
+still emit an error packet, but `changed_files` must report the actual files
+changed by the attempted apply and `post_rollback_verification` must carry the
+failed evidence. Phase 2 does not add `rollback --mutation-id <id> --json`.
 
 ## Severity classes
 
@@ -160,17 +854,40 @@ It must emit:
 - one launchable desktop artifact path
 - a checksum manifest for the artifact
 - metadata with the selected runtime executable and runtime-capability probe
+- runtime dependency truth:
+  `runtime_dependency_strategy=external_selected_runtime`,
+  `standalone_runtime_embedded=false`, and
+  `cross_machine_portability_claim=not_made`
 - integrity binding for both the artifact and the companion metadata used for
   launchability claims
+- an installer-stage admission packet for the bounded `.app` bundle strategy,
+  with production release claims explicitly absent until the release gate admits
+  signing and notarization
 - only allowlisted repo source/docs material plus the minimal launcher/bundle
   scaffolding required for packaged launch
 
 The launchable package surface must not include runtime/private data such as
 auth files, runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
 
+The launchable package installer-stage admission is not a production release
+claim. Until a separate release gate admits signing and notarization, it must
+remain bounded to:
+
+- `strategy=app_bundle_only`
+- `production_release_claim=not_made`
+- `production_release_status=deferred_by_release_gate`
+- `signing_status=not_signed`
+- `notarization_status=not_notarized`
+- `dmg_status=not_built`
+- `pkg_status=not_built`
+
 `package launchable verify --manifest <path> --json` is the owner surface for
 artifact existence + checksum verification + launchable bundle boundary +
 metadata-integrity verification from the manifest.
+
+Launcher smoke from a copied `.app` may prove relocated local startup only. It
+must not be treated as private-data boundary verification, standalone runtime
+proof, cross-machine portability proof, or production release proof.
 
 ## Additional onboarding owner surface
 
@@ -586,7 +1303,7 @@ Canonical launch-client outcomes include:
 `launch client --json` remains separate from:
 
 - runtime health ownership in `healthcheck --json`
-- delegated runtime readout in `status --json`
+- read-only runtime snapshot readout in `status --json`
 - runtime smoke activation truth in `launch smoke --json`
 
 ## Additional staged pool-policy owner surface
@@ -1159,6 +1876,22 @@ remain separate from:
 `accounts promote <id> --json` is the owner surface for single-account
 promotion truth.
 
+Promotion packets must emit `effect="mutate"` and packet-only additive field
+`mutation_id`.
+
+`mutation_id` must be `null` when promotion exits with `changed_files=[]`,
+including precondition failure and validation failure.
+When promotion leaves bounded owner truth-state changes in `changed_files`,
+`mutation_id` must be a stable planned mutation id for the promotion command,
+target backend, and declared changed files.
+Rollback-completed failures may still report rollback-touched owner truth-state
+surfaces in `changed_files`; those packets must also carry a stable
+`mutation_id`.
+
+This phase does not add a promotion `mutation_ledger`, rollback API, or
+rollback-available claim. Promotion rollback evidence remains expressed through
+`promotion_result` and truthful `changed_files`.
+
 Promotion success must not be inferred from external promote subprocess exit
 code alone.
 Successful owner packets must prove, machine-readably:
@@ -1335,6 +2068,27 @@ Canonical release outcomes include:
 Protective hold remains separate from promotion.
 Release remains separate from promotion and must not return a backend directly
 to `active`.
+
+`accounts hold <id> --dry-run --json` is the first account lifecycle dry-run
+contract surface. It is a `mutate` command-class packet, but must not write
+truth files, invoke the external accounts command, enter lifecycle locks, run
+sync, run status proof, run healthcheck, or attempt repair/recovery.
+
+Dry-run packets must include:
+
+- `effect="mutate"`
+- `dry_run=true`
+- `mutation_id=null`
+- `would_change`
+- `precondition_status=eligible|blocked`
+- `blocked_by`
+- `changed_files=[]`
+
+`would_change` reports the planned bounded write surface only. It must not be
+treated as evidence that a write occurred. A blocked dry-run must remain
+non-mutating and report the blocker machine-readably. Blocked hold dry-run
+packets use `machine_error_code=HOLD_DRY_RUN_BLOCKED` with `blocked_by`
+carrying the canonical precondition token.
 
 ## Additional retire owner surface
 
@@ -1554,9 +2308,9 @@ Field meaning rules:
 - `stable-runtime-config.generated.yaml` is a generated control artifact, not a
   truth surface
 - deterministic stable recovery entry is owned by the live attestation and
-  fallback-reconciliation path exposed through `healthcheck --json`
-- `status --json` may delegate to that owner path and must report its outcome
-  honestly; it must not pretend to be a separate recovery owner
+  fallback-reconciliation path exposed through `healthcheck --repair --json`
+- `status --json` must not delegate to that owner path; it may report only a
+  read-only snapshot and must mark live attestation as not run by status
 - silent fallback from approved target to observed source is forbidden
 - when desired source is the approved repair target, `launch smoke --json` may:
   - materialize `stable-runtime-config.generated.yaml`
@@ -1568,18 +2322,19 @@ Field meaning rules:
   `observed_source_selected`
 - approved-target activation success and observed-source fallback must remain
   separately distinguishable in machine-readable output
-- deterministic stable recovery in the owner path now reuses the same generated
+- deterministic stable recovery in the repair owner path now reuses the same generated
   config path, `WBP_STABLE_CONFIG` handoff, and snapshot topic through
-  `healthcheck --json`
+  `healthcheck --repair --json`
 - deterministic stable recovery in the owner path must regenerate generated
   config per approved-target attempt and must not treat a stale generated
   config artifact as authoritative truth
-- `healthcheck --json` may expose top-level
+- `healthcheck --repair --json` may expose top-level
   `deterministic_stable_recovery_contract`
-- `healthcheck --json` may expose top-level
+- `healthcheck --repair --json` may expose top-level
   `deterministic_stable_recovery_result`
-- `status --json` may expose nested
-  `stable_runtime_consumer.deterministic_stable_recovery_result`
+- `status --json` must not expose a fresh nested
+  `stable_runtime_consumer.deterministic_stable_recovery_result` unless it was
+  already present as persisted/cached snapshot evidence
 - owner-path packets now emit `deterministic_stable_recovery_result.entry_lane`
 - top-level `STABLE_SERVICE_DISABLED` may be emitted only when:
   - the same packet proves `entry_lane = stable_service_disabled`
@@ -1609,6 +2364,15 @@ Field meaning rules:
   evaluated or attempted current-proxy adoption
 - `proxy_reprobe_adoption_result` must remain nested owner-path truth rather
   than a top-level current-proxy truth surface
+- packets with `PROXY_PATH_BROKEN` or `PROXY_REPROBE_FAILED` may expose
+  `proxy_path_recovery_hint` as a command-packet-only summary for app-visible
+  blocked/action truth
+- `proxy_path_recovery_hint` must not start repair, claim recovery, persist new
+  metadata, or replace `proxy_reprobe`, `last_known_good_proxy`, or
+  `proxy_reprobe_adoption_result` evidence
+- materialized `last_known_good_proxy` may inform `proxy_path_recovery_hint`, but
+  must not by itself change top-level `machine_error_code` or make
+  `healthcheck --repair --json` an immediately allowed repair surface
 - that contract may expose an external launcher-path surface for
   `WBP_LAUNCHER_SCRIPT`, but launcher-path presence alone must not be treated as
   proof of current-proxy consumer capability
@@ -1635,13 +2399,15 @@ Field meaning rules:
   env keys for the managed runtime child process only
 - any such derived proxy env keys remain engine-local routing inputs, not
   control-plane truth surfaces
-- owner-path healthcheck writes may materialize or refresh
+- owner-path `healthcheck --repair --json` writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
-- `status --json` may expose the same `current_proxy_adoption_contract` only as
-  delegated reporting
-- `status --json` may expose the same nested `proxy_reprobe_adoption_result`
-  only as delegated reporting
+- `status --json` may expose static owner-path contracts as read-only snapshot
+  data, but it must not report delegated current-proxy adoption results as if
+  it had run healthcheck
+- `status --json` must not expose a fresh nested
+  `proxy_reprobe_adoption_result`; any such field must come only from already
+  persisted/cached snapshot evidence
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
 - current bounded candidate discovery remains
@@ -1651,10 +2417,10 @@ Field meaning rules:
   runtime reproof through `healthcheck.attestation`
 - no separate control-layer deep-probing surface is active by default; deeper
   runtime validation remains delegated to the live reproof surface above
-- `status --json` may expose the same `last_known_good_proxy` readout only as
-  delegated reporting
-- delegated `status --json` must propagate those owner-path writes honestly in
-  `changed_files`
+- `status --json` may expose the same `last_known_good_proxy` readout only as a
+  persisted-state snapshot
+- `status --json` must not report owner-path writes and must emit
+  `changed_files=[]`
 - `current_proxy_url` is current live outbound proxy truth and remains separate
   from nested `proxy_reprobe.working_candidate`
 - `current_proxy_url` remains separate from persisted

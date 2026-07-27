@@ -34,13 +34,13 @@ def operator_status() -> dict[str, Any]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.3-codex",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "passed"},
         "models": {
             "ok": True,
             "server_issued": True,
-            "model_ids": ["gpt-5.3-codex"],
+            "model_ids": ["gpt-5.5"],
         },
     }
 
@@ -59,7 +59,7 @@ def api_snapshot() -> dict[str, Any]:
                 "cost_class": "paid_or_free_limited",
                 "enabled": True,
                 "secret_ref": "OPENROUTER_API_KEY",
-                "secret_status_label": "missing",
+                "secret_status_label": "present",
             }
         ],
     }

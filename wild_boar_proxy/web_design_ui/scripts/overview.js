@@ -85,6 +85,11 @@ const ACTION_STATUS_VISUAL_CLASS = {
 };
 
 const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
+const QUICK_START_SESSION_DUAL_LANE_LABEL = "Проверить GPT+API";
+const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_SESSION_DUAL_LANE_LABEL;
+let quickStartMixedModeProductBlocked = false;
+let quickStartRouteProofResultLockedUntil = 0;
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -94,8 +99,14 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id", "session_id"];
+const CODEX_ROUTE_SELECTION_STORAGE_KEY = "wbp.codex.route-selection.v2";
+const QUICK_START_DEFAULT_EXECUTION_MODE = "chatgpt_plus_api";
+const QUICK_START_PREFERRED_CHATGPT_MODEL_ID = "gpt-5.5";
+const QUICK_START_LEGACY_CHATGPT_DEFAULT_MODEL_IDS = new Set(["gpt-5.3-codex"]);
+const QUICK_START_PREFERRED_API_MODEL_ID = "wbp-deepseek-chat";
+const QUICK_START_PREFERRED_API_REASONING_OPTION_ID = "provider_declared_disabled";
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
-const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
+const UI_READONLY_LANE_FORWARD_PLAN_CLAIM = "NO_ACTIVE_REPO_FORWARD_PLAN";
 const UI_READONLY_LANE_BLOCKERS = [
   ["LOCK_HELD", "Повторный selector owner path не admitted до локализации lock contention."],
   ["claim_gate_blocked", "Runtime truth снова показывает blocked claim gate."],
@@ -458,6 +469,8 @@ const CONSERVATIVE_CONFIRMATION_POLICY = {
 let actionMetadata = {};
 let actionPhase = "live_readonly";
 let sandboxActionPreflight = null;
+let actionMetadataLoaded = false;
+let actionMetadataLoadPromise = null;
 let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
@@ -465,6 +478,7 @@ let currentApiConnectionsSnapshot = null;
 let lastOnboardingActionPayload = null;
 let lastApiCredentialActionPayload = null;
 let lastApiCredentialActionRefreshState = "none";
+let refreshButtonFeedbackTimer = null;
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
@@ -476,6 +490,8 @@ let activeOnboardLoginSession = null;
 let onboardLoginWindowRef = null;
 let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
+let sourceTransitionEpoch = 0;
+let sourceTransitionAbortController = null;
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
 let reviewPanelBusy = false;
@@ -483,6 +499,9 @@ let reviewSurfacePacket = null;
 let reviewCommandsPacket = null;
 let reviewLastCommandPacket = null;
 let codexLaunchDryRunInFlight = false;
+const QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS = 30000;
+const CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS = 120000;
+let quickStartManualCheckSnapshot = null;
 let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
 let codexCustomSessionActionInFlight = false;
@@ -495,6 +514,57 @@ let snapshotCommandLedgerState = {
   source: "none",
   entries: [],
   hasWarnings: false
+};
+const CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND = "server_agent_bindings_packet";
+const CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS = Object.freeze({
+  primary_model_slot: "Codex",
+  coding_agent_model_slot: "DIP",
+  agent_1_display: "1",
+  agent_2_display: "2"
+});
+const CODEX_CUSTOM_AGENT_ALIAS_SLOTS = Object.freeze([
+  {
+    slot_id: "primary_model_slot",
+    input_id: "quickStartPrimaryAgentAliasInput",
+    default_label: "Codex",
+    runtime_lane: "chatgpt",
+    display_only: false
+  },
+  {
+    slot_id: "coding_agent_model_slot",
+    input_id: "quickStartCodingAgentAliasInput",
+    default_label: "DIP",
+    runtime_lane: "deepseek_api",
+    display_only: false
+  },
+  {
+    slot_id: "agent_1_display",
+    input_id: "quickStartAgentOneAliasInput",
+    default_label: "1",
+    runtime_lane: "chatgpt",
+    display_only: false
+  },
+  {
+    slot_id: "agent_2_display",
+    input_id: "quickStartAgentTwoAliasInput",
+    default_label: "2",
+    runtime_lane: "deepseek_api",
+    display_only: false
+  }
+]);
+let codexCustomAgentAliases = { ...CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS };
+let codexCustomAgentAliasBindingPacket = null;
+let codexCustomAgentAliasBindingSessionId = "";
+let codexCustomAgentRuntimeBindingPacket = null;
+let quickStartVoiceDraftState = {
+  serverPacket: null,
+  transcript: "",
+  recognition: null,
+  listening: false,
+  lastErrorCode: "",
+  pasteBridgePacket: null,
+  pastePreflightOk: false,
+  pasteInFlight: false
 };
 
 function text(id, value) {
@@ -545,7 +615,15 @@ function stateFromLocation() {
 
 function sourceFromLocation() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("source") === "live" ? "live" : "fixture";
+  const source = params.get("source");
+  if (source === "live") {
+    return "live";
+  }
+  if (source === "fixture") {
+    return "fixture";
+  }
+  const desktop = document.querySelector(".desktop");
+  return desktop?.dataset?.source === "live" ? "live" : "fixture";
 }
 
 function screenFromLocation() {
@@ -568,9 +646,9 @@ function currentSettingsSection() {
   return document.querySelector(".desktop").dataset.settingsSection || "hub";
 }
 
-async function loadFixture(stateId) {
+async function loadFixture(stateId, signal = null) {
   try {
-    const response = await fetch(`fixtures/${stateId}.json`, { cache: "no-store" });
+    const response = await fetch(`fixtures/${stateId}.json`, { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`fixture http ${response.status}`);
     }
@@ -584,9 +662,9 @@ async function loadFixture(stateId) {
   }
 }
 
-async function loadLiveReadonly() {
+async function loadLiveReadonly(signal = null) {
   try {
-    const response = await fetch("api/live-readonly", { cache: "no-store" });
+    const response = await fetch("api/live-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`live http ${response.status}`);
     }
@@ -620,9 +698,9 @@ async function loadLiveReadonly() {
   }
 }
 
-async function loadAccountsReadonly() {
+async function loadAccountsReadonly(signal = null) {
   try {
-    const response = await fetch("api/accounts-readonly", { cache: "no-store" });
+    const response = await fetch("api/accounts-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`accounts http ${response.status}`);
     }
@@ -663,9 +741,9 @@ async function loadAccountsReadonly() {
   }
 }
 
-async function loadApiConnectionsReadonly() {
+async function loadApiConnectionsReadonly(signal = null) {
   try {
-    const response = await fetch("api/api-connections-readonly", { cache: "no-store" });
+    const response = await fetch("api/api-connections-readonly", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`api-connections http ${response.status}`);
     }
@@ -707,9 +785,9 @@ async function loadApiConnectionsReadonly() {
   }
 }
 
-async function loadActionMetadata() {
+async function loadActionMetadata(signal = null) {
   try {
-    const response = await fetch("api/actions", { cache: "no-store" });
+    const response = await fetch("api/actions", { cache: "no-store", signal });
     if (!response.ok) {
       throw new Error(`metadata http ${response.status}`);
     }
@@ -721,19 +799,33 @@ async function loadActionMetadata() {
     actionMetadata = {};
     actionPhase = "live_readonly";
     sandboxActionPreflight = null;
+  } finally {
+    actionMetadataLoaded = true;
   }
 }
 
-async function fetchOperatorJson(path) {
-  const response = await fetch(path, { cache: "no-store" });
+async function ensureActionMetadataLoaded() {
+  if (actionMetadataLoaded) {
+    return;
+  }
+  if (!actionMetadataLoadPromise) {
+    actionMetadataLoadPromise = loadActionMetadata().finally(() => {
+      actionMetadataLoadPromise = null;
+    });
+  }
+  await actionMetadataLoadPromise;
+}
+
+async function fetchOperatorJson(path, signal = sourceTransitionAbortController?.signal) {
+  const response = await fetch(path, { cache: "no-store", signal });
   if (!response.ok) {
     throw new Error(`${path} http ${response.status}`);
   }
   return response.json();
 }
 
-async function fetchCodexLaunchJson(path) {
-  const response = await fetch(path, { cache: "no-store" });
+async function fetchCodexLaunchJson(path, signal = sourceTransitionAbortController?.signal) {
+  const response = await fetch(path, { cache: "no-store", signal });
   if (!response.ok) {
     throw new Error(`${path} http ${response.status}`);
   }
@@ -748,11 +840,332 @@ async function fetchReviewJson(path) {
   return response.json();
 }
 
+function webBootstrapValue(name) {
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") {
+    return "";
+  }
+  const node = document.querySelector(`meta[name="${name}"]`);
+  if (!node || typeof node.getAttribute !== "function") {
+    return "";
+  }
+  return String(node.getAttribute("content") || "");
+}
+
+function webPostHeaders(extraHeaders = {}) {
+  return {
+    ...extraHeaders,
+    Authorization: `Bearer ${webBootstrapValue("wbp-web-token")}`,
+    "X-WBP-CSRF": webBootstrapValue("wbp-csrf-token")
+  };
+}
+
 function operatorSetText(id, value) {
   const node = document.getElementById(id);
   if (node) {
     node.textContent = String(value ?? "-");
   }
+}
+
+function normalizeCodexCustomAgentAliasLabel(value, fallback) {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 24);
+  return normalized || fallback;
+}
+
+function normalizedCodexCustomAgentAliases(value = {}) {
+  const aliases = {};
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    aliases[slot.slot_id] = normalizeCodexCustomAgentAliasLabel(
+      value[slot.slot_id],
+      slot.default_label
+    );
+  }
+  return aliases;
+}
+
+function codexCustomAgentAliasServerPayload(aliases = codexCustomAgentAliases) {
+  const normalized = normalizedCodexCustomAgentAliases(aliases);
+  return {
+    primary_alias: normalized.primary_model_slot,
+    coding_alias: normalized.coding_agent_model_slot,
+    agent_1_alias: normalized.agent_1_display,
+    agent_2_alias: normalized.agent_2_display
+  };
+}
+
+function uniqueCodexCustomAgentAliases(values = []) {
+  const aliases = [];
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = normalizeCodexCustomAgentAliasLabel(value, "");
+    const key = normalized.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!normalized || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    aliases.push(normalized);
+  }
+  return aliases;
+}
+
+function codexCustomAgentBindingsPayload(
+  aliases = codexCustomAgentAliases,
+  selection = codexRouteSelectionFromUi(true)
+) {
+  const normalized = normalizedCodexCustomAgentAliases(aliases);
+  const chatModel = selection?.chatgpt_model_id || QUICK_START_PREFERRED_CHATGPT_MODEL_ID;
+  const apiRoute = selection?.api_model_id || QUICK_START_PREFERRED_API_MODEL_ID;
+  return {
+    agent_bindings: [
+      {
+        agent_id: "codex",
+        display_name: normalized.primary_model_slot,
+        role: "orchestrator",
+        aliases: uniqueCodexCustomAgentAliases([
+          normalized.primary_model_slot,
+          normalized.agent_1_display,
+          "Codex",
+          "Agent 1",
+          "1"
+        ]),
+        lane: "primary_chatgpt",
+        model_id: chatModel,
+        enabled: true,
+        allowed_actions: ["plan", "inspect", "patch", "verify"]
+      },
+      {
+        agent_id: "dip",
+        display_name: normalized.coding_agent_model_slot,
+        role: "coding_agent",
+        aliases: uniqueCodexCustomAgentAliases([
+          normalized.coding_agent_model_slot,
+          normalized.agent_2_display,
+          "DIP",
+          "Agent 2",
+          "2"
+        ]),
+        lane: "api_route",
+        route_id: apiRoute,
+        enabled: true,
+        allowed_actions: ["code_review", "implementation_help", "format_check"]
+      }
+    ]
+  };
+}
+
+function agentBindingsPacketForAliasMetadata(packet) {
+  if (!packet) {
+    return null;
+  }
+  const ok = (
+    packet.status === "ok" &&
+    packet.machine_error_code === "OK" &&
+    packet.alias_runtime_context_refreshed === true &&
+    packet.alias_runtime_binding_proven === true
+  );
+  return {
+    ...packet,
+    packet_kind: "codex_custom_agent_alias_runtime_binding",
+    alias_scope: "server_agent_bindings",
+    alias_runtime_binding_present: ok,
+    alias_runtime_binding_proven: ok,
+    semantic_alias_routing_enabled: ok,
+    native_free_text_alias_routing_proven: false,
+    does_not_prove_native_free_text_tool_bridge: true,
+    alias_to_slot_map: codexCustomAgentAliasRoleMap()
+  };
+}
+
+async function saveCodexCustomAgentBindingsToRuntime(source = "operator_saved") {
+  const response = await fetch("/api/codex/custom/agent-bindings", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(codexCustomAgentBindingsPayload())
+  });
+  if (!response.ok) {
+    throw new Error(`agent bindings http ${response.status}`);
+  }
+  codexCustomAgentRuntimeBindingPacket = agentBindingsPacketForAliasMetadata(await response.json());
+  renderCodexCustomAgentAliases(source);
+  return codexCustomAgentRuntimeBindingPacket;
+}
+
+function codexCustomAgentAliasRoleMap(aliases = codexCustomAgentAliases) {
+  return CODEX_CUSTOM_AGENT_ALIAS_SLOTS.map((slot) => ({
+    slot_id: slot.slot_id,
+    label: normalizeCodexCustomAgentAliasLabel(aliases[slot.slot_id], slot.default_label),
+    runtime_lane: slot.runtime_lane,
+    display_only: slot.display_only === true
+  }));
+}
+
+function codexCustomAgentAliasMetadataPacket(
+  source = "render",
+  serverPacket = codexCustomAgentRuntimeBindingPacket || codexCustomAgentAliasBindingPacket
+) {
+  const roleMap = Array.isArray(serverPacket?.alias_to_slot_map)
+    ? serverPacket.alias_to_slot_map
+    : codexCustomAgentAliasRoleMap();
+  return {
+    status: serverPacket?.status || "pending",
+    packet_kind: "codex_custom_agent_aliases",
+    source,
+    alias_scope: serverPacket?.alias_scope || "server_runtime_binding_pending",
+    config_kind: CODEX_CUSTOM_AGENT_ALIAS_CONFIG_KIND,
+    persisted_in_browser_storage: false,
+    alias_runtime_binding_present: serverPacket?.alias_runtime_binding_present === true,
+    alias_runtime_binding_proven: serverPacket?.alias_runtime_binding_proven === true,
+    semantic_alias_routing_enabled: serverPacket?.semantic_alias_routing_enabled === true,
+    runtime_dispatch_changed: false,
+    session_manager_changed: true,
+    provider_selection_changed: false,
+    command_surface_changed: true,
+    browser_label_intake: true,
+    browser_can_supply_alias_authority: false,
+    browser_can_supply_slot_authority: false,
+    browser_can_supply_route_authority: false,
+    browser_backend_intake: false,
+    browser_secret_intake: false,
+    native_free_text_alias_routing_proven:
+      serverPacket?.native_free_text_alias_routing_proven === true,
+    does_not_prove_native_free_text_tool_bridge:
+      serverPacket?.does_not_prove_native_free_text_tool_bridge !== false,
+    changed_files: [],
+    role_map: roleMap
+  };
+}
+
+function renderCodexCustomAgentAliases(source = "render") {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    const node = document.getElementById(slot.input_id);
+    if (node) {
+      node.value = codexCustomAgentAliases[slot.slot_id];
+    }
+  }
+  const primary = codexCustomAgentAliases.primary_model_slot;
+  const coding = codexCustomAgentAliases.coding_agent_model_slot;
+  const agentOne = codexCustomAgentAliases.agent_1_display;
+  const agentTwo = codexCustomAgentAliases.agent_2_display;
+  operatorSetText("quickStartAgentAliasPreview", `${primary}/ChatGPT · ${coding}/DeepSeek · ${agentOne}/${agentTwo} labels`);
+  const packet = codexCustomAgentAliasMetadataPacket(source);
+  const packetNode = document.getElementById("quickStartAgentAliasPacket");
+  if (packetNode) {
+    packetNode.textContent = `alias binding · ${packet.alias_scope} · proven: ${packet.alias_runtime_binding_proven} · roles: ${packet.role_map.length}`;
+    packetNode.dataset.aliasScope = packet.alias_scope;
+    packetNode.dataset.runtimeDispatchChanged = String(packet.runtime_dispatch_changed);
+    packetNode.dataset.semanticAliasRoutingEnabled = String(packet.semantic_alias_routing_enabled);
+    packetNode.dataset.aliasRuntimeBindingProven = String(packet.alias_runtime_binding_proven);
+    packetNode.dataset.roleMapCount = String(packet.role_map.length);
+  }
+  const scope = document.getElementById("quickStartAgentAliasScope");
+  if (scope?.lastElementChild) {
+    scope.lastElementChild.textContent = packet.alias_runtime_binding_proven ? "server binding" : "binding pending";
+  }
+}
+
+function collectCodexCustomAgentAliasesFromInputs() {
+  const aliases = {};
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    const node = document.getElementById(slot.input_id);
+    aliases[slot.slot_id] = normalizeCodexCustomAgentAliasLabel(
+      node ? node.value : "",
+      slot.default_label
+    );
+  }
+  return normalizedCodexCustomAgentAliases(aliases);
+}
+
+async function saveCodexCustomAgentAliasesToSelectedSession(source = "operator_saved") {
+  if (!codexCustomSelectedSessionId) {
+    renderCodexCustomAgentAliases(source);
+    return null;
+  }
+  const response = await fetch(currentCodexCustomSessionUrl("agent-aliases"), {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(codexCustomAgentAliasServerPayload())
+  });
+  if (!response.ok) {
+    throw new Error(`agent aliases http ${response.status}`);
+  }
+  codexCustomAgentAliasBindingPacket = await response.json();
+  codexCustomAgentAliasBindingSessionId = codexCustomSelectedSessionId;
+  renderCodexCustomSessionPacket(codexCustomAgentAliasBindingPacket);
+  renderCodexCustomAgentAliases(source);
+  return codexCustomAgentAliasBindingPacket;
+}
+
+async function saveCodexCustomAgentAliasesFromUi() {
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("operator_saved");
+  let runtimePacket = null;
+  try {
+    runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_saved");
+  } catch (error) {
+    codexCustomAgentRuntimeBindingPacket = {
+      status: "failed",
+      alias_scope: "server_runtime_binding_failed",
+      alias_runtime_binding_present: false,
+      alias_runtime_binding_proven: false,
+      semantic_alias_routing_enabled: false,
+      alias_to_slot_map: codexCustomAgentAliasRoleMap(),
+      machine_error_code: "AGENT_ALIAS_BINDING_FETCH_FAILED",
+      human_message: error.message,
+      does_not_prove_native_free_text_tool_bridge: true
+    };
+    renderCodexCustomAgentAliases("operator_save_failed");
+    return;
+  }
+  if (runtimePacket?.alias_runtime_binding_proven !== true) {
+    return;
+  }
+  try {
+    await saveCodexCustomAgentAliasesToSelectedSession("operator_saved");
+  } catch (error) {
+    codexCustomAgentAliasBindingPacket = {
+      status: "failed",
+      alias_scope: "session_alias_binding_failed",
+      alias_runtime_binding_present: false,
+      alias_runtime_binding_proven: false,
+      machine_error_code: "SESSION_AGENT_ALIAS_BINDING_FETCH_FAILED",
+      human_message: error.message
+    };
+    renderCodexCustomAgentAliases("operator_saved_runtime_only");
+  }
+}
+
+async function resetCodexCustomAgentAliasesFromUi() {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  codexCustomAgentRuntimeBindingPacket = null;
+  codexCustomAgentAliasBindingPacket = null;
+  codexCustomAgentAliasBindingSessionId = "";
+  renderCodexCustomAgentAliases("operator_reset");
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("operator_reset");
+    if (runtimePacket?.alias_runtime_binding_proven === true) {
+      await saveCodexCustomAgentAliasesToSelectedSession("operator_reset");
+    }
+  } catch (error) {
+    renderCodexCustomAgentAliases("operator_reset_unbound");
+  }
+}
+
+function setupCodexCustomAgentAliases() {
+  codexCustomAgentAliases = normalizedCodexCustomAgentAliases(CODEX_CUSTOM_AGENT_ALIAS_DEFAULTS);
+  renderCodexCustomAgentAliases("bootstrap");
+  for (const slot of CODEX_CUSTOM_AGENT_ALIAS_SLOTS) {
+    document.getElementById(slot.input_id)?.addEventListener("input", () => {
+      codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+      renderCodexCustomAgentAliases("editing");
+    });
+  }
+  document.getElementById("quickStartAgentAliasesSaveAction")?.addEventListener("click", () => saveCodexCustomAgentAliasesFromUi());
+  document.getElementById("quickStartAgentAliasesResetAction")?.addEventListener("click", () => resetCodexCustomAgentAliasesFromUi());
 }
 
 function codexLaunchSetText(id, value) {
@@ -799,14 +1212,21 @@ function renderCodexLaunchModes(launchModes, originalStatus, customStatus) {
 }
 
 async function refreshCodexLaunchModesPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [launchModes, originalStatus, customStatus] = await Promise.all([
       fetchCodexLaunchJson("api/codex/launch-modes"),
       fetchCodexLaunchJson("api/codex/original/status"),
       fetchCodexLaunchJson("api/codex/custom/status")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexLaunchModes(launchModes, originalStatus, customStatus);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexLaunchSetChip("red", "failed");
     codexLaunchSetText("codexLaunchModesSummary", `Launch modes fetch failed: ${error.message}`);
   }
@@ -896,6 +1316,11 @@ function renderCodexCustomLaunchDryRun(packet) {
 function renderCodexCustomLaunch(packet) {
   const response = document.getElementById("codexLaunchDryRunResponse");
   const claimScope = String(packet?.launch_claim_scope || "");
+  const selectionPacket = packet?.selection_packet || {};
+  const launchExecutionMode = packet?.execution_mode || selectionPacket?.execution_mode || "";
+  const launchChatgptModelId = packet?.chatgpt_model_id || selectionPacket?.chatgpt_model_id || "";
+  const launchApiModelId = packet?.api_model_id || selectionPacket?.api_model_id || "";
+  const launchRouteModelId = packet?.route_model_id || "";
   const normalizedClaimScope = claimScope.toLowerCase();
   const workbenchOnly = packet?.session_created === true
     || packet?.workbench_ready === true
@@ -914,10 +1339,51 @@ function renderCodexCustomLaunch(packet) {
     && packet?.process_started === true
     && packet?.expected_custom_identity_observed === true
     && packet?.native_window_observed === true
+    && packet?.native_app_usable === true
     && packet?.real_codex_app_launched === true
     && claimScope !== ""
     && !normalizedClaimScope.includes("dispatch")
     && !normalizedClaimScope.includes("workbench");
+  const limitedWindowLaunch = (packet?.status === "blocked" || packet?.status === "ok")
+    && packet?.process_started === true
+    && packet?.running_status === true
+    && packet?.native_window_observed === true
+    && packet?.native_app_usable !== true;
+  const nativeUsabilityBlocked = packet?.machine_error_code === "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+    || Boolean(packet?.native_app_usability_blocked_reason_class)
+    || Boolean(packet?.renderer_surface_blocked_reason_class);
+  const launchPacketTruth = packet?.launch_packet_is_truth_source === true;
+  const reusedExistingWindow = packet?.status === "ok"
+    && launchPacketTruth
+    && packet?.reused_existing_window === true
+    && packet?.launch_origin === "existing_window"
+    && packet?.existing_window_reuse_admissible === true
+    && packet?.selection_matches_last_launch === true
+    && packet?.show_window_attempted === true
+    && packet?.native_window_observed === true
+    && packet?.native_app_usable === true
+    && packet?.new_launch_started !== true;
+  const relaunchSucceeded = nativeProofOk
+    && launchPacketTruth
+    && packet?.existing_window_relaunch_admissible === true
+    && packet?.existing_window_relaunch_attempted === true
+    && packet?.existing_window_relaunch_termination?.status === "ok"
+    && packet?.new_launch_started === true;
+  const orphanReplaceSucceeded = nativeProofOk
+    && launchPacketTruth
+    && packet?.existing_window_orphan_replace_admissible === true
+    && packet?.existing_window_orphan_replace_attempted === true
+    && packet?.existing_window_orphan_replace_termination?.status === "ok"
+    && packet?.new_launch_started === true;
+  const existingWindowBlocked = packet?.status === "blocked"
+    && (
+      packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_RELAUNCH_STOP_FAILED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_ORPHAN_EXISTING_WINDOW_REPLACE_STOP_FAILED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_CONFIG_CHANGED_EXISTING_WINDOW_NOT_REUSED"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_WITHOUT_MATCHING_LAUNCH_PACKET"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_NOT_RESPONSIVE"
+      || packet?.machine_error_code === "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN"
+    );
   codexLaunchSetChip(
     nativeProofOk
       ? "green"
@@ -930,8 +1396,24 @@ function renderCodexCustomLaunch(packet) {
       ? "native proof confirmed"
       : (
         packet?.status === "ok"
-          ? (workbenchOnly ? "workbench/session only" : "native proof pending")
-          : (packet?.status || "failed")
+          ? (
+            limitedWindowLaunch
+              ? (
+                nativeUsabilityBlocked
+                  ? "renderer blocked / input not proven"
+                  : "window visible / proof incomplete"
+              )
+              : (workbenchOnly ? "workbench/session only" : "native proof pending")
+          )
+          : (
+            limitedWindowLaunch
+              ? (
+                nativeUsabilityBlocked
+                  ? "renderer blocked / input not proven"
+                  : "window visible / proof incomplete"
+              )
+              : (packet?.status || "failed")
+          )
       )
   );
   codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${claimScope || "native_proof_required"}`);
@@ -943,9 +1425,15 @@ function renderCodexCustomLaunch(packet) {
         workbenchOnly
           ? "workbench/session only"
           : (
-            packet?.process_started === true
+            limitedWindowLaunch
+              ? (
+                nativeUsabilityBlocked
+                  ? "window visible; input surface not proven"
+                  : "window visible; native proof incomplete"
+              )
+              : (packet?.process_started === true
               ? "process only; native proof missing"
-              : (packet?.next_action || "native proof missing")
+              : (packet?.next_action || "native proof missing"))
           )
       )
   );
@@ -953,6 +1441,10 @@ function renderCodexCustomLaunch(packet) {
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      final_status: packet?.final_status || "",
+      execution_mode: launchExecutionMode,
+      chatgpt_model_id: launchChatgptModelId,
+      api_model_id: launchApiModelId,
       session_created: packet?.session_created === true,
       running_status: packet?.running_status === true,
       isolated_home: packet?.isolated_home === true,
@@ -968,10 +1460,20 @@ function renderCodexCustomLaunch(packet) {
       native_window_observed: packet?.native_window_observed === true,
       real_codex_app_launched: packet?.real_codex_app_launched === true,
       native_app_usable: packet?.native_app_usable === true,
+      input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+      native_app_usability_source: packet?.native_app_usability_source || "",
+      native_app_usability_blocked_reason_class:
+        packet?.native_app_usability_blocked_reason_class || "",
       workbench_ready: packet?.workbench_ready === true,
-      selected_source_class: packet?.selection_packet?.selected_source_class || "",
-      selected_route_digest: packet?.selection_packet?.selected_route_digest || "",
+      selected_source_class: selectionPacket?.selected_source_class || "",
+      selected_route_digest: selectionPacket?.selected_route_digest || "",
       selected_model: packet?.selected_model || "",
+      launch_model_id: packet?.launch_model_id || "",
+      route_model_id: launchRouteModelId,
+      bridge_alive: packet?.bridge_alive === true,
+      stable_custom_codex_wbp_bridge_final_status:
+        packet?.stable_custom_codex_wbp_bridge_final_status || "",
+      bridge_status: packet?.bridge_status || "",
       launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
       quick_start_stable_custom_launch_final_status:
         packet?.quick_start_stable_custom_launch_final_status || "",
@@ -1010,29 +1512,196 @@ function renderCodexCustomLaunch(packet) {
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
       api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
       source_provenance_status: packet?.selection_packet?.source_provenance_status || "",
+      stable_bridge_recovery_retry_attempted:
+        packet?.stable_bridge_recovery_retry_attempted === true,
+      stable_bridge_recovery_status: packet?.stable_bridge_recovery_status || "",
+      stable_bridge_recovery_machine_error_code:
+        packet?.stable_bridge_recovery_machine_error_code || "",
       launch_claim_scope: claimScope,
       next_action: packet?.next_action || "",
     }, null, 2);
   }
   setQuickStartChip(
     "quickStartLaunchState",
-    packet?.status === "ok" ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    packet?.status === "ok" ? "запущен" : (packet?.machine_error_code || packet?.status || "ошибка")
+    nativeProofOk || reusedExistingWindow
+      ? "green"
+      : (packet?.status === "blocked" || packet?.status === "rejected" || packet?.status === "ok" ? "amber" : "red"),
+    relaunchSucceeded
+      ? "перезапущен"
+      : (
+        orphanReplaceSucceeded
+          ? "заменён"
+          : (
+            reusedExistingWindow
+              ? "старое окно"
+              : (
+                nativeProofOk
+                  ? "запущен"
+                  : (
+                    limitedWindowLaunch
+                      ? (nativeUsabilityBlocked ? "input не доказан" : "окно открыто")
+                      : (existingWindowBlocked ? "blocked" : (packet?.machine_error_code || packet?.status || "ошибка"))
+                  )
+              )
+          )
+      )
   );
   setQuickStartChip(
     "quickStartRouteChip",
-    packet?.status === "ok" ? "green" : "amber",
-    packet?.status === "ok" ? "запуск ok" : "проверь пакет"
+    nativeProofOk || reusedExistingWindow ? "green" : "amber",
+    relaunchSucceeded
+      ? "relaunch ok"
+      : (
+        orphanReplaceSucceeded
+          ? "replace ok"
+          : (
+            reusedExistingWindow
+              ? "reuse ok"
+              : (
+                nativeProofOk
+                  ? "запуск ok"
+                  : (
+                    limitedWindowLaunch
+                      ? (nativeUsabilityBlocked ? "renderer blocked" : "proof incomplete")
+                      : (existingWindowBlocked ? "blocked" : "проверь пакет")
+                  )
+              )
+          )
+      )
+  );
+  const launchUsesApiRoute = (
+    launchExecutionMode === "api_only"
+    || launchExecutionMode === "chatgpt_plus_api"
+    || packet?.external_route_selected === true
+    || Boolean(launchApiModelId)
+  );
+  const launchBridgeAlive = (
+    packet?.bridge_alive === true
+    || packet?.stable_custom_codex_wbp_bridge_final_status
+      === "STABLE_CUSTOM_CODEX_WBP_BRIDGE_PROVEN_WITH_LIMITS"
+  );
+  const launchBridgeConfigured = packet?.wbp_endpoint_configured === true;
+  setQuickStartChip(
+    "quickStartBridgeState",
+    launchUsesApiRoute
+      ? (launchBridgeAlive ? "green" : (launchBridgeConfigured ? "neutral" : "amber"))
+      : "neutral",
+    launchUsesApiRoute
+      ? (launchBridgeAlive ? "жив" : (launchBridgeConfigured ? "configured" : "не проверен"))
+      : "не нужен"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_window_observed === true
+      ? "green"
+      : (packet?.process_started === true ? "amber" : "neutral"),
+    packet?.native_window_observed === true
+      ? "найдено"
+      : (packet?.process_started === true ? "process" : "не найдено")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.quick_start_launch_route_truth_proven_with_limits === true
+      || packet?.route_packet_matches_selection_packet === true
+      || packet?.config_status === "matches_last_launch"
+      ? "green"
+      : (packet?.status === "ok" ? "neutral" : "amber"),
+    packet?.quick_start_launch_route_truth_proven_with_limits === true
+      || packet?.route_packet_matches_selection_packet === true
+      || packet?.config_status === "matches_last_launch"
+      ? "совпадает"
+      : (packet?.status === "ok" ? "launch packet" : "blocked")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    (!packet?.next_action || packet?.next_action === "none")
+      && !limitedWindowLaunch
+      && !nativeUsabilityBlocked
+      && !existingWindowBlocked
+      && packet?.status !== "blocked"
+      && packet?.status !== "rejected"
+      ? "green"
+      : "amber",
+    (!packet?.next_action || packet?.next_action === "none")
+      && (limitedWindowLaunch || nativeUsabilityBlocked || existingWindowBlocked)
+      ? "stop_and_diagnose"
+      : quickStartNextActionLabel(packet?.next_action || "")
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
     machine_error_code: packet?.machine_error_code || "UNKNOWN",
-    selected_model: packet?.selected_model || packet?.selection_packet?.selected_model || packet?.model || "",
+    final_status: packet?.final_status || "",
+    execution_mode: launchExecutionMode,
+    chatgpt_model_id: launchChatgptModelId,
+    api_model_id: launchApiModelId,
+    selected_model: packet?.selected_model || selectionPacket?.selected_model || packet?.model || "",
+    launch_model_id: packet?.launch_model_id || "",
+    route_model_id: launchRouteModelId,
     launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
     quick_start_stable_custom_launch_final_status:
       packet?.quick_start_stable_custom_launch_final_status || "",
     profile_final_status: packet?.profile_final_status || "",
     session_storage_final_status: packet?.session_storage_final_status || "",
+    bridge_status: packet?.bridge_status || "",
+    bridge_alive: packet?.bridge_alive === true,
+    stable_custom_codex_wbp_bridge_final_status:
+      packet?.stable_custom_codex_wbp_bridge_final_status || "",
+    runtime_health_gate_blocks_launch_admission:
+      packet?.runtime_health_gate_blocks_launch_admission === true,
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
+    window_status: packet?.window_status || "",
+    config_status: packet?.config_status || "",
+    selection_matches_last_launch:
+      packet?.selection_matches_last_launch === true,
+    existing_window_reuse_admissible:
+      packet?.existing_window_reuse_admissible === true,
+    existing_window_relaunch_admissible:
+      packet?.existing_window_relaunch_admissible === true,
+    existing_window_relaunch_attempted:
+      packet?.existing_window_relaunch_attempted === true,
+    existing_window_relaunch_termination:
+      packet?.existing_window_relaunch_termination || {},
+    existing_window_orphan_replace_admissible:
+      packet?.existing_window_orphan_replace_admissible === true,
+    existing_window_orphan_replace_attempted:
+      packet?.existing_window_orphan_replace_attempted === true,
+    existing_window_orphan_replace_termination:
+      packet?.existing_window_orphan_replace_termination || {},
+    orphan_replacement_authority_scope:
+      packet?.orphan_replacement_authority_scope || "",
+    custom_process_observed:
+      packet?.custom_process_observed === true,
+    custom_process_count:
+      Number(packet?.custom_process_count || 0),
+    custom_process_observed_before_relaunch:
+      packet?.custom_process_observed_before_relaunch === true,
+    custom_process_observed_after_relaunch_stop:
+      packet?.custom_process_observed_after_relaunch_stop === true,
+    custom_process_count_after_relaunch_stop:
+      Number(packet?.custom_process_count_after_relaunch_stop || 0),
+    reused_existing_window:
+      packet?.reused_existing_window === true,
+    launch_origin:
+      packet?.launch_origin || "",
+    fresh_launch_started:
+      packet?.fresh_launch_started === true,
+    launch_blocked:
+      packet?.launch_blocked === true,
+    show_window_attempted:
+      packet?.show_window_attempted === true,
+    window_unresponsive_with_limits:
+      packet?.window_unresponsive_with_limits === true,
+    owner_authorization_phrase_present:
+      packet?.owner_authorization_phrase_present === true,
     profile_persistence_proven: packet?.profile_persistence_proven === true,
     persistent_profile_reused: packet?.persistent_profile_reused === true,
     profile_path_stable: packet?.profile_path_stable === true,
@@ -1058,11 +1727,47 @@ function renderCodexCustomLaunch(packet) {
     history_persistence_claimed: packet?.history_persistence_claimed === true,
     visible_thread_history_restored_claimed:
       packet?.visible_thread_history_restored_claimed === true,
-    api_reasoning_option_id: packet?.api_reasoning_option_id || "",
-    api_reasoning_option_packet: packet?.api_reasoning_option_packet || {},
+    api_reasoning_option_id:
+      packet?.api_reasoning_option_id || selectionPacket?.api_reasoning_option_id || "",
+    api_reasoning_option_packet:
+      packet?.api_reasoning_option_packet || selectionPacket?.api_reasoning_option_packet || {},
+    primary_model_slot: packet?.primary_model_slot || selectionPacket?.primary_model_slot || {},
+    coding_agent_model_slot:
+      packet?.coding_agent_model_slot || selectionPacket?.coding_agent_model_slot || {},
+    chatgpt_line_used_as_executor:
+      Object.prototype.hasOwnProperty.call(packet || {}, "chatgpt_line_used_as_executor")
+        ? packet?.chatgpt_line_used_as_executor === true
+        : selectionPacket?.chatgpt_line_used_as_executor === true,
+    api_line_used_as_executor:
+      Object.prototype.hasOwnProperty.call(packet || {}, "api_line_used_as_executor")
+        ? packet?.api_line_used_as_executor === true
+        : selectionPacket?.api_line_used_as_executor === true,
+    api_only_calls_chatgpt:
+      packet?.api_only_calls_chatgpt === true
+      || selectionPacket?.api_only_calls_chatgpt === true,
+    chatgpt_only_calls_api:
+      packet?.chatgpt_only_calls_api === true
+      || selectionPacket?.chatgpt_only_calls_api === true,
+    server_issued_catalog_used:
+      packet?.server_issued_catalog_used === true
+      || selectionPacket?.server_issued_catalog_used === true,
     persistent_profile_id: packet?.persistent_profile_id || "",
     temp_profile_used: packet?.temp_profile_used === true,
+    running_status: packet?.running_status === true,
+    process_started: packet?.process_started === true,
     native_window_observed: packet?.native_window_observed === true,
+    real_codex_app_launched: packet?.real_codex_app_launched === true,
+    native_app_usable: packet?.native_app_usable === true,
+    input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+    native_app_usability_source: packet?.native_app_usability_source || "",
+    native_app_usability_blocked_reason_class:
+      packet?.native_app_usability_blocked_reason_class || "",
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    provider_called: packet?.provider_called === true,
+    launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
     raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
     original_codex_touched: packet?.original_codex_touched === true,
     launch_claim_scope: packet?.launch_claim_scope || "",
@@ -1209,7 +1914,7 @@ async function runSafeAppCopyLiveAdmission() {
     const response = await fetch("api/codex/app-copy/live-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1227,10 +1932,11 @@ async function runSafeAppCopyLiveAdmission() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       bounded_live_launch_execution_ready: false,
       launch_ready_claimed: false,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
@@ -1249,7 +1955,7 @@ async function runOriginalCodexDryRun() {
     const response = await fetch("api/codex/original/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1282,7 +1988,7 @@ async function runOriginalCodexLaunch() {
     const response = await fetch("api/codex/original/launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1319,7 +2025,7 @@ async function runCodexCustomLaunchDryRun() {
     const response = await fetch("api/codex/custom/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1348,30 +2054,152 @@ async function buildCodexCustomLaunchSelectionPayload() {
   syncCodexRouteSelects("quickStartApiModelSelect");
   syncCodexRouteSelects("quickStartApiReasoningOptionSelect");
   syncCodexRouteSelects("quickStartExecutionModeSelect");
-  const modeNode = document.getElementById("codexCustomExecutionModeSelect");
-  const modelNode = document.getElementById("codexCustomModelSelect");
-  const apiModelNode = document.getElementById("codexCustomApiModelSelect");
-  const apiReasoningNode = document.getElementById("codexCustomApiReasoningOptionSelect");
-  const executionMode = modeNode ? modeNode.value : "chatgpt_only";
-  let chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
-  let apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
-  const apiReasoningOptionId = executionMode === "chatgpt_only"
-    ? ""
-    : (apiReasoningNode ? apiReasoningNode.value : "");
-  if ((executionMode === "api_only" && !apiModelId) || (executionMode !== "api_only" && !chatgptModelId)) {
+  let payload = quickStartLaunchPayloadFromSelects();
+  if (customLaunchPayloadRequiresModelRefresh(payload)) {
     await refreshCodexCustomModelsPanel();
-    chatgptModelId = executionMode === "api_only" ? "" : (modelNode ? modelNode.value : "");
-    apiModelId = executionMode === "chatgpt_only" ? "" : (apiModelNode ? apiModelNode.value : "");
+    syncCodexRouteSelects("codexCustomModelSelect");
+    syncCodexRouteSelects("codexCustomApiModelSelect");
+    syncCodexRouteSelects("codexCustomApiReasoningOptionSelect");
+    syncCodexRouteSelects("codexCustomExecutionModeSelect");
+    payload = quickStartLaunchPayloadFromSelects();
   }
+  saveCodexRouteSelection(payload);
+  return payload;
+}
+
+function renderQuickStartNativeLaunchInFlight(payload, preflightPacket) {
+  setQuickStartChip("quickStartRouteChip", "neutral", "native launch");
+  setQuickStartChip("quickStartLaunchState", "neutral", "запускаю");
+  setQuickStartChip(
+    "quickStartBridgeState",
+    preflightPacket?.bridge_required === true
+      ? (preflightPacket?.bridge_alive === true ? "green" : "amber")
+      : "neutral",
+    preflightPacket?.bridge_required === true
+      ? (preflightPacket?.bridge_alive === true ? "жив" : "упал")
+      : "не нужен"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    preflightPacket?.custom_process_observed === true ? "green" : "neutral",
+    preflightPacket?.custom_process_observed === true ? "найдено" : "ожидаю"
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    preflightPacket?.status === "ok" ? "green" : "amber",
+    preflightPacket?.status === "ok" ? "preflight ok" : "preflight blocked"
+  );
+  setQuickStartChip("quickStartNextActionState", "neutral", "ожидание");
+  setQuickStartRouteResponse({
+    status: "running",
+    machine_error_code: "CUSTOM_NATIVE_LAUNCH_IN_FLIGHT",
+    final_status: "CUSTOM_NATIVE_LAUNCH_WAITING_FOR_PACKET",
+    execution_mode: payload?.execution_mode || preflightPacket?.execution_mode || "",
+    chatgpt_model_id: payload?.chatgpt_model_id || preflightPacket?.chatgpt_model_id || "",
+    api_model_id: payload?.api_model_id || preflightPacket?.api_model_id || "",
+    api_reasoning_option_id:
+      payload?.api_reasoning_option_id || preflightPacket?.api_reasoning_option_id || "",
+    bridge_status: preflightPacket?.bridge_status || "",
+    bridge_alive: preflightPacket?.bridge_alive === true,
+    window_status: preflightPacket?.window_status || "",
+    config_status: preflightPacket?.config_status || "",
+    custom_codex_launch_attempted: true,
+    new_launch_started: false,
+    live_call_attempted: true,
+    provider_called: false,
+    visible_window_counts_as_model_truth: false,
+    bridge_alive_counts_as_model_truth: false,
+    response_text_counts_as_route_truth: false,
+    launch_packet_is_truth_source: false,
+    next_action: "wait_for_native_launch_packet"
+  });
+}
+
+function codexCustomLaunchNeedsStableBridgeRecovery(packet) {
+  return packet?.machine_error_code === "CUSTOM_CODEX_STABLE_WBP_BRIDGE_PORT_UNAVAILABLE";
+}
+
+function stableBridgeRecoveryApplyPayload(preflightPacket) {
   return {
-    execution_mode: executionMode,
-    chatgpt_model_id: chatgptModelId,
-    api_model_id: apiModelId,
-    api_reasoning_option_id: apiReasoningOptionId
+    expected_bridge_port: preflightPacket?.bridge_port ?? preflightPacket?.target_bridge_port ?? 0,
+    expected_listener_pid: preflightPacket?.target_pid ?? preflightPacket?.listener_pid ?? 0,
+    expected_bridge_ownership_status: preflightPacket?.bridge_ownership_status || "",
+    bind_after_release: true
   };
 }
 
-async function runCodexCustomLaunch() {
+async function retryCodexCustomLaunchAfterStableBridgeRecovery(payload, blockedPacket, signal) {
+  if (!codexCustomLaunchNeedsStableBridgeRecovery(blockedPacket)) {
+    return blockedPacket;
+  }
+  const preflightResponse = await fetch("api/codex/custom/stable-bridge-recovery/preflight", {
+    cache: "no-store",
+    signal
+  });
+  if (!preflightResponse.ok) {
+    throw new Error(`stable bridge recovery preflight http ${preflightResponse.status}`);
+  }
+  const recoveryPreflight = await preflightResponse.json();
+  if (recoveryPreflight?.recovery_apply_admissible !== true) {
+    return {
+      ...blockedPacket,
+      stable_bridge_recovery_retry_attempted: false,
+      stable_bridge_recovery_preflight_packet: recoveryPreflight,
+      stable_bridge_recovery_status: recoveryPreflight?.status || "blocked",
+      stable_bridge_recovery_machine_error_code:
+        recoveryPreflight?.machine_error_code || "STABLE_BRIDGE_RECOVERY_PREFLIGHT_BLOCKED",
+      next_action:
+        recoveryPreflight?.next_action || blockedPacket?.next_action || "stop_and_diagnose_stable_wbp_bridge_port_conflict"
+    };
+  }
+  const applyResponse = await fetch("api/codex/custom/stable-bridge-recovery/apply", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(stableBridgeRecoveryApplyPayload(recoveryPreflight)),
+    signal
+  });
+  if (!applyResponse.ok) {
+    throw new Error(`stable bridge recovery apply http ${applyResponse.status}`);
+  }
+  const recoveryApply = await applyResponse.json();
+  const recoveryOk = recoveryApply?.status === "ok"
+    && recoveryApply?.current_process_bound_after_recovery === true;
+  if (!recoveryOk) {
+    return {
+      ...blockedPacket,
+      stable_bridge_recovery_retry_attempted: true,
+      stable_bridge_recovery_preflight_packet: recoveryPreflight,
+      stable_bridge_recovery_apply_packet: recoveryApply,
+      stable_bridge_recovery_status: recoveryApply?.status || "blocked",
+      stable_bridge_recovery_machine_error_code:
+        recoveryApply?.machine_error_code || "STABLE_BRIDGE_RECOVERY_APPLY_BLOCKED",
+      next_action:
+        recoveryApply?.next_action || blockedPacket?.next_action || "stop_and_diagnose_stable_wbp_bridge_port_conflict"
+    };
+  }
+  const retryResponse = await fetch("api/codex/custom/native-launch", {
+    method: "POST",
+    cache: "no-store",
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+    signal
+  });
+  if (!retryResponse.ok) {
+    throw new Error(`custom launch retry http ${retryResponse.status}`);
+  }
+  const retryPacket = await retryResponse.json();
+  return {
+    ...retryPacket,
+    stable_bridge_recovery_retry_attempted: true,
+    stable_bridge_recovery_preflight_packet: recoveryPreflight,
+    stable_bridge_recovery_apply_packet: recoveryApply,
+    stable_bridge_recovery_status: recoveryApply?.status || "",
+    stable_bridge_recovery_machine_error_code: recoveryApply?.machine_error_code || ""
+  };
+}
+
+async function runCodexCustomLaunch({ confirmationBound = false } = {}) {
   if (codexLaunchDryRunInFlight) {
     return;
   }
@@ -1381,12 +2209,18 @@ async function runCodexCustomLaunch() {
   document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
   codexLaunchSetChip("neutral", "launching");
   const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 45000) : null;
+  if (confirmationBound && controller) {
+    activeActionAbortReason = "";
+    activeActionAbortController = controller;
+  }
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), CUSTOM_NATIVE_LAUNCH_REQUEST_TIMEOUT_MS)
+    : null;
   try {
     const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1411,7 +2245,7 @@ async function runCodexCustomLaunch() {
     const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
@@ -1431,24 +2265,37 @@ async function runCodexCustomLaunch() {
       });
       return;
     }
+    renderQuickStartNativeLaunchInFlight(payload, preflightPacket);
     const response = await fetch("api/codex/custom/native-launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
     if (!response.ok) {
       throw new Error(`custom launch http ${response.status}`);
     }
-    const packet = await response.json();
+    const packet = await retryCodexCustomLaunchAfterStableBridgeRecovery(
+      payload,
+      await response.json(),
+      controller?.signal
+    );
     renderCodexCustomLaunch(packet);
+    await refreshQuickStartLiveBridgeStabilityTruth(packet);
+    const tracePacket = await refreshQuickStartMixedCoderTraceTruth(packet);
+    await runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket);
   } catch (error) {
-    const timedOut = error?.name === "AbortError";
+    const cancelledByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";
+    const timedOut = error?.name === "AbortError" && !cancelledByUser;
     renderCodexCustomLaunch({
       status: "failed",
-      machine_error_code: timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED",
-      human_message: timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message,
+      machine_error_code: cancelledByUser
+        ? "UI_ACTION_WAIT_CANCELLED"
+        : (timedOut ? "CUSTOM_LAUNCH_REQUEST_TIMEOUT" : "CUSTOM_LAUNCH_FETCH_FAILED"),
+      human_message: cancelledByUser
+        ? "Custom Codex launch wait was cancelled in the browser. Refresh before retrying."
+        : (timedOut ? "Custom Codex launch request timed out before a packet returned." : error.message),
       launch_admission: "blocked",
       session_created: false,
       running_status: false,
@@ -1480,6 +2327,10 @@ async function runCodexCustomLaunch() {
       clearTimeout(timeoutHandle);
     }
     codexLaunchDryRunInFlight = false;
+    if (confirmationBound && activeActionAbortController === controller) {
+      activeActionAbortController = null;
+      activeActionAbortReason = "";
+    }
     document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
     document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
   }
@@ -1498,26 +2349,299 @@ function quickStartExecutionModeLabel(mode) {
   return "не выбран";
 }
 
-function renderQuickStartConfigAdmission(packet) {
+function quickStartAdmissionComponentVisual(component) {
+  const status = component?.status || "";
+  if (["admitted", "accepted", "defaulted"].includes(status)) {
+    return "green";
+  }
+  if (status === "not_required") {
+    return "neutral";
+  }
+  if (["missing", "unavailable", "not_confirmed", "blocked", "rejected"].includes(status)) {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartAdmissionComponentLabel(component) {
+  const status = component?.status || "";
+  if (status === "not_required") {
+    return "not required";
+  }
+  if (status === "admitted") {
+    return "admitted";
+  }
+  if (status === "accepted" || status === "defaulted") {
+    return status;
+  }
+  return status || "unknown";
+}
+
+function quickStartNextActionLabel(nextAction) {
+  const action = nextAction || "";
+  if (!action || action === "none") {
+    return "none";
+  }
+  if (action === "provide_exact_owner_authorization_phrase") {
+    return "owner auth";
+  }
+  if (action === "repair_quick_start_config_selection") {
+    return "repair config";
+  }
+  if (action === "remove_forbidden_browser_fields" || action === "remove_browser_payload_fields") {
+    return "remove fields";
+  }
+  if (action === "relaunch_custom_codex_with_new_selection") {
+    return "relaunch ready";
+  }
+  if (action === "replace_existing_custom_codex_without_launch_packet") {
+    return "replace ready";
+  }
+  if (action.includes("launch_custom_codex") || action.includes("launch_or_reuse_custom_codex")) {
+    return "ready to launch";
+  }
+  if (action === "show_existing_window") {
+    return "show window";
+  }
+  if (action === "continue_in_existing_custom_window") {
+    return "existing window";
+  }
+  if (action === "run_fresh_chatgpt_plus_api_launch") {
+    return "fresh launch";
+  }
+  if (action === "refresh_chatgpt_plus_api_trace_snapshot") {
+    return "refresh trace";
+  }
+  if (action === "relaunch_custom") {
+    return "relaunch custom";
+  }
+  if (action === "inspect_bridge_stability_packet") {
+    return "inspect bridge";
+  }
+  if (action === "retry_live_bridge_stability") {
+    return "retry bridge";
+  }
+  if (action === "use_session_dispatch_probe_or_design_native_dual_lane_dispatcher") {
+    return "dual-lane unsupported";
+  }
+  if (action === "inspect_slot_binding_launch_evidence") {
+    return "inspect slot";
+  }
+  if (action === "confirm_runtime_can_dispatch_coding_agent_model_slot") {
+    return "dispatch proof";
+  }
+  if (action === "stop_and_diagnose_model_reasoning_matrix") {
+    return "matrix blocked";
+  }
+  return action.length > 18 ? `${action.slice(0, 18)}...` : action;
+}
+
+function quickStartNativeFreeTextBlockerLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (machineCode === "MANUAL_USER_PROMPT_NOT_OBSERVED") {
+    return "manual unseen";
+  }
+  if (machineCode === "MANUAL_FREE_CHAT_ROUTER_NOT_OBSERVABLE") {
+    return "router absent";
+  }
+  if (machineCode === "API_LANE_NOT_PROVEN") {
+    return "API not proven";
+  }
+  if (machineCode === "CODEX_SUBAGENT_USED_AS_DIP") {
+    return "sub-agent fail";
+  }
+  if (machineCode === "MANUAL_FREE_CHAT_BROWSER_AUTHORITY_REJECTED") {
+    return "browser blocked";
+  }
+  if (machineCode === "OWNER_AUTHORIZATION_REQUIRED") {
+    return "owner auth";
+  }
+  if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
+    return "auth required";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AUTH_WALL_OBSERVED") {
+    return "auth wall";
+  }
+  if (machineCode === "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT") {
+    return "permission prompt";
+  }
+  if (machineCode === "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE") {
+    return "input missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AUTH_PASSED_INPUT_READY") {
+    return "input ready";
+  }
+  if (machineCode === "CUSTOM_NATIVE_RESUME_AFTER_AUTH_READY") {
+    return "resume ready";
+  }
+  if (
+    machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+    || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+  ) {
+    return "process missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED") {
+    return "activation missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_WINDOW_NOT_OBSERVED") {
+    return "window missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_INPUT_SURFACE_NOT_FOUND") {
+    return "input missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_PROMPT_SUBMIT_FAILED") {
+    return "submit failed";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AGENT_PROOF_FILE_MISSING") {
+    return "proof missing";
+  }
+  if (machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID") {
+    return "proof invalid";
+  }
+  if (machineCode === "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP") {
+    return "sub-agent fail";
+  }
+  if (machineCode === "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN") {
+    return "observer missing";
+  }
+  return machineCode ? quickStartNextActionLabel(machineCode) : "native blocked";
+}
+
+function quickStartNativeFreeTextWindowLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (packet?.native_window_observed !== true) {
+    if (machineCode === "CUSTOM_NATIVE_ACTIVATION_NOT_CONFIGURED") {
+      return "activation missing";
+    }
+    if (machineCode === "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED") {
+      return "auth required";
+    }
+    if (machineCode === "CUSTOM_NATIVE_AUTH_WALL_OBSERVED") {
+      return "auth wall";
+    }
+    if (machineCode === "CUSTOM_NATIVE_KEYCHAIN_OR_PERMISSION_PROMPT") {
+      return "permission prompt";
+    }
+    if (
+      machineCode === "CUSTOM_NATIVE_PROCESS_NOT_FOUND_AFTER_LAUNCH"
+      || machineCode === "CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND"
+    ) {
+      return "process missing";
+    }
+    return "window missing";
+  }
+  if (packet?.input_capable_ui_observed !== true) {
+    if (machineCode === "CUSTOM_NATIVE_RENDERER_NO_INPUT_SURFACE") {
+      return "input missing";
+    }
+    return "input missing";
+  }
+  if (packet?.prompt_submitted !== true) {
+    return "submit failed";
+  }
+  if (packet?.native_agent_proof_file_valid !== true) {
+    return machineCode === "CUSTOM_NATIVE_AGENT_PROOF_INVALID" ? "proof invalid" : "proof missing";
+  }
+  return "input ok";
+}
+
+function quickStartModelReasoningMatrixLabel(packet) {
+  const machineCode = packet?.machine_error_code || "";
+  if (machineCode === "COMBINED_MODE_BLOCKED_NATIVE_AUTH") {
+    return "auth wall";
+  }
+  if (machineCode === "COMBINED_MODE_PARTIAL_API_ONLY") {
+    return "API partial";
+  }
+  if (machineCode === "BROWSER_ROUTE_AUTHORITY_REJECTED") {
+    return "route rejected";
+  }
+  if (machineCode === "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN") {
+    return "matrix blocked";
+  }
+  return machineCode ? quickStartNextActionLabel(machineCode) : "matrix blocked";
+}
+
+function quickStartChatgptRuntimeProofPending(packet) {
+  return Boolean(
+    packet?.runtime_health_required_for_chatgpt_lane === true
+    && packet?.chatgpt_runtime_proof_status === "not_proven"
+    && (
+      packet?.chatgpt_runtime_proof_machine_error_code
+      || packet?.runtime_health_machine_error_code
+      || packet?.runtime_health_gate?.runtime_health_machine_error_code
+    )
+  );
+}
+
+function quickStartRuntimeProofPendingLabel(packet) {
+  const machineCode = packet?.chatgpt_runtime_proof_machine_error_code
+    || packet?.runtime_health_machine_error_code
+    || packet?.runtime_health_gate?.runtime_health_machine_error_code
+    || "";
+  return machineCode === "AUTH_UNAVAILABLE" ? "auth pending" : "runtime pending";
+}
+
+function renderQuickStartConfigAdmission(packet, options = {}) {
   const admitted = packet?.status === "ok" && packet?.launch_admission === "admitted";
   const blocked = packet?.status === "blocked" || packet?.status === "rejected";
+  const replayed = options.replayed === true;
+  const runtimeProofPending = quickStartChatgptRuntimeProofPending(packet);
+  const admittedVisual = admitted && !runtimeProofPending && !replayed ? "green" : (blocked || admitted ? "amber" : "red");
+  const admittedLabel = replayed
+    ? "manual cache"
+    : (
+      admitted
+        ? (runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : "допущен")
+        : (packet?.machine_error_code || packet?.status || "blocked")
+    );
   const modeLabel = quickStartExecutionModeLabel(packet?.execution_mode || "");
   const apiRoute = packet?.api_route || {};
   const apiReasoning = packet?.api_reasoning || {};
+  const chatgptModel = packet?.chatgpt_model || {};
+  const apiModel = packet?.api_model || {};
+  const nextAction = packet?.next_action || "";
   setQuickStartChip(
     "quickStartRouteChip",
-    admitted ? "green" : (blocked ? "amber" : "red"),
-    admitted ? "допущен" : (packet?.machine_error_code || packet?.status || "blocked")
+    admittedVisual,
+    admittedLabel
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
-    admitted ? "green" : (blocked ? "amber" : "red"),
+    admittedVisual,
     modeLabel
   );
   setQuickStartChip(
+    "quickStartChatSlotState",
+    quickStartAdmissionComponentVisual(chatgptModel),
+    quickStartAdmissionComponentLabel(chatgptModel)
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    quickStartAdmissionComponentVisual(apiModel),
+    quickStartAdmissionComponentLabel(apiModel)
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    "neutral",
+    "preflight"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    admittedVisual,
+    admitted ? (runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : (replayed ? "manual cache" : "admission ok")) : "blocked"
+  );
+  setQuickStartChip(
     "quickStartConfigState",
-    admitted ? "green" : (blocked ? "amber" : "red"),
-    packet?.launch_admission === "admitted" ? "admitted" : "blocked"
+    admittedVisual,
+    packet?.launch_admission === "admitted"
+      ? (runtimeProofPending ? "runtime pending" : (replayed ? "manual cache" : "admitted"))
+      : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    (!nextAction || nextAction === "none") && !runtimeProofPending && !replayed ? "green" : "amber",
+    runtimeProofPending ? quickStartRuntimeProofPendingLabel(packet) : (replayed ? "manual cache" : quickStartNextActionLabel(nextAction))
   );
   setQuickStartChip(
     "quickStartApiRouteChip",
@@ -1537,11 +2661,27 @@ function renderQuickStartConfigAdmission(packet) {
     api_reasoning_status: apiReasoning.status || "",
     api_route_status: apiRoute.status || "",
     api_route_reference: apiRoute.route_reference || "",
+    owner_authorization_phrase_present: false,
     fallback_used: packet?.fallback_used === true,
     silent_fallback_used: packet?.silent_fallback_used === true,
     launch_admission: packet?.launch_admission || "blocked",
     launch_admission_summary: packet?.launch_admission_summary || "",
+    runtime_health_gate_blocks_launch_admission:
+      packet?.runtime_health_gate_blocks_launch_admission === true,
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
     dry_server_truth_only: packet?.dry_server_truth_only === true,
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
     live_call_attempted: packet?.live_call_attempted === true,
     provider_called: packet?.provider_called === true,
     raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
@@ -1549,8 +2689,15 @@ function renderQuickStartConfigAdmission(packet) {
     raw_path_exposed: packet?.raw_path_exposed === true,
     original_codex_touched: packet?.original_codex_touched === true,
     asar_touched: packet?.asar_touched === true,
+    manual_check_replay_active: replayed,
+    manual_check_replay_age_ms: Number.isFinite(options.replayAgeMs) ? options.replayAgeMs : null,
+    manual_check_replay_max_age_ms: replayed ? QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS : null,
+    runtime_readiness_claimed: false,
     next_action: packet?.next_action || ""
   });
+  if (options.remember === true && options.selectionPayload) {
+    rememberQuickStartConfigAdmissionSnapshot(options.selectionPayload, packet);
+  }
 }
 
 async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction") {
@@ -1572,19 +2719,34 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
     const response = await fetch("api/codex/custom/quick-start/config-admission", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
     if (!response.ok) {
       throw new Error(`quick start config admission http ${response.status}`);
     }
-    renderQuickStartConfigAdmission(await response.json());
+    const admissionPacket = await response.json();
+    renderQuickStartConfigAdmission(admissionPacket, { remember: true, selectionPayload: payload });
+    if (quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket)) {
+      setQuickStartChip("quickStartRouteChip", "neutral", "route check");
+      if (responseNode) {
+        const admissionOk = admissionPacket.status === "ok" && admissionPacket.machine_error_code === "OK";
+        responseNode.textContent = admissionOk
+          ? "admission ok; проверяю выбранный API route..."
+          : "selected route требует проверки; проверяю выбранный API route...";
+      }
+      const actionOutcome = await runUiAction("api_route_check", { route_id: payload.api_model_id });
+      renderQuickStartApiRouteCheckResult(payload, actionOutcome, { remember: true });
+    }
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderQuickStartConfigAdmission({
       status: "failed",
       machine_error_code: timedOut ? "QUICK_START_CONFIG_ADMISSION_TIMEOUT" : "QUICK_START_CONFIG_ADMISSION_FETCH_FAILED",
+      human_message: timedOut
+        ? "Quick Start config admission timed out before packet truth returned."
+        : error.message,
       final_status: "KNOWN_BLOCKER_QUICK_START_CONFIG_ADMISSION_NOT_PROVEN",
       execution_mode: payload.execution_mode || "",
       chatgpt_model: {
@@ -1612,14 +2774,105 @@ async function runQuickStartConfigAdmission(buttonId = "quickStartCheckApiAction
       raw_path_exposed: false,
       original_codex_touched: false,
       asar_touched: false,
-      next_action: error.message
-    });
+      next_action: "retry"
+    }, { remember: true, selectionPayload: payload });
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
     }
     codexLaunchDryRunInFlight = false;
     button?.removeAttribute("disabled");
+  }
+}
+
+const QUICK_START_SELECTED_API_ROUTE_CHECK_MACHINE_CODES = new Set([
+  "QUICK_START_CONFIG_API_ROUTE_BLOCKED",
+  "QUICK_START_CONFIG_API_ROUTE_CHECK_ATTENTION",
+  "QUICK_START_CONFIG_API_ROUTE_VALIDATION_FAILED"
+]);
+
+function quickStartAdmissionRequestsSelectedApiRouteCheck(payload, admissionPacket) {
+  const truthPacket = (
+    admissionPacket?.selection_packet?.next_action === "check_selected_api_route"
+      ? admissionPacket.selection_packet
+      : admissionPacket
+  );
+  if (!payload || !truthPacket || truthPacket.next_action !== "check_selected_api_route") {
+    return false;
+  }
+  const routePacket = truthPacket.api_route || {};
+  const apiModelPacket = truthPacket.api_model || {};
+  const routeMachineCode = routePacket.machine_error_code || truthPacket.machine_error_code || "";
+  return Boolean(
+    apiModelPacket.status === "admitted"
+    && (!apiModelPacket.model_id || apiModelPacket.model_id === payload.api_model_id)
+    && routePacket.status === "not_confirmed"
+    && QUICK_START_SELECTED_API_ROUTE_CHECK_MACHINE_CODES.has(routeMachineCode)
+    && truthPacket.fallback_used === false
+    && truthPacket.silent_fallback_used === false
+  );
+}
+
+function quickStartShouldRunSelectedApiRouteCheck(payload, admissionPacket) {
+  const launchAdmissionReady = Boolean(
+    admissionPacket
+    && admissionPacket.status === "ok"
+    && admissionPacket.machine_error_code === "OK"
+    && admissionPacket.launch_admission === "admitted"
+  );
+  const selectedRouteCheckRequested = quickStartAdmissionRequestsSelectedApiRouteCheck(payload, admissionPacket);
+  return Boolean(
+    payload
+    && admissionPacket
+    && payload.execution_mode !== "chatgpt_only"
+    && typeof payload.api_model_id === "string"
+    && payload.api_model_id
+    && (launchAdmissionReady || selectedRouteCheckRequested)
+  );
+}
+
+function renderQuickStartApiRouteCheckResult(selectionPayload, actionOutcome, options = {}) {
+  const actionPacket = actionOutcome?.payload || actionOutcome || {};
+  const result = actionPacket?.result || {};
+  const status = result.status || actionPacket.status || "unknown";
+  const machineCode = result.machine_error_code || actionPacket.machine_error_code || "UNKNOWN";
+  const refreshState = actionOutcome?.refreshState || "none";
+  const refreshRequired = actionPacket?.post_action_refresh_required === true;
+  const routeId = selectionPayload?.api_model_id || actionPacket?.route_id || result?.data?.route_id || "";
+  const routeOk = status === "ok" && machineCode === "OK";
+  const refreshOk = !refreshRequired || refreshState === "complete";
+  const replayed = options.replayed === true;
+  const blockedLabel = machineCode.length > 18 ? `${machineCode.slice(0, 18)}...` : machineCode;
+  setQuickStartChip(
+    "quickStartRouteChip",
+    routeOk && refreshOk && !replayed ? "green" : "amber",
+    routeOk && refreshOk ? (replayed ? "cached OK" : "OK") : blockedLabel
+  );
+  setQuickStartRouteResponse({
+    status,
+    machine_error_code: machineCode,
+    final_status: replayed ? "API_ROUTE_CHECK_ACTION_PACKET_REPLAYED" : "API_ROUTE_CHECK_ACTION_PACKET_RECEIVED",
+    execution_mode: selectionPayload?.execution_mode || "",
+    api_model_id: routeId,
+    selected_model: routeId,
+    api_reasoning_option_id: selectionPayload?.api_reasoning_option_id || "",
+    api_route_status: routeOk ? "checked" : "blocked",
+    api_route_reference: routeId,
+    ui_action: actionPacket?.ui_action || "api_route_check",
+    route_id: routeId,
+    action_status: status,
+    action_machine_error_code: machineCode,
+    action_refresh_state: refreshState,
+    human_message: result.human_message || "",
+    next_action: result.next_action || "",
+    post_action_refresh_required: refreshRequired,
+    manual_check_replay_active: replayed,
+    manual_check_replay_age_ms: Number.isFinite(options.replayAgeMs) ? options.replayAgeMs : null,
+    manual_check_replay_max_age_ms: replayed ? QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS : null,
+    runtime_readiness_claimed: false
+  });
+  if (options.remember === true) {
+    rememberQuickStartApiRouteCheckSnapshot(selectionPayload, actionOutcome);
   }
 }
 
@@ -1642,14 +2895,23 @@ async function runQuickStartLaunchPreflight() {
     const response = await fetch("api/codex/custom/native-launch-preflight", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: controller?.signal
     });
     if (!response.ok) {
       throw new Error(`custom launch preflight http ${response.status}`);
     }
-    renderQuickStartLaunchPreflight(await response.json());
+    const preflightPacket = await response.json();
+    renderQuickStartLaunchPreflight(preflightPacket);
+    if (quickStartShouldRunSelectedApiRouteCheck(payload, preflightPacket)) {
+      setQuickStartChip("quickStartRouteChip", "neutral", "route check");
+      if (responseNode) {
+        responseNode.textContent = "preflight требует selected route check; проверяю выбранный API route...";
+      }
+      const actionOutcome = await runUiAction("api_route_check", { route_id: payload.api_model_id });
+      renderQuickStartApiRouteCheckResult(payload, actionOutcome);
+    }
   } catch (error) {
     const timedOut = error?.name === "AbortError";
     renderQuickStartLaunchPreflight({
@@ -1691,6 +2953,92 @@ async function runQuickStartLaunchPreflight() {
   }
 }
 
+async function runQuickStartLaunchAdmissionProjection() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = await buildCodexCustomLaunchSelectionPayload();
+  codexLaunchDryRunInFlight = true;
+  const launchButton = document.getElementById("quickStartCustomLaunchAction");
+  const preflightButton = document.getElementById("quickStartLaunchPreflightAction");
+  launchButton?.setAttribute("disabled", "disabled");
+  preflightButton?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "проверяю");
+  setQuickStartChip("quickStartLaunchState", "neutral", "admission");
+  const responseNode = document.getElementById("quickStartRouteResponse");
+  if (responseNode) {
+    responseNode.textContent = "проверяю admission и preflight без live launch...";
+  }
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 20000) : null;
+  try {
+    const admissionResponse = await fetch("api/codex/custom/quick-start/config-admission", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!admissionResponse.ok) {
+      throw new Error(`quick start config admission http ${admissionResponse.status}`);
+    }
+    const admissionPacket = await admissionResponse.json();
+    renderQuickStartConfigAdmission(admissionPacket);
+    if (admissionPacket?.launch_admission !== "admitted") {
+      return;
+    }
+    const preflightResponse = await fetch("api/codex/custom/native-launch-preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+      signal: controller?.signal
+    });
+    if (!preflightResponse.ok) {
+      throw new Error(`custom launch preflight http ${preflightResponse.status}`);
+    }
+    renderQuickStartLaunchPreflight(await preflightResponse.json());
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    renderQuickStartLaunchPreflight({
+      status: "failed",
+      machine_error_code: timedOut
+        ? "QUICK_START_LAUNCH_ADMISSION_PROJECTION_TIMEOUT"
+        : "QUICK_START_LAUNCH_ADMISSION_PROJECTION_FETCH_FAILED",
+      human_message: timedOut
+        ? "Quick Start launch admission projection timed out before packet truth returned."
+        : error.message,
+      packet_kind: "quick_start_launch_admission_projection",
+      preflight_claim_scope: "quick_start_launch_guard_no_live_mutation",
+      execution_mode: payload.execution_mode || "",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      api_reasoning_option_id: payload.api_reasoning_option_id || "",
+      owner_authorization_phrase_present: false,
+      show_window_attempted: false,
+      new_launch_started: false,
+      live_call_attempted: false,
+      provider_called: false,
+      live_provider_called: false,
+      custom_codex_launch_attempted: false,
+      network_calls_made: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      raw_path_exposed: false,
+      original_codex_touched: false,
+      asar_touched: false,
+      next_action: "retry"
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    codexLaunchDryRunInFlight = false;
+    launchButton?.removeAttribute("disabled");
+    preflightButton?.removeAttribute("disabled");
+  }
+}
+
 function renderCodexCustomShowWindow(packet) {
   const summary = {
     status: packet?.status || "unknown",
@@ -1699,6 +3047,11 @@ function renderCodexCustomShowWindow(packet) {
     custom_process_pid: packet?.custom_process_pid ?? null,
     custom_window_visible: packet?.custom_window_visible === true,
     custom_window_frontmost: packet?.custom_window_frontmost === true,
+    native_app_usable: packet?.native_app_usable === true,
+    input_capable_ui_observed: packet?.input_capable_ui_observed === true,
+    native_app_usability_source: packet?.native_app_usability_source || "",
+    native_app_usability_blocked_reason_class:
+      packet?.native_app_usability_blocked_reason_class || "",
     visible_window_counts_as_model_truth: false,
     response_text_counts_as_route_truth: false,
     launch_packet_is_truth_source: false,
@@ -1716,18 +3069,24 @@ function renderCodexCustomShowWindow(packet) {
   if (quickResponse) {
     quickResponse.textContent = JSON.stringify(summary, null, 2);
   }
-  const ok = packet?.status === "ok" && packet?.custom_window_visible === true;
+  const ok = packet?.status === "ok"
+    && packet?.custom_window_visible === true
+    && packet?.native_app_usable === true;
+  const visibleOnly = packet?.custom_window_visible === true && packet?.native_app_usable !== true;
   setQuickStartChip(
     "quickStartLaunchState",
     ok ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
-    ok ? "окно видно" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? "окно usable" : (visibleOnly ? "окно видно" : (packet?.machine_error_code || packet?.status || "ошибка"))
   );
   setQuickStartChip(
     "quickStartRouteChip",
     ok ? "green" : "amber",
-    ok ? "окно ok" : "пакет окна"
+    ok ? "окно ok" : (visibleOnly ? "proof incomplete" : "пакет окна")
   );
-  codexLaunchSetChip(ok ? "green" : "amber", ok ? "window visible" : "window packet");
+  codexLaunchSetChip(
+    ok ? "green" : "amber",
+    ok ? "window usable" : (visibleOnly ? "window visible / proof incomplete" : "window packet")
+  );
 }
 
 async function showCodexCustomWindow() {
@@ -1748,7 +3107,7 @@ async function showCodexCustomWindow() {
     const response = await fetch("api/codex/custom/show-window", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({}),
       signal: controller?.signal
     });
@@ -1808,7 +3167,7 @@ async function confirmCodexCustomVisibleHistory() {
     const response = await fetch("api/codex/custom/visible-history/owner-confirmation", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -1857,7 +3216,7 @@ async function runSafeAppCopyLaunchDryRun() {
     const response = await fetch("api/codex/app-copy/launch-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1874,8 +3233,9 @@ async function runSafeAppCopyLaunchDryRun() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     codexLaunchDryRunInFlight = false;
@@ -1894,7 +3254,7 @@ async function runSafeAppCopyLaunch() {
     const response = await fetch("api/codex/app-copy/launch", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -1911,8 +3271,9 @@ async function runSafeAppCopyLaunch() {
       current_codex_touched: false,
       uses_current_home: false,
       uses_current_codex_home: false,
+      human_message: error.message,
       final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-      next_action: error.message
+      next_action: "retry"
     });
   }
 }
@@ -1960,7 +3321,18 @@ function codexCustomAvailableModelEntries(packet) {
 }
 
 function codexCustomApiModelEntries(packet) {
-  return codexCustomLaneEntries(packet, "api_lane");
+  const laneEntries = codexCustomLaneEntries(packet, "api_lane");
+  if (laneEntries.length) {
+    return laneEntries;
+  }
+  return (Array.isArray(packet?.available_models) ? packet.available_models : [])
+    .filter((entry) => (
+      typeof entry?.model_id === "string"
+      && entry.model_id
+      && entry?.selection_enabled === true
+      && entry?.model_lane === "api_route_lane"
+      && entry?.source === "server_owned_external_route"
+    ));
 }
 
 function codexCustomDisabledReasonText(entry) {
@@ -2079,7 +3451,275 @@ function renderApiReasoningOptionSelects() {
   }
 }
 
-function syncCodexRouteSelects(sourceId) {
+function codexRouteSelectionPrefersQuickStart() {
+  const desktop = document.querySelector(".desktop");
+  return desktop?.dataset?.screen === "quick-start";
+}
+
+function codexRoutePairValue(masterId, quickStartId, preferQuickStart = false) {
+  const primary = preferQuickStart ? quickStartId : masterId;
+  const fallback = preferQuickStart ? masterId : quickStartId;
+  return selectValue(primary) || selectValue(fallback);
+}
+
+function codexRouteSelectionFromUi(preferQuickStart = codexRouteSelectionPrefersQuickStart()) {
+  return {
+    execution_mode: codexRoutePairValue("codexCustomExecutionModeSelect", "quickStartExecutionModeSelect", preferQuickStart),
+    chatgpt_model_id: codexRoutePairValue("codexCustomModelSelect", "quickStartChatModelSelect", preferQuickStart),
+    api_model_id: codexRoutePairValue("codexCustomApiModelSelect", "quickStartApiModelSelect", preferQuickStart),
+    api_reasoning_option_id: codexRoutePairValue("codexCustomApiReasoningOptionSelect", "quickStartApiReasoningOptionSelect", preferQuickStart)
+  };
+}
+
+function codexExecutionModeIsKnown(mode) {
+  return ["chatgpt_only", "chatgpt_plus_api", "api_only"].includes(mode);
+}
+
+function codexExecutionModeNeedsChatGPT(mode) {
+  return mode === "chatgpt_only" || mode === "chatgpt_plus_api";
+}
+
+function codexExecutionModeNeedsApi(mode) {
+  return mode === "chatgpt_plus_api" || mode === "api_only";
+}
+
+function quickStartSelectionWithDefaults(selection) {
+  const next = { ...(selection || {}) };
+  if (!next.execution_mode) {
+    next.execution_mode = QUICK_START_DEFAULT_EXECUTION_MODE;
+  }
+  if (codexExecutionModeNeedsChatGPT(next.execution_mode) && !next.chatgpt_model_id) {
+    next.chatgpt_model_id = QUICK_START_PREFERRED_CHATGPT_MODEL_ID;
+  }
+  if (codexExecutionModeNeedsApi(next.execution_mode) && !next.api_model_id) {
+    next.api_model_id = QUICK_START_PREFERRED_API_MODEL_ID;
+  }
+  if (codexExecutionModeNeedsApi(next.execution_mode) && !next.api_reasoning_option_id) {
+    next.api_reasoning_option_id = QUICK_START_PREFERRED_API_REASONING_OPTION_ID;
+  }
+  return next;
+}
+
+function codexRouteSelectionHasValue(selection) {
+  return Boolean(
+    selection
+    && (
+      selection.execution_mode
+      || selection.chatgpt_model_id
+      || selection.api_model_id
+      || selection.api_reasoning_option_id
+    )
+  );
+}
+
+function readStoredCodexRouteSelection() {
+  try {
+    const raw = window.localStorage?.getItem(CODEX_ROUTE_SELECTION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return codexRouteSelectionHasValue(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function quickStartSelectionPreservesUserChatGptModel(selection, currentSelection = null) {
+  return Boolean(
+    selection?.chatgpt_model_selected_by_user === true
+    || (
+      currentSelection?.chatgpt_model_selected_by_user === true
+      && currentSelection?.chatgpt_model_id
+      && currentSelection.chatgpt_model_id === selection?.chatgpt_model_id
+    )
+  );
+}
+
+function quickStartStoredSelectionForRegistry(selection, registry) {
+  if (!selection) {
+    return null;
+  }
+  const next = { ...selection };
+  const serverDefault = String(registry?.chatgpt_lane?.default_model_id || "");
+  const preferredAvailable = registry?.chatgpt_lane?.preferred_default_available === true;
+  const preservesExplicitUserChoice = next.chatgpt_model_selected_by_user === true;
+  if (
+    !preservesExplicitUserChoice
+    && preferredAvailable
+    && serverDefault
+    && next.chatgpt_model_id !== serverDefault
+    && QUICK_START_LEGACY_CHATGPT_DEFAULT_MODEL_IDS.has(next.chatgpt_model_id)
+  ) {
+    next.chatgpt_model_id = serverDefault;
+    next.chatgpt_model_id_replaced_reason = "legacy_default_replaced_by_server_default";
+  }
+  return next;
+}
+
+function codexSelectCanUseValue(select, value) {
+  if (!select || !value) {
+    return false;
+  }
+  if (!select.options || typeof select.options[Symbol.iterator] !== "function") {
+    return true;
+  }
+  const options = [...select.options];
+  if (!options.length) {
+    return true;
+  }
+  return options.some((option) => option.value === value && !option.disabled);
+}
+
+function codexSelectPairCanUseValue(masterId, quickStartId, value) {
+  return codexSelectCanUseValue(document.getElementById(masterId), value)
+    && codexSelectCanUseValue(document.getElementById(quickStartId), value);
+}
+
+function codexRouteSelectionCanApplyFully(selection, options = {}) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return false;
+  }
+  const mode = selection.execution_mode || "";
+  if (!codexExecutionModeIsKnown(mode)) {
+    return false;
+  }
+  if (!codexSelectPairCanUseValue("codexCustomExecutionModeSelect", "quickStartExecutionModeSelect", mode)) {
+    return false;
+  }
+  if (
+    codexExecutionModeNeedsChatGPT(mode)
+    && !codexSelectPairCanUseValue("codexCustomModelSelect", "quickStartChatModelSelect", selection.chatgpt_model_id)
+  ) {
+    return false;
+  }
+  if (
+    codexExecutionModeNeedsApi(mode)
+    && !codexSelectPairCanUseValue("codexCustomApiModelSelect", "quickStartApiModelSelect", selection.api_model_id)
+  ) {
+    return false;
+  }
+  if (
+    options.reasoning !== false
+    && codexExecutionModeNeedsApi(mode)
+    && !codexSelectPairCanUseValue(
+      "codexCustomApiReasoningOptionSelect",
+      "quickStartApiReasoningOptionSelect",
+      selection.api_reasoning_option_id
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function codexRenderedRouteSelectionFromUi(preferQuickStart = codexRouteSelectionPrefersQuickStart()) {
+  const selection = codexRouteSelectionFromUi(preferQuickStart);
+  return codexRouteSelectionCanApplyFully(selection, { reasoning: false }) ? selection : null;
+}
+
+function setCodexSelectPairValue(masterId, quickStartId, value) {
+  if (!value) {
+    return false;
+  }
+  let applied = false;
+  for (const id of [masterId, quickStartId]) {
+    const node = document.getElementById(id);
+    if (codexSelectCanUseValue(node, value)) {
+      node.value = value;
+      applied = true;
+    }
+  }
+  return applied;
+}
+
+function renderQuickStartInvalidPersistedSelection(selection, machineErrorCode = "QUICK_START_PERSISTED_SELECTION_INVALID") {
+  if (!codexRouteSelectionPrefersQuickStart()) {
+    return;
+  }
+  setQuickStartChip("quickStartRouteChip", "amber", "invalid selection");
+  setQuickStartRouteResponse({
+    status: "blocked",
+    machine_error_code: machineErrorCode,
+    final_status: "QUICK_START_PERSISTED_SELECTION_REJECTED",
+    execution_mode: selection?.execution_mode || "",
+    chatgpt_model_id: selection?.chatgpt_model_id || "",
+    api_model_id: selection?.api_model_id || "",
+    api_reasoning_option_id: selection?.api_reasoning_option_id || "",
+    selected_model: selection?.chatgpt_model_id || selection?.api_model_id || "",
+    launch_admission: "blocked",
+    launch_admission_summary: "Persisted Quick Start selection is not bounded by the current server-issued catalog.",
+    dry_server_truth_only: true,
+    live_call_attempted: false,
+    provider_called: false,
+    fallback_used: false,
+    silent_fallback_used: false,
+    runtime_readiness_claimed: false,
+    next_action: "choose_server_issued_quick_start_selection"
+  });
+}
+
+function applyCodexRouteSelection(selection, options = {}) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return false;
+  }
+  let applied = false;
+  applied = setCodexSelectPairValue(
+    "codexCustomExecutionModeSelect",
+    "quickStartExecutionModeSelect",
+    selection.execution_mode
+  ) || applied;
+  applied = setCodexSelectPairValue(
+    "codexCustomModelSelect",
+    "quickStartChatModelSelect",
+    selection.chatgpt_model_id
+  ) || applied;
+  applied = setCodexSelectPairValue(
+    "codexCustomApiModelSelect",
+    "quickStartApiModelSelect",
+    selection.api_model_id
+  ) || applied;
+  if (options.reasoning !== false) {
+    applied = setCodexSelectPairValue(
+      "codexCustomApiReasoningOptionSelect",
+      "quickStartApiReasoningOptionSelect",
+      selection.api_reasoning_option_id
+    ) || applied;
+  }
+  return applied;
+}
+
+function saveCodexRouteSelection(
+  selection = codexRouteSelectionFromUi(codexRouteSelectionPrefersQuickStart()),
+  options = {}
+) {
+  if (!codexRouteSelectionHasValue(selection)) {
+    return;
+  }
+  const currentSelection = readStoredCodexRouteSelection();
+  const persistedSource = codexRouteSelectionPrefersQuickStart()
+    ? quickStartSelectionWithDefaults(selection)
+    : selection;
+  const persisted = { ...persistedSource };
+  persisted.selection_persistence_schema_version = 3;
+  if (quickStartSelectionPreservesUserChatGptModel(persisted, currentSelection)) {
+    persisted.chatgpt_model_selected_by_user = true;
+  }
+  if (
+    options.userInitiated === true
+    && ["codexCustomModelSelect", "quickStartChatModelSelect"].includes(options.sourceId)
+  ) {
+    persisted.chatgpt_model_selected_by_user = true;
+    persisted.selection_source = "user_change";
+  }
+  try {
+    window.localStorage?.setItem(CODEX_ROUTE_SELECTION_STORAGE_KEY, JSON.stringify(persisted));
+  } catch (error) {
+    // Selection persistence is a UI convenience; command packets remain the source of truth.
+  }
+}
+
+function syncCodexRouteSelects(sourceId, options = {}) {
   const pairs = [
     ["codexCustomModelSelect", "quickStartChatModelSelect"],
     ["codexCustomApiModelSelect", "quickStartApiModelSelect"],
@@ -2095,7 +3735,130 @@ function syncCodexRouteSelects(sourceId) {
   const target = document.getElementById(targetId);
   if (source && target) {
     target.value = source.value;
+    if (sourceId === "codexCustomExecutionModeSelect" || sourceId === "quickStartExecutionModeSelect") {
+      setQuickStartMixedLaunchActionGuard(false);
+    }
+    saveCodexRouteSelection(codexRouteSelectionFromUi(sourceId.startsWith("quickStart")), {
+      ...options,
+      sourceId
+    });
   }
+}
+
+function selectValue(id) {
+  const node = document.getElementById(id);
+  return node ? String(node.value || "").trim() : "";
+}
+
+function quickStartLaunchPayloadFromSelects() {
+  const executionMode = selectValue("quickStartExecutionModeSelect") || QUICK_START_DEFAULT_EXECUTION_MODE;
+  return {
+    execution_mode: executionMode,
+    chatgpt_model_id: executionMode === "api_only" ? "" : selectValue("quickStartChatModelSelect"),
+    api_model_id: executionMode === "chatgpt_only" ? "" : selectValue("quickStartApiModelSelect"),
+    api_reasoning_option_id: executionMode === "chatgpt_only"
+      ? ""
+      : selectValue("quickStartApiReasoningOptionSelect")
+  };
+}
+
+function quickStartManualCheckSelectionKey(payload) {
+  return JSON.stringify({
+    execution_mode: payload?.execution_mode || "",
+    chatgpt_model_id: payload?.chatgpt_model_id || "",
+    api_model_id: payload?.api_model_id || "",
+    api_reasoning_option_id: payload?.api_reasoning_option_id || ""
+  });
+}
+
+function quickStartManualCheckCurrentKey() {
+  return quickStartManualCheckSelectionKey(quickStartLaunchPayloadFromSelects());
+}
+
+function quickStartManualCheckSnapshotMatches(snapshot) {
+  if (!snapshot || !snapshot.selectionKey || !snapshot.recordedAt) {
+    return false;
+  }
+  if (Date.now() - snapshot.recordedAt > QUICK_START_MANUAL_CHECK_REPLAY_MAX_AGE_MS) {
+    return false;
+  }
+  return snapshot.selectionKey === quickStartManualCheckCurrentKey();
+}
+
+function rememberQuickStartConfigAdmissionSnapshot(selectionPayload, packet) {
+  if (!selectionPayload || !packet) {
+    return;
+  }
+  quickStartManualCheckSnapshot = {
+    selectionKey: quickStartManualCheckSelectionKey(selectionPayload),
+    selectionPayload: { ...selectionPayload },
+    admissionPacket: packet,
+    apiRouteCheckOutcome: null,
+    recordedAt: Date.now()
+  };
+}
+
+function rememberQuickStartApiRouteCheckSnapshot(selectionPayload, actionOutcome) {
+  if (!selectionPayload || !actionOutcome) {
+    return;
+  }
+  const selectionKey = quickStartManualCheckSelectionKey(selectionPayload);
+  if (!quickStartManualCheckSnapshot || quickStartManualCheckSnapshot.selectionKey !== selectionKey) {
+    quickStartManualCheckSnapshot = {
+      selectionKey,
+      selectionPayload: { ...selectionPayload },
+      admissionPacket: null,
+      apiRouteCheckOutcome: actionOutcome,
+      recordedAt: Date.now()
+    };
+    return;
+  }
+  quickStartManualCheckSnapshot = {
+    ...quickStartManualCheckSnapshot,
+    selectionPayload: { ...selectionPayload },
+    apiRouteCheckOutcome: actionOutcome,
+    recordedAt: Date.now()
+  };
+}
+
+function replayQuickStartManualCheckSnapshot() {
+  if (quickStartRouteProofResultLocked()) {
+    return;
+  }
+  if (!quickStartManualCheckSnapshotMatches(quickStartManualCheckSnapshot)) {
+    return;
+  }
+  const snapshot = quickStartManualCheckSnapshot;
+  const replayAgeMs = Date.now() - snapshot.recordedAt;
+  if (snapshot.admissionPacket) {
+    renderQuickStartConfigAdmission(snapshot.admissionPacket, {
+      remember: false,
+      replayed: true,
+      replayAgeMs
+    });
+  }
+  if (snapshot.apiRouteCheckOutcome) {
+    renderQuickStartApiRouteCheckResult(
+      snapshot.selectionPayload,
+      snapshot.apiRouteCheckOutcome,
+      {
+        remember: false,
+        replayed: true,
+        replayAgeMs
+      }
+    );
+  }
+}
+
+function customLaunchPayloadRequiresModelRefresh(payload) {
+  const executionMode = payload?.execution_mode || "";
+  if (executionMode === "api_only") {
+    return !payload?.api_model_id;
+  }
+  if (executionMode === "chatgpt_plus_api") {
+    return !payload?.chatgpt_model_id || !payload?.api_model_id;
+  }
+  return !payload?.chatgpt_model_id;
 }
 
 function setQuickStartChip(id, visual, label) {
@@ -2111,43 +3874,1330 @@ function setQuickStartChip(id, visual, label) {
   }
 }
 
+function quickStartVoiceRecognitionConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function quickStartVoiceAdapterAvailable() {
+  return Boolean(quickStartVoiceRecognitionConstructor());
+}
+
+async function quickStartSha256Hex(value) {
+  if (
+    typeof window === "undefined" ||
+    !window.crypto?.subtle ||
+    typeof TextEncoder === "undefined"
+  ) {
+    return "";
+  }
+  const encoded = new TextEncoder().encode(String(value || ""));
+  const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function quickStartVoiceDraftMetadata() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  return {
+    draft_length: transcript.length,
+    draft_sha256: await quickStartSha256Hex(transcript),
+    request_id: `wbp-voice-${Date.now().toString(36)}`
+  };
+}
+
+function quickStartVoiceStatusVisual(packet) {
+  const status = packet?.status || "";
+  const code = packet?.machine_error_code || "";
+  if (status === "ok" || code === "VOICE_DRAFT_COPY_OK") {
+    return "green";
+  }
+  if (status === "recording") {
+    return "blue";
+  }
+  if (code === "MICROPHONE_PERMISSION_DENIED" || status === "failed") {
+    return "red";
+  }
+  if (status === "blocked" || status === "integration_failure") {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartVoiceClientPacket(overrides = {}) {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  const adapterAvailable = quickStartVoiceAdapterAvailable();
+  const defaultStatus = transcript ? "ok" : (adapterAvailable ? "ready" : "blocked");
+  const defaultCode = transcript
+    ? "OK"
+    : (adapterAvailable ? "VOICE_DRAFT_READY" : "TRANSCRIPTION_ENGINE_NOT_CONFIGURED");
+  return {
+    schema_version: 1,
+    packet_kind: "wbp_voice_draft_client_packet",
+    endpoint: "/api/wbp/voice-draft",
+    status: overrides.status || defaultStatus,
+    machine_error_code: overrides.machine_error_code || defaultCode,
+    human_message: overrides.human_message || "",
+    voice_input_ui_present: true,
+    voice_capture_scope: "wbp_browser_local_draft",
+    browser_speech_api_available: adapterAvailable,
+    transcription_adapter: adapterAvailable ? "browser_speech_recognition" : "none",
+    transcription_adapter_fail_closed: true,
+    audio_recording_explicit_user_action: true,
+    transcript_preview_required: true,
+    transcript_present: transcript.length > 0,
+    transcript_length: transcript.length,
+    transcript_text_included_in_packet: false,
+    server_audio_ingress_enabled: false,
+    raw_audio_recorded_by_server: false,
+    raw_audio_persisted_by_default: false,
+    transcript_persisted_by_server: false,
+    custom_codex_not_mutated: true,
+    custom_window_mutation_attempted: false,
+    prompt_not_submitted: true,
+    clipboard_handoff_available: true,
+    clipboard_handoff_attempted: overrides.clipboard_handoff_attempted === true,
+    clipboard_handoff_ok: overrides.clipboard_handoff_ok === true,
+    clipboard_contains_transcript: overrides.clipboard_contains_transcript === true,
+    empty_transcript_copy_blocked: overrides.empty_transcript_copy_blocked === true,
+    clipboard_copy_only: true,
+    paste_bridge_available: true,
+    paste_preflight_passed: quickStartVoiceDraftState.pastePreflightOk === true,
+    live_paste_attempted: false,
+    paste_attempted: false,
+    paste_ok: false,
+    clipboard_restore_required: true,
+    clipboard_restored: false,
+    submit_action_planned: false,
+    enter_key_planned: false,
+    enter_key_pressed: false,
+    send_button_planned: false,
+    send_button_pressed: false,
+    api_called: false,
+    model_endpoint_called: false,
+    operator_run_called: false,
+    session_prompt_endpoint_called: false,
+    no_secret_exposed: true,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    changed_files: [],
+    server_contract_machine_error_code:
+      quickStartVoiceDraftState.serverPacket?.machine_error_code || "",
+    last_error_code: quickStartVoiceDraftState.lastErrorCode || "",
+    next_action: transcript ? "copy_draft_manually" : "dictate_or_type_draft"
+  };
+}
+
+function renderQuickStartVoiceDraft(packet = quickStartVoiceClientPacket()) {
+  const draft = document.getElementById("quickStartVoiceDraftText");
+  if (draft) {
+    draft.value = quickStartVoiceDraftState.transcript || "";
+  }
+  const hasTranscript = Boolean(quickStartVoiceDraftState.transcript);
+  const recordButton = document.getElementById("quickStartVoiceRecordAction");
+  const clearButton = document.getElementById("quickStartVoiceClearAction");
+  const copyButton = document.getElementById("quickStartVoiceCopyAction");
+  const pastePreflightButton = document.getElementById("quickStartVoicePastePreflightAction");
+  const pasteCustomButton = document.getElementById("quickStartVoicePasteCustomAction");
+  const pastePacket = quickStartVoiceDraftState.pasteBridgePacket;
+  const pastePreflightFresh = (
+    quickStartVoiceDraftState.pastePreflightOk === true &&
+    pastePacket?.phase === "preflight" &&
+    pastePacket?.draft_length === String(quickStartVoiceDraftState.transcript || "").length
+  );
+  if (recordButton?.lastElementChild) {
+    recordButton.lastElementChild.textContent = quickStartVoiceDraftState.listening
+      ? "Слушаю"
+      : "Надиктовать";
+  }
+  if (clearButton) {
+    clearButton.disabled = !hasTranscript && !quickStartVoiceDraftState.lastErrorCode;
+  }
+  if (copyButton) {
+    copyButton.disabled = !hasTranscript;
+  }
+  if (pastePreflightButton) {
+    pastePreflightButton.disabled = !hasTranscript || quickStartVoiceDraftState.pasteInFlight;
+  }
+  if (pasteCustomButton) {
+    pasteCustomButton.disabled = !hasTranscript || !pastePreflightFresh || quickStartVoiceDraftState.pasteInFlight;
+  }
+  const adapterAvailable = quickStartVoiceAdapterAvailable();
+  setQuickStartChip("quickStartVoiceDraftChip", quickStartVoiceStatusVisual(packet), packet.machine_error_code || "pending");
+  setQuickStartChip(
+    "quickStartVoiceEngineState",
+    adapterAvailable ? "green" : "amber",
+    adapterAvailable ? "browser" : "нет engine"
+  );
+  setQuickStartChip("quickStartVoiceScopeState", "green", "WBP draft");
+  setQuickStartChip(
+    "quickStartVoiceCustomState",
+    packet.custom_codex_not_mutated ? "green" : "red",
+    packet.custom_codex_not_mutated ? "не тронут" : "mutation"
+  );
+  setQuickStartChip(
+    "quickStartVoiceAudioState",
+    packet.raw_audio_recorded_by_server === false && packet.raw_audio_persisted_by_default === false
+      ? "green"
+      : "red",
+    "не хранится"
+  );
+  setQuickStartChip(
+    "quickStartVoicePasteState",
+    quickStartVoiceStatusVisual(pastePacket || {}),
+    pastePacket?.machine_error_code || "не проверен"
+  );
+  setQuickStartChip(
+    "quickStartVoiceSubmitState",
+    (pastePacket?.prompt_submitted === true ||
+      pastePacket?.enter_key_pressed === true ||
+      pastePacket?.send_button_pressed === true)
+      ? "red"
+      : "green",
+    (pastePacket?.prompt_submitted === true ||
+      pastePacket?.enter_key_pressed === true ||
+      pastePacket?.send_button_pressed === true)
+      ? "violation"
+      : "запрещен"
+  );
+  const packetNode = document.getElementById("quickStartVoiceDraftPacket");
+  if (packetNode) {
+    packetNode.textContent = JSON.stringify(pastePacket || packet, null, 2);
+  }
+}
+
+function resetQuickStartVoicePasteBridge() {
+  quickStartVoiceDraftState.pasteBridgePacket = null;
+  quickStartVoiceDraftState.pastePreflightOk = false;
+  quickStartVoiceDraftState.pasteInFlight = false;
+}
+
+async function refreshQuickStartVoiceDraftContract() {
+  const refreshEpoch = sourceTransitionEpoch;
+  try {
+    const response = await fetch("api/wbp/voice-draft", {
+      cache: "no-store",
+      signal: sourceTransitionAbortController?.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`voice draft contract http ${response.status}`);
+    }
+    const packet = await response.json();
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
+    quickStartVoiceDraftState.serverPacket = packet;
+    renderQuickStartVoiceDraft();
+  } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
+    quickStartVoiceDraftState.serverPacket = {
+      schema_version: 1,
+      packet_kind: "wbp_voice_draft_contract",
+      endpoint: "/api/wbp/voice-draft",
+      status: "integration_failure",
+      machine_error_code: "VOICE_DRAFT_CONTRACT_FETCH_FAILED",
+      human_message: error.message,
+      server_audio_ingress_enabled: false,
+      raw_audio_recorded_by_server: false,
+      raw_audio_persisted_by_default: false,
+      transcript_persisted_by_server: false,
+      custom_codex_not_mutated: true,
+      custom_window_mutation_attempted: false,
+      prompt_not_submitted: true,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      no_secret_exposed: true
+    };
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: quickStartVoiceAdapterAvailable() ? "ready" : "blocked",
+        machine_error_code: quickStartVoiceAdapterAvailable()
+          ? "VOICE_DRAFT_READY"
+          : "TRANSCRIPTION_ENGINE_NOT_CONFIGURED",
+        human_message: error.message
+      })
+    );
+  }
+}
+
+function quickStartVoiceRecognitionLanguage() {
+  const htmlLang = document.documentElement?.lang || "";
+  if (htmlLang.toLowerCase().startsWith("ru")) {
+    return "ru-RU";
+  }
+  if (typeof navigator !== "undefined" && navigator.language) {
+    return navigator.language;
+  }
+  return "ru-RU";
+}
+
+function startQuickStartVoiceDraft() {
+  if (quickStartVoiceDraftState.listening) {
+    try {
+      quickStartVoiceDraftState.recognition?.stop();
+    } catch (error) {
+      quickStartVoiceDraftState.lastErrorCode = "BROWSER_SPEECH_STOP_FAILED";
+    }
+    return;
+  }
+  const Recognition = quickStartVoiceRecognitionConstructor();
+  if (!Recognition) {
+    quickStartVoiceDraftState.lastErrorCode = "TRANSCRIPTION_ENGINE_NOT_CONFIGURED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "blocked",
+        machine_error_code: "TRANSCRIPTION_ENGINE_NOT_CONFIGURED",
+        human_message: "Browser SpeechRecognition is unavailable in this Custom Codex surface."
+      })
+    );
+    return;
+  }
+  let finalTranscript = "";
+  const recognition = new Recognition();
+  recognition.lang = quickStartVoiceRecognitionLanguage();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  quickStartVoiceDraftState.recognition = recognition;
+  quickStartVoiceDraftState.listening = true;
+  quickStartVoiceDraftState.lastErrorCode = "";
+  recognition.onresult = (event) => {
+    let interimTranscript = "";
+    for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
+      const phrase = String(event.results[index]?.[0]?.transcript || "");
+      if (event.results[index]?.isFinal) {
+        finalTranscript = `${finalTranscript} ${phrase}`.trim();
+      } else {
+        interimTranscript = `${interimTranscript} ${phrase}`.trim();
+      }
+    }
+    const nextTranscript = `${finalTranscript} ${interimTranscript}`.trim();
+    if (nextTranscript !== quickStartVoiceDraftState.transcript) {
+      quickStartVoiceDraftState.pasteBridgePacket = null;
+      quickStartVoiceDraftState.pastePreflightOk = false;
+    }
+    quickStartVoiceDraftState.transcript = nextTranscript;
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "recording",
+        machine_error_code: quickStartVoiceDraftState.transcript ? "VOICE_DRAFT_PARTIAL" : "VOICE_DRAFT_RECORDING"
+      })
+    );
+  };
+  recognition.onerror = (event) => {
+    const errorCode = event?.error === "not-allowed"
+      ? "MICROPHONE_PERMISSION_DENIED"
+      : "BROWSER_SPEECH_RECOGNITION_ERROR";
+    quickStartVoiceDraftState.listening = false;
+    quickStartVoiceDraftState.lastErrorCode = errorCode;
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: errorCode,
+        human_message: String(event?.message || event?.error || "Speech recognition failed.")
+      })
+    );
+  };
+  recognition.onend = () => {
+    quickStartVoiceDraftState.listening = false;
+    if (quickStartVoiceDraftState.lastErrorCode) {
+      return;
+    }
+    const hasTranscript = Boolean(quickStartVoiceDraftState.transcript);
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: hasTranscript ? "ok" : "blocked",
+        machine_error_code: hasTranscript ? "OK" : "EMPTY_TRANSCRIPT"
+      })
+    );
+  };
+  try {
+    recognition.start();
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "recording",
+        machine_error_code: "VOICE_DRAFT_RECORDING"
+      })
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.listening = false;
+    quickStartVoiceDraftState.lastErrorCode = "BROWSER_SPEECH_START_FAILED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: "BROWSER_SPEECH_START_FAILED",
+        human_message: error.message
+      })
+    );
+  }
+}
+
+function clearQuickStartVoiceDraft() {
+  quickStartVoiceDraftState.transcript = "";
+  quickStartVoiceDraftState.lastErrorCode = "";
+  resetQuickStartVoicePasteBridge();
+  renderQuickStartVoiceDraft();
+}
+
+async function copyQuickStartVoiceDraft() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  if (!transcript) {
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "blocked",
+        machine_error_code: "EMPTY_TRANSCRIPT",
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: false,
+        clipboard_contains_transcript: false,
+        empty_transcript_copy_blocked: true
+      })
+    );
+    return;
+  }
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      throw new Error("Clipboard API is unavailable.");
+    }
+    await navigator.clipboard.writeText(transcript);
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "ok",
+        machine_error_code: "VOICE_DRAFT_COPY_OK",
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: true,
+        clipboard_contains_transcript: true,
+        empty_transcript_copy_blocked: false
+      })
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.lastErrorCode = "CLIPBOARD_WRITE_FAILED";
+    renderQuickStartVoiceDraft(
+      quickStartVoiceClientPacket({
+        status: "failed",
+        machine_error_code: "CLIPBOARD_WRITE_FAILED",
+        human_message: error.message,
+        clipboard_handoff_attempted: true,
+        clipboard_handoff_ok: false,
+        clipboard_contains_transcript: false,
+        empty_transcript_copy_blocked: false
+      })
+    );
+  }
+}
+
+function quickStartVoicePasteBridgeBlockedPacket(code, message = "") {
+  return {
+    schema_version: 1,
+    packet_kind: "wbp_custom_paste_bridge",
+    endpoint: "/api/wbp/custom-paste-bridge/preflight",
+    phase: "client_guard",
+    status: "blocked",
+    machine_error_code: code,
+    human_message: message,
+    draft_present: Boolean(quickStartVoiceDraftState.transcript),
+    draft_length: String(quickStartVoiceDraftState.transcript || "").length,
+    draft_text_in_packet: false,
+    custom_window_found: false,
+    custom_window_identity_proven: false,
+    target_input_unique: false,
+    clipboard_restore_required: true,
+    live_paste_attempted: false,
+    paste_attempted: false,
+    paste_ok: false,
+    custom_window_mutation_attempted: false,
+    prompt_submitted: false,
+    submit_action_planned: false,
+    enter_key_planned: false,
+    enter_key_pressed: false,
+    send_button_planned: false,
+    send_button_pressed: false,
+    api_called: false,
+    model_endpoint_called: false,
+    operator_run_called: false,
+    session_prompt_endpoint_called: false,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    no_secret_exposed: true,
+    next_action: "fix_voice_draft_paste_bridge_guard"
+  };
+}
+
+async function runQuickStartVoicePastePreflight() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  if (!transcript) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket("EMPTY_DRAFT");
+    quickStartVoiceDraftState.pastePreflightOk = false;
+    renderQuickStartVoiceDraft();
+    return;
+  }
+  quickStartVoiceDraftState.pasteInFlight = true;
+  renderQuickStartVoiceDraft();
+  try {
+    const metadata = await quickStartVoiceDraftMetadata();
+    const response = await fetch("/api/wbp/custom-paste-bridge/preflight", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(metadata)
+    });
+    if (!response.ok) {
+      throw new Error(`paste preflight http ${response.status}`);
+    }
+    const packet = await response.json();
+    quickStartVoiceDraftState.pasteBridgePacket = packet;
+    quickStartVoiceDraftState.pastePreflightOk = (
+      packet?.status === "ok" &&
+      packet?.draft_text_in_packet === false &&
+      packet?.target_input_unique === true &&
+      packet?.prompt_submitted === false &&
+      packet?.enter_key_pressed === false &&
+      packet?.send_button_pressed === false
+    );
+  } catch (error) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      "PASTE_PREFLIGHT_FETCH_FAILED",
+      error.message
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } finally {
+    quickStartVoiceDraftState.pasteInFlight = false;
+    renderQuickStartVoiceDraft();
+  }
+}
+
+async function runQuickStartVoicePasteCustom() {
+  const transcript = String(quickStartVoiceDraftState.transcript || "");
+  const preflightPacket = quickStartVoiceDraftState.pasteBridgePacket;
+  const preflightFresh = (
+    quickStartVoiceDraftState.pastePreflightOk === true &&
+    preflightPacket?.phase === "preflight" &&
+    preflightPacket?.draft_length === transcript.length
+  );
+  if (!transcript || !preflightFresh) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      !transcript ? "EMPTY_DRAFT" : "PASTE_PREFLIGHT_REQUIRED"
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+    renderQuickStartVoiceDraft();
+    return;
+  }
+  quickStartVoiceDraftState.pasteInFlight = true;
+  renderQuickStartVoiceDraft();
+  try {
+    const metadata = await quickStartVoiceDraftMetadata();
+    const response = await fetch("/api/wbp/custom-paste-bridge/live-paste", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        ...metadata,
+        draft_text: transcript
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`paste live http ${response.status}`);
+    }
+    const packet = await response.json();
+    quickStartVoiceDraftState.pasteBridgePacket = packet;
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } catch (error) {
+    quickStartVoiceDraftState.pasteBridgePacket = quickStartVoicePasteBridgeBlockedPacket(
+      "LIVE_PASTE_FETCH_FAILED",
+      error.message
+    );
+    quickStartVoiceDraftState.pastePreflightOk = false;
+  } finally {
+    quickStartVoiceDraftState.pasteInFlight = false;
+    renderQuickStartVoiceDraft();
+  }
+}
+
+function lockQuickStartRouteProofResult(durationMs = 120000) {
+  quickStartRouteProofResultLockedUntil = Date.now() + durationMs;
+}
+
+function quickStartRouteProofResultLocked() {
+  return Date.now() < quickStartRouteProofResultLockedUntil;
+}
+
+function quickStartProofRankVisual(status) {
+  if (status === "ok") {
+    return "green";
+  }
+  if (status === "partial") {
+    return "amber";
+  }
+  if (status === "blocked") {
+    return "red";
+  }
+  return "neutral";
+}
+
+function quickStartPacketWithLimits(packet) {
+  const statuses = [
+    packet?.final_status,
+    packet?.legacy_quick_start_final_status
+  ];
+  return statuses.some((value) => String(value || "").includes("WITH_LIMITS"));
+}
+
+function quickStartProofRowVisual(row) {
+  if (row?.counts_as_full_success === true) {
+    return "green";
+  }
+  if (row?.counts_as_partial_api_success === true || row?.status === "partial") {
+    return "amber";
+  }
+  if (row?.proof_axis === "execution_mode" && row?.status === "ok") {
+    return "amber";
+  }
+  if (row?.status === "ok") {
+    return "green";
+  }
+  if (row?.status === "blocked") {
+    return "amber";
+  }
+  return "neutral";
+}
+
+function quickStartProofRowLabel(row) {
+  return row?.display_name
+    || row?.agent_slot
+    || row?.execution_mode
+    || row?.operator_level
+    || "unknown";
+}
+
+function quickStartProofRowMeta(row) {
+  const proof = row?.provider_reasoning_proof_level
+    || row?.proof_level
+    || row?.machine_error_code
+    || row?.status
+    || "";
+  const model = row?.model_id || row?.api_model_id || "";
+  const aliases = Array.isArray(row?.aliases) && row.aliases.length
+    ? row.aliases.slice(0, 4).join("/")
+    : "";
+  return [proof, model, aliases].filter(Boolean).join(" · ");
+}
+
+function setQuickStartProofRows(id, rows) {
+  const container = document.getElementById(id);
+  if (!container) {
+    return;
+  }
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) {
+    container.textContent = "pending";
+    return;
+  }
+  const plainRows = safeRows.map((row) => {
+    const label = quickStartProofRowLabel(row);
+    const meta = quickStartProofRowMeta(row);
+    return meta ? `${label}: ${meta}` : label;
+  });
+  if (
+    typeof document.createElement !== "function"
+    || typeof container.replaceChildren !== "function"
+  ) {
+    container.textContent = plainRows.join(" | ");
+    return;
+  }
+  container.replaceChildren();
+  for (const row of safeRows) {
+    const node = document.createElement("div");
+    node.className = "quick-start-proof-row";
+    const main = document.createElement("span");
+    main.className = "quick-start-proof-row-main";
+    main.textContent = quickStartProofRowLabel(row);
+    const chip = document.createElement("span");
+    chip.className = `chip ${quickStartProofRowVisual(row)}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = row?.status || row?.machine_error_code || "unknown";
+    chip.appendChild(dot);
+    chip.appendChild(label);
+    const meta = document.createElement("span");
+    meta.className = "quick-start-proof-row-meta";
+    meta.textContent = quickStartProofRowMeta(row);
+    node.appendChild(main);
+    node.appendChild(chip);
+    node.appendChild(meta);
+    container.appendChild(node);
+  }
+}
+
+function renderQuickStartProofBoard(packet) {
+  const rankStatus = packet?.proof_rank_status || "";
+  const rankLabel = packet?.proof_rank_label || packet?.proof_rank || "pending";
+  setQuickStartChip(
+    "quickStartProofRankChip",
+    quickStartProofRankVisual(rankStatus),
+    rankLabel
+  );
+  setQuickStartProofRows(
+    "quickStartProofModeRows",
+    Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows : packet?.matrix_rows
+  );
+  setQuickStartProofRows(
+    "quickStartProofReasoningRows",
+    Array.isArray(packet?.proof_reasoning_rows)
+      ? packet.proof_reasoning_rows
+      : packet?.reasoning_level_rows
+  );
+  setQuickStartProofRows(
+    "quickStartProofAgentRows",
+    Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows : []
+  );
+}
+
 function setQuickStartRouteResponse(packet) {
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
+    const primarySlot = packet?.primary_model_slot || {};
+    const codingSlot = packet?.coding_agent_model_slot || {};
     response.textContent = JSON.stringify({
       status: packet?.status || "unknown",
       machine_error_code: packet?.machine_error_code || packet?.final_status || "UNKNOWN",
       final_status: packet?.final_status || "",
+      packet_kind: packet?.packet_kind || "",
+      captured_at_utc: packet?.captured_at_utc || "",
+      request_id: packet?.request_id || "",
+      allowed_browser_fields:
+        Array.isArray(packet?.allowed_browser_fields) ? packet.allowed_browser_fields : [],
+      forbidden_fields:
+        Array.isArray(packet?.forbidden_fields) ? packet.forbidden_fields : [],
+      forbidden_fields_redacted:
+        packet?.forbidden_fields_redacted === true,
+      forbidden_field_count:
+        Number(packet?.forbidden_field_count || 0),
+      forbidden_field_categories:
+        Array.isArray(packet?.forbidden_field_categories)
+          ? packet.forbidden_field_categories
+          : [],
+      mixed_mode_product_decision:
+        packet?.mixed_mode_product_decision || "",
+      mixed_mode_launch_action:
+        packet?.mixed_mode_launch_action || "",
+      mixed_mode_launch_blocked_reason:
+        packet?.mixed_mode_launch_blocked_reason || "",
+      primary_trace_proof_status:
+        packet?.primary_trace_proof_status || "",
+      session_dual_lane_execution_packet:
+        packet?.session_dual_lane_execution_packet === true,
+      session_probe_only:
+        packet?.session_probe_only === true,
+      launch_attempted:
+        packet?.launch_attempted === true,
+      native_launch_attempted:
+        packet?.native_launch_attempted === true,
+      window_launch_attempted:
+        packet?.window_launch_attempted === true,
+      session_id:
+        packet?.session_id || "",
+      same_session_dispatch_proven:
+        packet?.same_session_dispatch_proven === true,
+      primary_dispatch_proven:
+        packet?.primary_dispatch_proven === true,
+      coding_dispatch_proven:
+        packet?.coding_dispatch_proven === true,
+      manual_activation_proven:
+        packet?.manual_activation_proven === true,
+      manual_activation_surface:
+        packet?.manual_activation_surface || "",
+      alias_runtime_binding_proven:
+        packet?.alias_runtime_binding_proven === true,
+      alias_prompt_seen:
+        packet?.alias_prompt_seen === true,
+      deepseek_response_token_matched:
+        packet?.deepseek_response_token_matched === true,
+      expected_coding_response:
+        packet?.expected_coding_response || "",
+      agent_alias_binding_packet:
+        packet?.agent_alias_binding_packet || null,
+      does_not_prove_native_free_text_tool_bridge:
+        packet?.does_not_prove_native_free_text_tool_bridge === true,
+      session_dual_lane_dispatch:
+        packet?.session_dual_lane_dispatch || {},
+      session_dual_lane_dispatch_proven_with_limits:
+        packet?.session_dual_lane_dispatch_proven_with_limits === true,
+      session_dual_lane_does_not_prove_native_launch:
+        packet?.session_dual_lane_does_not_prove_native_launch === true,
+      session_dual_lane_does_not_claim_product_readiness:
+        packet?.session_dual_lane_does_not_claim_product_readiness === true,
+      gpt_api_alias_command_loop_packet:
+        packet?.gpt_api_alias_command_loop_packet === true,
+      command_loop_proven:
+        packet?.command_loop_proven === true,
+      model_reasoning_availability_matrix_packet:
+        packet?.model_reasoning_availability_matrix_packet === true,
+      matrix_rows:
+        Array.isArray(packet?.matrix_rows) ? packet.matrix_rows : [],
+      matrix_row_count:
+        Array.isArray(packet?.matrix_rows) ? packet.matrix_rows.length : 0,
+      reasoning_level_rows:
+        Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows : [],
+      reasoning_level_row_count:
+        Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows.length : 0,
+      proof_rank:
+        packet?.proof_rank || "",
+      proof_rank_score:
+        Number(packet?.proof_rank_score || 0),
+      proof_rank_status:
+        packet?.proof_rank_status || "",
+      proof_rank_label:
+        packet?.proof_rank_label || "",
+      proof_rank_counts_as_full_success:
+        packet?.proof_rank_counts_as_full_success === true,
+      proof_rank_machine_error_code:
+        packet?.proof_rank_machine_error_code || "",
+      proof_mode_rows:
+        Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows : [],
+      proof_mode_row_count:
+        Array.isArray(packet?.proof_mode_rows) ? packet.proof_mode_rows.length : 0,
+      proof_reasoning_rows:
+        Array.isArray(packet?.proof_reasoning_rows) ? packet.proof_reasoning_rows : [],
+      proof_reasoning_row_count:
+        Array.isArray(packet?.proof_reasoning_rows) ? packet.proof_reasoning_rows.length : 0,
+      proof_agent_rows:
+        Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows : [],
+      proof_agent_row_count:
+        Array.isArray(packet?.proof_agent_rows) ? packet.proof_agent_rows.length : 0,
+      display_aliases_are_runtime_aliases:
+        packet?.display_aliases_are_runtime_aliases === true,
+      display_aliases_are_separate_agents:
+        packet?.display_aliases_are_separate_agents === true,
+      chatgpt_lane_proven:
+        packet?.chatgpt_lane_proven === true,
+      api_lane_proven:
+        packet?.api_lane_proven === true,
+      alias_binding_proven:
+        packet?.alias_binding_proven === true,
+      combined_slot_binding_proven:
+        packet?.combined_slot_binding_proven === true,
+      combined_full_proven:
+        packet?.combined_full_proven === true,
+      partial_api_lane_proven:
+        packet?.partial_api_lane_proven === true,
+      combined_status_counts_as_full_success:
+        packet?.combined_status_counts_as_full_success === true,
+      api_success_counts_as_combined_success:
+        packet?.api_success_counts_as_combined_success === true,
+      native_execution_proven:
+        packet?.native_execution_proven === true,
+      native_execution_machine_error_code:
+        packet?.native_execution_machine_error_code || "",
+      native_execution_packet:
+        packet?.native_execution_packet || {},
+      reasoning_dispatch_matrix_proven:
+        packet?.reasoning_dispatch_matrix_proven === true,
+      provider_declared_reasoning_levels_proven:
+        packet?.provider_declared_reasoning_levels_proven === true,
+      provider_reasoning_level_source:
+        packet?.provider_reasoning_level_source || "",
+      provider_reasoning_level_proof_count:
+        Number(packet?.provider_reasoning_level_proof_count || 0),
+      provider_reasoning_level_expected_count:
+        Number(packet?.provider_reasoning_level_expected_count || 0),
+      independent_quality_benchmark_proven:
+        packet?.independent_quality_benchmark_proven === true,
+      benchmark_required_for_provider_level_proof:
+        packet?.benchmark_required_for_provider_level_proof === true,
+      quality_benchmark_status:
+        packet?.quality_benchmark_status || "",
+      native_free_text_command_loop_packet:
+        packet?.native_free_text_command_loop_packet === true,
+      native_free_text_command_loop_proven:
+        packet?.native_free_text_command_loop_proven === true,
+      native_free_chat_dip_command_packet:
+        packet?.native_free_chat_dip_command_packet === true,
+      native_free_chat_dip_command_proven:
+        packet?.native_free_chat_dip_command_proven === true,
+      server_owned_native_free_chat_command_path:
+        packet?.server_owned_native_free_chat_command_path === true,
+      native_free_chat_api_lane_proven:
+        packet?.native_free_chat_api_lane_proven === true,
+      native_free_chat_custom_response_observed:
+        packet?.native_free_chat_custom_response_observed === true,
+      native_free_chat_request_bound_digest_matched:
+        packet?.native_free_chat_request_bound_digest_matched === true,
+      native_free_chat_subagent_substitution_blocked:
+        packet?.native_free_chat_subagent_substitution_blocked === true,
+      server_owned_natural_dip_command_packet:
+        packet?.server_owned_natural_dip_command_packet === true,
+      server_owned_natural_dip_command_proven:
+        packet?.server_owned_natural_dip_command_proven === true,
+      server_owned_natural_dip_command_path:
+        packet?.server_owned_natural_dip_command_path === true,
+      server_owned_natural_command_prompt_source:
+        packet?.server_owned_natural_command_prompt_source || "",
+      natural_dip_prompt_browser_supplied:
+        packet?.natural_dip_prompt_browser_supplied === true,
+      natural_dip_prompt_text_recorded:
+        packet?.natural_dip_prompt_text_recorded === true,
+      api_bridge_transcript_observed:
+        packet?.api_bridge_transcript_observed === true,
+      api_bridge_or_file_bridge_transcript_observed:
+        packet?.api_bridge_or_file_bridge_transcript_observed === true,
+      custom_response_observed:
+        packet?.custom_response_observed === true,
+      browser_authority_contract_enforced:
+        packet?.browser_authority_contract_enforced === true,
+      browser_prompt_authority_rejected:
+        packet?.browser_prompt_authority_rejected === true,
+      does_not_prove_universal_manual_chat_interception:
+        packet?.does_not_prove_universal_manual_chat_interception === true,
+      universal_manual_chat_interception_proven:
+        packet?.universal_manual_chat_interception_proven === true,
+      manual_free_chat_router_reality_packet:
+        packet?.manual_free_chat_router_reality_packet === true
+        || packet?.packet_kind === "custom_codex_manual_free_chat_router_reality",
+      manual_free_chat_router_reality_proven:
+        packet?.manual_free_chat_router_reality_proven === true,
+      manual_user_prompt_observed:
+        packet?.manual_user_prompt_observed === true,
+      manual_user_prompt_source:
+        packet?.manual_user_prompt_source || "",
+      manual_user_prompt_digest_present:
+        packet?.manual_user_prompt_digest_present === true,
+      wbp_owned_router_hook_observed:
+        packet?.wbp_owned_router_hook_observed === true,
+      router_hook_truth_source:
+        packet?.router_hook_truth_source || "",
+      router_hook_transcript_digest_present:
+        packet?.router_hook_transcript_digest_present === true,
+      native_free_chat_hook_status:
+        packet?.native_free_chat_hook_status || "",
+      native_free_chat_hook_machine_error_code:
+        packet?.native_free_chat_hook_machine_error_code || "",
+      native_free_chat_hook_observed:
+        packet?.native_free_chat_hook_observed === true,
+      native_free_chat_hook_truth_source:
+        packet?.native_free_chat_hook_truth_source || "",
+      codex_subagent_used_as_dip:
+        packet?.codex_subagent_used_as_dip === true,
+      server_owned_proof_counts_as_manual_router:
+        packet?.server_owned_proof_counts_as_manual_router === true,
+      server_owned_natural_proof_counts_as_manual_router:
+        packet?.server_owned_natural_proof_counts_as_manual_router === true,
+      server_owned_proof_counts_as_native_free_chat_hook:
+        packet?.server_owned_proof_counts_as_native_free_chat_hook === true,
+      server_owned_natural_proof_counts_as_native_free_chat_hook:
+        packet?.server_owned_natural_proof_counts_as_native_free_chat_hook === true,
+      api_lane_truth_source:
+        packet?.api_lane_truth_source || "",
+      native_free_text_tool_bridge_proven:
+        packet?.native_free_text_tool_bridge_proven === true,
+      native_free_text_activation_proven:
+        packet?.native_free_text_activation_proven === true,
+      native_activation_attempted:
+        packet?.native_activation_attempted === true,
+      native_activation_proven:
+        packet?.native_activation_proven === true,
+      native_activation_machine_error_code:
+        packet?.native_activation_machine_error_code || "",
+      native_activation_status:
+        packet?.native_activation_status || "",
+      native_free_text_activation_source:
+        packet?.native_free_text_activation_source || "",
+      native_auth_usability_state_code:
+        packet?.native_auth_usability_state_code || "",
+      native_auth_usability_machine_error_code:
+        packet?.native_auth_usability_machine_error_code || "",
+      native_auth_wall_observed:
+        packet?.native_auth_wall_observed === true,
+      native_keychain_or_permission_prompt_observed:
+        packet?.native_keychain_or_permission_prompt_observed === true,
+      native_renderer_no_input_surface_observed:
+        packet?.native_renderer_no_input_surface_observed === true,
+      native_auth_passed_input_ready:
+        packet?.native_auth_passed_input_ready === true,
+      native_resume_after_auth_ready:
+        packet?.native_resume_after_auth_ready === true,
+      native_activation_packet:
+        packet?.native_activation_packet || {},
+      native_submit_packet:
+        packet?.native_submit_packet || {},
+      native_submit_machine_error_code:
+        packet?.native_submit_machine_error_code || "",
+      native_submit_normalized_machine_error_code:
+        packet?.native_submit_normalized_machine_error_code || "",
+      native_agent_proof_packet:
+        packet?.native_agent_proof_packet || {},
+      native_agent_proof_machine_error_code:
+        packet?.native_agent_proof_machine_error_code || "",
+      native_agent_proof_blocking_reasons:
+        Array.isArray(packet?.native_agent_proof_blocking_reasons)
+          ? packet.native_agent_proof_blocking_reasons
+          : [],
+      command_loop_packet:
+        packet?.command_loop_packet || {},
+      native_free_text_tool_bridge_source:
+        packet?.native_free_text_tool_bridge_source || "",
+      native_free_text_observability_proven:
+        packet?.native_free_text_observability_proven === true,
+      native_submitter_trust_boundary_proven:
+        packet?.native_submitter_trust_boundary_proven === true,
+      native_agent_proof_file_observed:
+        packet?.native_agent_proof_file_observed === true,
+      native_agent_proof_file_valid:
+        packet?.native_agent_proof_file_valid === true,
+      native_free_text_agent_context_sha_match:
+        packet?.native_free_text_agent_context_sha_match === true,
+      native_free_text_alias_routing_proven:
+        packet?.native_free_text_alias_routing_proven === true,
+      input_capable_ui_observed:
+        packet?.input_capable_ui_observed === true,
+      input_text_insert_attempted:
+        packet?.input_text_insert_attempted === true,
+      input_text_insert_succeeded:
+        packet?.input_text_insert_succeeded === true,
+      prompt_submitted:
+        packet?.prompt_submitted === true,
+      prompt_text_recorded:
+        packet?.prompt_text_recorded === true,
+      raw_prompt_recorded:
+        packet?.raw_prompt_recorded === true,
+      native_agent_provider_call_directly_observed:
+        packet?.native_agent_provider_call_directly_observed === true,
+      custom_codex_response_text_read_proven:
+        packet?.custom_codex_response_text_read_proven === true,
+      custom_response_exact_token_observed:
+        packet?.custom_response_exact_token_observed === true,
+      custom_response_bound_to_request:
+        packet?.custom_response_bound_to_request === true,
+      custom_response_expected_sha256:
+        packet?.custom_response_expected_sha256 || "",
+      custom_response_expected_sha256_match:
+        packet?.custom_response_expected_sha256_match === true,
+      custom_response_observer_attempted:
+        packet?.custom_response_observer_attempted === true,
+      custom_response_observer_scan_performed:
+        packet?.custom_response_observer_scan_performed === true,
+      custom_response_text_read_without_storing:
+        packet?.custom_response_text_read_without_storing === true,
+      native_codex_subagent_used_as_dip:
+        packet?.native_codex_subagent_used_as_dip === true,
+      native_codex_subagent_absence_proven:
+        packet?.native_codex_subagent_absence_proven === true,
+      proof_file_path_redacted:
+        packet?.proof_file_path_redacted === true,
+      nested_packets_redacted:
+        packet?.nested_packets_redacted === true,
+      runtime_context_file_proven:
+        packet?.runtime_context_file_proven === true,
+      custom_codex_agent_runtime_context_proven:
+        packet?.custom_codex_agent_runtime_context_proven === true,
+      native_alias_context_read:
+        packet?.native_alias_context_read === true,
+      alias_context_read:
+        packet?.alias_context_read === true,
+      context_read_source:
+        packet?.context_read_source || "",
+      context_file_present:
+        packet?.context_file_present === true,
+      context_file_sha256_present:
+        packet?.context_file_sha256_present === true,
+      context_path_redacted:
+        packet?.context_path_redacted === true,
+      primary_alias:
+        packet?.primary_alias || "",
+      coding_alias:
+        packet?.coding_alias || "",
+      primary_alias_position:
+        Number.isFinite(packet?.primary_alias_position) ? packet.primary_alias_position : null,
+      coding_alias_position:
+        Number.isFinite(packet?.coding_alias_position) ? packet.coding_alias_position : null,
+      primary_alias_resolved_from_context:
+        packet?.primary_alias_resolved_from_context === true,
+      coding_alias_resolved_from_context:
+        packet?.coding_alias_resolved_from_context === true,
+      primary_alias_bound_to_chatgpt_lane:
+        packet?.primary_alias_bound_to_chatgpt_lane === true,
+      coding_alias_bound_to_api_lane:
+        packet?.coding_alias_bound_to_api_lane === true,
+      primary_alias_precedes_coding_alias:
+        packet?.primary_alias_precedes_coding_alias === true,
+      reasoning_prerequisite_proven:
+        packet?.reasoning_prerequisite_proven === true,
+      api_lane_exact_token_matched:
+        packet?.api_lane_exact_token_matched === true,
+      file_bridge_acceptance_proven:
+        packet?.file_bridge_acceptance_proven === true,
+      agent_alias_route_acceptance_proven:
+        packet?.agent_alias_route_acceptance_proven === true,
+      allowed_api_route_ids_enforced:
+        packet?.allowed_api_route_ids_enforced === true,
+      forbidden_stale_route_ids_enforced:
+        packet?.forbidden_stale_route_ids_enforced === true,
+      bridge_or_file_bridge_used:
+        packet?.bridge_or_file_bridge_used === true,
+      command_loop_route_authority_proven:
+        packet?.command_loop_route_authority_proven === true,
+      command_loop_provider_call_count:
+        Number(packet?.command_loop_provider_call_count || 0),
+      reasoning_provider_call_count:
+        Number(packet?.reasoning_provider_call_count || 0),
+      not_intelligence_proof:
+        packet?.not_intelligence_proof === true,
+      intelligence_measured:
+        packet?.intelligence_measured === true,
+      mixed_mode_launch_available_with_primary_trace_gap:
+        packet?.mixed_mode_launch_available_with_primary_trace_gap === true,
       execution_mode: packet?.execution_mode || "",
       chatgpt_model_id: packet?.chatgpt_model_id || "",
       api_model_id: packet?.api_model_id || "",
       selected_model: packet?.selected_model || packet?.api_model_id || packet?.chatgpt_model_id || "",
+      launch_model_id: packet?.launch_model_id || "",
+      route_model_id: packet?.route_model_id || "",
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
+      api_reasoning_operator_level: packet?.api_reasoning_operator_level || "",
+      api_reasoning_intelligence_measured:
+        packet?.api_reasoning_intelligence_measured === true,
       api_reasoning_status: packet?.api_reasoning_status || "",
       api_route_status: packet?.api_route_status || "",
       api_route_reference: packet?.api_route_reference || "",
+      primary_model_slot_lane: primarySlot?.lane || "",
+      primary_model_slot_model_id: primarySlot?.model_id || "",
+      coding_agent_model_slot_status: codingSlot?.status || "",
+      coding_agent_model_slot_model_id: codingSlot?.model_id || "",
+      chatgpt_line_used_as_executor:
+        packet?.chatgpt_line_used_as_executor === true,
+      api_line_used_as_executor:
+        packet?.api_line_used_as_executor === true,
+      api_only_calls_chatgpt: packet?.api_only_calls_chatgpt === true,
+      chatgpt_only_calls_api: packet?.chatgpt_only_calls_api === true,
+      server_issued_catalog_used: packet?.server_issued_catalog_used === true,
+      browser_can_supply_prompt_authority:
+        packet?.browser_can_supply_prompt_authority === true,
+      browser_can_supply_route_authority:
+        packet?.browser_can_supply_route_authority === true,
+      browser_can_supply_reasoning_authority:
+        packet?.browser_can_supply_reasoning_authority === true,
+      browser_model_authority:
+        packet?.browser_model_authority === true,
+      ui_action: packet?.ui_action || "",
+      route_id: packet?.route_id || "",
+      action_status: packet?.action_status || "",
+      action_machine_error_code: packet?.action_machine_error_code || "",
+      action_refresh_state: packet?.action_refresh_state || "",
+      human_message: packet?.human_message || "",
+      next_action: packet?.next_action || "",
+      post_action_refresh_required: packet?.post_action_refresh_required === true,
+      launch_proven: packet?.launch_proven === true,
+      launch_context_present: packet?.launch_context_present === true,
+      launch_context_missing: packet?.launch_context_missing === true,
+      launch_context_missing_reason: packet?.launch_context_missing_reason || "",
+      persisted_config_counts_as_launch_context:
+        packet?.persisted_config_counts_as_launch_context === true,
+      window_visibility_counts_as_launch_context:
+        packet?.window_visibility_counts_as_launch_context === true,
+      launch_status: packet?.launch_status || "",
+      launch_status_ok: packet?.launch_status_ok === true,
+      launch_packet_age_seconds:
+        Number.isFinite(packet?.launch_packet_age_seconds) ? packet.launch_packet_age_seconds : null,
+      launch_packet_stale: packet?.launch_packet_stale === true,
+      launch_packet_stale_overridden_by_current_bridge_trace:
+        packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
+      current_bridge_trace_matches_launch:
+        packet?.current_bridge_trace_matches_launch === true,
+      current_provider_record_matches_launch:
+        packet?.current_provider_record_matches_launch === true,
+      current_bridge_identity_bound_rebind_proven:
+        packet?.current_bridge_identity_bound_rebind_proven === true,
+      bridge_identity_matches_launch:
+        packet?.bridge_identity_matches_launch === true,
+      bridge_rebind_counts_as_provider_proof:
+        packet?.bridge_rebind_counts_as_provider_proof === true,
+      trace_snapshot_age_seconds:
+        Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
+      trace_snapshot_stale: packet?.trace_snapshot_stale === true,
+      current_launch_evidence_proven_with_limits:
+        packet?.current_launch_evidence_proven_with_limits === true,
+      current_mixed_trace_evidence_fresh:
+        packet?.current_mixed_trace_evidence_fresh === true,
+      native_dispatch_proof_attempted:
+        packet?.native_dispatch_proof_attempted === true,
+      native_dispatch_proof_scope:
+        packet?.native_dispatch_proof_scope || "",
+      native_dispatch_http_status:
+        Number.isFinite(packet?.native_dispatch_http_status)
+          ? packet.native_dispatch_http_status
+          : null,
+      native_dispatch_error_class:
+        packet?.native_dispatch_error_class || "",
+      native_ui_input_claimed:
+        packet?.native_ui_input_claimed === true,
+      runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
+      runtime_health_gate_blocks_launch_admission:
+        packet?.runtime_health_gate_blocks_launch_admission === true,
+      runtime_health_gate_blocks_window_launch:
+        packet?.runtime_health_gate_blocks_window_launch === true,
+      runtime_health_required_for_chatgpt_lane:
+        packet?.runtime_health_required_for_chatgpt_lane === true,
+      runtime_health_machine_error_code:
+        packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+      chatgpt_runtime_proof_status:
+        packet?.chatgpt_runtime_proof_status || "",
+      chatgpt_runtime_proof_machine_error_code:
+        packet?.chatgpt_runtime_proof_machine_error_code || "",
+      manual_check_replay_active: packet?.manual_check_replay_active === true,
+      manual_check_replay_age_ms:
+        Number.isFinite(packet?.manual_check_replay_age_ms) ? packet.manual_check_replay_age_ms : null,
+      manual_check_replay_max_age_ms:
+        Number.isFinite(packet?.manual_check_replay_max_age_ms) ? packet.manual_check_replay_max_age_ms : null,
       fallback_used: packet?.fallback_used === true,
       silent_fallback_used: packet?.silent_fallback_used === true,
       launch_admission: packet?.launch_admission || "",
       launch_admission_summary: packet?.launch_admission_summary || "",
       dry_server_truth_only: packet?.dry_server_truth_only === true,
+      owner_authorization_phrase_present:
+        packet?.owner_authorization_phrase_present === true,
       launch_route_truth_final_status: packet?.launch_route_truth_final_status || "",
       quick_start_stable_custom_launch_final_status:
         packet?.quick_start_stable_custom_launch_final_status || "",
       profile_final_status: packet?.profile_final_status || "",
       session_storage_final_status: packet?.session_storage_final_status || "",
+      bridge_alive: packet?.bridge_alive === true,
+      port_alive: packet?.port_alive === true,
+      responses_endpoint_available:
+        packet?.responses_endpoint_available === true,
+      stable_custom_codex_wbp_bridge_final_status:
+        packet?.stable_custom_codex_wbp_bridge_final_status || "",
       bridge_status: packet?.bridge_status || "",
+      live_bridge_stability_truth_packet:
+        packet?.live_bridge_stability_truth_packet === true,
+      bridge_session_matches_active_window:
+        packet?.bridge_session_matches_active_window === true,
+      trace_id_matches_launch:
+        packet?.trace_id_matches_launch === true,
+      launch_id_matches_trace:
+        packet?.launch_id_matches_trace === true,
+      old_window_answered:
+        packet?.old_window_answered === true,
+      failure_machine_error_code:
+        packet?.failure_machine_error_code || "",
+      recommended_recovery_action:
+        packet?.recommended_recovery_action || "",
+      recovery_required:
+        packet?.recovery_required === true,
       window_status: packet?.window_status || "",
       config_status: packet?.config_status || "",
+      selection_matches_last_launch:
+        packet?.selection_matches_last_launch === true,
       existing_window_reuse_admissible:
         packet?.existing_window_reuse_admissible === true,
+      existing_window_relaunch_admissible:
+        packet?.existing_window_relaunch_admissible === true,
+      existing_window_relaunch_attempted:
+        packet?.existing_window_relaunch_attempted === true,
+      existing_window_relaunch_termination:
+        packet?.existing_window_relaunch_termination || {},
+      existing_window_orphan_replace_admissible:
+        packet?.existing_window_orphan_replace_admissible === true,
+      existing_window_orphan_replace_attempted:
+        packet?.existing_window_orphan_replace_attempted === true,
+      existing_window_orphan_replace_termination:
+        packet?.existing_window_orphan_replace_termination || {},
+      orphan_replacement_authority_scope:
+        packet?.orphan_replacement_authority_scope || "",
+      custom_process_observed:
+        packet?.custom_process_observed === true,
+      custom_process_count: Number(packet?.custom_process_count || 0),
+      custom_process_observed_before_relaunch:
+        packet?.custom_process_observed_before_relaunch === true,
+      custom_process_observed_after_relaunch_stop:
+        packet?.custom_process_observed_after_relaunch_stop === true,
+      custom_process_count_after_relaunch_stop:
+        Number(packet?.custom_process_count_after_relaunch_stop || 0),
+      reused_existing_window:
+        packet?.reused_existing_window === true,
+      existing_window_reuse_proven_with_limits:
+        packet?.existing_window_reuse_proven_with_limits === true,
+      launch_origin:
+        packet?.launch_origin || "",
+      fresh_launch_started:
+        packet?.fresh_launch_started === true,
+      launch_blocked:
+        packet?.launch_blocked === true,
+      show_window_attempted:
+        packet?.show_window_attempted === true,
+      window_unresponsive_with_limits:
+        packet?.window_unresponsive_with_limits === true,
       new_launch_required: packet?.new_launch_required === true,
+      running_status: packet?.running_status === true,
+      process_started: packet?.process_started === true,
+      native_window_observed: packet?.native_window_observed === true,
+      real_codex_app_launched: packet?.real_codex_app_launched === true,
+      native_app_usable: packet?.native_app_usable === true,
+      native_app_usability_blocked_reason_class:
+        packet?.native_app_usability_blocked_reason_class || "",
+      renderer_surface_blocked_reason_class:
+        packet?.renderer_surface_blocked_reason_class || "",
+      slot_binding_blocking_reasons:
+        Array.isArray(packet?.slot_binding_blocking_reasons)
+          ? packet.slot_binding_blocking_reasons
+          : [],
+      blocking_reasons:
+        Array.isArray(packet?.blocking_reasons) ? packet.blocking_reasons : [],
+      custom_codex_launch_attempted:
+        packet?.custom_codex_launch_attempted === true,
+      new_launch_started: packet?.new_launch_started === true,
+      network_calls_made: packet?.network_calls_made === true,
       visible_window_counts_as_model_truth:
         packet?.visible_window_counts_as_model_truth === true,
       bridge_alive_counts_as_model_truth:
         packet?.bridge_alive_counts_as_model_truth === true,
       response_text_counts_as_route_truth:
         packet?.response_text_counts_as_route_truth === true,
+      mixed_route_truth_packet:
+        packet?.mixed_route_truth_packet === true,
+      mixed_route_blocked:
+        packet?.mixed_route_blocked === true,
+      native_mixed_primary_trace_supported:
+        packet?.native_mixed_primary_trace_supported === true,
+      prompt_seen:
+        packet?.prompt_seen === true,
+      prompt_seen_blocking_reason:
+        packet?.prompt_seen_blocking_reason || "",
+      coder_dispatch_proven:
+        packet?.coder_dispatch_proven === true,
+      coder_work_result_proven_with_limits:
+        packet?.coder_work_result_proven_with_limits === true,
+      deepseek_route_observed:
+        packet?.deepseek_route_observed === true,
+      api_route_dispatched_without_primary:
+        packet?.api_route_dispatched_without_primary === true,
+      direct_api_dispatch_without_primary_trace:
+        packet?.direct_api_dispatch_without_primary_trace === true,
+      ui_label_counts_as_proof:
+        packet?.ui_label_counts_as_proof === true,
+      primary_trace_id_matches_launch:
+        packet?.primary_trace_id_matches_launch === true,
+      coder_trace_id_matches_launch:
+        packet?.coder_trace_id_matches_launch === true,
+      primary_replacement_trace_id_matches_launch:
+        packet?.primary_replacement_trace_id_matches_launch === true,
+      native_dual_lane_prompt_trace_missing:
+        packet?.native_dual_lane_prompt_trace_missing === true,
+      native_current_launch_single_executor_observed:
+        packet?.native_current_launch_single_executor_observed === true,
+      runtime_executor_lane:
+        packet?.runtime_executor_lane || "",
+      runtime_executor_truth_source:
+        packet?.runtime_executor_truth_source || "",
+      mixed_mode_actual_primary_executor_is_api_route:
+        packet?.mixed_mode_actual_primary_executor_is_api_route === true,
+      capability_proof_scope:
+        packet?.capability_proof_scope || "",
+      unsupported_evidence:
+        packet?.unsupported_evidence || {},
       launch_packet_is_truth_source: packet?.launch_packet_is_truth_source === true,
       profile_persistence_proven: packet?.profile_persistence_proven === true,
       persistent_profile_reused: packet?.persistent_profile_reused === true,
@@ -2161,10 +5211,2060 @@ function setQuickStartRouteResponse(packet) {
       next_action: packet?.next_action || ""
     }, null, 2);
   }
+  renderQuickStartProofBoard(packet);
+}
+
+function quickStartLaunchRequiresBridgeStability(packet) {
+  const mode = packet?.execution_mode || packet?.selection_packet?.execution_mode || "";
+  return mode === "chatgpt_plus_api";
+}
+
+function quickStartLiveBridgeStabilityWindowNotBound(packet) {
+  return packet?.machine_error_code === "BRIDGE_WINDOW_NOT_BOUND"
+    || packet?.bridge_status === "BRIDGE_WINDOW_NOT_BOUND"
+    || packet?.failure_machine_error_code === "WINDOW_BOUND_TO_OLD_BRIDGE"
+    || packet?.old_window_answered === true
+    || packet?.bridge_session_matches_active_window === false;
+}
+
+function renderQuickStartLiveBridgeStability(packet) {
+  const ready = packet?.status === "ok" && packet?.bridge_status === "BRIDGE_READY";
+  const rejected = packet?.status === "rejected" || packet?.status === "failed";
+  const windowNotBound = quickStartLiveBridgeStabilityWindowNotBound(packet);
+  const bridgeAlive = packet?.bridge_alive === true || packet?.port_alive === true;
+  const nextAction = packet?.recommended_recovery_action || packet?.next_action || "";
+  const blockedVisual = rejected ? "red" : "amber";
+  setQuickStartChip(
+    "quickStartLaunchState",
+    ready ? "green" : blockedVisual,
+    ready ? "запуск ok" : (windowNotBound ? "старое окно" : (packet?.machine_error_code || "bridge blocked"))
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    ready ? "green" : (bridgeAlive ? "amber" : blockedVisual),
+    ready ? "жив" : (windowNotBound ? "не привязан" : (bridgeAlive ? "жив, blocked" : "не готов"))
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    ready ? "green" : (windowNotBound ? "amber" : "neutral"),
+    ready ? "найдено" : (windowNotBound ? "старое окно" : "не доказано")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    ready ? "green" : (windowNotBound ? "amber" : "neutral"),
+    ready ? "совпадает" : (windowNotBound ? "trace mismatch" : "не доказан")
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    ready ? "green" : blockedVisual,
+    ready ? "запуск ok" : (windowNotBound ? "old window" : (packet?.bridge_status || packet?.machine_error_code || "bridge blocked"))
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    ready ? "green" : "amber",
+    ready ? "none" : quickStartNextActionLabel(nextAction || "inspect_bridge_stability_packet")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    live_bridge_stability_truth_packet: true,
+    runtime_readiness_claimed: ready,
+    next_action: nextAction || packet?.next_action || ""
+  });
+}
+
+async function refreshQuickStartLiveBridgeStabilityTruth(launchPacket) {
+  if (!quickStartLaunchRequiresBridgeStability(launchPacket)) {
+    return null;
+  }
+  try {
+    const response = await fetch("api/codex/custom/live-bridge-stability", {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`live bridge stability http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartLiveBridgeStability(packet);
+    return packet;
+  } catch (error) {
+    const packet = {
+      status: "failed",
+      machine_error_code: "LIVE_BRIDGE_STABILITY_FETCH_FAILED",
+      bridge_status: "BRIDGE_STABILITY_PACKET_UNAVAILABLE",
+      human_message: error.message,
+      execution_mode: launchPacket?.execution_mode || "",
+      chatgpt_model_id: launchPacket?.chatgpt_model_id || "",
+      api_model_id: launchPacket?.api_model_id || "",
+      fallback_used: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      live_bridge_stability_truth_packet: true,
+      runtime_readiness_claimed: false,
+      next_action: "retry_live_bridge_stability"
+    };
+    renderQuickStartLiveBridgeStability(packet);
+    return packet;
+  }
+}
+
+function quickStartMixedTraceUnsupported(packet) {
+  return packet?.mixed_mode_product_decision === "UNSUPPORTED"
+    || packet?.machine_error_code === "DUAL_LANE_NATIVE_PROMPT_TRACE_NOT_SUPPORTED"
+    || packet?.native_mixed_primary_trace_supported === false;
+}
+
+function quickStartMixedLaunchAvailableWithTraceGap(packet) {
+  const launchEvidenceProven = Boolean(
+    packet?.launch_proven === true
+    || packet?.launch_evidence_proven_with_limits === true
+    || packet?.current_launch_evidence_proven_with_limits === true
+    || packet?.existing_window_reuse_proven_with_limits === true
+    || packet?.native_limited_launch_proven_with_limits === true
+  );
+  return Boolean(
+    packet?.mixed_mode_product_decision === "WORKS_WITH_LIMITS"
+    && packet?.mixed_mode_launch_action === "available"
+    && packet?.mixed_mode_launch_available_with_primary_trace_gap === true
+    && launchEvidenceProven
+    && packet?.api_route_dispatched_without_primary === true
+    && packet?.primary_replaced_by_api_route !== true
+    && packet?.chatgpt_replaced_by_api !== true
+    && packet?.coder_dispatch_proven === true
+    && packet?.coder_work_result_proven_with_limits === true
+  );
+}
+
+function setQuickStartMixedLaunchActionGuard(blocked) {
+  quickStartMixedModeProductBlocked = blocked === true;
+  const button = document.getElementById("quickStartCustomLaunchAction");
+  if (!button) {
+    return;
+  }
+  if (!button.dataset) {
+    button.dataset = {};
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  const isSessionDualLaneMode = payload?.execution_mode === "chatgpt_plus_api";
+  const readyLabel = isSessionDualLaneMode
+    ? QUICK_START_SESSION_DUAL_LANE_LABEL
+    : QUICK_START_DEFAULT_LAUNCH_LABEL;
+  const readyTitle = isSessionDualLaneMode
+    ? "Проверяет GPT+API session dispatch; native окно этим действием не запускается."
+    : QUICK_START_DEFAULT_LAUNCH_LABEL;
+  button.dataset.mixedModeLaunchBlocked = quickStartMixedModeProductBlocked ? "true" : "false";
+  button.setAttribute?.(
+    "title",
+    quickStartMixedModeProductBlocked
+      ? "ChatGPT + API сейчас заблокирован; кнопка запускает проверку и затем обновляет blocker truth."
+      : readyTitle
+  );
+  const label = button.querySelector?.("span");
+  if (label) {
+    label.textContent = quickStartMixedModeProductBlocked
+      ? QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL
+      : readyLabel;
+  }
+}
+
+function quickStartMixedTraceReasonLabel(packet) {
+  const reason = packet?.prompt_seen_blocking_reason || "";
+  if (reason === "primary_chatgpt_request_absent_api_route_dispatched") {
+    return "primary не доказан";
+  }
+  if (reason === "primary_chatgpt_request_forced_to_api_route") {
+    return "primary заменён API";
+  }
+  if (reason === "chatgpt_primary_trace_record_missing") {
+    return "primary trace missing";
+  }
+  return "primary не доказан";
+}
+
+function renderQuickStartMixedCoderTrace(packet) {
+  const launchWithTraceGap = quickStartMixedLaunchAvailableWithTraceGap(packet);
+  const existingWindowWithTraceGap = Boolean(
+    launchWithTraceGap
+    && packet?.next_action === "continue_in_existing_custom_window"
+    && packet?.existing_window_reuse_proven_with_limits === true
+    && packet?.launch_origin === "existing_window"
+  );
+  const unsupported = !launchWithTraceGap && quickStartMixedTraceUnsupported(packet);
+  const traceOk = packet?.status === "ok" && packet?.machine_error_code === "OK";
+  const blocked = packet?.status === "blocked" || unsupported;
+  const launchPacketStaleOverridden =
+    packet?.launch_packet_stale_overridden_by_current_bridge_trace === true
+    && packet?.current_bridge_trace_matches_launch === true
+    && packet?.current_launch_evidence_proven_with_limits === true
+    && packet?.current_mixed_trace_evidence_fresh === true;
+  const launchPacketStaleBlocks =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_LAUNCH_PACKET_STALE"
+    || (
+      packet?.launch_packet_stale === true
+      && !launchPacketStaleOverridden
+    );
+  const traceSnapshotStaleBlocks =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_TRACE_SNAPSHOT_STALE"
+    || packet?.trace_snapshot_stale === true;
+  const staleMixedEvidence =
+    launchPacketStaleBlocks || traceSnapshotStaleBlocks;
+  setQuickStartMixedLaunchActionGuard(blocked && !traceOk);
+  const launchContextMissing =
+    packet?.machine_error_code === "CHATGPT_PLUS_API_LAUNCH_CONTEXT_MISSING"
+    || packet?.launch_context_missing === true;
+  const slotBindingBlocked = packet?.machine_error_code === "CHATGPT_PLUS_API_SLOT_BINDING_NOT_PROVEN";
+  const chatgptLabel = slotBindingBlocked
+    ? "not proven"
+    : (unsupported || launchWithTraceGap)
+    ? quickStartMixedTraceReasonLabel(packet)
+    : (packet?.prompt_seen === true ? "runtime proven" : "not proven");
+  const bridgeProven = traceOk && (
+    packet?.current_bridge_identity_bound_rebind_proven === true
+    || (
+      packet?.current_bridge_trace_matches_launch === true
+      && packet?.stable_bridge_preflight_ok === true
+    )
+    || packet?.native_mixed_primary_trace_supported === true
+    || packet?.stable_bridge_preflight_ok === true
+  );
+  const windowProven = traceOk
+    && packet?.native_window_observed === true
+    && packet?.real_codex_app_launched === true;
+  const configProven = traceOk && (
+    packet?.trace_launch_packet_matches === true
+    || (
+      packet?.launch_status_ok === true
+      && packet?.launch_context_missing !== true
+      && packet?.launch_packet_stale !== true
+      && packet?.trace_snapshot_stale !== true
+    )
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk ? "mixed ok" : (launchWithTraceGap ? "mixed limited" : (launchContextMissing ? "launch context missing" : (staleMixedEvidence ? "mixed stale" : (unsupported ? "mixed blocked" : (packet?.machine_error_code || "mixed blocked")))))
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk || launchWithTraceGap || staleMixedEvidence || launchContextMissing ? "ChatGPT + API" : "unsupported"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    traceOk ? "green" : (launchWithTraceGap || blocked ? "amber" : "red"),
+    traceOk
+      ? "запуск ok"
+      : (
+        launchWithTraceGap
+          ? (existingWindowWithTraceGap ? "старое окно" : "запуск ok")
+          : (launchContextMissing ? "context missing" : (staleMixedEvidence ? "stale" : "blocked"))
+      )
+  );
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.prompt_seen === true ? "green" : "amber",
+    chatgptLabel
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coder_dispatch_proven === true ? "green" : "amber",
+    packet?.coder_dispatch_proven === true ? "proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    (!packet?.next_action || packet?.next_action === "none") && traceOk ? "green" : "amber",
+    quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    traceOk && packet?.launch_proven === true ? "green" : "neutral",
+    traceOk && packet?.launch_proven === true ? "confirmed" : "preflight"
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    bridgeProven ? "green" : (packet?.stable_bridge_preflight_ok === true ? "amber" : "neutral"),
+    bridgeProven ? "жив" : (packet?.stable_bridge_preflight_ok === true ? "preflight" : "не проверен")
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    windowProven ? "green" : (packet?.launch_proven === true ? "amber" : "neutral"),
+    windowProven ? "найдено" : (packet?.launch_proven === true ? "не доказано" : "не проверено")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    configProven ? "green" : (packet?.launch_status_ok === true ? "amber" : "neutral"),
+    configProven ? "совпадает" : (packet?.launch_status_ok === true ? "не доказан" : "не проверен")
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    mixed_mode_product_decision:
+      packet?.mixed_mode_product_decision || (traceOk ? "WORKS" : "UNSUPPORTED"),
+    mixed_mode_launch_action:
+      packet?.mixed_mode_launch_action || (traceOk || launchWithTraceGap ? "available" : "blocked"),
+    mixed_mode_launch_blocked_reason:
+      packet?.mixed_mode_launch_blocked_reason || (traceOk || launchWithTraceGap ? "" : (packet?.machine_error_code || "UNKNOWN")),
+    primary_trace_proof_status:
+      packet?.primary_trace_proof_status || (packet?.prompt_seen === true ? "proven" : "not_proven"),
+    mixed_mode_launch_available_with_primary_trace_gap:
+      launchWithTraceGap,
+    execution_mode: packet?.execution_mode || "",
+    chatgpt_model_id: packet?.primary_model_id || "",
+    api_model_id: packet?.coding_agent_model_id || "",
+    primary_model_slot: packet?.primary_model_slot || {},
+    coding_agent_model_slot: packet?.coding_agent_model_slot || {},
+    mixed_route_truth_packet: true,
+    mixed_route_blocked: blocked,
+    native_mixed_primary_trace_supported:
+      packet?.native_mixed_primary_trace_supported === true,
+    prompt_seen: packet?.prompt_seen === true,
+    prompt_seen_blocking_reason: packet?.prompt_seen_blocking_reason || "",
+    coder_dispatch_proven: packet?.coder_dispatch_proven === true,
+    coder_work_result_proven_with_limits:
+      packet?.coder_work_result_proven_with_limits === true,
+    deepseek_route_observed: packet?.deepseek_route_observed === true,
+    api_route_dispatched_without_primary:
+      packet?.api_route_dispatched_without_primary === true,
+    direct_api_dispatch_without_primary_trace:
+      packet?.direct_api_dispatch_without_primary_trace === true,
+    launch_proven:
+      packet?.launch_proven === true,
+    launch_context_present:
+      packet?.launch_context_present === true,
+    launch_context_missing:
+      packet?.launch_context_missing === true,
+    launch_context_missing_reason:
+      packet?.launch_context_missing_reason || "",
+    persisted_config_counts_as_launch_context:
+      packet?.persisted_config_counts_as_launch_context === true,
+    window_visibility_counts_as_launch_context:
+      packet?.window_visibility_counts_as_launch_context === true,
+    launch_status:
+      packet?.launch_status || "",
+    launch_status_ok:
+      packet?.launch_status_ok === true,
+    existing_window_reuse_proven_with_limits:
+      packet?.existing_window_reuse_proven_with_limits === true,
+    launch_origin:
+      packet?.launch_origin || "",
+    fresh_launch_started:
+      packet?.fresh_launch_started === true,
+    launch_packet_age_seconds:
+      Number.isFinite(packet?.launch_packet_age_seconds) ? packet.launch_packet_age_seconds : null,
+    launch_packet_stale:
+      packet?.launch_packet_stale === true,
+    launch_packet_stale_overridden_by_current_bridge_trace:
+      packet?.launch_packet_stale_overridden_by_current_bridge_trace === true,
+    current_bridge_trace_matches_launch:
+      packet?.current_bridge_trace_matches_launch === true,
+    current_provider_record_matches_launch:
+      packet?.current_provider_record_matches_launch === true,
+    current_bridge_identity_bound_rebind_proven:
+      packet?.current_bridge_identity_bound_rebind_proven === true,
+    bridge_identity_matches_launch:
+      packet?.bridge_identity_matches_launch === true,
+    bridge_rebind_counts_as_provider_proof:
+      packet?.bridge_rebind_counts_as_provider_proof === true,
+    trace_snapshot_age_seconds:
+      Number.isFinite(packet?.trace_snapshot_age_seconds) ? packet.trace_snapshot_age_seconds : null,
+    trace_snapshot_stale:
+      packet?.trace_snapshot_stale === true,
+    current_launch_evidence_proven_with_limits:
+      packet?.current_launch_evidence_proven_with_limits === true,
+    current_mixed_trace_evidence_fresh:
+      packet?.current_mixed_trace_evidence_fresh === true,
+    native_window_observed:
+      packet?.native_window_observed === true,
+    real_codex_app_launched:
+      packet?.real_codex_app_launched === true,
+    slot_binding_blocking_reasons:
+      Array.isArray(packet?.slot_binding_blocking_reasons)
+        ? packet.slot_binding_blocking_reasons
+        : [],
+    primary_trace_id_matches_launch:
+      packet?.primary_trace_id_matches_launch === true,
+    coder_trace_id_matches_launch:
+      packet?.coder_trace_id_matches_launch === true,
+    primary_replacement_trace_id_matches_launch:
+      packet?.primary_replacement_trace_id_matches_launch === true,
+    native_dual_lane_prompt_trace_missing:
+      packet?.native_dual_lane_prompt_trace_missing === true,
+    native_current_launch_single_executor_observed:
+      packet?.native_current_launch_single_executor_observed === true,
+    runtime_executor_lane:
+      packet?.runtime_executor_lane || "",
+    runtime_executor_truth_source:
+      packet?.runtime_executor_truth_source || "",
+    mixed_mode_actual_primary_executor_is_api_route:
+      packet?.mixed_mode_actual_primary_executor_is_api_route === true,
+    capability_proof_scope:
+      packet?.capability_proof_scope || "",
+    unsupported_evidence:
+      packet?.unsupported_evidence || {},
+    fallback_used: packet?.fallback_used === true,
+    response_text_counts_as_model_truth:
+      packet?.response_text_counts_as_model_truth === true,
+    ui_label_counts_as_proof: packet?.ui_label_counts_as_proof === true,
+    native_dispatch_proof_attempted:
+      packet?.native_dispatch_proof_attempted === true,
+    native_dispatch_proof_scope:
+      packet?.native_dispatch_proof_scope || "",
+    native_dispatch_http_status:
+      Number.isFinite(packet?.native_dispatch_http_status)
+        ? packet.native_dispatch_http_status
+        : null,
+    native_dispatch_error_class:
+      packet?.native_dispatch_error_class || "",
+    native_ui_input_claimed:
+      packet?.native_ui_input_claimed === true,
+    runtime_readiness_claimed: packet?.runtime_readiness_claimed === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function refreshQuickStartMixedCoderTraceTruth(launchPacket) {
+  const executionMode = launchPacket?.execution_mode
+    || launchPacket?.selection_packet?.execution_mode
+    || "";
+  if (executionMode !== "chatgpt_plus_api") {
+    return null;
+  }
+  try {
+    const response = await fetch("api/codex/custom/chatgpt-plus-api-coder-trace", {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`mixed coder trace http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } catch (error) {
+    setQuickStartChip("quickStartRouteChip", "amber", "trace failed");
+    setQuickStartChip("quickStartExecutionModeState", "amber", "trace missing");
+    setQuickStartChip("quickStartNextActionState", "amber", "refresh trace");
+    setQuickStartRouteResponse({
+      status: "blocked",
+      machine_error_code: "MIXED_CODER_TRACE_FETCH_FAILED",
+      final_status: "KNOWN_BLOCKER_MIXED_CODER_TRACE_NOT_LOADED",
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id:
+        launchPacket?.chatgpt_model_id || launchPacket?.selection_packet?.chatgpt_model_id || "",
+      api_model_id:
+        launchPacket?.api_model_id || launchPacket?.selection_packet?.api_model_id || "",
+      mixed_route_truth_packet: false,
+      mixed_route_blocked: true,
+      runtime_readiness_claimed: false,
+      next_action: "refresh_mixed_coder_trace",
+      human_message: error?.message || "mixed coder trace fetch failed"
+    });
+    return null;
+  }
+}
+
+async function runQuickStartNativeMixedDispatchProofIfNeeded(tracePacket) {
+  if (
+    tracePacket?.execution_mode !== "chatgpt_plus_api"
+    || tracePacket?.status === "ok"
+    || tracePacket?.next_action !== "confirm_runtime_can_dispatch_coding_agent_model_slot"
+  ) {
+    return tracePacket || null;
+  }
+  setQuickStartChip("quickStartRouteChip", "neutral", "dispatch proof");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), 95000) : null;
+  try {
+    const response = await fetch("api/codex/custom/native-dispatch-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({}),
+      signal: controller?.signal
+    });
+    if (!response.ok) {
+      throw new Error(`native dispatch proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    const packet = {
+      ...tracePacket,
+      status: "blocked",
+      machine_error_code: timedOut ? "NATIVE_DISPATCH_PROOF_TIMEOUT" : "NATIVE_DISPATCH_PROOF_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_NATIVE_DISPATCH_PROOF_FETCH_FAILED",
+      native_dispatch_proof_attempted: true,
+      native_ui_input_claimed: false,
+      browser_trace_authority: false,
+      raw_prompt_recorded: false,
+      auth_header_recorded: false,
+      secret_value_recorded: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      runtime_readiness_claimed: false,
+      next_action: "stop_and_diagnose_native_dispatch_proof"
+    };
+    renderQuickStartMixedCoderTrace(packet);
+    return packet;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+async function refreshQuickStartRouteStatus(options = {}) {
+  if (options?.force === true) {
+    quickStartRouteProofResultLockedUntil = 0;
+  }
+  if (options?.force !== true && quickStartRouteProofResultLocked()) {
+    return;
+  }
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  const buttons = [
+    document.getElementById("quickStartRouteRefreshAction"),
+    document.getElementById("refreshFixture")
+  ].filter(Boolean);
+  for (const button of buttons) {
+    button.setAttribute("disabled", "disabled");
+  }
+  setQuickStartChip("quickStartRouteChip", "neutral", "обновляю");
+  setQuickStartChip("quickStartNextActionState", "neutral", "refreshing");
+  try {
+    await refreshCodexCustomModelsPanel();
+    if (options?.force !== true && quickStartRouteProofResultLocked()) {
+      return;
+    }
+    const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+    const refreshPacket = {
+      ...payload,
+      selection_packet: { ...payload },
+      status: "checking",
+      machine_error_code: "QUICK_START_ROUTE_STATUS_REFRESH"
+    };
+    if (quickStartLaunchRequiresBridgeStability(refreshPacket)) {
+      if (options?.force !== true && quickStartRouteProofResultLocked()) {
+        return;
+      }
+      await refreshQuickStartLiveBridgeStabilityTruth(refreshPacket);
+      if (options?.force !== true && quickStartRouteProofResultLocked()) {
+        return;
+      }
+      await refreshQuickStartMixedCoderTraceTruth(refreshPacket);
+      return;
+    }
+    setQuickStartChip("quickStartRouteChip", "neutral", "модели загружены");
+    setQuickStartChip(
+      "quickStartNextActionState",
+      "neutral",
+      payload.execution_mode === "chatgpt_plus_api" ? "проверить GPT+API" : "проверить запуск"
+    );
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    for (const button of buttons) {
+      button.removeAttribute("disabled");
+    }
+  }
+}
+
+function renderQuickStartSessionDualLaneExecution(packet) {
+  const dispatch = packet?.session_dual_lane_dispatch || {};
+  const boundedTruthGuardsHeld = dispatch?.does_not_prove_native_launch === true
+    && dispatch?.does_not_claim_product_readiness === true;
+  const aliasActivationProven = packet?.manual_activation_proven === true
+    && packet?.alias_runtime_binding_proven === true
+    && packet?.alias_prompt_seen === true
+    && packet?.deepseek_response_token_matched === true;
+  const proven = packet?.status === "ok"
+    && packet?.same_session_dispatch_proven === true
+    && packet?.primary_dispatch_proven === true
+    && packet?.coding_dispatch_proven === true
+    && packet?.fallback_used !== true
+    && boundedTruthGuardsHeld;
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven && aliasActivationProven ? "green" : "amber",
+    proven && aliasActivationProven ? "mixed ok" : (proven ? "session proof" : "session blocked")
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_dispatch_proven === true ? "green" : "amber",
+    packet?.primary_dispatch_proven === true ? "proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_dispatch_proven === true ? "green" : "amber",
+    packet?.coding_dispatch_proven === true ? "proven" : "not proven"
+  );
+  const ownerAuthConfirmed = packet?.status === "ok" && packet?.machine_error_code === "OK" && proven;
+  const ownerAuthBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    ownerAuthConfirmed ? "green" : "amber",
+    ownerAuthConfirmed ? "confirmed" : (ownerAuthBlocked ? "owner auth" : "not confirmed")
+  );
+  setQuickStartChip("quickStartLaunchState", proven ? "green" : "amber", proven ? "session ok" : "blocked");
+  setQuickStartChip("quickStartBridgeState", "neutral", "not needed");
+  setQuickStartChip("quickStartWindowState", "neutral", "not launched");
+  setQuickStartChip("quickStartConfigState", proven ? "green" : "amber", proven ? "session proof" : "session blocked");
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && aliasActivationProven ? "green" : "amber",
+    proven && aliasActivationProven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    status: packet?.status || "unknown",
+    machine_error_code: packet?.machine_error_code || "UNKNOWN",
+    final_status: packet?.final_status || "",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_model_id || "",
+    api_model_id: packet?.coding_agent_model_id || "",
+    session_dual_lane_execution_packet: true,
+    session_probe_only: packet?.manual_activation_proven !== true,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    session_id: packet?.session_id || "",
+    same_session_dispatch_proven: packet?.same_session_dispatch_proven === true,
+    primary_dispatch_proven: packet?.primary_dispatch_proven === true,
+    coding_dispatch_proven: packet?.coding_dispatch_proven === true,
+    manual_activation_proven: packet?.manual_activation_proven === true,
+    manual_activation_surface: packet?.manual_activation_surface || "",
+    alias_runtime_binding_proven: packet?.alias_runtime_binding_proven === true,
+    alias_prompt_seen: packet?.alias_prompt_seen === true,
+    deepseek_response_token_matched: packet?.deepseek_response_token_matched === true,
+    expected_coding_response: packet?.expected_coding_response || "",
+    agent_alias_binding_packet: packet?.agent_alias_binding_packet || null,
+    does_not_prove_native_free_text_tool_bridge:
+      packet?.does_not_prove_native_free_text_tool_bridge === true,
+    session_dual_lane_dispatch: dispatch,
+    session_dual_lane_dispatch_proven_with_limits: proven,
+    session_dual_lane_does_not_prove_native_launch:
+      dispatch?.does_not_prove_native_launch === true,
+    session_dual_lane_does_not_claim_product_readiness:
+      dispatch?.does_not_claim_product_readiness === true,
+    fallback_used: packet?.fallback_used === true,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+function renderQuickStartGptApiAliasCommandLoopProof(packet) {
+  lockQuickStartRouteProofResult();
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.command_loop_proven === true
+    && packet?.runtime_context_file_proven === true
+    && packet?.primary_alias_bound_to_chatgpt_lane === true
+    && packet?.coding_alias_bound_to_api_lane === true
+    && packet?.primary_alias_precedes_coding_alias === true
+    && packet?.reasoning_prerequisite_proven === true
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.secret_value_exposed !== true
+  );
+  const provenWithLimits = proven && quickStartPacketWithLimits(packet);
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "bounded proof only" : "mixed ok")
+      : (packet?.machine_error_code || "loop blocked")
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "green" : "amber",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "orchestrator" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "green" : "amber",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    proven ? "green" : "neutral",
+    proven ? "confirmed" : "preflight"
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven ? (provenWithLimits ? "bounded proof only" : "loop ok") : "blocked"
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip("quickStartWindowState", "neutral", "not launched");
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.runtime_context_file_proven === true ? "green" : "amber",
+    packet?.runtime_context_file_proven === true ? "context ok" : "context missing"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && !provenWithLimits && (!packet?.next_action || packet?.next_action === "none")
+      ? "green"
+      : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_binding?.model_id || packet?.primary_model_id || "",
+    api_model_id: packet?.coding_binding?.route_id || packet?.requested_model || "",
+    gpt_api_alias_command_loop_packet: true,
+    session_probe_only: false,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    runtime_readiness_claimed: false,
+    browser_can_supply_route_authority: packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+function renderQuickStartNativeFreeTextCommandLoopProof(packet) {
+  lockQuickStartRouteProofResult();
+  const blockedLabel = quickStartNativeFreeTextBlockerLabel(packet);
+  const windowLabel = quickStartNativeFreeTextWindowLabel(packet);
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.native_free_chat_dip_command_packet === true
+    && packet?.native_free_chat_dip_command_proven === true
+    && packet?.server_owned_native_free_chat_command_path === true
+    && packet?.native_free_chat_api_lane_proven === true
+    && packet?.native_free_chat_custom_response_observed === true
+    && packet?.native_free_chat_request_bound_digest_matched === true
+    && packet?.native_free_chat_subagent_substitution_blocked === true
+    && packet?.server_owned_natural_dip_command_packet === true
+    && packet?.server_owned_natural_dip_command_proven === true
+    && packet?.server_owned_natural_dip_command_path === true
+    && packet?.server_owned_natural_command_prompt_source === "server_owned_builder"
+    && packet?.natural_dip_prompt_browser_supplied !== true
+    && packet?.natural_dip_prompt_text_recorded !== true
+    && packet?.api_bridge_transcript_observed === true
+    && packet?.api_bridge_or_file_bridge_transcript_observed === true
+    && packet?.custom_response_observed === true
+    && packet?.browser_authority_contract_enforced === true
+    && packet?.browser_prompt_authority_rejected === true
+    && packet?.browser_can_supply_prompt_authority !== true
+    && packet?.browser_can_supply_route_authority !== true
+    && packet?.browser_can_supply_reasoning_authority !== true
+    && packet?.browser_model_authority !== true
+    && packet?.does_not_prove_universal_manual_chat_interception === true
+    && packet?.universal_manual_chat_interception_proven !== true
+    && packet?.native_free_text_command_loop_proven === true
+    && packet?.native_free_text_tool_bridge_proven === true
+    && packet?.native_window_observed === true
+    && packet?.input_capable_ui_observed === true
+    && packet?.input_text_insert_succeeded === true
+    && packet?.prompt_submitted === true
+    && packet?.native_agent_proof_file_valid === true
+    && packet?.native_free_text_agent_context_sha_match === true
+    && packet?.native_free_text_alias_routing_proven === true
+    && packet?.runtime_context_file_proven === true
+    && packet?.command_loop_proven === true
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.native_free_text_observability_proven === true
+    && packet?.native_submitter_trust_boundary_proven === true
+    && packet?.custom_codex_response_text_read_proven === true
+    && packet?.custom_response_exact_token_observed === true
+    && packet?.custom_response_bound_to_request === true
+    && packet?.custom_response_expected_sha256_match === true
+    && packet?.native_codex_subagent_absence_proven === true
+    && packet?.native_codex_subagent_used_as_dip !== true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.prompt_text_recorded !== true
+    && packet?.raw_backend_details_exposed !== true
+    && packet?.secret_value_exposed !== true
+  );
+  const provenWithLimits = proven && quickStartPacketWithLimits(packet);
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "server-owned proof only" : "natural DIP ok")
+      : blockedLabel
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "green" : "amber",
+    packet?.primary_alias_bound_to_chatgpt_lane === true ? "orchestrator" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "green" : "amber",
+    packet?.coding_alias_bound_to_api_lane === true && packet?.api_lane_exact_token_matched === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    proven ? "green" : (packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED" ? "amber" : "neutral"),
+    proven ? "confirmed" : (packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED" ? "owner auth" : "preflight")
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? (provenWithLimits ? "amber" : "green") : "amber",
+    proven
+      ? (provenWithLimits ? "server-owned proof only" : "natural DIP ok")
+      : blockedLabel
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "green" : "amber",
+    packet?.native_window_observed === true && packet?.input_capable_ui_observed === true ? "input ok" : windowLabel
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.runtime_context_file_proven === true && packet?.native_free_text_agent_context_sha_match === true ? "green" : "amber",
+    packet?.runtime_context_file_proven === true && packet?.native_free_text_agent_context_sha_match === true
+      ? "context ok"
+      : (packet?.runtime_context_file_proven === true ? "native context not proven" : "context missing")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && !provenWithLimits && (!packet?.next_action || packet?.next_action === "none")
+      ? "green"
+      : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: packet?.primary_binding?.model_id || packet?.primary_model_id || "",
+    api_model_id: packet?.coding_binding?.route_id || packet?.requested_model || "",
+    native_free_text_command_loop_packet: true,
+    native_free_chat_dip_command_packet:
+      packet?.native_free_chat_dip_command_packet === true,
+    native_free_chat_dip_command_proven:
+      packet?.native_free_chat_dip_command_proven === true,
+    server_owned_native_free_chat_command_path:
+      packet?.server_owned_native_free_chat_command_path === true,
+    native_free_chat_api_lane_proven:
+      packet?.native_free_chat_api_lane_proven === true,
+    native_free_chat_custom_response_observed:
+      packet?.native_free_chat_custom_response_observed === true,
+    native_free_chat_request_bound_digest_matched:
+      packet?.native_free_chat_request_bound_digest_matched === true,
+    native_free_chat_subagent_substitution_blocked:
+      packet?.native_free_chat_subagent_substitution_blocked === true,
+    server_owned_natural_dip_command_packet:
+      packet?.server_owned_natural_dip_command_packet === true,
+    server_owned_natural_dip_command_proven:
+      packet?.server_owned_natural_dip_command_proven === true,
+    server_owned_natural_dip_command_path:
+      packet?.server_owned_natural_dip_command_path === true,
+    server_owned_natural_command_prompt_source:
+      packet?.server_owned_natural_command_prompt_source || "",
+    natural_dip_prompt_browser_supplied:
+      packet?.natural_dip_prompt_browser_supplied === true,
+    natural_dip_prompt_text_recorded:
+      packet?.natural_dip_prompt_text_recorded === true,
+    api_bridge_transcript_observed:
+      packet?.api_bridge_transcript_observed === true,
+    api_bridge_or_file_bridge_transcript_observed:
+      packet?.api_bridge_or_file_bridge_transcript_observed === true,
+    custom_response_observed:
+      packet?.custom_response_observed === true,
+    browser_authority_contract_enforced:
+      packet?.browser_authority_contract_enforced === true,
+    browser_prompt_authority_rejected:
+      packet?.browser_prompt_authority_rejected === true,
+    browser_can_supply_prompt_authority:
+      packet?.browser_can_supply_prompt_authority === true,
+    does_not_prove_universal_manual_chat_interception:
+      packet?.does_not_prove_universal_manual_chat_interception === true,
+    universal_manual_chat_interception_proven:
+      packet?.universal_manual_chat_interception_proven === true,
+    api_lane_truth_source:
+      packet?.api_lane_truth_source || "",
+    gpt_api_alias_command_loop_packet: packet?.command_loop_proven === true,
+    session_probe_only: false,
+    launch_attempted: packet?.launch_attempted === true,
+    native_launch_attempted: packet?.native_launch_attempted === true,
+    window_launch_attempted: packet?.window_launch_attempted === true,
+    runtime_readiness_claimed: false,
+    browser_can_supply_route_authority: packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    next_action: packet?.next_action || ""
+  });
+}
+
+function renderQuickStartManualFreeChatRouterReality(packet) {
+  lockQuickStartRouteProofResult();
+  const blockedLabel = quickStartNativeFreeTextBlockerLabel(packet);
+  const proven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.manual_free_chat_router_reality_proven === true
+    && packet?.manual_user_prompt_observed === true
+    && packet?.manual_user_prompt_digest_present === true
+    && packet?.wbp_owned_router_hook_observed === true
+    && packet?.router_hook_transcript_digest_present === true
+    && packet?.native_free_chat_hook_status === "observable"
+    && packet?.native_free_chat_hook_observed === true
+    && packet?.bridge_or_file_bridge_used === true
+    && Number(packet?.command_loop_provider_call_count || 0) > 0
+    && packet?.api_lane_exact_token_matched === true
+    && packet?.allowed_api_route_ids_enforced === true
+    && packet?.codex_subagent_used_as_dip !== true
+    && packet?.native_codex_subagent_used_as_dip !== true
+    && packet?.local_imitation_used !== true
+    && packet?.fallback_used !== true
+    && packet?.server_owned_proof_counts_as_manual_router !== true
+    && packet?.server_owned_natural_proof_counts_as_manual_router !== true
+    && packet?.does_not_prove_universal_manual_chat_interception === true
+    && packet?.universal_manual_chat_interception_proven !== true
+    && packet?.prompt_text_recorded !== true
+    && packet?.raw_prompt_recorded !== true
+    && packet?.raw_backend_details_exposed !== true
+    && packet?.secret_value_exposed !== true
+  );
+  setQuickStartChip(
+    "quickStartRouteChip",
+    proven ? "green" : "amber",
+    proven ? "manual router ok" : blockedLabel
+  );
+  setQuickStartChip("quickStartExecutionModeState", "green", "ChatGPT + API");
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.manual_user_prompt_observed === true ? "green" : "amber",
+    packet?.manual_user_prompt_observed === true ? "manual seen" : "manual unseen"
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip("quickStartOwnerAuthState", "neutral", "preflight");
+  setQuickStartChip(
+    "quickStartLaunchState",
+    proven ? "green" : "amber",
+    proven ? "manual router ok" : blockedLabel
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.bridge_or_file_bridge_used === true ? "green" : "amber",
+    packet?.bridge_or_file_bridge_used === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_free_chat_hook_status === "observable" ? "green" : "amber",
+    packet?.native_free_chat_hook_status === "observable"
+      ? "hook observed"
+      : packet?.native_free_chat_hook_status === "with_limits"
+        ? "hook limited"
+        : "not observable"
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.browser_authority_contract_enforced === true ? "green" : "amber",
+    packet?.browser_authority_contract_enforced === true ? "contract ok" : "contract drift"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    proven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    proven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    manual_free_chat_router_reality_packet: true,
+    manual_free_chat_router_reality_proven:
+      packet?.manual_free_chat_router_reality_proven === true,
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: "",
+    api_model_id: "",
+    api_lane_proven: packet?.api_lane_proven === true,
+    manual_user_prompt_observed: packet?.manual_user_prompt_observed === true,
+    manual_user_prompt_source: packet?.manual_user_prompt_source || "",
+    manual_user_prompt_digest_present:
+      packet?.manual_user_prompt_digest_present === true,
+    wbp_owned_router_hook_observed:
+      packet?.wbp_owned_router_hook_observed === true,
+    router_hook_truth_source: packet?.router_hook_truth_source || "",
+    router_hook_transcript_digest_present:
+      packet?.router_hook_transcript_digest_present === true,
+    native_free_chat_hook_status:
+      packet?.native_free_chat_hook_status || "not_observable",
+    native_free_chat_hook_machine_error_code:
+      packet?.native_free_chat_hook_machine_error_code || "NATIVE_FREE_CHAT_HOOK_NOT_OBSERVABLE",
+    native_free_chat_hook_observed:
+      packet?.native_free_chat_hook_observed === true,
+    native_free_chat_hook_truth_source:
+      packet?.native_free_chat_hook_truth_source || "",
+    bridge_or_file_bridge_used: packet?.bridge_or_file_bridge_used === true,
+    command_loop_provider_call_count:
+      Number(packet?.command_loop_provider_call_count || 0),
+    api_lane_exact_token_matched:
+      packet?.api_lane_exact_token_matched === true,
+    allowed_api_route_ids_enforced:
+      packet?.allowed_api_route_ids_enforced === true,
+    codex_subagent_used_as_dip:
+      packet?.codex_subagent_used_as_dip === true,
+    native_codex_subagent_used_as_dip:
+      packet?.native_codex_subagent_used_as_dip === true,
+    server_owned_proof_counts_as_manual_router:
+      packet?.server_owned_proof_counts_as_manual_router === true,
+    server_owned_natural_proof_counts_as_manual_router:
+      packet?.server_owned_natural_proof_counts_as_manual_router === true,
+    server_owned_natural_dip_command_proven:
+      packet?.server_owned_natural_dip_command_proven === true,
+    server_owned_proof_counts_as_native_free_chat_hook:
+      packet?.server_owned_proof_counts_as_native_free_chat_hook === true,
+    server_owned_natural_proof_counts_as_native_free_chat_hook:
+      packet?.server_owned_natural_proof_counts_as_native_free_chat_hook === true,
+    browser_authority_contract_enforced:
+      packet?.browser_authority_contract_enforced === true,
+    browser_prompt_authority_rejected:
+      packet?.browser_prompt_authority_rejected === true,
+    browser_can_supply_prompt_authority:
+      packet?.browser_can_supply_prompt_authority === true,
+    browser_can_supply_route_authority:
+      packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    browser_model_authority:
+      packet?.browser_model_authority === true,
+    does_not_prove_universal_manual_chat_interception:
+      packet?.does_not_prove_universal_manual_chat_interception === true,
+    universal_manual_chat_interception_proven:
+      packet?.universal_manual_chat_interception_proven === true,
+    prompt_text_recorded: packet?.prompt_text_recorded === true,
+    raw_prompt_recorded: packet?.raw_prompt_recorded === true,
+    raw_backend_details_exposed: packet?.raw_backend_details_exposed === true,
+    secret_value_exposed: packet?.secret_value_exposed === true,
+    fallback_used: packet?.fallback_used === true,
+    local_imitation_used: packet?.local_imitation_used === true,
+    launch_attempted: false,
+    native_launch_attempted: false,
+    window_launch_attempted: false,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartManualFreeChatRouterReality() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartManualFreeChatRouterRealityAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "manual router");
+  setQuickStartChip("quickStartLaunchState", "neutral", "checking");
+  setQuickStartChip("quickStartNextActionState", "neutral", "checking");
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_MANUAL_FREE_CHAT_ROUTER_REALITY_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: "",
+    api_model_id: "",
+    manual_free_chat_router_reality_packet: true,
+    manual_free_chat_router_reality_proven: false,
+    manual_user_prompt_observed: false,
+    manual_user_prompt_source: "not_observed",
+    manual_user_prompt_digest_present: false,
+    wbp_owned_router_hook_observed: false,
+    router_hook_truth_source: "not_observable",
+    router_hook_transcript_digest_present: false,
+    bridge_or_file_bridge_used: false,
+    command_loop_provider_call_count: 0,
+    api_lane_exact_token_matched: false,
+    allowed_api_route_ids_enforced: false,
+    api_lane_proven: false,
+    codex_subagent_used_as_dip: false,
+    native_codex_subagent_used_as_dip: false,
+    server_owned_proof_counts_as_manual_router: false,
+    server_owned_natural_proof_counts_as_manual_router: false,
+    does_not_prove_universal_manual_chat_interception: true,
+    universal_manual_chat_interception_proven: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    prompt_text_recorded: false,
+    raw_prompt_recorded: false,
+    raw_backend_details_exposed: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_manual_free_chat_router_reality"
+  });
+  try {
+    const response = await fetch("api/codex/custom/manual-free-chat-router-reality", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        request_id: `ui-manual-router-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`manual free-chat router reality http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartManualFreeChatRouterReality(packet);
+  } catch (error) {
+    renderQuickStartManualFreeChatRouterReality({
+      status: "failed",
+      machine_error_code: "QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_MANUAL_FREE_CHAT_ROUTER_REALITY_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      manual_free_chat_router_reality_packet: true,
+      manual_free_chat_router_reality_proven: false,
+      manual_user_prompt_observed: false,
+      manual_user_prompt_source: "not_observed",
+      manual_user_prompt_digest_present: false,
+      wbp_owned_router_hook_observed: false,
+      router_hook_truth_source: "not_observable",
+      router_hook_transcript_digest_present: false,
+      bridge_or_file_bridge_used: false,
+      command_loop_provider_call_count: 0,
+      api_lane_exact_token_matched: false,
+      allowed_api_route_ids_enforced: false,
+      api_lane_proven: false,
+      codex_subagent_used_as_dip: false,
+      native_codex_subagent_used_as_dip: false,
+      server_owned_proof_counts_as_manual_router: false,
+      server_owned_natural_proof_counts_as_manual_router: false,
+      browser_authority_contract_enforced: true,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      browser_can_supply_route_authority: false,
+      browser_can_supply_reasoning_authority: false,
+      browser_model_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      prompt_text_recorded: false,
+      raw_prompt_recorded: false,
+      raw_backend_details_exposed: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_manual_free_chat_router_reality"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartManualFreeChatRouterRealityAction")?.removeAttribute("disabled");
+  }
+}
+
+function renderQuickStartModelReasoningAvailabilityMatrix(packet) {
+  lockQuickStartRouteProofResult();
+  const matrixLabel = quickStartModelReasoningMatrixLabel(packet);
+  const combinedProven = Boolean(
+    packet?.status === "ok"
+    && packet?.machine_error_code === "OK"
+    && packet?.combined_full_proven === true
+    && packet?.chatgpt_lane_proven === true
+    && packet?.api_lane_proven === true
+    && packet?.alias_binding_proven === true
+    && packet?.combined_status_counts_as_full_success === true
+    && packet?.api_success_counts_as_combined_success !== true
+    && packet?.native_execution_proven === true
+    && packet?.reasoning_dispatch_matrix_proven === true
+    && packet?.provider_declared_reasoning_levels_proven === true
+    && packet?.fallback_used !== true
+    && packet?.local_imitation_used !== true
+    && packet?.secret_value_exposed !== true
+    && packet?.raw_backend_details_exposed !== true
+    && packet?.intelligence_measured !== true
+  );
+  const partialApiOnly = packet?.partial_api_lane_proven === true
+    || packet?.machine_error_code === "COMBINED_MODE_PARTIAL_API_ONLY";
+  const nativeAuthWall = packet?.native_auth_wall_observed === true
+    || packet?.machine_error_code === "COMBINED_MODE_BLOCKED_NATIVE_AUTH";
+  const matrixExecutionMode = packet?.execution_mode || "chatgpt_plus_api";
+  const matrixModeOk = matrixExecutionMode === "chatgpt_plus_api";
+  setQuickStartChip(
+    "quickStartRouteChip",
+    combinedProven ? "green" : "amber",
+    combinedProven ? "matrix ok" : matrixLabel
+  );
+  setQuickStartChip(
+    "quickStartExecutionModeState",
+    matrixModeOk ? "green" : "amber",
+    matrixModeOk ? "ChatGPT + API" : "select GPT+API"
+  );
+  setQuickStartChip(
+    "quickStartChatSlotState",
+    packet?.chatgpt_lane_proven === true ? "green" : "amber",
+    packet?.chatgpt_lane_proven === true ? "native proven" : (nativeAuthWall ? "auth wall" : "listed only")
+  );
+  setQuickStartChip(
+    "quickStartApiSlotState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "API proven" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartOwnerAuthState",
+    nativeAuthWall ? "amber" : (combinedProven ? "green" : "neutral"),
+    nativeAuthWall ? "auth wall" : (combinedProven ? "confirmed" : "preflight")
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    combinedProven ? "green" : "amber",
+    combinedProven ? "combined ok" : (partialApiOnly ? "API partial" : matrixLabel)
+  );
+  setQuickStartChip(
+    "quickStartBridgeState",
+    packet?.api_lane_proven === true ? "green" : "amber",
+    packet?.api_lane_proven === true ? "жив" : "not proven"
+  );
+  setQuickStartChip(
+    "quickStartWindowState",
+    packet?.native_execution_proven === true ? "green" : "amber",
+    packet?.native_execution_proven === true ? "native ok" : (nativeAuthWall ? "auth wall" : "not proven")
+  );
+  setQuickStartChip(
+    "quickStartConfigState",
+    packet?.alias_binding_proven === true && packet?.runtime_context_file_proven === true ? "green" : "amber",
+    packet?.alias_binding_proven === true && packet?.runtime_context_file_proven === true ? "context ok" : "binding blocked"
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    combinedProven && (!packet?.next_action || packet?.next_action === "none") ? "green" : "amber",
+    combinedProven ? "none" : quickStartNextActionLabel(packet?.next_action || "")
+  );
+  setQuickStartRouteResponse({
+    ...packet,
+    model_reasoning_availability_matrix_packet: true,
+    execution_mode: "chatgpt_plus_api",
+    matrix_rows: Array.isArray(packet?.matrix_rows) ? packet.matrix_rows : [],
+    reasoning_level_rows: Array.isArray(packet?.reasoning_level_rows) ? packet.reasoning_level_rows : [],
+    chatgpt_lane_proven: packet?.chatgpt_lane_proven === true,
+    api_lane_proven: packet?.api_lane_proven === true,
+    alias_binding_proven: packet?.alias_binding_proven === true,
+    combined_slot_binding_proven: packet?.combined_slot_binding_proven === true,
+    combined_full_proven: packet?.combined_full_proven === true,
+    partial_api_lane_proven: packet?.partial_api_lane_proven === true,
+    combined_status_counts_as_full_success:
+      packet?.combined_status_counts_as_full_success === true,
+    api_success_counts_as_combined_success:
+      packet?.api_success_counts_as_combined_success === true,
+    native_auth_wall_observed: nativeAuthWall,
+    native_execution_proven: packet?.native_execution_proven === true,
+    native_execution_machine_error_code: packet?.native_execution_machine_error_code || "",
+    native_execution_packet: packet?.native_execution_packet || {},
+    reasoning_dispatch_matrix_proven:
+      packet?.reasoning_dispatch_matrix_proven === true,
+    provider_declared_reasoning_levels_proven:
+      packet?.provider_declared_reasoning_levels_proven === true,
+    provider_reasoning_level_source:
+      packet?.provider_reasoning_level_source || "",
+    provider_reasoning_level_proof_count:
+      Number(packet?.provider_reasoning_level_proof_count || 0),
+    provider_reasoning_level_expected_count:
+      Number(packet?.provider_reasoning_level_expected_count || 0),
+    independent_quality_benchmark_proven:
+      packet?.independent_quality_benchmark_proven === true,
+    benchmark_required_for_provider_level_proof:
+      packet?.benchmark_required_for_provider_level_proof === true,
+    quality_benchmark_status:
+      packet?.quality_benchmark_status || "",
+    command_loop_proven: packet?.command_loop_proven === true,
+    runtime_context_file_proven: packet?.runtime_context_file_proven === true,
+    primary_alias_bound_to_chatgpt_lane:
+      packet?.primary_alias_bound_to_chatgpt_lane === true,
+    coding_alias_bound_to_api_lane:
+      packet?.coding_alias_bound_to_api_lane === true,
+    api_lane_exact_token_matched:
+      packet?.api_lane_exact_token_matched === true,
+    file_bridge_acceptance_proven:
+      packet?.file_bridge_acceptance_proven === true,
+    agent_alias_route_acceptance_proven:
+      packet?.agent_alias_route_acceptance_proven === true,
+    allowed_api_route_ids_enforced:
+      packet?.allowed_api_route_ids_enforced === true,
+    forbidden_stale_route_ids_enforced:
+      packet?.forbidden_stale_route_ids_enforced === true,
+    bridge_or_file_bridge_used:
+      packet?.bridge_or_file_bridge_used === true,
+    command_loop_route_authority_proven:
+      packet?.command_loop_route_authority_proven === true,
+    command_loop_provider_call_count:
+      Number(packet?.command_loop_provider_call_count || 0),
+    reasoning_provider_call_count:
+      Number(packet?.reasoning_provider_call_count || 0),
+    browser_can_supply_route_authority:
+      packet?.browser_can_supply_route_authority === true,
+    browser_can_supply_reasoning_authority:
+      packet?.browser_can_supply_reasoning_authority === true,
+    browser_model_authority:
+      packet?.browser_model_authority === true,
+    api_reasoning_operator_level: packet?.api_reasoning_operator_level || "",
+    api_reasoning_intelligence_measured:
+      packet?.api_reasoning_intelligence_measured === true,
+    intelligence_measured: packet?.intelligence_measured === true,
+    not_intelligence_proof: packet?.not_intelligence_proof === true,
+    runtime_readiness_claimed: false,
+    next_action: packet?.next_action || ""
+  });
+}
+
+async function runQuickStartGptApiAliasCommandLoopProof() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("command_loop_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "command loop");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_GPT_API_COMMAND_LOOP_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    gpt_api_alias_command_loop_packet: false,
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    reasoning_prerequisite_proven: false,
+    api_lane_exact_token_matched: false,
+    bridge_or_file_bridge_used: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_gpt_api_alias_command_loop"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("command_loop_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartGptApiAliasCommandLoopProof({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "CUSTOM_CODEX_GPT_API_ALIAS_COMMAND_LOOP_NOT_PROVEN",
+        command_loop_proven: false,
+        runtime_context_file_proven: false,
+        primary_alias_bound_to_chatgpt_lane: false,
+        coding_alias_bound_to_api_lane: false,
+        primary_alias_precedes_coding_alias: false,
+        reasoning_prerequisite_proven: false,
+        api_lane_exact_token_matched: false,
+        bridge_or_file_bridge_used: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        secret_value_exposed: false,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const response = await fetch("api/codex/custom/gpt-api-alias-command-loop-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        request_id: `ui-command-loop-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`gpt api command loop proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartGptApiAliasCommandLoopProof(packet);
+  } catch (error) {
+    renderQuickStartGptApiAliasCommandLoopProof({
+      status: "failed",
+      machine_error_code: "QUICK_START_GPT_API_COMMAND_LOOP_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_GPT_API_COMMAND_LOOP_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      primary_alias_bound_to_chatgpt_lane: false,
+      coding_alias_bound_to_api_lane: false,
+      primary_alias_precedes_coding_alias: false,
+      reasoning_prerequisite_proven: false,
+      api_lane_exact_token_matched: false,
+      bridge_or_file_bridge_used: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_gpt_api_alias_command_loop"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartNativeFreeTextCommandLoopProof() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    renderQuickStartNativeFreeTextCommandLoopProof({
+      status: "blocked",
+      machine_error_code: "CUSTOM_NATIVE_FREE_TEXT_REQUIRES_CHATGPT_PLUS_API",
+      final_status: "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_NOT_PROVEN",
+      execution_mode: payload?.execution_mode || "",
+      native_free_chat_dip_command_packet: true,
+      native_free_chat_dip_command_proven: false,
+      server_owned_native_free_chat_command_path: true,
+      native_free_chat_api_lane_proven: false,
+      native_free_chat_custom_response_observed: false,
+      native_free_chat_request_bound_digest_matched: false,
+      native_free_chat_subagent_substitution_blocked: false,
+      server_owned_natural_dip_command_packet: true,
+      server_owned_natural_dip_command_proven: false,
+      server_owned_natural_dip_command_path: true,
+      server_owned_natural_command_prompt_source: "server_owned_builder",
+      natural_dip_prompt_browser_supplied: false,
+      natural_dip_prompt_text_recorded: false,
+      api_bridge_transcript_observed: false,
+      api_bridge_or_file_bridge_transcript_observed: false,
+      custom_response_observed: false,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
+      native_free_text_command_loop_proven: false,
+      native_free_text_tool_bridge_proven: false,
+      native_free_text_observability_proven: false,
+      native_submitter_trust_boundary_proven: false,
+      native_window_observed: false,
+      input_capable_ui_observed: false,
+      prompt_submitted: false,
+      native_agent_proof_file_valid: false,
+      runtime_context_file_proven: false,
+      command_loop_proven: false,
+      api_lane_exact_token_matched: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      native_agent_provider_call_directly_observed: false,
+      custom_codex_response_text_read_proven: false,
+      custom_response_exact_token_observed: false,
+      custom_response_bound_to_request: false,
+      custom_response_expected_sha256_match: false,
+      custom_response_observer_attempted: false,
+      custom_response_observer_scan_performed: false,
+      custom_response_text_read_without_storing: false,
+      native_codex_subagent_used_as_dip: false,
+      native_codex_subagent_absence_proven: false,
+      secret_value_exposed: false,
+      next_action: "select_chatgpt_plus_api"
+    });
+    return;
+  }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("native_free_text_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "native proof");
+  setQuickStartChip("quickStartLaunchState", "neutral", "working");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_NATIVE_NATURAL_DIP_COMMAND_IN_PROGRESS",
+    final_status: "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    native_free_chat_dip_command_packet: true,
+    native_free_chat_dip_command_proven: false,
+    server_owned_native_free_chat_command_path: true,
+    native_free_chat_api_lane_proven: false,
+    native_free_chat_custom_response_observed: false,
+    native_free_chat_request_bound_digest_matched: false,
+    native_free_chat_subagent_substitution_blocked: false,
+    server_owned_natural_dip_command_packet: true,
+    server_owned_natural_dip_command_proven: false,
+    server_owned_natural_dip_command_path: true,
+    server_owned_natural_command_prompt_source: "server_owned_builder",
+    natural_dip_prompt_browser_supplied: false,
+    natural_dip_prompt_text_recorded: false,
+    api_bridge_transcript_observed: false,
+    api_bridge_or_file_bridge_transcript_observed: false,
+    custom_response_observed: false,
+    browser_prompt_authority_rejected: true,
+    browser_can_supply_prompt_authority: false,
+    does_not_prove_universal_manual_chat_interception: true,
+    universal_manual_chat_interception_proven: false,
+    api_lane_truth_source: "",
+    native_free_text_command_loop_packet: false,
+    native_free_text_command_loop_proven: false,
+    native_free_text_tool_bridge_proven: false,
+    native_free_text_observability_proven: false,
+    native_submitter_trust_boundary_proven: false,
+    native_free_text_activation_proven: false,
+    native_window_observed: false,
+    input_capable_ui_observed: false,
+    input_text_insert_attempted: false,
+    input_text_insert_succeeded: false,
+    prompt_submitted: false,
+    native_agent_provider_call_directly_observed: false,
+    custom_codex_response_text_read_proven: false,
+    custom_response_exact_token_observed: false,
+    custom_response_bound_to_request: false,
+    custom_response_expected_sha256_match: false,
+    custom_response_observer_attempted: false,
+    custom_response_observer_scan_performed: false,
+    custom_response_text_read_without_storing: false,
+    native_codex_subagent_used_as_dip: false,
+    native_codex_subagent_absence_proven: false,
+    native_agent_proof_file_observed: false,
+    native_agent_proof_file_valid: false,
+    native_free_text_agent_context_sha_match: false,
+    native_free_text_alias_routing_proven: false,
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    reasoning_prerequisite_proven: false,
+    api_lane_exact_token_matched: false,
+    bridge_or_file_bridge_used: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    prompt_text_recorded: false,
+    secret_value_exposed: false,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_native_natural_dip_command"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("native_free_text_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartNativeFreeTextCommandLoopProof({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "CUSTOM_CODEX_SERVER_OWNED_NATURAL_DIP_COMMAND_NOT_PROVEN",
+        native_free_chat_dip_command_packet: true,
+        native_free_chat_dip_command_proven: false,
+        server_owned_native_free_chat_command_path: true,
+        native_free_chat_api_lane_proven: false,
+        native_free_chat_custom_response_observed: false,
+        native_free_chat_request_bound_digest_matched: false,
+        native_free_chat_subagent_substitution_blocked: false,
+        server_owned_natural_dip_command_packet: true,
+        server_owned_natural_dip_command_proven: false,
+        server_owned_natural_dip_command_path: true,
+        server_owned_natural_command_prompt_source: "server_owned_builder",
+        natural_dip_prompt_browser_supplied: false,
+        natural_dip_prompt_text_recorded: false,
+        api_bridge_transcript_observed: false,
+        api_bridge_or_file_bridge_transcript_observed: false,
+        custom_response_observed: false,
+        browser_prompt_authority_rejected: true,
+        browser_can_supply_prompt_authority: false,
+        does_not_prove_universal_manual_chat_interception: true,
+        universal_manual_chat_interception_proven: false,
+        native_free_text_command_loop_proven: false,
+        native_free_text_tool_bridge_proven: false,
+        native_free_text_observability_proven: false,
+        native_submitter_trust_boundary_proven: false,
+        native_window_observed: false,
+        input_capable_ui_observed: false,
+        prompt_submitted: false,
+        native_agent_proof_file_valid: false,
+        runtime_context_file_proven: false,
+        command_loop_proven: false,
+        primary_alias_bound_to_chatgpt_lane: false,
+        coding_alias_bound_to_api_lane: false,
+        reasoning_prerequisite_proven: false,
+        api_lane_exact_token_matched: false,
+        bridge_or_file_bridge_used: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        native_agent_provider_call_directly_observed: false,
+        custom_codex_response_text_read_proven: false,
+        custom_response_exact_token_observed: false,
+        custom_response_bound_to_request: false,
+        custom_response_expected_sha256_match: false,
+        custom_response_observer_attempted: false,
+        custom_response_observer_scan_performed: false,
+        custom_response_text_read_without_storing: false,
+        native_codex_subagent_used_as_dip: false,
+        native_codex_subagent_absence_proven: false,
+        secret_value_exposed: false,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const requestId = `ui-native-natural-dip-${Date.now()}`;
+    const expectedCodingResponse = `WBP_UI_NATURAL_DIP_OK_${requestId}`;
+    const response = await fetch("api/codex/custom/native-natural-dip-command-proof", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        expected_coding_response: expectedCodingResponse,
+        request_id: requestId
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`native natural DIP command proof http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartNativeFreeTextCommandLoopProof(packet);
+  } catch (error) {
+    renderQuickStartNativeFreeTextCommandLoopProof({
+      status: "failed",
+      machine_error_code: "QUICK_START_NATIVE_NATURAL_DIP_COMMAND_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_NATIVE_NATURAL_DIP_COMMAND_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      native_free_chat_dip_command_packet: true,
+      native_free_chat_dip_command_proven: false,
+      server_owned_native_free_chat_command_path: true,
+      native_free_chat_api_lane_proven: false,
+      native_free_chat_custom_response_observed: false,
+      native_free_chat_request_bound_digest_matched: false,
+      native_free_chat_subagent_substitution_blocked: false,
+      server_owned_natural_dip_command_packet: true,
+      server_owned_natural_dip_command_proven: false,
+      server_owned_natural_dip_command_path: true,
+      server_owned_natural_command_prompt_source: "server_owned_builder",
+      natural_dip_prompt_browser_supplied: false,
+      natural_dip_prompt_text_recorded: false,
+      api_bridge_transcript_observed: false,
+      api_bridge_or_file_bridge_transcript_observed: false,
+      custom_response_observed: false,
+      browser_prompt_authority_rejected: true,
+      browser_can_supply_prompt_authority: false,
+      does_not_prove_universal_manual_chat_interception: true,
+      universal_manual_chat_interception_proven: false,
+      native_free_text_command_loop_proven: false,
+      native_free_text_tool_bridge_proven: false,
+      native_free_text_observability_proven: false,
+      native_submitter_trust_boundary_proven: false,
+      native_window_observed: false,
+      input_capable_ui_observed: false,
+      prompt_submitted: false,
+      native_agent_proof_file_valid: false,
+      runtime_context_file_proven: false,
+      command_loop_proven: false,
+      primary_alias_bound_to_chatgpt_lane: false,
+      coding_alias_bound_to_api_lane: false,
+      reasoning_prerequisite_proven: false,
+      api_lane_exact_token_matched: false,
+      bridge_or_file_bridge_used: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      native_agent_provider_call_directly_observed: false,
+      custom_codex_response_text_read_proven: false,
+      custom_response_exact_token_observed: false,
+      custom_response_bound_to_request: false,
+      custom_response_expected_sha256_match: false,
+      custom_response_observer_attempted: false,
+      custom_response_observer_scan_performed: false,
+      custom_response_text_read_without_storing: false,
+      native_codex_subagent_used_as_dip: false,
+      native_codex_subagent_absence_proven: false,
+      secret_value_exposed: false,
+      next_action: "stop_and_diagnose_native_natural_dip_command"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartModelReasoningAvailabilityMatrix() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    renderQuickStartModelReasoningAvailabilityMatrix({
+      status: "blocked",
+      machine_error_code: "MODEL_REASONING_MATRIX_REQUIRES_CHATGPT_PLUS_API",
+      final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+      execution_mode: payload?.execution_mode || "",
+      chatgpt_lane_proven: false,
+      api_lane_proven: false,
+      alias_binding_proven: false,
+      combined_slot_binding_proven: false,
+      combined_full_proven: false,
+      partial_api_lane_proven: false,
+      combined_status_counts_as_full_success: false,
+      api_success_counts_as_combined_success: false,
+      native_auth_wall_observed: false,
+      native_execution_proven: false,
+      reasoning_dispatch_matrix_proven: false,
+      provider_declared_reasoning_levels_proven: false,
+      provider_reasoning_level_source: "provider_spec_not_live_proven",
+      provider_reasoning_level_proof_count: 0,
+      provider_reasoning_level_expected_count: 0,
+      independent_quality_benchmark_proven: false,
+      benchmark_required_for_provider_level_proof: false,
+      quality_benchmark_status: "not_required_for_provider_level_proof",
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      intelligence_measured: false,
+      not_intelligence_proof: true,
+      next_action: "select_chatgpt_plus_api"
+    });
+    return;
+  }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("model_reasoning_matrix_editing");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartModelReasoningMatrixAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "matrix");
+  setQuickStartChip("quickStartLaunchState", "neutral", "working");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  const aliases = normalizedCodexCustomAgentAliases(codexCustomAgentAliases);
+  setQuickStartRouteResponse({
+    status: "checking",
+    machine_error_code: "QUICK_START_MODEL_REASONING_MATRIX_IN_PROGRESS",
+    final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_PENDING",
+    execution_mode: "chatgpt_plus_api",
+    chatgpt_model_id: payload.chatgpt_model_id || "",
+    api_model_id: payload.api_model_id || "",
+    api_reasoning_option_id: payload.api_reasoning_option_id || "",
+    model_reasoning_availability_matrix_packet: false,
+    matrix_rows: [],
+    reasoning_level_rows: [],
+    primary_alias: aliases.primary_model_slot,
+    coding_alias: aliases.coding_agent_model_slot,
+    chatgpt_lane_proven: false,
+    api_lane_proven: false,
+    alias_binding_proven: false,
+    combined_slot_binding_proven: false,
+    combined_full_proven: false,
+    partial_api_lane_proven: false,
+    combined_status_counts_as_full_success: false,
+    api_success_counts_as_combined_success: false,
+    native_auth_wall_observed: false,
+    native_execution_proven: false,
+    reasoning_dispatch_matrix_proven: false,
+    provider_declared_reasoning_levels_proven: false,
+    provider_reasoning_level_source: "provider_spec_not_live_proven",
+    provider_reasoning_level_proof_count: 0,
+    provider_reasoning_level_expected_count: 0,
+    independent_quality_benchmark_proven: false,
+    benchmark_required_for_provider_level_proof: false,
+    quality_benchmark_status: "not_required_for_provider_level_proof",
+    command_loop_proven: false,
+    runtime_context_file_proven: false,
+    primary_alias_bound_to_chatgpt_lane: false,
+    coding_alias_bound_to_api_lane: false,
+    api_lane_exact_token_matched: false,
+    fallback_used: false,
+    local_imitation_used: false,
+    secret_value_exposed: false,
+    raw_backend_details_exposed: false,
+    intelligence_measured: false,
+    not_intelligence_proof: true,
+    runtime_readiness_claimed: false,
+    next_action: "wait_for_model_reasoning_matrix"
+  });
+  try {
+    const runtimePacket = await saveCodexCustomAgentBindingsToRuntime("model_reasoning_matrix_saved");
+    if (runtimePacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartModelReasoningAvailabilityMatrix({
+        ...runtimePacket,
+        status: runtimePacket?.status || "blocked",
+        machine_error_code: runtimePacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        final_status: "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+        chatgpt_lane_proven: false,
+        api_lane_proven: false,
+        alias_binding_proven: false,
+        combined_slot_binding_proven: false,
+        combined_full_proven: false,
+        partial_api_lane_proven: false,
+        combined_status_counts_as_full_success: false,
+        api_success_counts_as_combined_success: false,
+        native_execution_proven: false,
+        reasoning_dispatch_matrix_proven: false,
+        provider_declared_reasoning_levels_proven: false,
+        provider_reasoning_level_source: "provider_spec_not_live_proven",
+        provider_reasoning_level_proof_count: 0,
+        provider_reasoning_level_expected_count: 0,
+        independent_quality_benchmark_proven: false,
+        benchmark_required_for_provider_level_proof: false,
+        quality_benchmark_status: "not_required_for_provider_level_proof",
+        command_loop_proven: false,
+        runtime_context_file_proven: false,
+        fallback_used: false,
+        local_imitation_used: false,
+        secret_value_exposed: false,
+        raw_backend_details_exposed: false,
+        intelligence_measured: false,
+        not_intelligence_proof: true,
+        next_action: runtimePacket?.next_action || "repair_agent_bindings"
+      });
+      return;
+    }
+    const response = await fetch("api/codex/custom/model-reasoning-availability-matrix", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        execution_mode: "chatgpt_plus_api",
+        chatgpt_model_id: payload.chatgpt_model_id || "",
+        api_model_id: payload.api_model_id || "",
+        api_reasoning_option_id: payload.api_reasoning_option_id || "",
+        request_id: `ui-model-reasoning-matrix-${Date.now()}`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`model reasoning availability matrix http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderQuickStartModelReasoningAvailabilityMatrix(packet);
+  } catch (error) {
+    renderQuickStartModelReasoningAvailabilityMatrix({
+      status: "failed",
+      machine_error_code: "QUICK_START_MODEL_REASONING_MATRIX_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_MODEL_REASONING_MATRIX_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      chatgpt_model_id: payload.chatgpt_model_id || "",
+      api_model_id: payload.api_model_id || "",
+      api_reasoning_option_id: payload.api_reasoning_option_id || "",
+      chatgpt_lane_proven: false,
+      api_lane_proven: false,
+      alias_binding_proven: false,
+      combined_slot_binding_proven: false,
+      combined_full_proven: false,
+      partial_api_lane_proven: false,
+      combined_status_counts_as_full_success: false,
+      api_success_counts_as_combined_success: false,
+      native_auth_wall_observed: false,
+      native_execution_proven: false,
+      reasoning_dispatch_matrix_proven: false,
+      provider_declared_reasoning_levels_proven: false,
+      provider_reasoning_level_source: "provider_spec_not_live_proven",
+      provider_reasoning_level_proof_count: 0,
+      provider_reasoning_level_expected_count: 0,
+      independent_quality_benchmark_proven: false,
+      benchmark_required_for_provider_level_proof: false,
+      quality_benchmark_status: "not_required_for_provider_level_proof",
+      command_loop_proven: false,
+      runtime_context_file_proven: false,
+      fallback_used: false,
+      local_imitation_used: false,
+      secret_value_exposed: false,
+      raw_backend_details_exposed: false,
+      intelligence_measured: false,
+      not_intelligence_proof: true,
+      next_action: "stop_and_diagnose_model_reasoning_matrix"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartSessionDualLaneExecution() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode !== "chatgpt_plus_api") {
+    await runCodexCustomLaunch();
+    return;
+  }
+  codexCustomAgentAliases = collectCodexCustomAgentAliasesFromInputs();
+  renderCodexCustomAgentAliases("operator_selected");
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("quickStartNativeFreeTextProofAction")?.setAttribute("disabled", "disabled");
+  setQuickStartChip("quickStartRouteChip", "neutral", "session check");
+  setQuickStartChip("quickStartNextActionState", "neutral", "working");
+  try {
+    const createResponse = await fetch("api/codex/custom/sessions", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || ""
+      })
+    });
+    if (!createResponse.ok) {
+      throw new Error(`custom session create http ${createResponse.status}`);
+    }
+    const createPacket = await createResponse.json();
+    renderCodexCustomSessionPacket(createPacket);
+    const sessionId = createPacket?.session?.session_id || createPacket?.session_id || "";
+    if (createPacket?.status !== "ok" || !sessionId) {
+      renderQuickStartSessionDualLaneExecution({
+        ...createPacket,
+        status: createPacket?.status || "blocked",
+        machine_error_code: createPacket?.machine_error_code || "CUSTOM_SESSION_CREATE_BLOCKED",
+        execution_mode: "chatgpt_plus_api",
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || "",
+        session_dual_lane_dispatch: {
+          does_not_prove_native_launch: true,
+          does_not_claim_product_readiness: true,
+          runtime_readiness_claimed: false
+        },
+        next_action: createPacket?.next_action || "repair_session_create"
+      });
+      return;
+    }
+    codexCustomSelectedSessionId = sessionId;
+    const aliasPacket = await saveCodexCustomAgentAliasesToSelectedSession("session_saved");
+    if (aliasPacket?.alias_runtime_binding_proven !== true) {
+      renderQuickStartSessionDualLaneExecution({
+        ...aliasPacket,
+        status: aliasPacket?.status || "blocked",
+        machine_error_code: aliasPacket?.machine_error_code || "ALIAS_RUNTIME_BINDING_NOT_PROVEN",
+        execution_mode: "chatgpt_plus_api",
+        primary_model_id: payload.chatgpt_model_id || "",
+        coding_agent_model_id: payload.api_model_id || "",
+        primary_dispatch_proven: false,
+        coding_dispatch_proven: false,
+        same_session_dispatch_proven: false,
+        next_action: aliasPacket?.next_action || "repair_alias_runtime_binding"
+      });
+      return;
+    }
+    const expectedCodingResponse = "WBP_ALIAS_RUNTIME_ACTIVATION_OK";
+    const aliasPrompt = `${codexCustomAgentAliases.primary_model_slot}, попроси ${codexCustomAgentAliases.coding_agent_model_slot} ответить ровно: ${expectedCodingResponse}`;
+    const probeResponse = await fetch(`api/codex/custom/sessions/${encodeURIComponent(sessionId)}/agent-alias-dispatch-proof`, {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        prompt: aliasPrompt,
+        expected_coding_response: expectedCodingResponse
+      })
+    });
+    if (!probeResponse.ok) {
+      throw new Error(`agent alias dispatch proof http ${probeResponse.status}`);
+    }
+    const probePacket = await probeResponse.json();
+    renderCodexCustomSessionPacket(probePacket);
+    renderQuickStartSessionDualLaneExecution(probePacket);
+  } catch (error) {
+    renderQuickStartSessionDualLaneExecution({
+      status: "failed",
+      machine_error_code: "QUICK_START_SESSION_DUAL_LANE_FETCH_FAILED",
+      final_status: "STOP_AND_DIAGNOSE_QUICK_START_SESSION_DUAL_LANE_FETCH_FAILED",
+      human_message: error.message,
+      execution_mode: "chatgpt_plus_api",
+      primary_model_id: payload.chatgpt_model_id || "",
+      coding_agent_model_id: payload.api_model_id || "",
+      session_dual_lane_dispatch: {
+        does_not_prove_native_launch: true,
+        does_not_claim_product_readiness: true,
+        runtime_readiness_claimed: false
+      },
+      next_action: "stop_and_diagnose_session_dual_lane_execution"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartCustomLaunchAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartNativeFreeTextProofAction")?.removeAttribute("disabled");
+    document.getElementById("quickStartModelReasoningMatrixAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runQuickStartCustomLaunchAction() {
+  if (!actionMetadataLoaded) {
+    await ensureActionMetadataLoaded();
+    applyActionAvailability();
+  }
+  setQuickStartMixedLaunchActionGuard(false);
+  const payload = quickStartSelectionWithDefaults(quickStartLaunchPayloadFromSelects());
+  if (payload?.execution_mode === "chatgpt_plus_api") {
+    await runQuickStartGptApiAliasCommandLoopProof();
+    return;
+  }
+  const launchMetadata = metadataFor("launch_custom_client_native");
+  if (launchMetadata?.available === true) {
+    await runCodexCustomLaunch();
+    return;
+  }
+  await runQuickStartLaunchAdmissionProjection();
 }
 
 function renderQuickStartLaunchPreflight(packet) {
   const ok = packet?.status === "ok" && packet?.machine_error_code === "OK";
+  const ownerBlocked = packet?.machine_error_code === "OWNER_AUTHORIZATION_REQUIRED";
+  const runtimeProofPending = quickStartChatgptRuntimeProofPending(packet);
+  const explicitRuntimeNotReady = packet?.runtime_readiness_claimed === false;
+  const okVisual = ok && !runtimeProofPending && !explicitRuntimeNotReady ? "green" : (ok ? "amber" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"));
+  const okLabel = runtimeProofPending
+    ? quickStartRuntimeProofPendingLabel(packet)
+    : (explicitRuntimeNotReady ? "preflight only" : "preflight ok");
+  const nextAction = packet?.next_action || "";
+  const nextActionReady = ok && (
+    !nextAction
+    || nextAction === "none"
+    || nextAction === "show_existing_window"
+    || nextAction === "relaunch_custom_codex_with_new_selection"
+    || nextAction === "replace_existing_custom_codex_without_launch_packet"
+    || nextAction.includes("launch_custom_codex")
+    || nextAction.includes("launch_or_reuse_custom_codex")
+  );
   const bridgeLabel = packet?.bridge_required === true
     ? (packet?.bridge_alive === true ? "жив" : "упал")
     : "не нужен";
@@ -2190,14 +7290,35 @@ function renderQuickStartLaunchPreflight(packet) {
     windowLabel
   );
   setQuickStartChip(
+    "quickStartOwnerAuthState",
+    packet?.owner_authorization_phrase_present === true
+      ? "green"
+      : (ownerBlocked ? "amber" : "neutral"),
+    packet?.owner_authorization_phrase_present === true
+      ? "confirmed"
+      : (ownerBlocked ? "owner auth" : "not checked")
+  );
+  setQuickStartChip(
+    "quickStartLaunchState",
+    okVisual,
+    ok ? okLabel : (ownerBlocked ? "owner auth" : "blocked")
+  );
+  setQuickStartChip(
     "quickStartConfigState",
     configVisual,
     configLabel
   );
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "preflight ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    okVisual,
+    ok ? okLabel : (packet?.machine_error_code || packet?.status || "ошибка")
+  );
+  setQuickStartChip(
+    "quickStartNextActionState",
+    nextActionReady && !runtimeProofPending && !explicitRuntimeNotReady ? "green" : "amber",
+    runtimeProofPending
+      ? quickStartRuntimeProofPendingLabel(packet)
+      : (explicitRuntimeNotReady ? "preflight only" : quickStartNextActionLabel(nextAction))
   );
   setQuickStartRouteResponse({
     status: packet?.status || "unknown",
@@ -2209,8 +7330,31 @@ function renderQuickStartLaunchPreflight(packet) {
     bridge_status: packet?.bridge_status || "",
     window_status: packet?.window_status || "",
     config_status: configStatus,
+    owner_authorization_phrase_present:
+      packet?.owner_authorization_phrase_present === true,
     existing_window_reuse_admissible: packet?.existing_window_reuse_admissible === true,
+    existing_window_relaunch_admissible: packet?.existing_window_relaunch_admissible === true,
+    existing_window_orphan_replace_admissible:
+      packet?.existing_window_orphan_replace_admissible === true,
+    orphan_replacement_authority_scope:
+      packet?.orphan_replacement_authority_scope || "",
+    runtime_health_gate_blocks_window_launch:
+      packet?.runtime_health_gate_blocks_window_launch === true,
+    runtime_health_required_for_chatgpt_lane:
+      packet?.runtime_health_required_for_chatgpt_lane === true,
+    runtime_health_machine_error_code:
+      packet?.runtime_health_machine_error_code || packet?.runtime_health_gate?.runtime_health_machine_error_code || "",
+    chatgpt_runtime_proof_status:
+      packet?.chatgpt_runtime_proof_status || "",
+    chatgpt_runtime_proof_machine_error_code:
+      packet?.chatgpt_runtime_proof_machine_error_code || "",
     new_launch_required: packet?.new_launch_required === true,
+    custom_codex_launch_attempted: packet?.custom_codex_launch_attempted === true,
+    new_launch_started: packet?.new_launch_started === true,
+    network_calls_made: packet?.network_calls_made === true,
+    live_call_attempted: packet?.live_call_attempted === true,
+    provider_called: packet?.provider_called === true,
+    runtime_readiness_claimed: false,
     visible_window_counts_as_model_truth:
       packet?.visible_window_counts_as_model_truth === true,
     bridge_alive_counts_as_model_truth:
@@ -2228,10 +7372,11 @@ function renderQuickStartLaunchPreflight(packet) {
 function renderQuickStartDeepSeekCoderCheck(packet) {
   const ok = packet?.final_status === "DEEPSEEK_LIVE_EXECUTOR_PACKET_PROVEN_WITH_LIMITS"
     || packet?.legacy_quick_start_final_status === "QUICK_START_API_ONLY_DEEPSEEK_SAFE_WORKTREE_BUTTON_PROVEN_WITH_LIMITS";
+  const provenWithLimits = ok && quickStartPacketWithLimits(packet);
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "DeepSeek ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? (provenWithLimits ? "amber" : "green") : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? (provenWithLimits ? "bounded proof only" : "DeepSeek ok") : (packet?.machine_error_code || packet?.status || "ошибка")
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
@@ -2240,8 +7385,8 @@ function renderQuickStartDeepSeekCoderCheck(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    ok ? "green" : "amber",
-    ok ? "tool-loop ok" : "не доказан"
+    ok ? (provenWithLimits ? "amber" : "green") : "amber",
+    ok ? (provenWithLimits ? "bounded proof only" : "tool-loop ok") : "не доказан"
   );
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
@@ -2302,10 +7447,13 @@ function renderQuickStartDeepSeekCoderCheck(packet) {
 
 function renderQuickStartDeepSeekCodeEditProof(packet) {
   const ok = packet?.final_status === "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCIBLE_PROVEN_WITH_LIMITS";
+  const provenWithLimits = ok && quickStartPacketWithLimits(packet);
+  const windowLaunchUsable = packet?.window_launch_proven_with_limits === true
+    && packet?.native_app_usable === true;
   setQuickStartChip(
     "quickStartRouteChip",
-    ok ? "green" : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
-    ok ? "правка ok" : (packet?.machine_error_code || packet?.status || "ошибка")
+    ok ? (provenWithLimits ? "amber" : "green") : (packet?.status === "rejected" || packet?.status === "blocked" ? "amber" : "red"),
+    ok ? (provenWithLimits ? "bounded proof only" : "правка ok") : (packet?.machine_error_code || packet?.status || "ошибка")
   );
   setQuickStartChip(
     "quickStartExecutionModeState",
@@ -2314,8 +7462,10 @@ function renderQuickStartDeepSeekCodeEditProof(packet) {
   );
   setQuickStartChip(
     "quickStartLaunchState",
-    packet?.window_launch_proven_with_limits === true ? "green" : "amber",
-    packet?.window_launch_proven_with_limits === true ? "окно ok" : "окно не доказано"
+    windowLaunchUsable ? (provenWithLimits ? "amber" : "green") : "amber",
+    windowLaunchUsable
+      ? (provenWithLimits ? "usable with limits" : "окно usable")
+      : "окно не доказано"
   );
   const response = document.getElementById("quickStartRouteResponse");
   if (response) {
@@ -2326,6 +7476,9 @@ function renderQuickStartDeepSeekCodeEditProof(packet) {
       execution_mode: packet?.execution_mode || "",
       selected_model: packet?.selected_model || "",
       api_model_id: packet?.api_model_id || "",
+      window_launch_proven_with_limits:
+        packet?.window_launch_proven_with_limits === true,
+      native_app_usable: packet?.native_app_usable === true,
       api_reasoning_option_id: packet?.api_reasoning_option_id || "",
       cwd: packet?.cwd || "",
       repo_root: packet?.repo_root || "",
@@ -2377,7 +7530,7 @@ async function runQuickStartDeepSeekCoderCheck() {
     const response = await fetch("api/codex/custom/quick-start/deepseek-safe-worktree-check", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         api_model_id: apiModelId,
@@ -2392,6 +7545,7 @@ async function runQuickStartDeepSeekCoderCheck() {
     renderQuickStartDeepSeekCoderCheck({
       status: "failed",
       machine_error_code: "QUICK_START_DEEPSEEK_SAFE_WORKTREE_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_QUICK_START_DEEPSEEK_SAFE_WORKTREE_NOT_PROVEN",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -2415,7 +7569,7 @@ async function runQuickStartDeepSeekCoderCheck() {
       commit_attempted: false,
       push_attempted: false,
       merge_attempted: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("quickStartDeepSeekCoderCheckAction")?.removeAttribute("disabled");
@@ -2439,7 +7593,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
     const response = await fetch("api/codex/custom/quick-start/deepseek-code-edit-proof", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         api_model_id: apiModelId,
@@ -2454,6 +7608,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
     renderQuickStartDeepSeekCodeEditProof({
       status: "failed",
       machine_error_code: "CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_PROOF_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_CUSTOM_CODEX_DEEPSEEK_CODE_EDIT_REPRODUCTION_FAILED",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -2472,7 +7627,7 @@ async function runQuickStartDeepSeekCodeEditProof() {
       commit_attempted: false,
       push_attempted: false,
       merge_attempted: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("quickStartDeepSeekCodeEditProofAction")?.removeAttribute("disabled");
@@ -2482,6 +7637,17 @@ async function runQuickStartDeepSeekCodeEditProof() {
 function renderCodexCustomModels(registry, compat) {
   const chatSelect = document.getElementById("codexCustomModelSelect");
   const apiSelect = document.getElementById("codexCustomApiModelSelect");
+  const preferQuickStart = codexRouteSelectionPrefersQuickStart();
+  const storedSelection = quickStartStoredSelectionForRegistry(
+    readStoredCodexRouteSelection(),
+    registry
+  );
+  const visibleSelection = codexRenderedRouteSelectionFromUi(preferQuickStart);
+  const preservedSelection = preferQuickStart
+    ? quickStartSelectionWithDefaults(
+        storedSelection || visibleSelection
+      )
+    : (storedSelection || visibleSelection || codexRouteSelectionFromUi(false));
   const chatEntries = codexCustomAvailableModelEntries(registry);
   const apiEntries = codexCustomApiModelEntries(registry);
   const seedEntries = codexCustomSeedEntries(registry);
@@ -2536,8 +7702,30 @@ function renderCodexCustomModels(registry, compat) {
   }
   mirrorSelectOptions(chatSelect, "quickStartChatModelSelect");
   mirrorSelectOptions(apiSelect, "quickStartApiModelSelect");
+  const persistedSelectionInvalid = Boolean(
+    preferQuickStart
+    && storedSelection
+    && !codexRouteSelectionCanApplyFully(preservedSelection, { reasoning: false })
+  );
+  const restoredSelection = persistedSelectionInvalid
+    ? false
+    : applyCodexRouteSelection(preservedSelection, { reasoning: false });
   renderApiReasoningOptionSelects();
-  syncCodexRouteSelects("codexCustomExecutionModeSelect");
+  const persistedReasoningInvalid = Boolean(
+    preferQuickStart
+    && storedSelection
+    && !codexRouteSelectionCanApplyFully(preservedSelection)
+  );
+  if (!persistedSelectionInvalid && !persistedReasoningInvalid) {
+    applyCodexRouteSelection(preservedSelection);
+  }
+  if (restoredSelection && !persistedReasoningInvalid) {
+    saveCodexRouteSelection(codexRouteSelectionFromUi(preferQuickStart));
+  } else if (persistedSelectionInvalid || persistedReasoningInvalid) {
+    renderQuickStartInvalidPersistedSelection(preservedSelection);
+  } else {
+    syncCodexRouteSelects("codexCustomExecutionModeSelect");
+  }
   renderCodexCustomModelCatalog("codexCustomChatLaneCatalog", chatEntries);
   renderCodexCustomModelCatalog("codexCustomApiLaneCatalog", apiEntries);
   renderCodexCustomModelCatalog("codexCustomSeedLaneCatalog", seedEntries);
@@ -2573,11 +7761,29 @@ function renderCodexCustomModels(registry, compat) {
   codexCustomModelsSetText("codexCustomApiModelCount", String(apiEntries.length));
   codexCustomModelsSetText("codexCustomSeedModelCount", String(seedEntries.length));
   codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
-  setQuickStartChip(
-    "quickStartRouteChip",
-    chatEntries.length || apiEntries.length ? "neutral" : "amber",
-    chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
-  );
+  if (
+    !persistedSelectionInvalid
+    && !persistedReasoningInvalid
+    && !quickStartRouteProofResultLocked()
+  ) {
+    setQuickStartChip(
+      "quickStartRouteChip",
+      chatEntries.length || apiEntries.length ? "neutral" : "amber",
+      chatEntries.length || apiEntries.length ? "модели загружены" : "нет моделей"
+    );
+  }
+  if (
+    currentScreen() === "quick-start"
+    && currentAccountsSnapshot
+    && currentApiConnectionsSnapshot
+  ) {
+    renderQuickStart(
+      currentAccountsSnapshot,
+      currentApiConnectionsSnapshot,
+      document.getElementById("sourcePicker")?.value || "live",
+      document.querySelector(".desktop")?.dataset?.fixtureState || "unknown"
+    );
+  }
 }
 
 function renderCodexCustomSelectorIntent(packet) {
@@ -2838,7 +8044,7 @@ async function refreshCodexCustomApiActionGate() {
     const response = await fetch("api/codex/custom/api-action-gate", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -2876,7 +8082,8 @@ async function refreshCodexCustomApiActionGate() {
         api_action_visible: true,
         api_action_enabled: false,
         live_provider_request_allowed: false,
-        next_action: error.message,
+        human_message: error.message,
+        next_action: "retry",
       },
     });
   }
@@ -2904,7 +8111,7 @@ async function runCodexCustomExecutionModeDryRun() {
     const response = await fetch("api/codex/custom/execution-mode-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         execution_mode: executionMode,
         chatgpt_model_id: chatgptModelId,
@@ -2920,6 +8127,7 @@ async function runCodexCustomExecutionModeDryRun() {
     renderCodexCustomExecutionMode({
       status: "failed",
       machine_error_code: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
+      human_message: error.message,
       final_status: "CUSTOM_CODEX_EXECUTION_MODE_FETCH_FAILED",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -2934,7 +8142,7 @@ async function runCodexCustomExecutionModeDryRun() {
       wbp_patch_applier_used: false,
       selector_packet_truth_only: true,
       ui_text_counts_as_runtime_truth: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("codexCustomExecutionModeDryRunAction")?.removeAttribute("disabled");
@@ -2953,7 +8161,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
     const response = await fetch("api/codex/custom/api-only-deepseek/live-format", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ execution_mode: executionMode, api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -2964,6 +8172,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
     renderCodexCustomDeepSeekLiveFormat({
       status: "failed",
       machine_error_code: "API_ONLY_DEEPSEEK_LIVE_FORMAT_FETCH_FAILED",
+      human_message: error.message,
       final_status: "KNOWN_BLOCKER_API_ONLY_DEEPSEEK_ROUTE_OR_FORMAT_NOT_ADMISSIBLE",
       execution_mode: executionMode,
       api_model_id: apiModelId,
@@ -2981,7 +8190,7 @@ async function runCodexCustomDeepSeekLiveFormat() {
       secret_value_exposed: false,
       state_written: false,
       evidence_written: false,
-      next_action: error.message
+      next_action: "retry"
     });
   } finally {
     document.getElementById("codexCustomDeepSeekLiveFormatAction")?.removeAttribute("disabled");
@@ -2989,14 +8198,21 @@ async function runCodexCustomDeepSeekLiveFormat() {
 }
 
 async function refreshCodexCustomModelsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [registry, compat] = await Promise.all([
       fetchCodexLaunchJson("api/codex/custom/model-selector"),
       fetchCodexLaunchJson("api/codex/custom/api-compat")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomModels(registry, compat);
     await refreshCodexCustomApiActionGate();
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomModelsSetChip("red", "failed");
     codexCustomModelsSetText("codexCustomModelsSummary", `Dual-lane selector fetch failed: ${error.message}`);
     codexCustomModelsSetText("codexCustomApiCompat", "fetch failed");
@@ -3014,7 +8230,7 @@ async function runCodexCustomSelectorIntentDryRun() {
     const response = await fetch("api/codex/custom/model-selector-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ chatgpt_model_id: chatgptModelId, api_model_id: apiModelId })
     });
     if (!response.ok) {
@@ -3052,7 +8268,7 @@ async function runCodexCustomModelDryRun() {
     const response = await fetch("api/codex/custom/model-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ model_id: modelId })
     });
     if (!response.ok) {
@@ -3173,13 +8389,20 @@ function renderCodexCustomAccountDryRun(packet) {
 }
 
 async function refreshCodexCustomAccountsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [accounts, selection] = await Promise.all([
       fetchCodexLaunchJson("api/codex/custom/accounts"),
       fetchCodexLaunchJson("api/codex/custom/account-selection")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomAccounts(accounts, selection);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomAccountsSetChip("red", "failed");
     codexCustomAccountsSetText("codexCustomAccountsSummary", `Account truth fetch failed: ${error.message}`);
     codexCustomAccountsSetText("codexCustomAccountsSelection", "fetch failed");
@@ -3199,7 +8422,7 @@ async function runCodexCustomAccountSmokeDryRun() {
     const response = await fetch("api/codex/custom/account-smoke-dry-run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ model_id: modelId })
     });
     if (!response.ok) {
@@ -3248,6 +8471,204 @@ function codexCustomSessionsSetChip(visual, label) {
   }
 }
 
+function codexCustomProofObject(packet) {
+  const proof = packet?.reply_proof_summary;
+  return proof && typeof proof === "object" && !Array.isArray(proof) ? proof : {};
+}
+
+function codexCustomProofValue(packet, proof, key, fallback) {
+  if (Object.prototype.hasOwnProperty.call(proof, key)) {
+    return proof[key];
+  }
+  return fallback;
+}
+
+function codexCustomProofStatus(value, expected) {
+  if (value === expected) {
+    return "ok";
+  }
+  if (value === true || value === false) {
+    return "fail";
+  }
+  return "missing";
+}
+
+function codexCustomProofLabel(value, expected) {
+  const status = codexCustomProofStatus(value, expected);
+  if (status === "ok" && expected === false) {
+    return "off";
+  }
+  return status;
+}
+
+function renderCodexCustomAgentReplyBlock(packet) {
+  const block = document.getElementById("codexCustomAgentReplyBlock");
+  if (!block) {
+    return;
+  }
+  const directReply = packet?.direct_api_reply_block === true
+    || packet?.reply_block_kind === "api_agent_direct_reply";
+  const agentReply = packet?.agent_reply_block === true
+    || directReply
+    || Boolean(packet?.reply_block_kind);
+  if (!agentReply) {
+    block.hidden = true;
+    return;
+  }
+
+  const proof = codexCustomProofObject(packet);
+  const alias = packet?.reply_author_alias || packet?.selected_alias || "Agent";
+  const provider = packet?.reply_provider_label || packet?.selected_provider_label || "model";
+  const replyText = packet?.reply_text
+    || packet?.reply_preview_bounded
+    || packet?.direct_reply_text
+    || packet?.response_preview_bounded
+    || "";
+  const proofPairs = directReply
+    ? [
+      [
+        "direct_reply",
+        codexCustomProofLabel(
+          codexCustomProofValue(
+            packet,
+            proof,
+            "direct_reply_proven",
+            packet?.direct_reply_proven === true || packet?.api_agent_direct_reply_proven === true
+          ),
+          true
+        )
+      ],
+      [
+        "provider",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "api_agent_provider_called", packet?.api_agent_provider_called === true),
+          true
+        )
+      ],
+      [
+        "prompt_runner",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
+          false
+        )
+      ],
+      [
+        "codex_exec",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "codex_exec_invoked", packet?.codex_exec_invoked),
+          false
+        )
+      ],
+      [
+        "tools_wbp_dip",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "tools_wbp_dip_invoked", packet?.tools_wbp_dip_invoked),
+          false
+        )
+      ],
+      [
+        "dip_run",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "dip_run_invoked", packet?.dip_run_invoked),
+          false
+        )
+      ],
+      [
+        "fallback",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
+          false
+        )
+      ],
+      [
+        "local_imitation",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
+          false
+        )
+      ],
+      [
+        "final_tool_call",
+        codexCustomProofLabel(
+          codexCustomProofValue(
+            packet,
+            proof,
+            "final_answer_was_repo_tool_call",
+            packet?.final_answer_was_repo_tool_call
+          ),
+          false
+        )
+      ]
+    ]
+    : [
+      [
+        "reply",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "reply_visible", Boolean(replyText)),
+          true
+        )
+      ],
+      [
+        "inference",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "inference_proven", packet?.inference_proven === true),
+          true
+        )
+      ],
+      [
+        "lane",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "runtime_lane_proven", packet?.runtime_lane_proven === true),
+          true
+        )
+      ],
+      [
+        "prompt_runner",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "prompt_runner_called", packet?.prompt_runner_called),
+          true
+        )
+      ],
+      [
+        "fallback",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "fallback_used", packet?.fallback_used),
+          false
+        )
+      ],
+      [
+        "local_imitation",
+        codexCustomProofLabel(
+          codexCustomProofValue(packet, proof, "local_imitation_used", packet?.local_imitation_used),
+          false
+        )
+      ]
+    ];
+  const proofOk = proofPairs.every(([, status]) => status === "ok" || status === "off");
+  const title = document.getElementById("codexCustomAgentReplyTitle");
+  if (title) {
+    title.textContent = `${alias} / ${provider}`;
+  }
+  const chip = document.getElementById("codexCustomAgentReplyChip");
+  if (chip) {
+    chip.className = `chip ${proofOk ? "green" : "amber"}`;
+    if (chip.lastElementChild) {
+      chip.lastElementChild.textContent = proofOk
+        ? (directReply ? "direct proof" : "agent proof")
+        : "proof incomplete";
+    }
+  }
+  const text = document.getElementById("codexCustomAgentReplyText");
+  if (text) {
+    text.textContent = replyText || "No reply preview.";
+  }
+  const proofNode = document.getElementById("codexCustomAgentReplyProof");
+  if (proofNode) {
+    proofNode.textContent = `proof: ${proofPairs.map(([key, status]) => `${key}=${status}`).join(" · ")}`;
+  }
+  block.hidden = false;
+}
+
 function currentCodexCustomSessionUrl(action = "") {
   if (!codexCustomSelectedSessionId) {
     return "";
@@ -3271,6 +8692,14 @@ function renderCodexCustomSessionPacket(packet) {
   const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true;
   const liveSelection = session?.live_selection_proven === true || packet?.live_selection_proven === true;
   const slotCatalogRevalidated = session?.slot_catalog_revalidated === true || packet?.role_slot_binding_packet?.slot_catalog_revalidated === true;
+  const sessionDualLaneDispatch = session?.session_dual_lane_dispatch
+    || packet?.session_dual_lane_dispatch
+    || packet?.role_slot_binding_packet?.session_dual_lane_dispatch
+    || {};
+  const sessionDualLaneProven = sessionDualLaneDispatch?.status === "ok"
+    && sessionDualLaneDispatch?.final_status === "SESSION_DUAL_LANE_DISPATCH_PROVEN_WITH_LIMITS"
+    && sessionDualLaneDispatch?.does_not_prove_native_launch === true
+    && sessionDualLaneDispatch?.does_not_claim_product_readiness === true;
   const packetStatus = packet?.status || session?.status || "unknown";
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
   codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packetStatus || "unknown");
@@ -3287,7 +8716,10 @@ function renderCodexCustomSessionPacket(packet) {
       : "not proven"
   );
   codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
-  codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
+  codexCustomSessionsSetText(
+    "codexCustomSessionInference",
+    `${inference ? "response proof" : "not claimed"}${sessionDualLaneProven ? " · session dual-lane proven" : ""}`
+  );
   codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
   let chipVisual = "neutral";
   let chipLabel = packetStatus;
@@ -3304,6 +8736,24 @@ function renderCodexCustomSessionPacket(packet) {
     chipVisual = "amber";
   }
   codexCustomSessionsSetChip(chipVisual, chipLabel || "unknown");
+  const scopedAliasBinding = codexCustomAgentAliasBindingSessionId === sessionId
+    ? codexCustomAgentAliasBindingPacket
+    : null;
+  if (codexCustomAgentAliasBindingSessionId && codexCustomAgentAliasBindingSessionId !== sessionId) {
+    codexCustomAgentAliasBindingPacket = null;
+    codexCustomAgentAliasBindingSessionId = "";
+  }
+  const serverAliasBinding = packet?.agent_alias_binding_packet
+    || session?.agent_alias_binding
+    || scopedAliasBinding;
+  if (serverAliasBinding) {
+    codexCustomAgentAliasBindingPacket = serverAliasBinding;
+    codexCustomAgentAliasBindingSessionId = sessionId;
+  }
+  const aliasMetadata = codexCustomAgentAliasMetadataPacket(
+    "session_render",
+    serverAliasBinding
+  );
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
@@ -3315,10 +8765,33 @@ function renderCodexCustomSessionPacket(packet) {
       model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
       current_execution_slot_id: session?.current_execution_slot_id || packet?.current_execution_slot_id || "",
       current_execution_path_source: session?.current_execution_path_source || packet?.current_execution_path_source || "",
+      agent_alias_binding: serverAliasBinding || null,
+      alias_scope: aliasMetadata.alias_scope,
+      alias_role_map: aliasMetadata.role_map,
+      alias_runtime_binding_present: aliasMetadata.alias_runtime_binding_present,
+      alias_runtime_binding_proven: aliasMetadata.alias_runtime_binding_proven,
+      semantic_alias_routing_enabled: aliasMetadata.semantic_alias_routing_enabled,
+      runtime_dispatch_changed: aliasMetadata.runtime_dispatch_changed,
+      session_manager_changed: aliasMetadata.session_manager_changed,
+      command_surface_changed: aliasMetadata.command_surface_changed,
+      provider_selection_changed: aliasMetadata.provider_selection_changed,
+      browser_can_supply_alias_authority: aliasMetadata.browser_can_supply_alias_authority,
+      browser_can_supply_route_authority: aliasMetadata.browser_can_supply_route_authority,
+      does_not_prove_native_free_text_tool_bridge:
+        aliasMetadata.does_not_prove_native_free_text_tool_bridge === true,
+      manual_activation_proven: packet?.manual_activation_proven === true,
+      manual_activation_surface: packet?.manual_activation_surface || "",
+      deepseek_response_token_matched: packet?.deepseek_response_token_matched === true,
       role_slot_binding_proven: session?.role_slot_binding_proven === true || packet?.role_slot_binding_proven === true,
       role_slot_binding_count: session?.role_slot_binding_count ?? packet?.role_slot_binding_packet?.role_slot_binding_count ?? 0,
       slot_catalog_revalidated: slotCatalogRevalidated,
       role_slots: roleSlots,
+      session_dual_lane_dispatch: sessionDualLaneDispatch,
+      session_dual_lane_dispatch_proven_with_limits: sessionDualLaneProven,
+      session_dual_lane_does_not_prove_native_launch:
+        sessionDualLaneDispatch?.does_not_prove_native_launch === true,
+      session_dual_lane_does_not_claim_product_readiness:
+        sessionDualLaneDispatch?.does_not_claim_product_readiness === true,
       selection_dry_run_proven: selectionDryRun,
       live_selection_proven: liveSelection,
       selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
@@ -3340,9 +8813,25 @@ function renderCodexCustomSessionPacket(packet) {
       prompt_preview_redacted: packet?.prompt_preview_redacted || "",
       raw_prompt_not_stored: packet?.raw_prompt_not_stored === true,
       transcript_kind: packet?.transcript_kind || "",
+      agent_reply_entries_present: packet?.agent_reply_entries_present === true,
+      agent_reply_entry_count: packet?.agent_reply_entry_count || 0,
+      agent_reply_authors: packet?.agent_reply_authors || [],
       model_response_present: modelResponsePresent,
       response_digest: packet?.response_digest || "",
       response_preview_bounded: packet?.response_preview_bounded || "",
+      agent_reply_block: packet?.agent_reply_block === true,
+      direct_api_reply_block: packet?.direct_api_reply_block === true,
+      reply_block_kind: packet?.reply_block_kind || "",
+      reply_author_alias: packet?.reply_author_alias || packet?.selected_alias || "",
+      reply_agent_id: packet?.reply_agent_id || packet?.selected_slot || "",
+      reply_lane: packet?.reply_lane || packet?.selected_alias_lane || "",
+      reply_provider_label: packet?.reply_provider_label || "",
+      reply_preview_bounded: packet?.reply_preview_bounded || "",
+      reply_text: packet?.reply_text || packet?.direct_reply_text || "",
+      reply_text_sha256: packet?.reply_text_sha256 || packet?.direct_reply_text_sha256 || "",
+      reply_proof_summary: packet?.reply_proof_summary || null,
+      direct_reply_proven: packet?.direct_reply_proven === true,
+      auto_router_decision: packet?.auto_router_decision || "",
       token_usage_present: packet?.token_usage_present === true,
       latency_ms: packet?.latency_ms ?? null,
       wbp_path_configured: packet?.wbp_path_configured === true,
@@ -3373,12 +8862,16 @@ function renderCodexCustomSessionPacket(packet) {
       next_action: packet?.next_action || "",
     }, null, 2);
   }
+  renderCodexCustomAgentReplyBlock(packet);
 }
 
 function renderCodexCustomSessionList(packet) {
-  const sessions = Array.isArray(packet?.sessions) ? packet.sessions : [];
+  const sessions = (Array.isArray(packet?.sessions) ? packet.sessions : [])
+    .slice()
+    .sort((left, right) => String(right?.updated_at_utc || right?.created_at_utc || "")
+      .localeCompare(String(left?.updated_at_utc || left?.created_at_utc || "")));
   codexCustomSessionsSetText("codexCustomSessionCount", String(packet?.session_count ?? sessions.length));
-  if (!codexCustomSelectedSessionId && sessions.length) {
+  if (sessions.length) {
     codexCustomSelectedSessionId = sessions[0].session_id || "";
   }
   const selected = sessions.find((session) => session.session_id === codexCustomSelectedSessionId) || sessions[0] || null;
@@ -3405,16 +8898,26 @@ function renderCodexCustomTranscript(packet) {
       transcript_kind: packet?.transcript_kind || "service_ledger_only",
       model_response_present: packet?.model_response_present === true,
       inference_proven: packet?.inference_proven === true,
+      agent_reply_entries_present: packet?.agent_reply_entries_present === true,
+      agent_reply_entry_count: packet?.agent_reply_entry_count || 0,
+      agent_reply_authors: packet?.agent_reply_authors || [],
       entries: packet?.entries || [],
     }, null, 2);
   }
 }
 
 async function refreshCodexCustomSessionsPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const packet = await fetchCodexLaunchJson("api/codex/custom/sessions");
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     renderCodexCustomSessionList(packet);
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     codexCustomSessionsSetChip("red", "failed");
     codexCustomSessionsSetText("codexCustomSessionsSummary", `Session fetch failed: ${error.message}`);
   }
@@ -3442,7 +8945,7 @@ async function postCodexCustomSessionAction(action, payload = {}) {
     const response = await fetch(url, {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -3599,7 +9102,8 @@ async function cleanupCodexCustomProductCoderWorktree() {
   try {
     const response = await fetch(`api/codex/custom/worktrees/${encodeURIComponent(worktreeId)}/cleanup`, {
       method: "POST",
-      cache: "no-store"
+      cache: "no-store",
+      headers: webPostHeaders()
     });
     if (!response.ok) {
       throw new Error(`product coder cleanup http ${response.status}`);
@@ -4963,7 +10467,7 @@ async function createCodexCustomRecoveryRollbackPoint() {
     const response = await fetch("api/codex/custom/recovery/rollback-point", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -5187,7 +10691,7 @@ async function createCodexCustomRecoveryRollbackApplyReceipt() {
     const response = await fetch("api/codex/custom/recovery/rollback-apply", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -5485,7 +10989,7 @@ async function runCodexCustomRecoveryStopCleanupLive() {
     const response = await fetch("api/codex/custom/recovery/stop-cleanup", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -5976,17 +11480,24 @@ function operatorRenderResult(packet) {
 }
 
 async function refreshOperatorPanel() {
+  const refreshEpoch = sourceTransitionEpoch;
   try {
     const [status, models, transcript] = await Promise.all([
       fetchOperatorJson("api/operator/status"),
       fetchOperatorJson("api/operator/models"),
       fetchOperatorJson("api/operator/transcript")
     ]);
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     operatorRenderStatus(status);
     operatorRenderModels(models);
     operatorRenderTranscript(transcript);
     operatorSetText("operatorRefreshState", "readonly refresh complete");
   } catch (error) {
+    if (!liveSourceRefreshIsCurrent(refreshEpoch)) {
+      return;
+    }
     operatorSetChip("red", "failed");
     operatorSetText("operatorStatusLine", `Operator surface fetch failed: ${error.message}`);
     operatorSetText("operatorMachineCode", "OPERATOR_SURFACE_FETCH_FAILED");
@@ -6009,7 +11520,7 @@ async function runOperatorPrompt() {
     const response = await fetch("api/operator/run", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ prompt, model_id: modelId })
     });
     if (!response.ok) {
@@ -6079,7 +11590,7 @@ async function postReviewCommand(commandId, payload = {}) {
   const response = await fetch("api/review-command", {
     method: "POST",
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
+    headers: webPostHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ [commandField]: commandId, payload })
   });
   if (!response.ok) {
@@ -6621,12 +12132,15 @@ function actionRefreshLabel(payload, refreshState) {
 }
 
 async function runUiAction(uiAction, extraPayload = {}) {
+  if (uiAction === "launch_custom_client_native") {
+    return runCodexCustomLaunch({ confirmationBound: true });
+  }
   const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
   const requestKey = actionRequestKey(requestPayload);
   const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : onboardLoginWindowRef;
   if (activeActionRequestKey) {
     const sameRequest = activeActionRequestKey === requestKey;
-    setActionPanel({
+    const duplicatePayload = {
       status: "duplicate_blocked",
       ui_action: uiAction,
       action_role: "ui_session_guard",
@@ -6642,8 +12156,9 @@ async function runUiAction(uiAction, extraPayload = {}) {
         next_action: "wait",
         changed_files: []
       }
-    });
-    return;
+    };
+    setActionPanel(duplicatePayload);
+    return { payload: duplicatePayload, refreshState: "none" };
   }
   activeActionRequestKey = requestKey;
   activeActionAbortReason = "";
@@ -6667,7 +12182,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
     const response = await fetch("api/action", {
       method: "POST",
       cache: "no-store",
-      headers: { "Content-Type": "application/json" },
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(requestPayload),
       signal: activeActionAbortController?.signal
     });
@@ -6675,7 +12190,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       throw new Error(`action http ${response.status}`);
     }
     const payload = await response.json();
-    await handleActionPayload(payload, onboardLoginWindow);
+    return await handleActionPayload(payload, onboardLoginWindow);
   } catch (error) {
     const abortedByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";
     const timeoutFailure = !abortedByUser && (
@@ -6699,7 +12214,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       : (error instanceof SyntaxError
         ? "UI_ACTION_INVALID_JSON"
         : (timeoutFailure ? "UI_ACTION_TIMEOUT" : "UI_ACTION_FETCH_FAILED"));
-    setActionPanel({
+    const failurePayload = {
       ui_action: uiAction,
       action_role: abortedByUser ? "user_cancelled" : "integration_failure",
       account_id: requestPayload.account_id || "",
@@ -6714,7 +12229,9 @@ async function runUiAction(uiAction, extraPayload = {}) {
         next_action: abortedByUser ? "refresh" : "retry",
         changed_files: []
       }
-    });
+    };
+    setActionPanel(failurePayload);
+    return { payload: failurePayload, refreshState: "failed" };
   } finally {
     activeActionRequestKey = "";
     activeActionAbortController = null;
@@ -6919,6 +12436,8 @@ function onboardLoginWindowHtml(model) {
     message,
     tone,
     serverOrigin: (typeof window !== "undefined" && window.location && typeof window.location.origin === "string") ? window.location.origin : "",
+    webToken: webBootstrapValue("wbp-web-token"),
+    csrfToken: webBootstrapValue("wbp-csrf-token"),
     deviceUrl: model?.deviceUrl || "",
     deviceCode: model?.deviceCode || "",
     status: model?.status || "",
@@ -6968,6 +12487,16 @@ function onboardLoginWindowHtml(model) {
   <script>
     const MODEL = ${encodedModel};
     const ACTION_URL = MODEL.serverOrigin ? MODEL.serverOrigin + "/api/action" : "api/action";
+    const OPENER_ORIGIN = (() => {
+      try {
+        const parsed = new URL(MODEL.serverOrigin || "");
+        return ["http:", "https:"].includes(parsed.protocol) && parsed.origin === MODEL.serverOrigin
+          ? parsed.origin
+          : "";
+      } catch (_originError) {
+        return "";
+      }
+    })();
     let requestInFlight = false;
     const safeText = (value, fallback = "-") => {
       if (typeof value !== "string") return fallback;
@@ -6976,8 +12505,8 @@ function onboardLoginWindowHtml(model) {
     };
     const postToOpener = (payload) => {
       try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: "wbp-onboard-login-payload", payload }, "*");
+        if (OPENER_ORIGIN && window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: "wbp-onboard-login-payload", payload }, OPENER_ORIGIN);
         }
       } catch (_openerError) {
       }
@@ -7000,7 +12529,11 @@ function onboardLoginWindowHtml(model) {
         const response = await fetch(ACTION_URL, {
           method: "POST",
           cache: "no-store",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + (MODEL.webToken || ""),
+            "X-WBP-CSRF": MODEL.csrfToken || ""
+          },
           body: JSON.stringify({ ui_action: uiAction, session_id: MODEL.sessionId })
         });
         if (!response.ok) {
@@ -7231,6 +12764,7 @@ async function handleActionPayload(payload, loginWindow = null) {
     }
   }
   setActionPanel(payload);
+  let refreshState = "none";
   if (payload.post_action_refresh_required) {
     const refreshTarget = currentScreen() === "accounts"
       ? "accounts"
@@ -7242,7 +12776,7 @@ async function handleActionPayload(payload, loginWindow = null) {
     text("actionRefreshStatus", `обновление live ${refreshTarget}`);
     const refreshed = await refreshLiveReadonlyForActionPayload(payload, false);
     if (actionRefreshSucceeded(payload, refreshed)) {
-      const refreshState = canonicalActionRefreshState(payload, refreshed);
+      refreshState = canonicalActionRefreshState(payload, refreshed);
       setActionPanel(payload, refreshState);
       setMiniPill(
         "onboardingResultRefreshChip",
@@ -7250,9 +12784,11 @@ async function handleActionPayload(payload, loginWindow = null) {
         refreshState === "mismatch" ? "amber" : "green"
       );
     } else {
+      refreshState = "failed";
       setActionPanel(payload, "failed");
     }
   }
+  return { payload, refreshState };
 }
 
 function actionRequestKey(payload) {
@@ -7752,6 +13288,50 @@ function setLiveReadonlyPendingUi() {
   setSourceCopy("live");
   setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
   renderUiReadonlyLaneExitSummary();
+}
+
+function setRefreshButtonText(label) {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  const labelNode = refresh.lastElementChild || refresh;
+  labelNode.textContent = label;
+}
+
+function setRefreshButtonFeedback(state, label, options = {}) {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  if (refreshButtonFeedbackTimer) {
+    clearTimeout(refreshButtonFeedbackTimer);
+    refreshButtonFeedbackTimer = null;
+  }
+  refresh.dataset.refreshState = state;
+  refresh.disabled = Boolean(options.disabled);
+  setRefreshButtonText(label);
+  if (options.resetAfterMs) {
+    refreshButtonFeedbackTimer = setTimeout(() => {
+      refresh.dataset.refreshState = "idle";
+      refresh.disabled = false;
+      setRefreshButtonText("Обновить");
+      refreshButtonFeedbackTimer = null;
+    }, options.resetAfterMs);
+  }
+}
+
+function resetRefreshButtonLabelIfIdle() {
+  const refresh = document.getElementById("refreshFixture");
+  if (!refresh) {
+    return;
+  }
+  if (["busy", "success", "error"].includes(refresh.dataset.refreshState)) {
+    return;
+  }
+  refresh.dataset.refreshState = "idle";
+  refresh.disabled = false;
+  setRefreshButtonText("Обновить");
 }
 
 function renderOverviewLivePendingState() {
@@ -9006,7 +14586,7 @@ function renderUiReadonlyLaneExitSummary() {
   text("uiLaneExitLiveChain", model.liveChain);
   text("uiLaneExitMetadataStatus", model.metadataStatus);
   text("uiLaneExitSafeSummary", model.safeSummary);
-  text("uiLaneExitNextContour", UI_READONLY_LANE_NEXT_CONTOUR);
+  text("uiLaneExitForwardPlan", UI_READONLY_LANE_FORWARD_PLAN_CLAIM);
   renderUiReadonlyLaneExitList("uiLaneExitBlockedList", model.blockedNow, "amber");
   renderUiReadonlyLaneExitList("uiLaneExitSafeList", model.safeNow, "blue");
   renderUiReadonlyLaneExitList("uiLaneExitForbiddenList", model.forbiddenNow, "red");
@@ -9034,8 +14614,8 @@ function uiReadonlyLaneExitSummaryModel() {
     chipLabel: snapshotCommandLedgerState.status === "integration_failure" ? "blocked truth" : "parked handoff",
     sourceLabel: `${screen} · ${source} · no new commands`,
     truthNote: snapshotCommandLedgerState.status === "integration_failure"
-      ? "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now, but current live snapshot truth is degraded and the next contour must return to runtime diagnosis."
-      : "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now and should stop here; the next contour must return to runtime diagnosis instead of another UI panel.",
+      ? "Runtime/live-action chain remains parked. Read-only UI lane may display the degraded snapshot, but it must not claim a forward repair route."
+      : "Runtime/live-action chain remains parked. Read-only UI lane may display bounded truth only and must not claim a forward repair route.",
     currentSource: source,
     snapshotState,
     liveChain: "parked by canon-backed runtime blockers",
@@ -9329,24 +14909,75 @@ function renderApiCredentialSetupLane(payload = lastApiCredentialActionPayload, 
   }
 }
 
+const ONBOARD_LOGIN_MESSAGE_ACTIONS = new Set([
+  "account_login_status",
+  "account_login_complete",
+  "account_login_cancel",
+]);
+let lastOnboardLoginMessageKey = "";
+
+function trustedOnboardLoginMessagePayload(event, loginWindow, activeSession) {
+  if (
+    !event
+    || typeof window === "undefined"
+    || typeof window.location?.origin !== "string"
+    || !window.location.origin
+    || window.location.origin === "null"
+    || event.origin !== window.location.origin
+    || !loginWindow
+    || loginWindow.closed === true
+    || event.source !== loginWindow
+  ) {
+    return null;
+  }
+  const envelope = event.data;
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+    return null;
+  }
+  if (envelope.type !== "wbp-onboard-login-payload") {
+    return null;
+  }
+  const payload = envelope.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  if (!ONBOARD_LOGIN_MESSAGE_ACTIONS.has(payload.ui_action)) {
+    return null;
+  }
+  const activeSessionId = typeof activeSession?.sessionId === "string" ? activeSession.sessionId : "";
+  const payloadSessionId = onboardLoginSessionIdFromPayload(payload);
+  if (!activeSessionId || payloadSessionId !== activeSessionId) {
+    return null;
+  }
+  return payload;
+}
+
+function onboardLoginMessageKey(payload) {
+  return [
+    onboardLoginSessionIdFromPayload(payload),
+    payload?.ui_action || "",
+    payload?.result?.status || "",
+    payload?.result?.machine_error_code || "",
+    payload?.result?.next_action || "",
+  ].join("|");
+}
+
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("message", (event) => {
-    const payload = event?.data;
-    if (!payload || typeof payload !== "object") {
+    const payload = trustedOnboardLoginMessagePayload(
+      event,
+      onboardLoginWindowRef,
+      activeOnboardLoginSession,
+    );
+    if (!payload) {
       return;
     }
-    if (payload.type === "wbp-onboard-login-payload" && payload.payload) {
-      handleActionPayload(payload.payload, onboardLoginWindowRef).catch(() => {});
+    const messageKey = onboardLoginMessageKey(payload);
+    if (messageKey === lastOnboardLoginMessageKey) {
       return;
     }
-    if (payload.type === "wbp-onboard-login-command") {
-      const uiAction = typeof payload.uiAction === "string" ? payload.uiAction : "";
-      const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
-      if (!uiAction || !sessionId) {
-        return;
-      }
-      runUiAction(uiAction, { session_id: sessionId }).catch(() => {});
-    }
+    lastOnboardLoginMessageKey = messageKey;
+    handleActionPayload(payload, onboardLoginWindowRef).catch(() => {});
   });
 }
 
@@ -10156,8 +15787,10 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
       post_action_refresh_required: false,
       result: {
         status: "integration_failure",
-        machine_error_code: "UI_ACTION_UNAVAILABLE",
+        machine_error_code: metadata.disabled_reason_code || "UI_ACTION_UNAVAILABLE",
         human_message: metadata.unavailable_reason || "Действие недоступно.",
+        availability_state: metadata.availability_state || "unknown_disabled",
+        disabled_reasons: Array.isArray(metadata.disabled_reasons) ? metadata.disabled_reasons : [],
         next_action: "user_action",
         changed_files: []
       }
@@ -10657,7 +16290,18 @@ function quickStartCompactApiMeta(route) {
   return [provider, role].filter(Boolean).join(" · ") || "server-owned route";
 }
 
-function quickStartApiModel(snapshot, source) {
+function quickStartSelectedRouteHasBoundedProof(route) {
+  if (!route || typeof route !== "object") {
+    return false;
+  }
+  const validation = String(route.validation_label || "").toLowerCase();
+  return route.enabled === true
+    && route.secret_status_label === "available"
+    && route.secret_visual_state === "green"
+    && (route.validation_visual_state === "green" || validation === "ok");
+}
+
+function quickStartApiModel(snapshot, source, selectedRouteId = "") {
   const routes = Array.isArray(snapshot.routes) ? snapshot.routes : [];
   if (snapshot.status === "stale") {
     const primary = routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true) || routes[0];
@@ -10708,10 +16352,14 @@ function quickStartApiModel(snapshot, source) {
       confirmed: false
     };
   }
+  const selectedRoute = source === "live" && selectedRouteId
+    ? routes.find((route) => route.route_id === selectedRouteId)
+    : null;
   const primary = source === "live"
     ? routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true)
     : routes.find((route) => route.enabled === true) || routes[0];
-  if (!primary) {
+  const routeForSummary = selectedRoute || primary;
+  if (!routeForSummary) {
     return {
       state: "not_configured",
       visual: "neutral",
@@ -10727,27 +16375,32 @@ function quickStartApiModel(snapshot, source) {
       confirmed: false
     };
   }
-  const missingSecret = primary.status_code === "missing_secret" || primary.secret_visual_state === "amber" || primary.secret_status_label === "missing";
-  const failed = primary.visual_state === "red" || primary.validation_visual_state === "red";
-  const stale = snapshot.status === "stale" || primary.status_code === "stale";
-  const visual = missingSecret || stale ? "amber" : (failed ? "red" : (primary.enabled === true ? "green" : "neutral"));
+  const missingSecret = routeForSummary.status_code === "missing_secret" || routeForSummary.secret_visual_state === "amber" || routeForSummary.secret_status_label === "missing";
+  const failed = routeForSummary.visual_state === "red" || routeForSummary.validation_visual_state === "red";
+  const stale = snapshot.status === "stale" || routeForSummary.status_code === "stale";
+  const selectedRouteChosen = selectedRoute && routeForSummary.route_id === selectedRoute.route_id;
+  const selectedRouteAdmitted = selectedRouteChosen && quickStartSelectedRouteHasBoundedProof(routeForSummary);
+  const selectedRouteNeedsCheck = selectedRouteChosen && !selectedRouteAdmitted && !missingSecret && !failed && !stale && routeForSummary.enabled === true;
+  const visual = missingSecret || stale || selectedRouteNeedsCheck ? "amber" : (failed ? "red" : (routeForSummary.enabled === true ? "green" : "neutral"));
   const title = missingSecret
     ? "Нужен secret_ref"
-    : (failed ? "Ошибка" : (stale ? "Устарело" : (primary.enabled === true ? "Работает" : "Deferred")));
+    : (failed ? "Ошибка" : (stale ? "Устарело" : (selectedRouteNeedsCheck ? "Проверить" : (routeForSummary.enabled === true ? (selectedRouteAdmitted ? "Выбранный route подтверждён" : "Работает") : "Deferred"))));
   return {
-    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (primary.enabled === true ? "ok" : "unsupported_provider"))),
+    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (selectedRouteNeedsCheck ? "needs_check" : (routeForSummary.enabled === true ? "ok" : "unsupported_provider")))),
     visual,
     title,
-    provider: quickStartCompactApiLabel(primary),
-    model: quickStartCompactApiMeta(primary),
-    routeId: primary.route_id || "",
-    secretRef: primary.secret_ref || "—",
-    secretState: missingSecret ? "missing" : (primary.secret_status_label || "unknown"),
-    validationState: primary.validation_label || primary.status_label || "not checked",
-    lastCheck: primary.last_checked || "нет данных",
+    provider: quickStartCompactApiLabel(routeForSummary),
+    model: quickStartCompactApiMeta(routeForSummary),
+    routeId: routeForSummary.route_id || "",
+    secretRef: routeForSummary.secret_ref || "—",
+    secretState: missingSecret ? "missing" : (routeForSummary.secret_status_label || "unknown"),
+    validationState: routeForSummary.validation_label || routeForSummary.status_label || "not checked",
+    lastCheck: routeForSummary.last_checked || "нет данных",
     routeCount: routes.length,
-    confirmed: source !== "live" || primary.role_label === "main route" || primary.role_label === "primary" || primary.is_primary === true || primary.primary === true,
-    routeEnabled: primary.enabled === true
+    confirmed: selectedRouteAdmitted || (!selectedRouteChosen && (source !== "live" || routeForSummary.role_label === "main route" || routeForSummary.role_label === "primary" || routeForSummary.is_primary === true || routeForSummary.primary === true)),
+    selectedRoute: Boolean(selectedRouteChosen),
+    selectedRouteAdmitted,
+    routeEnabled: routeForSummary.enabled === true
   };
 }
 
@@ -10775,7 +16428,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const accounts = safeAccounts.accounts || [];
@@ -10805,7 +16458,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   );
   renderQuickStartAccountRows(safeAccounts);
 
-  const apiModel = quickStartApiModel(safeApi, source);
+  const apiModel = quickStartApiModel(safeApi, source, selectValue("quickStartApiModelSelect"));
   const apiChip = document.getElementById("quickStartApiChip");
   apiChip.className = `chip ${apiModel.visual}`;
   apiChip.lastElementChild.textContent = apiModel.title;
@@ -10830,15 +16483,19 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
     apiModel.state === "missing_secret_ref"
       ? "Основной route выбран, но secret_ref не подтверждён bounded packet. Это не runtime failure."
       : (apiModel.state === "ok"
-        ? "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно."
+        ? (apiModel.selectedRoute === true
+          ? "Выбранный route подтверждён bounded packet. Runtime readiness подтверждается отдельно."
+          : "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно.")
         : (apiModel.state === "stale"
           ? "Основной route показан из устаревшего bounded snapshot. Требуется обновление."
-          : "Основной route не подтверждён bounded snapshot."))
+          : (apiModel.state === "needs_check"
+            ? "Выбранный route ещё не подтверждён bounded packet. Запустите проверку маршрута."
+            : "Основной route не подтверждён bounded snapshot.")))
   );
 
   setQuickStartChecklistChip("quickStartApiProviderChip", apiModel.provider === "Не настроено" ? "neutral" : "green", apiModel.provider === "Не настроено" ? "unknown" : "OK");
   setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber" : (apiModel.secretState === "available" ? "green" : "neutral"), apiModel.state === "missing_secret_ref" ? "missing" : apiModel.secretState);
-  setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (apiModel.state === "missing_secret_ref" ? "amber" : "neutral"), apiModel.validationState);
+  setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (["missing_secret_ref", "needs_check", "stale"].includes(apiModel.state) ? "amber" : "neutral"), apiModel.validationState);
 
   const apiAction = document.getElementById("quickStartCheckApiAction");
   if (apiAction) {
@@ -10869,6 +16526,8 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   setVisualClass(sidebarDot, "dot", bannerVisual);
   text("sidebarStatus", firstRun ? "Quick Start: first run" : "Quick Start: summary state");
   renderApiCredentialSetupLane(lastApiCredentialActionPayload, lastApiCredentialActionRefreshState);
+  applyActionAvailability();
+  replayQuickStartManualCheckSnapshot();
   applyActionAvailability();
 }
 
@@ -11230,7 +16889,7 @@ function renderAccountsSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const banner = document.getElementById("accountsBanner");
@@ -11294,7 +16953,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = "";
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
   setSourceCopy(source);
 
   const banner = document.getElementById("apiConnectionsBanner");
@@ -12313,7 +17972,7 @@ function renderSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("brandCaption").textContent = "";
   setSourceCopy(source);
-  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  resetRefreshButtonLabelIfIdle();
 
   const runtimeChip = document.getElementById("runtimeChip");
   setClassName(runtimeChip, "chip", visualState);
@@ -12351,9 +18010,19 @@ function renderSnapshot(snapshot) {
 }
 
 async function setFixtureState(stateId, updateUrl = false) {
+  const transitionEpoch = ++sourceTransitionEpoch;
+  sourceTransitionAbortController?.abort();
+  sourceTransitionAbortController = typeof AbortController === "function" ? new AbortController() : null;
+  const desktop = document.querySelector(".desktop");
+  if (desktop) {
+    desktop.dataset.source = "fixture";
+  }
   setSourceCopy("fixture");
   const state = canonicalState(stateId);
-  const fixture = await loadFixture(state);
+  const fixture = await loadFixture(state, sourceTransitionAbortController?.signal);
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("state", state);
@@ -12372,23 +18041,34 @@ async function setFixtureState(stateId, updateUrl = false) {
   if (currentScreen() === "overview") {
     renderReviewPanel();
   }
+  return fixture;
 }
 
 async function setLiveReadonly(updateUrl = false) {
+  const transitionEpoch = ++sourceTransitionEpoch;
+  sourceTransitionAbortController?.abort();
+  sourceTransitionAbortController = typeof AbortController === "function" ? new AbortController() : null;
+  const signal = sourceTransitionAbortController?.signal;
   setLiveReadonlyPendingUi();
   if (currentScreen() === "overview") {
     renderOverviewLivePendingState();
   }
-  await loadActionMetadata();
+  await loadActionMetadata(signal);
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   applyActionAvailability();
   const snapshot = currentScreen() === "quick-start"
     ? {
-      accounts: await loadAccountsReadonly(),
-      apiConnections: await loadApiConnectionsReadonly()
+      accounts: await loadAccountsReadonly(signal),
+      apiConnections: await loadApiConnectionsReadonly(signal)
     }
     : (currentScreen() === "accounts"
-      ? await loadAccountsReadonly()
-      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly()));
+      ? await loadAccountsReadonly(signal)
+      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly(signal) : await loadLiveReadonly(signal)));
+  if (transitionEpoch !== sourceTransitionEpoch) {
+    return null;
+  }
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("source", "live");
@@ -12429,12 +18109,52 @@ async function refreshLiveReadonlyForActionPayload(payload, updateUrl = false) {
   return { accounts, runtime };
 }
 
-function refreshCurrentSource() {
-  const source = document.getElementById("sourcePicker").value;
-  if (source === "live") {
-    return setLiveReadonly(false);
+async function refreshCurrentSource() {
+  const startedAt = Date.now();
+  setRefreshButtonFeedback("busy", "Обновляю...", { disabled: true });
+  try {
+    const source = document.getElementById("sourcePicker").value;
+    const result = source === "live"
+      ? await setLiveReadonly(false)
+      : await setFixtureState(document.getElementById("statePicker").value, false);
+    if (source === "live" && currentScreen() === "quick-start") {
+      await refreshQuickStartRouteStatus();
+    }
+    const remainingBusyMs = Math.max(0, 250 - (Date.now() - startedAt));
+    if (remainingBusyMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remainingBusyMs));
+    }
+    setRefreshButtonFeedback("success", "Обновлено", { resetAfterMs: 1000 });
+    return result;
+  } catch (error) {
+    setRefreshButtonFeedback("error", "Ошибка", { resetAfterMs: 1800 });
+    console.error("Failed to refresh current source", error);
+    return null;
   }
-  return setFixtureState(document.getElementById("statePicker").value, false);
+}
+
+function refreshServerBackedPanels() {
+  refreshCodexLaunchModesPanel();
+  refreshCodexCustomModelsPanel();
+  refreshCodexCustomAccountsPanel();
+  refreshCodexCustomSessionsPanel();
+  refreshOperatorPanel();
+}
+
+function liveSourceRefreshIsCurrent(refreshEpoch) {
+  return refreshEpoch === sourceTransitionEpoch
+    && document.querySelector(".desktop")?.dataset?.source === "live";
+}
+
+async function bootstrapInitialSource(initialSource, initialState) {
+  if (initialSource === "live") {
+    await setLiveReadonly(false);
+    refreshQuickStartVoiceDraftContract();
+    refreshServerBackedPanels();
+    return;
+  }
+  applyActionAvailability();
+  await setFixtureState(initialState, false);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -12444,9 +18164,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialState = stateFromLocation();
   const initialSource = sourceFromLocation();
   const initialScreen = screenFromLocation();
-  await loadActionMetadata();
-  applyActionAvailability();
+  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runQuickStartCustomLaunchAction());
+  document.getElementById("quickStartNativeFreeTextProofAction")?.addEventListener("click", () => runQuickStartNativeFreeTextCommandLoopProof());
+  document.getElementById("quickStartModelReasoningMatrixAction")?.addEventListener("click", () => runQuickStartModelReasoningAvailabilityMatrix());
+  document.getElementById("quickStartManualFreeChatRouterRealityAction")?.addEventListener("click", () => runQuickStartManualFreeChatRouterReality());
+  document.getElementById("quickStartVoiceRecordAction")?.addEventListener("click", () => startQuickStartVoiceDraft());
+  document.getElementById("quickStartVoiceClearAction")?.addEventListener("click", () => clearQuickStartVoiceDraft());
+  document.getElementById("quickStartVoiceCopyAction")?.addEventListener("click", () => copyQuickStartVoiceDraft());
+  document.getElementById("quickStartVoicePastePreflightAction")?.addEventListener("click", () => runQuickStartVoicePastePreflight());
+  document.getElementById("quickStartVoicePasteCustomAction")?.addEventListener("click", () => runQuickStartVoicePasteCustom());
+  setupCodexCustomAgentAliases();
   setScreen(initialScreen, false);
+  renderQuickStartVoiceDraft();
+  applyCodexRouteSelection(readStoredCodexRouteSelection());
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
@@ -12510,28 +18240,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
-  document.getElementById("codexCustomModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomModelSelect"));
+  document.getElementById("codexCustomModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("codexCustomModelSelect", { userInitiated: true });
+  });
   document.getElementById("codexCustomApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("codexCustomApiModelSelect");
     renderApiReasoningOptionSelects();
+    saveCodexRouteSelection(codexRouteSelectionFromUi(false));
     refreshCodexCustomApiActionGate();
   });
   document.getElementById("codexCustomApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomApiReasoningOptionSelect"));
   document.getElementById("codexCustomExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("codexCustomExecutionModeSelect"));
-  document.getElementById("quickStartChatModelSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartChatModelSelect"));
+  document.getElementById("quickStartChatModelSelect")?.addEventListener("change", () => {
+    syncCodexRouteSelects("quickStartChatModelSelect", { userInitiated: true });
+  });
   document.getElementById("quickStartApiModelSelect")?.addEventListener("change", () => {
     syncCodexRouteSelects("quickStartApiModelSelect");
     renderApiReasoningOptionSelects();
+    saveCodexRouteSelection(codexRouteSelectionFromUi(true));
     refreshCodexCustomApiActionGate();
   });
   document.getElementById("quickStartApiReasoningOptionSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartApiReasoningOptionSelect"));
   document.getElementById("quickStartExecutionModeSelect")?.addEventListener("change", () => syncCodexRouteSelects("quickStartExecutionModeSelect"));
-  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("quickStartRouteRefreshAction")?.addEventListener("click", () => refreshQuickStartRouteStatus({ force: true }));
   document.getElementById("quickStartExecutionModeDryRunAction")?.addEventListener("click", () => runQuickStartConfigAdmission("quickStartExecutionModeDryRunAction"));
   document.getElementById("quickStartLaunchPreflightAction")?.addEventListener("click", () => runQuickStartLaunchPreflight());
   document.getElementById("quickStartDeepSeekCoderCheckAction")?.addEventListener("click", () => runQuickStartDeepSeekCoderCheck());
   document.getElementById("quickStartDeepSeekCodeEditProofAction")?.addEventListener("click", () => runQuickStartDeepSeekCodeEditProof());
-  document.getElementById("quickStartCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch());
   document.getElementById("quickStartShowCustomWindowAction")?.addEventListener("click", () => showCodexCustomWindow());
   document.getElementById("quickStartVisibleHistoryConfirmAction")?.addEventListener("click", () => confirmCodexCustomVisibleHistory());
   document.getElementById("codexCustomApiActionGateAction")?.addEventListener("click", () => refreshCodexCustomApiActionGate());
@@ -12594,10 +18329,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     maybeConfirmAndRunFromButton(document.getElementById("quickStartConnectApiAction"), "api_route_connect");
   });
   document.getElementById("quickStartApiCredentialCheckAction")?.addEventListener("click", () => {
-    maybeConfirmAndRun("api_route_credential_check");
+    maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialCheckAction"), "api_route_credential_check");
   });
   document.getElementById("quickStartApiCredentialRetryAction")?.addEventListener("click", () => {
-    maybeConfirmAndRun("api_route_connect");
+    maybeConfirmAndRunFromButton(document.getElementById("quickStartApiCredentialRetryAction"), "api_route_connect");
   });
   document.getElementById("apiRouteConnectAction")?.addEventListener("click", () => {
     maybeConfirmAndRun("api_route_connect");
@@ -12622,16 +18357,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
   refresh.addEventListener("click", () => refreshCurrentSource());
-  if (initialSource === "live") {
-    setLiveReadonly(false);
-  } else {
-    setFixtureState(initialState, false);
-  }
-  refreshCodexLaunchModesPanel();
-  refreshCodexCustomModelsPanel();
-  refreshCodexCustomAccountsPanel();
-  refreshCodexCustomSessionsPanel();
-  refreshOperatorPanel();
+  await bootstrapInitialSource(initialSource, initialState);
   reviewEnsurePacketInputSeed();
   renderReviewPanel();
   if (initialScreen === "overview" && initialSource === "live") {

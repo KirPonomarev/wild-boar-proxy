@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-24T01:28:50.040117Z",
-  "findings": [],
-  "machine_error_code": "OK",
-  "raw_auth_file_content_recorded": false,
-  "raw_auth_ref_exposed": false,
-  "secret_value_recorded": false,
-  "status": "ok"
-}

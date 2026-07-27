@@ -432,7 +432,15 @@ class JsonCommandRunnerTests(unittest.TestCase):
         result = runner.run("status", "--json")
 
         self.assertEqual(result.payload["human_message"], "ready")
-        run_mock.assert_called_once()
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 300.0)
+
+    @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
+    def test_run_surfaces_bounded_command_timeout(self, run_mock: mock.Mock) -> None:
+        run_mock.side_effect = subprocess.TimeoutExpired(cmd=["wbp"], timeout=3)
+        runner = JsonCommandRunner(base_command=["wbp"], timeout_seconds=3)
+
+        with self.assertRaisesRegex(UiShellError, "timed out after 3 seconds"):
+            runner.run("status", "--json")
 
     @mock.patch("wild_boar_proxy.ui_shell.subprocess.run")
     def test_run_rejects_missing_required_command_fields(self, run_mock: mock.Mock) -> None:
@@ -522,6 +530,60 @@ class RuntimeSnapshotTests(unittest.TestCase):
 
         with self.assertRaisesRegex(UiShellError, "effective mode"):
             load_runtime_snapshot(runner)
+
+    def test_load_runtime_snapshot_live_probe_uses_healthcheck_truth(self) -> None:
+        runner = FakeRunner(
+            {
+                ("status", "--json"): status_payload(
+                    liveness="unknown",
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 1,
+                        "retired": 0,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    },
+                    attestation_summary={
+                        "status": "not_run",
+                        "machine_error_code": "LIVE_ATTESTATION_NOT_RUN_BY_STATUS",
+                        "attestation_source": "status --json",
+                        "observed_at_utc": "",
+                    },
+                ),
+                ("mode", "get", "--json"): mode_payload(),
+                ("healthcheck", "--json"): command_payload(
+                    human_message="Runtime attestation passed.",
+                    liveness="healthy",
+                    severity="recoverable",
+                    operator_action="none",
+                    desired_mode="managed",
+                    effective_mode="managed",
+                    endpoint="127.0.0.1:9999",
+                    current_proxy_url="",
+                    attestation={
+                        "attestation_source": "healthcheck --json",
+                        "observed_at_utc": "2026-05-05T10:00:00+00:00",
+                    },
+                    last_error="",
+                ),
+            }
+        )
+
+        snapshot = load_runtime_snapshot(runner, live_probe=True)
+
+        self.assertEqual(snapshot.liveness, "healthy")
+        self.assertEqual(snapshot.attestation_source, "healthcheck --json")
+        self.assertEqual(snapshot.active_count, 0)
+        self.assertEqual(snapshot.reserve_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("healthcheck", "--json"),
+            ],
+        )
 
 
 class AccountPoolSnapshotTests(unittest.TestCase):

@@ -28,6 +28,7 @@ from wild_boar_proxy.persistent_profile_pre_live_admission import (
     build_summary_packet,
 )
 from wild_boar_proxy.persistent_profile_state_diff import marker_scan_text
+from tools.historical_audit_fixtures import historical_audit_path
 
 
 EVIDENCE_DIR_NAME = (
@@ -256,7 +257,7 @@ def build_locations(repo_root: Path, args: argparse.Namespace) -> list[PriorEvid
     }
     locations: list[PriorEvidenceLocation] = []
     for key, default_path in DEFAULT_PRIOR_DIRS.items():
-        path_value = overrides[key] or str(repo_root / default_path)
+        path_value = overrides[key] or str(historical_audit_path(repo_root, default_path))
         locations.append(PriorEvidenceLocation(key=key, evidence_dir=Path(path_value)))
     return locations
 

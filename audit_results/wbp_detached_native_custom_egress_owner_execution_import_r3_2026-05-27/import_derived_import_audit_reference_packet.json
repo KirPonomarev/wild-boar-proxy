@@ -1,7 +1,0 @@
-{
-  "audit_emitted_by_import_tool": true,
-  "captured_at_utc": "2026-05-27T02:34:52.271949Z",
-  "packet_kind": "detached_egress_import_audit_reference",
-  "status": "ok",
-  "text_only_audit_counted_as_pass": false
-}

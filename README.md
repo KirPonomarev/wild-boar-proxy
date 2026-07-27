@@ -36,6 +36,52 @@ issue tracker.
 Repository truth is limited to canon, contracts, implementation, tests, and
 completed evidence.
 
+## Local development quick start
+
+Wild Boar Proxy requires Python 3.11 or newer.
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e .
+make check
+make test-core
+```
+
+For a static fixture preview that does not read runtime/state/log surfaces and
+does not call `/api/*`:
+
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1 \
+  --directory wild_boar_proxy/web_design_ui
+```
+
+Then open `http://127.0.0.1:8765/?source=fixture&state=healthy`. Fixture states
+are UI examples only and never prove runtime health.
+
+For the bounded live-readonly web surface:
+
+```bash
+python3 -m wild_boar_proxy.web_design_live_server \
+  --host 127.0.0.1 \
+  --port 8788 \
+  --action-phase live_readonly \
+  --active-project-root "$PWD"
+```
+
+Then open `http://127.0.0.1:8788/?source=live`. Live readiness remains defined
+by fresh command packets; the UI must not infer it from fixture or cached data.
+Mutating owner actions are intentionally outside this quick start and require
+their explicit action phase, authorization, and rollback boundary.
+
+Useful local gates:
+
+```bash
+make test-custom-stability
+make test-full
+python3 -m wild_boar_proxy --help
+```
+
 ## First useful release claim matrix
 
 - `Review packet preview`: supported; local JSON review packet only
@@ -52,23 +98,24 @@ completed evidence.
 
 ## Managed pool capacity
 
-The current local real-load contour has exercised a managed pool of 25 accounts.
+The canonical account-capacity target is 20 managed accounts.
 
 The default operating contour uses a 10-account active window.
-The wider managed pool remains available for ranking, replacement, and staged expansion.
+The wider managed pool is staged through 15 and then 20 accounts for ranking,
+replacement, and controlled expansion.
 
-This means the system does not need to route through all 25 accounts at the same time.
+This means the system does not need to route through all managed accounts at the same time.
 Instead, it selects a healthy working subset and can pull in additional managed accounts when active accounts degrade, hit quota limits, fail authentication, or are placed on hold.
 
 Account-level failures such as `401`, `429`, or quota exhaustion do not, by themselves, mean that the runtime architecture has failed.
 They mean the system has identified a problem with a specific account and should continue operating through the remaining healthy pool.
 
-This currently indicates 25-account managed-pool readiness for the experimental control contour.
+This currently keeps managed-pool readiness bound to the canonical 20-account ceiling.
 Canonical release-facing claims remain bound to committed evidence and closeout.
 
 In short:
 
-- `25 accounts` is the tested managed-pool capacity
+- `20 accounts` is the canonical managed-pool capacity target
 - `10 accounts` is the default active window
 - the remaining managed accounts provide replacement depth, resilience, and controlled scale headroom
 

@@ -1,7 +1,0 @@
-{
-  "ran": false,
-  "rows": [],
-  "schema_version": 1,
-  "skipped_reason": "mock success did not pass; failure modes invalid by plan",
-  "success_variant": null
-}

@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-27T08:59:47.900063Z",
-  "codex_native_lane_present": true,
-  "external_provider_lane_is_codex_native_lane": false,
-  "lanes_mixed": false,
-  "packet_kind": "model_lane_separation",
-  "status": "ok",
-  "wbp_api_lane_present": true
-}

@@ -1,9 +1,0 @@
-{
-  "authorization_basis": "active thread contains exact standing owner approval phrase",
-  "captured_at_utc": "2026-05-24T01:46:24.202990Z",
-  "live_prompt_authorized": true,
-  "project_scoped": true,
-  "prompt_limit": 1,
-  "retry_limit": 0,
-  "standing_approval_phrase_present": true
-}

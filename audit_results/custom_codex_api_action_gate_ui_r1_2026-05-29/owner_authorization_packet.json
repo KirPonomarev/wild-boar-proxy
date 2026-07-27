@@ -1,8 +1,0 @@
-{
-  "credential_ref_permission_present": false,
-  "owner_live_authorization_present": false,
-  "packet_kind": "owner_authorization",
-  "raw_secret_authorized": false,
-  "raw_secret_recorded": false,
-  "status": "blocked"
-}

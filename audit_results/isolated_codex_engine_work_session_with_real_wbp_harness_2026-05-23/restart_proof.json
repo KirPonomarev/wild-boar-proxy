@@ -1,7 +1,0 @@
-{
-  "claim": "same isolated home remains usable across fresh process restart; no durable session continuity claimed",
-  "ran": false,
-  "result": null,
-  "schema_version": 1,
-  "success": false
-}

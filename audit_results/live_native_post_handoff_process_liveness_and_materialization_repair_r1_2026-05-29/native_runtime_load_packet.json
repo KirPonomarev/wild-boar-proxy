@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-29T04:14:58.192139Z",
-  "health_after_runtime_loaded_count": 0,
-  "health_before_runtime_loaded_count": 0,
-  "runtime_loaded": false,
-  "session_id": "codex-a6774fadc45044b989d88b9fda341035",
-  "status_after_machine_error_code": "AUTH_UNAVAILABLE"
-}

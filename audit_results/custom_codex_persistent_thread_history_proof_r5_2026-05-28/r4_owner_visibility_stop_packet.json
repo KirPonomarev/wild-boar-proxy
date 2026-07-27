@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-28T08:05:11.090028Z",
-  "packet_kind": "r4_owner_visibility_stop",
-  "reason_class": "R4_OWNER_RELAUNCH_VISIBILITY_REQUIRED",
-  "required_owner_marker": "owner_confirmation_collected=true; same_nonce_thread_visible=true|false; owner_visible_prior_thread=true|false|unknown; owner_ready_now=true; prompt_entered=true; nonce_used=true; evidence_dir_preserved=true",
-  "status": "blocked",
-  "stop_required_before_thread_history_classification": true
-}

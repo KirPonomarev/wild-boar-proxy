@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-28T08:03:26.733919Z",
-  "current_contour_mutates_quarantined_paths": false,
-  "current_contour_relies_on_quarantined_paths": false,
-  "current_contour_stages_quarantined_paths": false,
-  "packet_kind": "r2b_historical_dirt_quarantine",
-  "quarantined_paths": [],
-  "status": "ok"
-}

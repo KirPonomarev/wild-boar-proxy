@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wild_boar_proxy.core import packets
+
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTH_COMMAND_HELPER = ROOT / "wbp_codex_auth_command.py"
@@ -92,6 +94,13 @@ class TokenCommandCliTests(unittest.TestCase):
         self.assertFalse(payload["data"]["token_emitted"])
         self.assertFalse(payload["data"]["secret_value_exposed"])
         self.assertTrue(payload["data"]["local_only"])
+        self.assertNotIn("config_path", payload["data"])
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(
+                payload,
+                secret_values=["local-runtime-token-123"],
+            )
+        )
 
     def test_token_plain_falls_back_to_secret_key_shape(self) -> None:
         self.generated_config.write_text(
@@ -105,6 +114,43 @@ class TokenCommandCliTests(unittest.TestCase):
         self.assertEqual(result.stdout, "fallback-runtime-token-456")
         self.assertEqual(result.stderr, "")
 
+    def test_token_plain_falls_back_to_profile_config_bearer_token(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("token")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "profile-bearer-token-789")
+        self.assertEqual(result.stderr, "")
+
+    def test_token_json_reports_profile_config_fallback_without_secret_leak(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("token", "--json")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr, "")
+        self.assertNotIn("profile-bearer-token-789", result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["data"]["token_source_kind"],
+            "custom_profile_config_toml_experimental_bearer_token",
+        )
+        self.assertFalse(
+            packets.command_packet_has_secret_leak(
+                payload,
+                secret_values=["profile-bearer-token-789"],
+            )
+        )
+
     def test_token_json_fails_cleanly_when_generated_config_missing(self) -> None:
         result = self.run_cli("token", "--json")
 
@@ -112,6 +158,7 @@ class TokenCommandCliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "WBP_TOKEN_SOURCE_UNAVAILABLE")
+        self.assertEqual(payload["operator_action"], "user_action")
         self.assertEqual(payload["next_action"], "repair_runtime")
 
     def test_token_plain_fails_without_json_when_generated_config_missing(self) -> None:
@@ -153,6 +200,44 @@ class TokenCommandCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "local-runtime-token-123")
+        self.assertEqual(result.stderr, "")
+
+    def test_repo_owned_auth_command_helper_falls_back_to_profile_config_bearer_token(self) -> None:
+        (self.profile_dir / "config.toml").write_text(
+            'experimental_bearer_token = "profile-bearer-token-789"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_helper()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "profile-bearer-token-789")
+        self.assertEqual(result.stderr, "")
+
+    def test_repo_owned_auth_command_helper_prefers_wbp_stable_config_override(self) -> None:
+        self.generated_config.write_text(
+            'secret-key: ""\napi-keys:\n  - "profile-runtime-token-123"\n',
+            encoding="utf-8",
+        )
+        override_config = self.root / "stable-config.yaml"
+        override_config.write_text(
+            'secret-key: ""\napi-keys:\n  - "override-runtime-token-456"\n',
+            encoding="utf-8",
+        )
+        env = self.env()
+        env["WBP_STABLE_CONFIG"] = str(override_config)
+
+        result = subprocess.run(
+            [str(AUTH_COMMAND_HELPER)],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "override-runtime-token-456")
         self.assertEqual(result.stderr, "")
 
     def test_repo_owned_auth_command_helper_writes_audit_stamp_when_requested(self) -> None:

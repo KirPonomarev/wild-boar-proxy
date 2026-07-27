@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "packet_kind": "wbp_official_e2e_fresh_working_flow_proof_runner_inputs",
+  "proof_run_id": "WBP_FRESH_LIVE_E2E_1782785554635938000",
+  "proof_run_started_at_ns": 1782785554635938000,
+  "real_custom_hook_proof_file": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_technical_base_completion_2026-06-30/fresh-router-ready/fresh-sealed/fresh-live/admission/user-prompt-submit-proof.packet.json",
+  "codex_exec_jsonl_file": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_technical_base_completion_2026-06-30/fresh-router-ready/fresh-sealed/fresh-live/admission/codex-exec.jsonl",
+  "expected_real_custom_hook_proof_file_sha256": "2cbd058f4163711447a4314a0051767dd87058922fe47553b41e75e1442b0a6e",
+  "expected_codex_exec_jsonl_file_sha256": "727b733d86b2f78ae7690d469232d494dac55b470207dadf05918316310a0db9"
+}

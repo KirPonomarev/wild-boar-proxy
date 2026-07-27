@@ -15,6 +15,7 @@ from wild_boar_proxy.review_bridge_apply_admission import (
     ReviewApplyContext,
     build_review_apply_preflight_packet,
 )
+from wild_boar_proxy.state_store import write_text as write_state_text
 
 
 @dataclass(frozen=True)
@@ -284,10 +285,8 @@ def _result(
 
 
 def _write_text_exact_atomic(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(value, encoding="utf-8")
-    tmp_path.replace(path)
+    mode = path.stat().st_mode & 0o777
+    write_state_text(path, value, mode=mode)
 
 
 def _count_exact_occurrences(text: str, needle: str) -> int:

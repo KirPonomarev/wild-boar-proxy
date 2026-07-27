@@ -25,7 +25,7 @@ from wild_boar_proxy.external_models.http_client import HttpJsonResponse  # noqa
 import wild_boar_proxy.operator_surface as operator_surface  # noqa: E402
 
 
-PRIMARY_MODEL_ID = "gpt-5.3-codex"
+PRIMARY_MODEL_ID = "gpt-5.5"
 API_MODEL_ID = "wbp-web-primary-openrouter"
 ROUTE_ID = API_MODEL_ID
 

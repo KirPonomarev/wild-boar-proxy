@@ -36,7 +36,7 @@ class DualSlotSessionSchemaAndRoleBindingR1ProbeTests(unittest.TestCase):
 
         current_path = packets["current_execution_path_separation_packet.json"]
         self.assertEqual(current_path["current_execution_slot_id"], "primary_model_slot")
-        self.assertEqual(current_path["current_execution_path_model_id"], "gpt-5.3-codex")
+        self.assertEqual(current_path["current_execution_path_model_id"], "gpt-5.5")
         self.assertTrue(current_path["coding_agent_bound_not_dispatched"])
         self.assertFalse(current_path["slot_binding_implies_runtime_dispatch"])
 
@@ -52,7 +52,7 @@ class DualSlotSessionSchemaAndRoleBindingR1ProbeTests(unittest.TestCase):
         migration = packets["single_to_multi_slot_migration_packet.json"]
         self.assertTrue(migration["legacy_single_model_migrated"])
         self.assertEqual(migration["migration_status"], "legacy_single_model_migrated")
-        self.assertEqual(migration["primary_slot_model_id"], "gpt-5.3-codex")
+        self.assertEqual(migration["primary_slot_model_id"], "gpt-5.5")
         self.assertFalse(migration["coding_agent_slot_fabricated"])
         self.assertFalse(migration["history_loss_claimed"])
 

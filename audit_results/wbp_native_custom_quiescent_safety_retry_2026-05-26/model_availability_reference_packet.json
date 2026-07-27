@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T10:03:32.714597Z",
-  "model_availability_reproved_in_this_contour": false,
-  "packet_kind": "model_availability_reference",
-  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_model_availability_smoke_matrix_2026-05-26/model_availability_matrix.json",
-  "referenced_packet_status": "present",
-  "referenced_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
-  "status": "ok"
-}

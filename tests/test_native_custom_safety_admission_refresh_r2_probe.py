@@ -29,7 +29,9 @@ class NativeCustomSafetyAdmissionRefreshR2ProbeTests(unittest.TestCase):
         live_gate = packets["native_custom_live_precondition_gate_packet.json"]
 
         if summary["status"] == "blocked":
-            self.assertIn("sync_gate_packet.json", summary["blocked_packets"])
+            self.assertTrue(summary["blocked_packets"])
+            for packet_name in summary["blocked_packets"]:
+                self.assertEqual(packets[packet_name]["status"], "blocked")
             self.assertFalse(summary["parent_target_closed"])
             self.assertFalse(summary["this_target_closed"])
             self.assertFalse(summary["native_launch_attempted"])
@@ -64,6 +66,42 @@ class NativeCustomSafetyAdmissionRefreshR2ProbeTests(unittest.TestCase):
         self.assertFalse(modes["persistent_custom"]["cleanup_can_delete_history_by_default"])
         self.assertFalse(boundary["persistent_identity_counts_as_history_proof"])
         self.assertFalse(boundary["original_profile_shortcut_allowed"])
+
+    def test_missing_historical_references_are_nonblocking_context_only(self) -> None:
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:
+            packets = build_packets(REPO_ROOT, Path(tmp))
+
+        summary = packets["native_custom_safety_refresh_summary_packet.json"]
+        references = (
+            packets["provider_auth_strategy_reference_packet.json"],
+            packets["model_availability_reference_packet.json"],
+            packets["cli_runner_reference_packet.json"],
+        )
+        reference_packet_names = {
+            "provider_auth_strategy_reference_packet.json",
+            "model_availability_reference_packet.json",
+            "cli_runner_reference_packet.json",
+        }
+
+        if summary["status"] == "blocked":
+            self.assertTrue(summary["blocked_packets"])
+            self.assertTrue(
+                reference_packet_names.isdisjoint(summary["blocked_packets"])
+            )
+        else:
+            self.assertEqual(summary["status"], "ok")
+        for reference in references:
+            self.assertEqual(reference["source_status"], "missing")
+            self.assertEqual(
+                reference["reason_class"],
+                "HISTORICAL_REFERENCE_NOT_ACTIVE_TRUTH",
+            )
+            self.assertTrue(reference["historical_reference_only"])
+            self.assertFalse(reference["historical_reference_available"])
+            self.assertFalse(reference["historical_reference_required_for_current_pass"])
+            self.assertFalse(reference["current_contour_relies_on_reference"])
+            self.assertFalse(reference["missing_historical_reference_blocks_summary"])
+            self.assertFalse(reference["native_proof_claimed_from_reference"])
 
     def test_persistent_identity_is_not_thread_history_persistence(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "audit_results") as tmp:

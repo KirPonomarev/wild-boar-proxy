@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-27T08:59:47.899583Z",
-  "model_count": 6,
-  "packet_kind": "model_registry_schema",
-  "registry_schema_validated": true,
-  "schema_version": 1,
-  "status": "ok",
-  "validation_findings": []
-}

@@ -1,0 +1,349 @@
+{
+  "blocked_diagnostic_packet_count": 2,
+  "cases": [
+    {
+      "case": "diagnose-native-agent1-spaces",
+      "custom_response_bound_to_request": false,
+      "machine_error_code": "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "evidence-copy-smoke",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "fixed-native-agent1-spaces",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "ok"
+    },
+    {
+      "case": "proof-copy-critical-rerun/api_nfkc_dip",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "proof-copy-critical-rerun/fail_closed_dipp",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "fail_closed",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "proof-copy-critical-rerun/renamed_api_koder",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "proof-copy-critical-rerun/repo_read_json",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "renamed-alias-matrix/renamed_api_case",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "renamed-alias-matrix/renamed_api_en_phrase",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "renamed-alias-matrix/renamed_api_ru",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "renamed-alias-matrix/renamed_primary_en",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "ok"
+    },
+    {
+      "case": "renamed-alias-matrix/renamed_primary_ru",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-mutation/mutation_cleanup",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-mutation/mutation_create_readback",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-mutation/outside_root_policy",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-pytest-wbp-dip-tool",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-reasoning-suite",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-safety/injection_block",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-safety/repo_read_root",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "repo-bridge-safety/secret_block",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix/api_agent2",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix/api_dip_lower",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix/api_dip_upper",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix/native_codex_exact",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix/unknown_ghost",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "fail_closed",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix-extended/api_dip_nfkc",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix-extended/gpt_api_delegate_ru",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "route-matrix-extended/native_agent1_spaces",
+      "custom_response_bound_to_request": false,
+      "machine_error_code": "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "route-matrix-extended/native_codex_lower",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "ok"
+    },
+    {
+      "case": "route-unknown-dipp",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "fail_closed",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "ultrahard-miniapp/cleanup",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    },
+    {
+      "case": "ultrahard-miniapp/create-and-test",
+      "custom_response_bound_to_request": true,
+      "machine_error_code": "OK",
+      "mode": "api",
+      "router_proof_copy_recorded": true,
+      "router_proof_proven": true,
+      "status": "ok"
+    }
+  ],
+  "contour": "custom_physical_matrix_and_repo_bridge_hardening",
+  "diagnostic_blocked_cases": [
+    {
+      "case": "diagnose-native-agent1-spaces",
+      "custom_response_bound_to_request": false,
+      "machine_error_code": "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "blocked"
+    },
+    {
+      "case": "route-matrix-extended/native_agent1_spaces",
+      "custom_response_bound_to_request": false,
+      "machine_error_code": "CUSTOM_PHYSICAL_EXPECTED_TEXT_NOT_OBSERVED",
+      "mode": "native",
+      "router_proof_copy_recorded": false,
+      "router_proof_proven": false,
+      "status": "blocked"
+    }
+  ],
+  "green_case_count_excluding_diagnostics": 30,
+  "local_verification": [
+    {
+      "command": "python3 -m pytest tests/test_user_prompt_submit_hook_producer.py tests/test_api_agent_auto_router.py tests/test_custom_agent_bindings.py tests/test_custom_codex_physical_smoke.py -q",
+      "result": "81 passed, 22 subtests passed"
+    },
+    {
+      "command": "python3 -m py_compile tools/custom_codex_physical_smoke.py wild_boar_proxy/user_prompt_submit_hook_producer.py",
+      "result": "ok"
+    },
+    {
+      "command": "python3 -m pytest tests/test_wbp_dip_tool.py -q",
+      "result": "134 passed, 2 subtests passed"
+    },
+    {
+      "command": "python3 -m pytest <reasoning-dispatch targeted 8 tests> -q",
+      "result": "8 passed"
+    },
+    {
+      "command": "python3 tools/model_intelligence_and_speed_metadata_fidelity_r1_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir audit_results/wbp_physical_custom_matrix_2026-06-30/intelligence-metadata-fidelity",
+      "result": "status ok, 8 packets"
+    }
+  ],
+  "ok_packet_count": 30,
+  "packet_count": 32,
+  "packet_kind": "wbp_physical_custom_matrix_summary",
+  "router_proof_copy_count": 7,
+  "scope_boundaries": [
+    "physical Custom UI matrix is not a full release-green claim",
+    "full pytest was not run in this contour",
+    "e2e-mode-matrix acceptance gate was not closed by these physical smoke packets alone",
+    "intelligence levels are routing/metadata proof, not measured model quality proof",
+    "native GPT exact proof remains visible-response based; API-lane exact proof requires router sidecar"
+  ],
+  "status": "ok"
+}

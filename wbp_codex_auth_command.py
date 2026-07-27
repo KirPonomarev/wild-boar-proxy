@@ -5,15 +5,28 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
-from wild_boar_proxy.token_command import emit_local_token
+from wild_boar_proxy.token_command import (
+    emit_local_token,
+    emit_local_token_from_config_path,
+)
 
 
 def main() -> int:
     try:
-        sys.stdout.write(emit_local_token(RuntimePaths.from_env()))
+        stable_config_override = os.environ.get("WBP_STABLE_CONFIG", "").strip()
+        if stable_config_override:
+            sys.stdout.write(
+                emit_local_token_from_config_path(
+                    Path(stable_config_override).expanduser()
+                )
+            )
+        else:
+            sys.stdout.write(emit_local_token(RuntimePaths.from_env()))
         return 0
     except RuntimeErrorInfo as exc:
         sys.stderr.write(f"{exc.message}\n")

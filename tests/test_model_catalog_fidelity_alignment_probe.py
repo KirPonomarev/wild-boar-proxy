@@ -33,7 +33,7 @@ class ModelCatalogFidelityAlignmentProbeTests(unittest.TestCase):
         self.assertEqual(catalog["availability_lattice_status"], "ok")
         rows = {row["model_id"]: row for row in lattice["rows"]}
         self.assertEqual(
-            rows["gpt-5.3-codex"]["availability_claim_level"],
+            rows["gpt-5.5"]["availability_claim_level"],
             "direct_wbp_non_stream_response_accepted",
         )
         self.assertEqual(
@@ -42,7 +42,7 @@ class ModelCatalogFidelityAlignmentProbeTests(unittest.TestCase):
         )
         self.assertEqual(smoke["target_status"], TARGET_STATUS)
         self.assertTrue(smoke["spark_absent_from_current_operator_model_list"])
-        self.assertEqual(smoke["out_of_catalog_negative_examples"][0]["model_id"], "gpt-5.3-codex-spark")
+        self.assertEqual(smoke["out_of_catalog_negative_examples"][0]["model_id"], "gpt-5.5-spark")
         self.assertEqual(false_green["status"], "ok")
         self.assertFalse(false_green["all_models_work_claimed"])
 

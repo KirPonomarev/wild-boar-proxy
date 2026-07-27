@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T08:14:28.618192Z",
-  "current_codex_auth_json_dependency": false,
-  "keychain_dependency": false,
-  "original_codex_mutation": false,
-  "schema_version": 1,
-  "scope_note": "This packet covers the catalog contract path only; existing native/CLI probes are outside this contour.",
-  "test": "test_wbp_model_catalog_no_current_codex_auth_json_dependency"
-}

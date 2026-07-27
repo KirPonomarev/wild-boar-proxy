@@ -1,0 +1,19 @@
+{
+  "browser_client_path_authority": false,
+  "captured_at_utc": "2026-05-27T05:41:58.598066Z",
+  "codex_home": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "launcher_selected_profile_id": "wbp-custom-main",
+  "launcher_selected_profile_path": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "operator_explicit_profile_id_required": true,
+  "packet_kind": "persistent_profile_path_authority",
+  "persistent_profile_id": "wbp-custom-main",
+  "persistent_profile_root": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main",
+  "profile_root_created": false,
+  "profile_root_declared": true,
+  "profile_root_exists_counted_as_state_write_proof": false,
+  "profile_storage_persistence_claimed": false,
+  "remote_client_path_authority": false,
+  "silent_profile_switching_allowed": false,
+  "status": "ok",
+  "user_data_dir": "<redacted_user_home>/Library/Application Support/WildBoarProxy/CodexProfiles/wbp-custom-main/electron-user-data"
+}

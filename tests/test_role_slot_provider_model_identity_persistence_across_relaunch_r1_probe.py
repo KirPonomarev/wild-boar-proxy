@@ -31,7 +31,7 @@ class RoleSlotProviderModelIdentityPersistenceAcrossRelaunchR1ProbeTests(unittes
         self.assertEqual(saved["status"], "ok")
         self.assertTrue(saved["session_root_under_persistent_profile"])
         self.assertEqual(saved["saved_slot_binding_count"], 2)
-        self.assertEqual(saved["saved_primary_slot_model_id"], "gpt-5.3-codex")
+        self.assertEqual(saved["saved_primary_slot_model_id"], "gpt-5.5")
         self.assertEqual(saved["saved_coding_slot_model_id"], "wbp-web-primary-openrouter")
         self.assertTrue(saved["slot_catalog_revalidated_before_reload"])
 
@@ -55,7 +55,7 @@ class RoleSlotProviderModelIdentityPersistenceAcrossRelaunchR1ProbeTests(unittes
         self.assertEqual(runtime["status"], "ok")
         self.assertTrue(runtime["primary_runtime_identity_proven"])
         self.assertTrue(runtime["coding_runtime_identity_proven"])
-        self.assertEqual(runtime["primary_runtime_selected_model"], "gpt-5.3-codex")
+        self.assertEqual(runtime["primary_runtime_selected_model"], "gpt-5.5")
         self.assertEqual(runtime["coding_runtime_selected_model"], "wbp-web-primary-openrouter")
 
         provenance = packets["role_slot_post_relaunch_provenance_packet.json"]

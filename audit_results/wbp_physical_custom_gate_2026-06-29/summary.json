@@ -1,0 +1,27 @@
+{
+  "contour": "Physical Custom Gate",
+  "date": "2026-06-29",
+  "custom_surface": "Codex WBP Clean via physical app UI/CDP on 127.0.0.1:9223",
+  "total": 30,
+  "passed": 29,
+  "failed": 1,
+  "failed_ids": [
+    "gpt_plus_api_router_hook"
+  ],
+  "modes": [
+    "alias",
+    "api",
+    "api_case",
+    "gpt",
+    "gpt_api",
+    "guard",
+    "repo_mutation",
+    "repo_readonly",
+    "security",
+    "ui_level"
+  ],
+  "notes": [
+    "Exact API/GPT/repo/security/level smoke passed except GPT+API router-hook proof.",
+    "gpt_plus_api_router_hook returned a JSON claim but lacked visible router-hook auto-route-output evidence."
+  ]
+}

@@ -1,8 +1,0 @@
-{
-  "auth_materialization_counts_as_runtime_loaded_auth": false,
-  "captured_at_utc": "2026-05-29T03:44:15.104795Z",
-  "handoff_counts_as_owner_completion": false,
-  "owner_completion_counts_as_auth_materialization": false,
-  "runtime_loaded_auth_counts_as_native_responses_success": false,
-  "stable_runtime_reproof_counts_as_launched_custom_codex_recovery": false
-}

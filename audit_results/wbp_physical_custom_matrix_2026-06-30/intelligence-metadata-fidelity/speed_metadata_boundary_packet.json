@@ -1,0 +1,11 @@
+{
+  "all_current_speed_rows_unavailable_unknown": true,
+  "captured_at_utc": "2026-06-29T22:25:15.708050Z",
+  "measured_speed_implies_intelligence": false,
+  "measured_speed_rows_present": false,
+  "packet_kind": "speed_metadata_boundary",
+  "speed_metadata_reopens_acceleration_proof": false,
+  "speed_metadata_scope_classification": "catalog_and_selector_metadata_only",
+  "status": "ok",
+  "unknown_speed_tiers_present": false
+}

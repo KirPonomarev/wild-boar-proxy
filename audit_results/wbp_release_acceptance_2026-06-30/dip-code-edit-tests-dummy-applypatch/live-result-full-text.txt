@@ -1,0 +1,14 @@
+**Краткое подтверждение**
+
+Все файлы созданы через `write_file` (разрешён для scratch кода под `tmp/`):
+
+- `tmp/wbp-contour4-code/contour4_math.py` — реализованы функции `clamp`, `rolling_sum`, `normalize_weights`
+- `tmp/wbp-contour4-code/test_contour4_math.py` — 9 pytest тестов (все 8 обязательных + 1 дополнительный)
+
+**Проверки пройдены**
+
+- `python3 -m py_compile tmp/wbp-contour4-code/contour4_math.py` — exit code 0 (синтаксис корректен)
+- `python3 -m pytest tmp/wbp-contour4-code/test_contour4_math.py -q` — **9 passed in 0.01s**
+
+**Блокеры:** нет.
+**Следующее действие оператора:** не требуется — задача выполнена.

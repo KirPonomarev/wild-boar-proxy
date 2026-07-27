@@ -158,6 +158,11 @@ def claim_gate_status_from_operator_status(operator_status: dict[str, Any] | Non
     return "not_reported"
 
 
+def _claim_gate_status_is_blocked(status: str) -> bool:
+    normalized = status.strip().lower()
+    return normalized == "blocked" or normalized.startswith("blocked_")
+
+
 def build_launch_modes_packet(operator_status: dict[str, Any] | None = None) -> dict[str, Any]:
     claim_gate_status = claim_gate_status_from_operator_status(operator_status)
     return {
@@ -696,7 +701,7 @@ def build_custom_status_packet(
     model_ids = models.get("model_ids", []) if isinstance(models, dict) else []
     server_issued_models_visible = bool(model_ids)
     claim_gate_status = claim_gate_status_from_operator_status(operator_status)
-    claim_gate_blocked = "blocked" in claim_gate_status
+    claim_gate_blocked = _claim_gate_status_is_blocked(claim_gate_status)
     status = "ok" if server_issued_models_visible and not claim_gate_blocked else "degraded"
     machine_error_code = (
         "OK"

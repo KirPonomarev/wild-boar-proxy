@@ -1,8 +1,0 @@
-{
-  "after_packet": "current_codex_targeted_surface_after.json",
-  "before_packet": "current_codex_targeted_surface_before.json",
-  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
-  "current_codex_auth_json_used_as_execution_input": false,
-  "current_codex_config_auth_unchanged": true,
-  "status": "passed"
-}

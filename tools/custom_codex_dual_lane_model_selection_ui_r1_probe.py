@@ -35,12 +35,12 @@ def operator_status() -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.4",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "blocked_by_runtime_truth_gate"},
         "models": {
             "ok": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
             "server_issued": True,
         },
     }
@@ -222,7 +222,7 @@ def build_packets() -> dict[str, dict[str, Any]]:
                 "status": "ok",
             },
             {
-                "id": "current_execution_path_model_id_is_operator_reported_not_browser_selected",
+                "id": "current_execution_path_model_id_remains_operator_reported_when_browser_default_matches",
                 "status": "ok",
             },
             {

@@ -77,13 +77,13 @@ def operator_status() -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.3-codex",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "passed"},
         "models": {
             "ok": True,
             "server_issued": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
         },
     }
 
@@ -288,7 +288,7 @@ def build_model_catalog_contract_packet() -> dict[str, Any]:
 
 def build_browser_selection_payload_negative_packet() -> dict[str, Any]:
     payload = {
-        "model_id": "gpt-5.3-codex",
+        "model_id": "gpt-5.5",
         "provider": "openai",
         "wire_api": "chat_completions",
         "model_provider": "browser-owned",
@@ -321,7 +321,7 @@ def build_browser_selection_payload_negative_packet() -> dict[str, Any]:
 
 def build_server_selection_binding_packet() -> dict[str, Any]:
     gpt = build_model_selection_truth_packet(
-        {"model_id": "gpt-5.3-codex"},
+        {"model_id": "gpt-5.5"},
         commands(),
         operator_status(),
         api_snapshot=api_snapshot(),

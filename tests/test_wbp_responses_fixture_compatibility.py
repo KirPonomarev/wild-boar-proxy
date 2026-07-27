@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import unittest
 import urllib.error
@@ -18,6 +19,8 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "wbp_responses_compatibility"
+FIXTURE_API_KEY = "local-runtime-fixture"
+FIXTURE_AUTHORIZATION = "Bearer " + FIXTURE_API_KEY
 
 
 def load_json(name: str) -> dict[str, object]:
@@ -86,7 +89,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=route if route is not None else fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json),
@@ -100,7 +103,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(effective_payload).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                     "Accept": accept,
                 },
@@ -226,7 +229,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=timeout_request_json),
@@ -235,7 +238,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -259,7 +262,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         with (
             ExternalRouteResponsesAdapter(
                 route=fixture_route(),
-                expected_api_key="local-runtime-fixture",
+                expected_api_key=FIXTURE_API_KEY,
                 route_secret="route-secret-fixture",
             ) as adapter,
             mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=disconnect_request_json),
@@ -268,7 +271,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 f"{adapter.listen_endpoint}/responses",
                 data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer local-runtime-fixture",
+                    "Authorization": FIXTURE_AUTHORIZATION,
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -291,6 +294,51 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"]["type"], "invalid_request_error")
         self.assertIn("responses input did not contain prompt text", payload["error"]["message"])
+        self.assertEqual(captured, {})
+
+    def test_context_budget_guard_blocks_huge_payload_before_upstream_call(self) -> None:
+        huge_context = "branch diff hidden context\n" + ("+ changed line\n" * 400)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "WBP_PROVIDER_CONTEXT_WINDOW_TOKENS": "256",
+                "WBP_PROVIDER_CONTEXT_SAFETY_TOKENS": "16",
+            },
+        ):
+            status, body, captured, _fixture = self.run_adapter_request(
+                "non_stream_text_request.json",
+                request_payload={
+                    "model": "wbp-fixture-route",
+                    "max_output_tokens": 32,
+                    "input": [
+                        {
+                            "type": "message",
+                            "role": "developer",
+                            "content": [
+                                {"type": "input_text", "text": huge_context}
+                            ],
+                        },
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": "continue"}
+                            ],
+                        },
+                    ],
+                },
+            )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 413)
+        self.assertEqual(payload["machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(payload["error"]["code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertTrue(payload["context_budget_guard_triggered"])
+        self.assertFalse(payload["provider_called"])
+        self.assertFalse(payload["downstream_called"])
+        self.assertFalse(payload["secret_value_exposed"])
+        self.assertEqual(payload["requested_output_tokens"], 32)
+        self.assertGreater(payload["estimated_input_tokens"], payload["input_budget_tokens"])
         self.assertEqual(captured, {})
 
     def test_system_role_transform_profile_maps_system_to_developer(self) -> None:
@@ -357,7 +405,9 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
             request_payload={
                 "model": "wbp-fixture-route",
                 "tools": [
+                    {"type": "custom", "name": "apply_patch"},
                     {"type": "namespace", "name": "shell"},
+                    {"type": "tool_search", "name": "tool_search"},
                     {"type": "web_search", "name": "web_search"},
                 ],
                 "input": "Reply directly.",
@@ -372,7 +422,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["dropped_responses_tool_types"],
-            ["namespace", "web_search"],
+            ["custom", "namespace", "tool_search", "web_search"],
         )
         self.assertNotIn("tools", captured["payload"])  # type: ignore[operator]
 
@@ -553,7 +603,7 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=json.dumps(fixture).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer local-runtime-fixture",
+                        "Authorization": FIXTURE_AUTHORIZATION,
                         "Content-Type": "application/json",
                     },
                     method="POST",

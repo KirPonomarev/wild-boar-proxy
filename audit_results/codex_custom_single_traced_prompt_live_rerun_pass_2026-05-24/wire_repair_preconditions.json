@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-24T01:46:24.206116Z",
-  "head": "6719d8d5",
-  "previous_close_token": "WBP_RESPONSES_WIRE_API_COMPAT_REPAIRED",
-  "trace_safe_headers_repair_expected": true,
-  "upstream_4xx_bubble_up_repair_expected": true,
-  "wire_repair_commit_required": "6719d8d5",
-  "wire_repair_present": true
-}

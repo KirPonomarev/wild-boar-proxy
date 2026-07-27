@@ -25,12 +25,12 @@ def operator_status() -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.4",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "blocked_by_runtime_truth_gate"},
         "models": {
             "ok": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
             "server_issued": True,
         },
     }
@@ -99,9 +99,9 @@ class CustomCodexDualLaneModelSelectionUiR1ProbeTests(unittest.TestCase):
         self.assertFalse(packet["session_execution_wired"])
         self.assertFalse(packet["simultaneous_execution_proven"])
         self.assertTrue(packet["selected_models_are_server_issued"])
-        self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.4")
+        self.assertEqual(packet["current_execution_path_model_id"], "gpt-5.5")
         self.assertEqual(packet["current_execution_path_source"], "operator_reported_configured_model")
-        self.assertFalse(packet["browser_selected_chatgpt_matches_current_execution_path"])
+        self.assertTrue(packet["browser_selected_chatgpt_matches_current_execution_path"])
         self.assertEqual(packet["current_execution_path_scope"], "chatgpt_lane_only_in_this_contour")
         self.assertEqual(packet["api_lane_scope"], "selection_intent_only_until_role_slot_session_contour")
 
@@ -142,8 +142,8 @@ class CustomCodexDualLaneModelSelectionUiR1ProbeTests(unittest.TestCase):
             self.assertTrue(intent["selection_intent_only"])
             self.assertTrue(intent["selected_models_are_server_issued"])
             self.assertFalse(intent["session_execution_wired"])
-            self.assertEqual(intent["current_execution_path_model_id"], "gpt-5.4")
-            self.assertFalse(intent["browser_selected_chatgpt_matches_current_execution_path"])
+            self.assertEqual(intent["current_execution_path_model_id"], "gpt-5.5")
+            self.assertTrue(intent["browser_selected_chatgpt_matches_current_execution_path"])
 
             visibility = json.loads(
                 (evidence_dir / "selector_current_vs_seed_visibility_packet.json").read_text(

@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 from wild_boar_proxy.cli_runner import RUNNER_SURFACE
 from wild_boar_proxy.cli_runner_via_wbp import build_cli_runner_layer_boundary_packet, sha256_text
 from wild_boar_proxy.native_filesystem_probe import json_write
+from tools.historical_audit_fixtures import historical_audit_path
 
 
 TARGET_STATUS = "CODEX_CLI_RUNNER_VIA_WBP_SMOKE_READINESS_CLASSIFIED"
@@ -184,8 +185,12 @@ def build_command_shape_packet() -> dict[str, Any]:
 
 
 def build_auth_boundary_packet() -> dict[str, Any]:
-    summary_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_strategy_summary_packet.json"
-    contract_path = REPO_ROOT / AUTH_STRATEGY_DIR / "provider_auth_precedence_contract_packet.json"
+    summary_path = historical_audit_path(
+        REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_strategy_summary_packet.json"
+    )
+    contract_path = historical_audit_path(
+        REPO_ROOT, f"{AUTH_STRATEGY_DIR}/provider_auth_precedence_contract_packet.json"
+    )
     summary = read_json(summary_path)
     contract = read_json(contract_path)
     selected_strategy = str(
@@ -230,8 +235,12 @@ def build_prompt_redaction_packet(command_shape: dict[str, Any]) -> dict[str, An
 
 
 def build_model_selection_boundary_packet() -> dict[str, Any]:
-    summary_path = REPO_ROOT / MODEL_READINESS_DIR / "model_availability_readiness_summary_packet.json"
-    matrix_path = REPO_ROOT / MODEL_READINESS_DIR / "model_availability_candidate_matrix_packet.json"
+    summary_path = historical_audit_path(
+        REPO_ROOT, f"{MODEL_READINESS_DIR}/model_availability_readiness_summary_packet.json"
+    )
+    matrix_path = historical_audit_path(
+        REPO_ROOT, f"{MODEL_READINESS_DIR}/model_availability_candidate_matrix_packet.json"
+    )
     summary = read_json(summary_path)
     matrix = read_json(matrix_path)
     rows = matrix.get("rows") if isinstance(matrix.get("rows"), list) else []

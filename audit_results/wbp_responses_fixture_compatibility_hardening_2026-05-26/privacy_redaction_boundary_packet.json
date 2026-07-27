@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T07:53:04.804749Z",
-  "fixture": "large_prompt_redaction_case.json",
-  "machine_error_code": "OK",
-  "prompt_body_recorded": false,
-  "request_body_hash_required": true,
-  "status": "ok",
-  "test": "test_wbp_large_prompt_redaction_required"
-}

@@ -7,6 +7,7 @@ import argparse
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import deque
@@ -18,7 +19,22 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs
 
+from .web_ingress import (
+    FORM_CONTENT_TYPE,
+    MAX_WEB_REQUEST_BODY_BYTES,
+    content_type_matches,
+    host_header_is_local,
+    origin_header_is_allowed,
+    parse_content_length,
+    unsafe_bind_requested,
+)
+from .web_rate_limit import (
+    DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+    WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+    WebPostRateLimiter,
+)
 from .external_models.paths import ExternalModelsPaths
+from .runtime import RuntimePaths
 from .ui_shell import (
     AccountPoolSnapshot,
     ExternalActionResult,
@@ -40,6 +56,16 @@ from .ui_shell import (
     run_smoke_and_refresh,
     run_stable_repair_and_refresh,
     run_sync_and_refresh,
+)
+from .web_token import (
+    WEB_FORM_CSRF_FIELD,
+    WEB_FORM_TOKEN_FIELD,
+    WebTokenState,
+    create_in_memory_web_token,
+    create_web_token,
+    delete_web_token,
+    web_form_csrf_valid,
+    web_form_token_valid,
 )
 
 
@@ -102,7 +128,7 @@ def load_dashboard_state(
     external_action: ExternalActionResult | None = None,
 ) -> DashboardState:
     try:
-        runtime = load_runtime_snapshot(runner)
+        runtime = load_runtime_snapshot(runner, live_probe=True)
         accounts = load_account_pool_snapshot(runner)
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(
@@ -1042,22 +1068,144 @@ class WildBoarWebUi:
         return _with_events(state, tuple(self._events))
 
 
-def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
+def build_handler(
+    app: WildBoarWebUi,
+    web_token_state: WebTokenState | None = None,
+    post_rate_limiter: WebPostRateLimiter | None = None,
+    post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+) -> type[BaseHTTPRequestHandler]:
+    handler_web_token_state = web_token_state or create_in_memory_web_token()
+    handler_post_rate_limiter = post_rate_limiter or WebPostRateLimiter(
+        limit_per_second=post_rate_limit_per_second
+    )
+
+    def render_with_web_tokens(state: DashboardState) -> str:
+        return _inject_web_form_tokens(render_dashboard(state), handler_web_token_state)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            self._send_html(render_dashboard(app.get_dashboard(path=self.path)))
+            if not self._admit_common_request():
+                return
+            self._send_html(render_with_web_tokens(app.get_dashboard(path=self.path)))
 
         def do_POST(self) -> None:  # noqa: N802
-            length = int(self.headers.get("Content-Length", "0"))
+            length = self._admitted_form_body_length()
+            if length is None:
+                return
             body = self.rfile.read(length).decode("utf-8")
             parsed = {
                 key: values[-1]
                 for key, values in parse_qs(body, keep_blank_values=True).items()
             }
-            self._send_html(render_dashboard(app.post_action(parsed, path=self.path)))
+            if not web_form_token_valid(handler_web_token_state, parsed):
+                self._send_plain_rejection(
+                    HTTPStatus.UNAUTHORIZED,
+                    "WEB_INGRESS_WEB_TOKEN_REJECTED",
+                    "Form POST requests must include a valid local Wild Boar Proxy web token.",
+                )
+                return
+            if not web_form_csrf_valid(handler_web_token_state, parsed):
+                self._send_plain_rejection(
+                    HTTPStatus.FORBIDDEN,
+                    "WEB_INGRESS_CSRF_REJECTED",
+                    "Form POST requests must include a valid Wild Boar Proxy CSRF token.",
+                )
+                return
+            if not handler_post_rate_limiter.admit(
+                client_ip=str(self.client_address[0] or ""),
+                path=self.path.split("?", 1)[0],
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    WEB_RATE_LIMIT_MACHINE_ERROR_CODE,
+                    "Form POST request rate limit exceeded.",
+                )
+                return
+            action_fields = {
+                key: value
+                for key, value in parsed.items()
+                if key not in {WEB_FORM_TOKEN_FIELD, WEB_FORM_CSRF_FIELD}
+            }
+            self._send_html(render_with_web_tokens(app.post_action(action_fields, path=self.path)))
 
         def log_message(self, fmt: str, *args: object) -> None:
             return
+
+        def _admit_common_request(self) -> bool:
+            if host_header_is_local(
+                self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                return True
+            self._send_plain_rejection(
+                HTTPStatus.BAD_REQUEST,
+                "WEB_INGRESS_HOST_REJECTED",
+                "HTTP Host must target this local Wild Boar Proxy server.",
+            )
+            return False
+
+        def _admitted_form_body_length(self) -> int | None:
+            if not self._admit_common_request():
+                return None
+            length, length_error = parse_content_length(self.headers)
+            if length_error is not None:
+                self._send_plain_rejection(
+                    HTTPStatus.BAD_REQUEST,
+                    length_error,
+                    "HTTP Content-Length must be a non-negative integer.",
+                )
+                return None
+            if length <= 0:
+                self._send_plain_rejection(
+                    HTTPStatus.BAD_REQUEST,
+                    "WEB_INGRESS_FORM_BODY_REQUIRED",
+                    "Form POST requests must include a request body.",
+                )
+                return None
+            if length > MAX_WEB_REQUEST_BODY_BYTES:
+                self._send_plain_rejection(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    "WEB_INGRESS_BODY_TOO_LARGE",
+                    "HTTP request body exceeds the Wild Boar Proxy web ingress limit.",
+                )
+                return None
+            content_type_header = str(self.headers.get("Content-Type", "") or "").strip()
+            if (
+                (length > 0 or content_type_header)
+                and not content_type_matches(self.headers, FORM_CONTENT_TYPE)
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "WEB_INGRESS_CONTENT_TYPE_REJECTED",
+                    "Form POST requests must use application/x-www-form-urlencoded.",
+                )
+                return None
+            if not origin_header_is_allowed(
+                self.headers.get("Origin"),
+                host_header=self.headers.get("Host"),
+                server_port=int(self.server.server_port),
+            ):
+                self._send_plain_rejection(
+                    HTTPStatus.FORBIDDEN,
+                    "WEB_INGRESS_ORIGIN_REJECTED",
+                    "Browser POST Origin must match this local Wild Boar Proxy server.",
+                )
+                return None
+            return length
+
+        def _send_plain_rejection(
+            self,
+            status: HTTPStatus,
+            machine_error_code: str,
+            human_message: str,
+        ) -> None:
+            payload = f"{machine_error_code}\n{human_message}\n".encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
 
         def _send_html(self, body: str) -> None:
             payload = body.encode("utf-8")
@@ -1071,23 +1219,74 @@ def build_handler(app: WildBoarWebUi) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+def _web_hidden_inputs(web_token_state: WebTokenState) -> str:
+    token_name = html.escape(WEB_FORM_TOKEN_FIELD, quote=True)
+    csrf_name = html.escape(WEB_FORM_CSRF_FIELD, quote=True)
+    token_value = html.escape(web_token_state.token, quote=True)
+    csrf_value = html.escape(web_token_state.csrf_token, quote=True)
+    return (
+        f'<input type="hidden" name="{token_name}" value="{token_value}">'
+        f'<input type="hidden" name="{csrf_name}" value="{csrf_value}">'
+    )
+
+
+def _inject_web_form_tokens(body: str, web_token_state: WebTokenState) -> str:
+    hidden_inputs = _web_hidden_inputs(web_token_state)
+    return re.sub(
+        r'(<form\b[^>]*\bmethod=(["\'])post\2[^>]*>)',
+        lambda match: f"{match.group(1)}{hidden_inputs}",
+        body,
+        flags=re.IGNORECASE,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="wild-boar-proxy-web-ui")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--unsafe-allow-public-bind",
+        action="store_true",
+        help="allow binding the web UI to a public/unspecified host",
+    )
+    parser.add_argument(
+        "--post-rate-limit-per-second",
+        type=int,
+        default=DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+        help="maximum admitted local form POST requests per second per client/path",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    server = ThreadingHTTPServer((args.host, args.port), build_handler(WildBoarWebUi()))
-    print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if unsafe_bind_requested(args.host) and not args.unsafe_allow_public_bind:
+        parser.error(
+            "--host 0.0.0.0/:: is unsafe for the web UI; "
+            "pass --unsafe-allow-public-bind only with an explicit operator boundary."
+        )
+    if args.post_rate_limit_per_second <= 0:
+        parser.error("--post-rate-limit-per-second must be a positive integer.")
+    web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
+    server = None
     try:
+        server = ThreadingHTTPServer(
+            (args.host, args.port),
+            build_handler(
+                WildBoarWebUi(),
+                web_token_state=web_token_state,
+                post_rate_limit_per_second=args.post_rate_limit_per_second,
+            ),
+        )
+        print(f"Wild Boar Proxy web UI запущен на http://{args.host}:{args.port}")
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        if server is not None:
+            server.server_close()
+        delete_web_token(web_token_state)
     return 0
 
 

@@ -4,15 +4,219 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
+import threading
+import time
 from typing import Any
 
+from .approved_handoff import (
+    APPROVED_HANDOFF_SURFACES,
+    HANDOFF_SURFACE_LOCAL_PROOF_COMMAND,
+    HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
+    run_approved_handoff_command,
+)
 from .cli_runner import run_codex_cli_runner_smoke
+from .command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ, EFFECT_REPAIR
+from .core import packets as command_packets
+from .custom_codex_admission import run_custom_codex_admission_command
+from .custom_codex_operator_proof import run_repeatable_operator_proof_command
+from .real_custom_dip_proof_runner import run_real_custom_dip_proof_runner_command
+from .real_custom_dip_operator import (
+    ACCEPTANCE_RUNS_DEFAULT,
+    DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    run_dip_work_chain_join_command,
+    run_dip_operator_status_command,
+    run_real_custom_dip_operator_acceptance_command,
+    run_real_custom_dip_operator_preflight_command,
+    run_real_custom_dip_operator_run_command,
+    run_real_custom_dip_operator_work_command,
+)
+from .custom_codex_working_flow_visible_source_proof import (
+    run_working_flow_visible_source_proof_command,
+)
+from .fresh_live_custom_codex_e2e_proof import (
+    run_fresh_live_custom_codex_e2e_proof_command,
+)
+from .fresh_sealed_e2e_proof import (
+    run_fresh_sealed_e2e_proof_command,
+)
+from .gpt_api_dip_acceptance_gate import (
+    run_gpt_api_dip_acceptance_gate_command,
+)
+from .gpt_api_dip_product_ready_gate import (
+    run_gpt_api_dip_product_ready_gate_command,
+)
+from .e2e_mode_matrix import run_e2e_mode_matrix_command
+from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
+from .repeatable_proof_status import run_repeatable_proof_status_command
+from .custom_codex_native_ui_observer_proof import (
+    run_native_ui_observer_proof_command,
+)
+from .custom_codex_native_response_matrix import (
+    DEFAULT_NATIVE_RESPONSE_MATRIX_EXPECTED_PREFIX,
+    DEFAULT_NATIVE_RESPONSE_MATRIX_REQUEST_PREFIX,
+    run_native_response_matrix_command,
+)
+from .interactive_custom_codex_proof import (
+    run_interactive_custom_codex_collect_command,
+    run_interactive_custom_codex_preflight_command,
+)
+from .interactive_codex_working_flow_delivery import (
+    APPROVED_DELIVERY_SOURCE_KINDS,
+    DELIVERY_SOURCE_CODEX_EXEC_JSONL,
+    run_interactive_codex_working_flow_delivery_command,
+)
+from .live_manual_gate_proof import run_live_manual_gate_proof_command
 from .external_models import run_external_models_command
+from .controlled_api_dispatch import run_controlled_api_dispatch_command
+from .api_agent_direct_reply import (
+    DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    DEFAULT_DIRECT_REPLY_WORK_MODE,
+    DIRECT_REPLY_REPO_BRIDGE_MODES,
+    DIRECT_REPLY_WORK_MODES,
+    resolve_prompt_repo_bridge_mode,
+    run_api_agent_direct_reply_command,
+)
+from .api_agent_auto_router import run_api_agent_auto_router_command
+from .controlled_dispatch_handoff_proof import (
+    run_controlled_dispatch_handoff_proof_command,
+)
+from .controlled_ingress_api_dispatch_proof import (
+    run_controlled_ingress_api_dispatch_proof_command,
+)
+from .codex_exec_assistant_continuation_proof import (
+    run_codex_exec_assistant_continuation_proof_command,
+)
+from .codex_working_flow_delivery_proof import (
+    run_codex_working_flow_delivery_proof_command,
+)
+from .custom_app_identity_repair import build_custom_app_identity_repair_packet
+from .custom_codex_hook_origin_proof import (
+    run_custom_codex_hook_origin_proof_command,
+)
+from .native_free_chat_router_dispatch_admission import (
+    run_native_free_chat_router_dispatch_admission_command,
+)
+from .native_free_chat_router_handoff_working_flow_join import (
+    run_handoff_to_working_flow_join_command,
+)
+from .native_filesystem_probe import DEFAULT_CUSTOM_NATIVE_MODEL
+from .natural_free_chat_router_proof import (
+    run_natural_free_chat_router_proof_command,
+)
+from .codex_transcript_delivery_observation import (
+    run_codex_transcript_delivery_observation_command,
+)
+from .custom_codex_approved_visible_source_observation import (
+    APPROVED_VISIBLE_SOURCE_KINDS,
+    VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    run_custom_codex_approved_visible_source_observation_command,
+)
+from .custom_codex_visible_source_binding_proof import (
+    APPROVED_VISIBLE_SOURCE_KINDS as BINDING_APPROVED_VISIBLE_SOURCE_KINDS,
+    VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT as BINDING_VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    run_custom_codex_visible_source_binding_proof_command,
+)
+from .custom_codex_ui_visibility_proof import (
+    run_custom_codex_ui_visibility_proof_command,
+)
+from .custom_codex_ingress_proof import run_custom_codex_ingress_proof_command
+from .observed_machine_handoff_delivery import (
+    APPROVED_DELIVERY_SURFACES,
+    DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
+    run_observed_machine_handoff_delivery_command,
+)
+from .proof_seal import (
+    run_proof_seal_create_command,
+    run_proof_seal_verify_command,
+)
+from .router_hook_entry import (
+    ADMITTED_HOOK_SURFACES,
+    HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    HOOK_SURFACE_PROMPT_PREPROCESSOR,
+    run_router_hook_entry_command,
+)
+from .real_custom_codex_hook_proof import (
+    run_real_custom_codex_hook_proof_command,
+)
+from .real_user_prompt_submit_ledger_proof import (
+    run_real_user_prompt_submit_ledger_proof_command,
+)
+from .real_ledger_bound_api_dispatch_proof import (
+    run_real_ledger_bound_api_dispatch_proof_command,
+)
+from .real_custom_app_submit_ledger_proof import (
+    run_real_custom_app_submit_ledger_proof_command,
+)
+from .custom_ui_origin_admission import run_custom_ui_origin_admission_command
+from .custom_origin_bound_api_dispatch_proof import (
+    ADMITTED_CUSTOM_ORIGIN_BOUND_LAUNCH_SURFACES,
+    run_custom_origin_bound_api_dispatch_proof_command,
+)
+from .custom_origin_bound_live_provider_join import (
+    run_custom_origin_bound_live_provider_join_command,
+)
+from .official_mcp_ledger_bound_dispatch_join import (
+    run_official_mcp_ledger_bound_dispatch_join_command,
+)
+from .wbp_dip_hook_origin_proof import run_wbp_dip_hook_origin_proof_command
+from .official_mcp_handoff_source_proof import (
+    run_official_mcp_handoff_source_proof_command,
+    run_official_mcp_working_flow_handoff_source_proof_command,
+)
+from .official_mcp_transcript_tool_result_observation import (
+    run_official_mcp_transcript_tool_result_observation_command,
+)
+from .official_mcp_assistant_continuation_observation import (
+    run_official_mcp_assistant_continuation_observation_command,
+)
+from .official_mcp_approved_codex_exec_source_observation import (
+    run_official_mcp_approved_codex_exec_source_observation_command,
+)
+from .official_mcp_delivery_candidate_join import (
+    run_official_mcp_delivery_candidate_join_command,
+)
+from .official_mcp_working_flow_delivery_join import (
+    run_official_mcp_working_flow_delivery_join_command,
+)
+from .official_e2e_working_flow_proof_join import (
+    run_official_e2e_working_flow_proof_join_command,
+)
+from .official_e2e_working_flow_proof_runner import (
+    run_official_e2e_working_flow_proof_runner_command,
+)
+from .official_e2e_fresh_working_flow_proof_runner import (
+    run_official_e2e_fresh_working_flow_proof_runner_command,
+)
+from .full_runtime_dispatch_proof import (
+    run_full_runtime_dispatch_proof_command,
+)
+from .full_runtime_dispatch_proof_runner import (
+    run_full_runtime_dispatch_proof_runner_command,
+)
+from .full_runtime_dispatch_admission import (
+    run_full_runtime_dispatch_admission_command,
+)
+from .full_runtime_dispatch_admission_seal import (
+    run_full_runtime_dispatch_admission_seal_command,
+)
+from .custom_codex_auth_session_readiness import (
+    run_custom_codex_auth_session_readiness_command,
+)
+from .user_prompt_submit_hook_producer import (
+    build_user_prompt_submit_install_packet,
+    build_user_prompt_submit_readiness_packet,
+    build_user_prompt_submit_trust_repair_packet,
+)
+from .runtime_health import run_healthcheck_probe
+from .runtime_repair import run_healthcheck_repair
 from .runtime import (
     RuntimeErrorInfo,
     RuntimePaths,
+    _health_probe_dependencies,
+    _healthcheck_repair_dependencies,
     export_diagnostics,
     list_accounts,
     mode_get,
@@ -23,7 +227,6 @@ from .runtime import (
     run_accounts_login_complete,
     run_accounts_login_start,
     run_demote,
-    run_healthcheck,
     run_invariant_check,
     run_installer_init,
     run_hold,
@@ -35,6 +238,8 @@ from .runtime import (
     run_promote,
     run_companion_reset,
     run_release,
+    run_rollback_latest_apply,
+    run_rollback_latest_dry_run,
     run_rollout_evidence_capture,
     run_rollout_posture_inspect,
     run_rollout_rotation_inspect,
@@ -58,20 +263,21 @@ def build_parser() -> argparse.ArgumentParser:
     root_parser = argparse.ArgumentParser(prog="wild-boar-proxy")
     subparsers = root_parser.add_subparsers(dest="command", required=True)
 
-    healthcheck = subparsers.add_parser("healthcheck")
+    healthcheck = subparsers.add_parser("healthcheck", help="Проверить live-состояние без ремонта")
     healthcheck.add_argument("--json", action="store_true", required=True)
+    healthcheck.add_argument("--repair", action="store_true")
     healthcheck.add_argument("--model")
 
-    status = subparsers.add_parser("status")
+    status = subparsers.add_parser("status", help="Показать read-only snapshot без live attestation")
     status.add_argument("--json", action="store_true", required=True)
 
-    invariant_check = subparsers.add_parser("invariant-check")
+    invariant_check = subparsers.add_parser("invariant-check", help="Проверить false-green инварианты")
     invariant_check.add_argument("--json", action="store_true", required=True)
 
-    token = subparsers.add_parser("token")
+    token = subparsers.add_parser("token", help="Проверить или получить локальный web token")
     token.add_argument("--json", action="store_true")
 
-    stable = subparsers.add_parser("stable")
+    stable = subparsers.add_parser("stable", help="Диагностировать и ремонтировать stable runtime")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
     stable_repair = stable_subparsers.add_parser("repair")
     stable_repair_mode = stable_repair.add_mutually_exclusive_group(required=True)
@@ -90,27 +296,1474 @@ def build_parser() -> argparse.ArgumentParser:
     stable_target_switch_mode.add_argument("--apply", action="store_true")
     stable_target_switch.add_argument("--json", action="store_true", required=True)
 
-    sync = subparsers.add_parser("sync")
+    rollback = subparsers.add_parser("rollback", help="Проверить или применить последний rollback")
+    rollback.add_argument("--latest", action="store_true", required=True)
+    rollback_mode = rollback.add_mutually_exclusive_group(required=True)
+    rollback_mode.add_argument("--dry-run", action="store_true")
+    rollback_mode.add_argument("--apply", action="store_true")
+    rollback.add_argument("--json", action="store_true", required=True)
+
+    sync = subparsers.add_parser("sync", help="Синхронизировать managed runtime state")
     sync.add_argument("--json", action="store_true", required=True)
     sync.add_argument("--model")
 
-    launch = subparsers.add_parser("launch")
+    launch = subparsers.add_parser("launch", help="Запустить smoke, клиент или bounded repair")
     launch_subparsers = launch.add_subparsers(dest="launch_command", required=True)
     launch_smoke = launch_subparsers.add_parser("smoke")
     launch_smoke.add_argument("--json", action="store_true", required=True)
     launch_client = launch_subparsers.add_parser("client")
     launch_client.add_argument("--client-path", required=True)
     launch_client.add_argument("--json", action="store_true", required=True)
+    launch_custom_app_identity = launch_subparsers.add_parser(
+        "custom-app-identity-repair"
+    )
+    launch_custom_app_identity_mode = launch_custom_app_identity.add_mutually_exclusive_group(
+        required=True
+    )
+    launch_custom_app_identity_mode.add_argument("--dry-run", action="store_true")
+    launch_custom_app_identity_mode.add_argument("--apply", action="store_true")
+    launch_custom_app_identity.add_argument("--stock-app-path")
+    launch_custom_app_identity.add_argument("--custom-app-path")
+    launch_custom_app_identity.add_argument("--backup-dir")
+    launch_custom_app_identity.add_argument("--json", action="store_true", required=True)
 
-    codex_runner = subparsers.add_parser("codex-runner")
+    dip = subparsers.add_parser("dip", help="Проверить канонический DIP execution path")
+    dip_subparsers = dip.add_subparsers(dest="dip_command", required=True)
+    dip_preflight = dip_subparsers.add_parser("preflight")
+    dip_preflight.add_argument("--prompt", required=True)
+    dip_preflight.add_argument("--codex-bin")
+    dip_preflight.add_argument("--proof-dir")
+    dip_preflight.add_argument("--codex-cwd")
+    dip_preflight.add_argument("--codex-hook-current-hash")
+    dip_preflight.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_preflight.add_argument("--json", action="store_true", required=True)
+    dip_work = dip_subparsers.add_parser("work")
+    dip_work.add_argument("--prompt", required=True)
+    dip_work.add_argument("--codex-bin")
+    dip_work.add_argument("--codex-model")
+    dip_work.add_argument("--proof-dir")
+    dip_work.add_argument("--codex-cwd")
+    dip_work.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_work.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_work.add_argument("--codex-hook-current-hash")
+    dip_work.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_work.add_argument("--json", action="store_true", required=True)
+    dip_acceptance = dip_subparsers.add_parser("acceptance")
+    dip_acceptance.add_argument("--prompt", required=True)
+    dip_acceptance.add_argument("--runs", type=int, default=ACCEPTANCE_RUNS_DEFAULT)
+    dip_acceptance.add_argument("--codex-bin")
+    dip_acceptance.add_argument("--codex-model")
+    dip_acceptance.add_argument("--proof-dir")
+    dip_acceptance.add_argument("--codex-cwd")
+    dip_acceptance.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_acceptance.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_acceptance.add_argument("--codex-hook-current-hash")
+    dip_acceptance.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_acceptance.add_argument("--json", action="store_true", required=True)
+    dip_status = dip_subparsers.add_parser("status")
+    dip_status.add_argument("--proof-file")
+    dip_status.add_argument(
+        "--max-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_status.add_argument("--json", action="store_true", required=True)
+    dip_chain_join = dip_subparsers.add_parser("chain-join")
+    dip_chain_join.add_argument("--status-file", required=True)
+    dip_chain_join.add_argument("--work-file", required=True)
+    dip_chain_join.add_argument("--runner-file")
+    dip_chain_join.add_argument(
+        "--max-status-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_chain_join.add_argument("--json", action="store_true", required=True)
+    dip_run = dip_subparsers.add_parser("run")
+    dip_run.add_argument("--prompt", required=True)
+    dip_run.add_argument("--codex-bin")
+    dip_run.add_argument("--codex-model")
+    dip_run.add_argument("--proof-dir")
+    dip_run.add_argument("--codex-cwd")
+    dip_run.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    dip_run.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    dip_run.add_argument("--codex-hook-current-hash")
+    dip_run.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    dip_run.add_argument(
+        "--max-status-age-seconds",
+        type=int,
+        default=DIP_OPERATOR_STATUS_MAX_AGE_SECONDS_DEFAULT,
+    )
+    dip_run.add_argument("--json", action="store_true", required=True)
+
+    codex_runner = subparsers.add_parser("codex-runner", help="Запустить bounded Codex proof commands")
     codex_runner_subparsers = codex_runner.add_subparsers(
         dest="codex_runner_command", required=True
     )
     codex_runner_smoke = codex_runner_subparsers.add_parser("smoke")
     codex_runner_smoke.add_argument("--prompt", required=True)
     codex_runner_smoke.add_argument("--json", action="store_true", required=True)
+    codex_runner_admission = codex_runner_subparsers.add_parser("admission")
+    codex_runner_admission.add_argument("--prompt", required=True)
+    codex_runner_admission.add_argument("--codex-bin")
+    codex_runner_admission.add_argument("--codex-model")
+    codex_runner_admission.add_argument("--proof-dir")
+    codex_runner_admission.add_argument("--codex-cwd")
+    codex_runner_admission.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_admission.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_admission.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_admission.add_argument("--json", action="store_true", required=True)
+    codex_runner_operator = codex_runner_subparsers.add_parser("operator-proof")
+    codex_runner_operator.add_argument("--prompt", required=True)
+    codex_runner_operator.add_argument("--codex-bin")
+    codex_runner_operator.add_argument("--codex-model")
+    codex_runner_operator.add_argument("--proof-dir")
+    codex_runner_operator.add_argument("--codex-cwd")
+    codex_runner_operator.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_operator.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_operator.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_operator.add_argument("--json", action="store_true", required=True)
+    codex_runner_real_custom_dip = codex_runner_subparsers.add_parser(
+        "real-custom-dip-proof"
+    )
+    codex_runner_real_custom_dip.add_argument("--prompt", required=True)
+    codex_runner_real_custom_dip.add_argument("--codex-bin")
+    codex_runner_real_custom_dip.add_argument("--codex-model")
+    codex_runner_real_custom_dip.add_argument("--proof-dir")
+    codex_runner_real_custom_dip.add_argument("--codex-cwd")
+    codex_runner_real_custom_dip.add_argument("--custom-user-data-dir")
+    codex_runner_real_custom_dip.add_argument(
+        "--mode",
+        choices=("proof", "work"),
+        default="proof",
+    )
+    codex_runner_real_custom_dip.add_argument(
+        "--api-backed-gate",
+        action="store_true",
+    )
+    codex_runner_real_custom_dip.add_argument("--expected-alias", default="DIP")
+    codex_runner_real_custom_dip.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_real_custom_dip.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_real_custom_dip.add_argument("--codex-hook-current-hash")
+    codex_runner_real_custom_dip.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_real_custom_dip.add_argument("--json", action="store_true", required=True)
+    codex_runner_gpt_api_dip_gate = codex_runner_subparsers.add_parser(
+        "gpt-api-dip-acceptance-gate"
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--fresh-sealed-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--dip-feature-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--dip-action-proof-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_gate.add_argument("--proof-dir")
+    codex_runner_gpt_api_dip_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_product_gate = codex_runner_subparsers.add_parser(
+        "gpt-api-dip-product-ready-gate"
+    )
+    codex_runner_gpt_api_dip_product_gate.add_argument(
+        "--acceptance-gate-file",
+        required=True,
+    )
+    codex_runner_gpt_api_dip_product_gate.add_argument("--proof-dir")
+    codex_runner_gpt_api_dip_product_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix = codex_runner_subparsers.add_parser(
+        "e2e-mode-matrix"
+    )
+    codex_runner_e2e_mode_matrix.add_argument("--gpt-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--api-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--gpt-api-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument("--dip-ping-proof-file", required=True)
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-repo-audit-dummy-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-repo-audit-wbp-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--dip-code-edit-tests-dummy-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--api-agent-direct-reply-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--api-agent-custom-alias-proof-file",
+        required=True,
+    )
+    codex_runner_e2e_mode_matrix.add_argument("--proof-dir")
+    codex_runner_e2e_mode_matrix.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_repeatable_status = codex_runner_subparsers.add_parser(
+        "repeatable-proof-status"
+    )
+    codex_runner_repeatable_status.add_argument("--route", required=True)
+    codex_runner_repeatable_status.add_argument("--fresh-proof-file")
+    codex_runner_repeatable_status.add_argument(
+        "--provider-expected-text",
+        default="WBP_REPEATABLE_PROOF_PREFLIGHT_OK",
+    )
+    codex_runner_repeatable_status.add_argument(
+        "--run-provider-preflight",
+        action="store_true",
+    )
+    codex_runner_repeatable_status.add_argument("--external-models-dir")
+    codex_runner_repeatable_status.add_argument("--codex-hook-current-hash")
+    codex_runner_repeatable_status.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_repeatable_status.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_fresh_router_ready = codex_runner_subparsers.add_parser(
+        "fresh-router-ready-proof"
+    )
+    codex_runner_fresh_router_ready.add_argument("--route", required=True)
+    codex_runner_fresh_router_ready.add_argument("--prompt", required=True)
+    codex_runner_fresh_router_ready.add_argument("--codex-bin")
+    codex_runner_fresh_router_ready.add_argument("--codex-model")
+    codex_runner_fresh_router_ready.add_argument("--proof-dir")
+    codex_runner_fresh_router_ready.add_argument("--codex-cwd")
+    codex_runner_fresh_router_ready.add_argument(
+        "--custom-codex-ui-visibility-proof-file"
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--provider-expected-text",
+        default="WBP_REPEATABLE_PROOF_PREFLIGHT_OK",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_fresh_router_ready.add_argument("--persistent-profile-base-dir")
+    codex_runner_fresh_router_ready.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-model",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-owner-authorization-phrase"
+    )
+    codex_runner_fresh_router_ready.add_argument("--native-auto-launch-repo-root")
+    codex_runner_fresh_router_ready.add_argument(
+        "--native-auto-launch-stable-runtime-generated-config-file"
+    )
+    codex_runner_fresh_router_ready.add_argument("--external-models-dir")
+    codex_runner_fresh_router_ready.add_argument("--codex-hook-current-hash")
+    codex_runner_fresh_router_ready.add_argument(
+        "--probe-codex-app-server",
+        action="store_true",
+    )
+    codex_runner_fresh_router_ready.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_visible_source = codex_runner_subparsers.add_parser(
+        "working-flow-visible-source-proof"
+    )
+    codex_runner_visible_source.add_argument("--prompt", required=True)
+    codex_runner_visible_source.add_argument("--codex-bin")
+    codex_runner_visible_source.add_argument("--codex-model")
+    codex_runner_visible_source.add_argument("--proof-dir")
+    codex_runner_visible_source.add_argument("--codex-cwd")
+    codex_runner_visible_source.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_visible_source.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_visible_source.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_visible_source.add_argument("--json", action="store_true", required=True)
+    codex_runner_fresh_live_e2e = codex_runner_subparsers.add_parser(
+        "fresh-live-e2e-proof"
+    )
+    codex_runner_fresh_live_e2e.add_argument("--prompt", required=True)
+    codex_runner_fresh_live_e2e.add_argument("--codex-bin")
+    codex_runner_fresh_live_e2e.add_argument("--codex-model")
+    codex_runner_fresh_live_e2e.add_argument("--proof-dir")
+    codex_runner_fresh_live_e2e.add_argument("--codex-cwd")
+    codex_runner_fresh_live_e2e.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_live_e2e.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_fresh_sealed_e2e = codex_runner_subparsers.add_parser(
+        "fresh-sealed-e2e-proof"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--prompt", required=True)
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-bin")
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-model")
+    codex_runner_fresh_sealed_e2e.add_argument("--proof-dir")
+    codex_runner_fresh_sealed_e2e.add_argument("--codex-cwd")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--custom-codex-ui-visibility-proof-file"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--sandbox",
+        default="danger-full-access",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--persistent-profile-base-dir")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-model",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-owner-authorization-phrase"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument("--native-auto-launch-repo-root")
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--native-auto-launch-stable-runtime-generated-config-file"
+    )
+    codex_runner_fresh_sealed_e2e.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_native_ui = codex_runner_subparsers.add_parser(
+        "native-ui-observer-proof"
+    )
+    codex_runner_native_ui.add_argument("--prompt", required=True)
+    codex_runner_native_ui.add_argument("--request-id", required=True)
+    codex_runner_native_ui.add_argument("--expected-text", required=True)
+    codex_runner_native_ui.add_argument("--proof-dir")
+    codex_runner_native_ui.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_native_ui.add_argument("--persistent-profile-base-dir")
+    codex_runner_native_ui.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-custom-codex",
+        action="store_true",
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-endpoint",
+        default="http://127.0.0.1:8318/v1",
+    )
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-model",
+        default=DEFAULT_CUSTOM_NATIVE_MODEL,
+    )
+    codex_runner_native_ui.add_argument("--auto-launch-owner-authorization-phrase")
+    codex_runner_native_ui.add_argument("--auto-launch-repo-root")
+    codex_runner_native_ui.add_argument(
+        "--auto-launch-stable-runtime-generated-config-file"
+    )
+    codex_runner_native_ui.add_argument("--json", action="store_true", required=True)
+    codex_runner_native_response_matrix = codex_runner_subparsers.add_parser(
+        "native-response-matrix"
+    )
+    codex_runner_native_response_matrix.add_argument("--proof-dir")
+    codex_runner_native_response_matrix.add_argument("--matrix-id")
+    codex_runner_native_response_matrix.add_argument(
+        "--request-prefix",
+        default=DEFAULT_NATIVE_RESPONSE_MATRIX_REQUEST_PREFIX,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--expected-prefix",
+        default=DEFAULT_NATIVE_RESPONSE_MATRIX_EXPECTED_PREFIX,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--persistent-profile-id",
+        default="wbp-custom-main",
+    )
+    codex_runner_native_response_matrix.add_argument("--persistent-profile-base-dir")
+    codex_runner_native_response_matrix.add_argument(
+        "--observer-timeout-seconds",
+        type=float,
+        default=None,
+    )
+    codex_runner_native_response_matrix.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_interactive_preflight = codex_runner_subparsers.add_parser(
+        "interactive-preflight"
+    )
+    codex_runner_interactive_preflight.add_argument("--prompt", required=True)
+    codex_runner_interactive_preflight.add_argument("--proof-dir")
+    codex_runner_interactive_preflight.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_interactive_collect = codex_runner_subparsers.add_parser(
+        "interactive-collect"
+    )
+    codex_runner_interactive_collect.add_argument("--prompt", required=True)
+    codex_runner_interactive_collect.add_argument(
+        "--preflight-packet-file",
+        required=True,
+    )
+    codex_runner_interactive_collect.add_argument("--proof-dir")
+    codex_runner_interactive_collect.add_argument(
+        "--expected-text",
+        default="WBP_DIP_DISPATCH_OK",
+    )
+    codex_runner_interactive_collect.add_argument("--live-provider-proof-file")
+    codex_runner_interactive_collect.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_interactive_working_flow = codex_runner_subparsers.add_parser(
+        "interactive-working-flow-delivery"
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--interactive-proof-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    codex_runner_interactive_working_flow.add_argument("--proof-dir")
+    codex_runner_interactive_working_flow.add_argument(
+        "--delivery-source-kind",
+        choices=sorted(APPROVED_DELIVERY_SOURCE_KINDS),
+        default=DELIVERY_SOURCE_CODEX_EXEC_JSONL,
+    )
+    codex_runner_interactive_working_flow.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    codex_runner_live_manual_gate = codex_runner_subparsers.add_parser(
+        "live-manual-gate-proof"
+    )
+    codex_runner_live_manual_gate.add_argument(
+        "--interactive-working-flow-delivery-file",
+        required=True,
+    )
+    codex_runner_live_manual_gate.add_argument("--proof-dir")
+    codex_runner_live_manual_gate.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
 
-    accounts = subparsers.add_parser("accounts")
+    router_hook = subparsers.add_parser("router-hook", help="Маршрутизировать Custom Codex aliases")
+    router_hook_subparsers = router_hook.add_subparsers(
+        dest="router_hook_command",
+        required=True,
+    )
+    router_hook_entry = router_hook_subparsers.add_parser("entry")
+    router_hook_entry.add_argument("--prompt", required=True)
+    router_hook_entry.add_argument("--runtime-context-file")
+    router_hook_entry.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_entry.add_argument("--json", action="store_true", required=True)
+    router_hook_dispatch = router_hook_subparsers.add_parser("dispatch")
+    router_hook_dispatch.add_argument("--prompt", required=True)
+    router_hook_dispatch.add_argument("--runtime-context-file")
+    router_hook_dispatch.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_dispatch.add_argument("--json", action="store_true", required=True)
+    router_hook_auto_route = router_hook_subparsers.add_parser("auto-route")
+    router_hook_auto_route.add_argument("--prompt", required=True)
+    router_hook_auto_route.add_argument("--runtime-context-file")
+    router_hook_auto_route.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_auto_route.add_argument("--active-project-root")
+    router_hook_auto_route.add_argument("--target-repo")
+    router_hook_auto_route.add_argument(
+        "--repo-bridge",
+        choices=sorted(DIRECT_REPLY_REPO_BRIDGE_MODES),
+        default=DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    )
+    router_hook_auto_route.add_argument(
+        "--work-mode",
+        choices=sorted(DIRECT_REPLY_WORK_MODES),
+        default=DEFAULT_DIRECT_REPLY_WORK_MODE,
+    )
+    router_hook_auto_route.add_argument("--timeout-seconds", type=float, default=60.0)
+    router_hook_auto_route.add_argument("--proof-dir")
+    router_hook_auto_route.add_argument("--progress-stderr", action="store_true")
+    router_hook_auto_route.add_argument(
+        "--progress-stderr-interval",
+        type=float,
+        default=20.0,
+    )
+    router_hook_auto_route.add_argument("--json", action="store_true", required=True)
+    router_hook_auto_route_output = router_hook_subparsers.add_parser("auto-route-output")
+    router_hook_auto_route_output.add_argument("--prompt")
+    router_hook_auto_route_output.add_argument(
+        "--prompt-file",
+        default="-",
+        help="Read the original prompt from this file, or '-' for stdin.",
+    )
+    router_hook_auto_route_output.add_argument("--runtime-context-file")
+    router_hook_auto_route_output.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_auto_route_output.add_argument("--active-project-root")
+    router_hook_auto_route_output.add_argument("--target-repo")
+    router_hook_auto_route_output.add_argument(
+        "--repo-bridge",
+        choices=sorted(DIRECT_REPLY_REPO_BRIDGE_MODES),
+        default=DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    )
+    router_hook_auto_route_output.add_argument(
+        "--work-mode",
+        choices=sorted(DIRECT_REPLY_WORK_MODES),
+        default=DEFAULT_DIRECT_REPLY_WORK_MODE,
+    )
+    router_hook_auto_route_output.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=60.0,
+    )
+    router_hook_auto_route_output.add_argument("--proof-dir")
+    router_hook_direct_reply = router_hook_subparsers.add_parser("direct-reply")
+    router_hook_direct_reply.add_argument("--prompt", required=True)
+    router_hook_direct_reply.add_argument("--runtime-context-file")
+    router_hook_direct_reply.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_direct_reply.add_argument("--active-project-root")
+    router_hook_direct_reply.add_argument("--target-repo")
+    router_hook_direct_reply.add_argument(
+        "--repo-bridge",
+        choices=sorted(DIRECT_REPLY_REPO_BRIDGE_MODES),
+        default=DEFAULT_DIRECT_REPLY_REPO_BRIDGE_MODE,
+    )
+    router_hook_direct_reply.add_argument(
+        "--work-mode",
+        choices=sorted(DIRECT_REPLY_WORK_MODES),
+        default=DEFAULT_DIRECT_REPLY_WORK_MODE,
+    )
+    router_hook_direct_reply.add_argument("--timeout-seconds", type=float, default=60.0)
+    router_hook_direct_reply.add_argument("--proof-dir")
+    router_hook_direct_reply.add_argument("--progress-stderr", action="store_true")
+    router_hook_direct_reply.add_argument(
+        "--progress-stderr-interval",
+        type=float,
+        default=20.0,
+    )
+    router_hook_direct_reply.add_argument("--json", action="store_true", required=True)
+    router_hook_handoff = router_hook_subparsers.add_parser("handoff")
+    router_hook_handoff.add_argument("--prompt", required=True)
+    router_hook_handoff.add_argument("--runtime-context-file")
+    router_hook_handoff.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_handoff.add_argument(
+        "--handoff-surface-kind",
+        choices=sorted(APPROVED_HANDOFF_SURFACES),
+        default=HANDOFF_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_handoff.add_argument("--json", action="store_true", required=True)
+    router_hook_deliver = router_hook_subparsers.add_parser("deliver")
+    router_hook_deliver.add_argument("--prompt", required=True)
+    router_hook_deliver.add_argument("--runtime-context-file")
+    router_hook_deliver.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    )
+    router_hook_deliver.add_argument(
+        "--delivery-surface-kind",
+        choices=sorted(APPROVED_DELIVERY_SURFACES),
+        default=DELIVERY_SURFACE_MCP_TOOL_RESPONSE,
+    )
+    router_hook_deliver.add_argument("--json", action="store_true", required=True)
+    router_hook_ingress = router_hook_subparsers.add_parser("ingress")
+    router_hook_ingress.add_argument("--prompt", required=True)
+    router_hook_ingress.add_argument("--codex-exec-jsonl-file", required=True)
+    router_hook_ingress.add_argument("--runtime-context-file")
+    router_hook_ingress.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
+    )
+    router_hook_ingress.add_argument("--json", action="store_true", required=True)
+    router_hook_dispatch_proof = router_hook_subparsers.add_parser("dispatch-proof")
+    router_hook_dispatch_proof.add_argument("--ingress-proof-file", required=True)
+    router_hook_dispatch_proof.add_argument("--prompt", required=True)
+    router_hook_dispatch_proof.add_argument("--runtime-context-file")
+    router_hook_dispatch_proof.add_argument(
+        "--hook-surface-kind",
+        choices=sorted(ADMITTED_HOOK_SURFACES),
+        default=HOOK_SURFACE_PROMPT_PREPROCESSOR,
+    )
+    router_hook_dispatch_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_handoff_proof = router_hook_subparsers.add_parser("handoff-proof")
+    router_hook_handoff_proof.add_argument("--dispatch-proof-file", required=True)
+    router_hook_handoff_proof.add_argument(
+        "--handoff-surface-kind",
+        choices=sorted(APPROVED_HANDOFF_SURFACES),
+        default=HANDOFF_SURFACE_MCP_TOOL_RESPONSE,
+    )
+    router_hook_handoff_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_transcript_observe = router_hook_subparsers.add_parser(
+        "transcript-observe"
+    )
+    router_hook_transcript_observe.add_argument("--handoff-proof-file", required=True)
+    router_hook_transcript_observe.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_transcript_observe.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_assistant_continuation = router_hook_subparsers.add_parser(
+        "assistant-continuation-proof"
+    )
+    router_hook_assistant_continuation.add_argument(
+        "--transcript-observation-file",
+        required=True,
+    )
+    router_hook_assistant_continuation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_assistant_continuation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_visible_source = router_hook_subparsers.add_parser(
+        "visible-source-observe"
+    )
+    router_hook_visible_source.add_argument(
+        "--assistant-continuation-proof-file",
+        required=True,
+    )
+    router_hook_visible_source.add_argument(
+        "--visible-source-kind",
+        choices=sorted(APPROVED_VISIBLE_SOURCE_KINDS),
+        default=VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    )
+    router_hook_visible_source.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_visible_source.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_visible_source_binding = router_hook_subparsers.add_parser(
+        "visible-source-binding-proof"
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--visible-source-kind",
+        choices=sorted(BINDING_APPROVED_VISIBLE_SOURCE_KINDS),
+        default=BINDING_VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    )
+    router_hook_visible_source_binding.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_visible_source_binding.add_argument("--runtime-context-file")
+    router_hook_visible_source_binding.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_ui_visibility = router_hook_subparsers.add_parser(
+        "custom-codex-ui-visibility-proof"
+    )
+    router_hook_ui_visibility.add_argument(
+        "--visible-source-binding-proof-file",
+        required=True,
+    )
+    router_hook_ui_visibility.add_argument(
+        "--native-ui-observer-packet-file",
+        required=True,
+    )
+    router_hook_ui_visibility.add_argument("--expected-visible-text", required=True)
+    router_hook_ui_visibility.add_argument("--request-id", required=True)
+    router_hook_ui_visibility.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch = router_hook_subparsers.add_parser(
+        "full-runtime-dispatch-proof"
+    )
+    router_hook_full_runtime_dispatch.add_argument(
+        "--official-e2e-working-flow-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch.add_argument(
+        "--custom-codex-ui-visibility-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch.add_argument("--proof-dir")
+    router_hook_full_runtime_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner = router_hook_subparsers.add_parser(
+        "full-runtime-dispatch-proof-runner"
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--real-custom-hook-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--custom-codex-ui-visibility-proof-file",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--freshness-anchor-digest",
+    )
+    router_hook_full_runtime_dispatch_runner.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission = router_hook_subparsers.add_parser(
+        "full-runtime-dispatch-admission"
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
+        "--expected-freshness-anchor-digest",
+    )
+    router_hook_full_runtime_dispatch_admission.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal = (
+        router_hook_subparsers.add_parser("full-runtime-dispatch-admission-seal")
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
+        "--proof-dir",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
+        "--expected-freshness-anchor-digest",
+        required=True,
+    )
+    router_hook_full_runtime_dispatch_admission_seal.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit = router_hook_subparsers.add_parser(
+        "user-prompt-submit-proof"
+    )
+    router_hook_user_prompt_submit.add_argument("--prompt", required=True)
+    router_hook_user_prompt_submit.add_argument("--hook-ledger-file", required=True)
+    router_hook_user_prompt_submit.add_argument("--runtime-context-file")
+    router_hook_user_prompt_submit.add_argument("--live-provider-expected-text")
+    router_hook_user_prompt_submit.add_argument("--live-provider-proof-file")
+    router_hook_user_prompt_submit.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_ledger = router_hook_subparsers.add_parser(
+        "user-prompt-submit-ledger-proof"
+    )
+    router_hook_user_prompt_submit_ledger.add_argument("--prompt", required=True)
+    router_hook_user_prompt_submit_ledger.add_argument("--hook-ledger-file")
+    router_hook_user_prompt_submit_ledger.add_argument("--runtime-context-file")
+    router_hook_user_prompt_submit_ledger.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_ledger_bound_dispatch = router_hook_subparsers.add_parser(
+        "ledger-bound-dispatch-proof"
+    )
+    router_hook_ledger_bound_dispatch.add_argument("--prompt", required=True)
+    router_hook_ledger_bound_dispatch.add_argument("--hook-ledger-file")
+    router_hook_ledger_bound_dispatch.add_argument("--runtime-context-file")
+    router_hook_ledger_bound_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch = router_hook_subparsers.add_parser(
+        "custom-origin-bound-dispatch-proof"
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument("--prompt", required=True)
+    router_hook_custom_origin_bound_dispatch.add_argument(
+        "--ledger-mtime-before-ns",
+        type=int,
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument(
+        "--launch-surface",
+        choices=sorted(ADMITTED_CUSTOM_ORIGIN_BOUND_LAUNCH_SURFACES),
+        required=True,
+    )
+    router_hook_custom_origin_bound_dispatch.add_argument("--hook-ledger-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--runtime-context-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--process-inventory-file")
+    router_hook_custom_origin_bound_dispatch.add_argument("--stock-app-path")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-app-path")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-profile-dir")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-user-data-dir")
+    router_hook_custom_origin_bound_dispatch.add_argument("--custom-launcher-path")
+    router_hook_custom_origin_bound_dispatch.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join = router_hook_subparsers.add_parser(
+        "custom-origin-bound-live-provider-join"
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--prompt",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--custom-origin-bound-dispatch-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--live-provider-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--live-provider-expected-text",
+        required=True,
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--runtime-context-file",
+    )
+    router_hook_custom_origin_bound_live_provider_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join = router_hook_subparsers.add_parser(
+        "official-mcp-ledger-bound-dispatch-join"
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--official-mcp-case-file",
+        required=True,
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--ledger-bound-dispatch-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_ledger_bound_dispatch_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_wbp_dip_hook_origin_proof = router_hook_subparsers.add_parser(
+        "wbp-dip-hook-origin-proof"
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument("--prompt", required=True)
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--ledger-proof-file",
+        required=True,
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--wbp-dip-proof-file",
+        required=True,
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--expected-alias",
+        default="DIP",
+    )
+    router_hook_wbp_dip_hook_origin_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_handoff_source_proof = router_hook_subparsers.add_parser(
+        "official-mcp-handoff-source-proof"
+    )
+    router_hook_official_mcp_handoff_source_proof.add_argument(
+        "--dispatch-join-file",
+        required=True,
+    )
+    router_hook_official_mcp_handoff_source_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-working-flow-handoff-source-proof"
+        )
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_handoff_source_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_transcript_tool_result_observation = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-transcript-tool-result-observe"
+        )
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--handoff-source-file",
+        required=True,
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_official_mcp_transcript_tool_result_observation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_assistant_continuation_observation = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-assistant-continuation-observe"
+        )
+    )
+    router_hook_official_mcp_assistant_continuation_observation.add_argument(
+        "--transcript-observation-file",
+        required=True,
+    )
+    router_hook_official_mcp_assistant_continuation_observation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_official_mcp_assistant_continuation_observation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_approved_codex_exec_source_observation = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-approved-codex-exec-source-observe"
+        )
+    )
+    router_hook_official_mcp_approved_codex_exec_source_observation.add_argument(
+        "--assistant-continuation-observation-file",
+        required=True,
+    )
+    router_hook_official_mcp_approved_codex_exec_source_observation.add_argument(
+        "--approved-source-kind",
+        choices=sorted(APPROVED_VISIBLE_SOURCE_KINDS),
+        default=VISIBLE_SOURCE_CODEX_EXEC_JSON_ASSISTANT_OUTPUT,
+    )
+    router_hook_official_mcp_approved_codex_exec_source_observation.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_official_mcp_approved_codex_exec_source_observation.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_delivery_candidate_join = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-delivery-candidate-join"
+        )
+    )
+    router_hook_official_mcp_delivery_candidate_join.add_argument(
+        "--approved-exec-source-observation-file",
+        required=True,
+    )
+    router_hook_official_mcp_delivery_candidate_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_delivery_join = (
+        router_hook_subparsers.add_parser(
+            "official-mcp-working-flow-delivery-join"
+        )
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--delivery-candidate-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_official_mcp_working_flow_delivery_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_join = (
+        router_hook_subparsers.add_parser(
+            "official-e2e-working-flow-proof-join"
+        )
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--real-custom-hook-proof-file",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--official-working-flow-delivery-join-file",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_runner = (
+        router_hook_subparsers.add_parser(
+            "official-e2e-working-flow-proof-runner"
+        )
+    )
+    router_hook_official_e2e_working_flow_proof_runner.add_argument(
+        "--inputs-file",
+        required=True,
+    )
+    router_hook_official_e2e_working_flow_proof_runner.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner = (
+        router_hook_subparsers.add_parser(
+            "official-e2e-fresh-working-flow-proof-runner"
+        )
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--inputs-file",
+        required=True,
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--proof-output-dir",
+        required=True,
+    )
+    router_hook_official_e2e_fresh_working_flow_proof_runner.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_app_submit_ledger = router_hook_subparsers.add_parser(
+        "custom-app-submit-ledger-proof"
+    )
+    router_hook_custom_app_submit_ledger.add_argument("--prompt", required=True)
+    router_hook_custom_app_submit_ledger.add_argument("--ledger-mtime-before-ns", type=int, required=True)
+    router_hook_custom_app_submit_ledger.add_argument("--hook-ledger-file")
+    router_hook_custom_app_submit_ledger.add_argument("--runtime-context-file")
+    router_hook_custom_app_submit_ledger.add_argument("--process-inventory-file")
+    router_hook_custom_app_submit_ledger.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_ui_origin_admission = router_hook_subparsers.add_parser(
+        "custom-ui-origin-admission"
+    )
+    router_hook_custom_ui_origin_admission.add_argument("--prompt", required=True)
+    router_hook_custom_ui_origin_admission.add_argument(
+        "--ledger-mtime-before-ns",
+        type=int,
+        required=True,
+    )
+    router_hook_custom_ui_origin_admission.add_argument("--hook-ledger-file")
+    router_hook_custom_ui_origin_admission.add_argument("--runtime-context-file")
+    router_hook_custom_ui_origin_admission.add_argument("--process-inventory-file")
+    router_hook_custom_ui_origin_admission.add_argument("--stock-app-path")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-app-path")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-profile-dir")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-user-data-dir")
+    router_hook_custom_ui_origin_admission.add_argument("--custom-launcher-path")
+    router_hook_custom_ui_origin_admission.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_dispatch_admission = router_hook_subparsers.add_parser(
+        "dispatch-admission"
+    )
+    router_hook_dispatch_admission.add_argument("--prompt", required=True)
+    router_hook_dispatch_admission.add_argument("--hook-ledger-file", required=True)
+    router_hook_dispatch_admission.add_argument("--runtime-context-file")
+    router_hook_dispatch_admission.add_argument("--handoff-file")
+    router_hook_dispatch_admission.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join = router_hook_subparsers.add_parser(
+        "handoff-working-flow-join"
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--dispatch-admission-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--dispatch-handoff-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_handoff_working_flow_join.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof = router_hook_subparsers.add_parser(
+        "natural-free-chat-router-proof"
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--prompt", required=True)
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--hook-proof-file",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--runtime-context-file")
+    router_hook_natural_free_chat_router_proof.add_argument("--entry-evidence-file")
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--handoff-working-flow-join-file"
+    )
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--codex-exec-exit-code",
+        type=int,
+        default=0,
+    )
+    router_hook_natural_free_chat_router_proof.add_argument("--codex-exec-stderr-file")
+    router_hook_natural_free_chat_router_proof.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_working_flow_delivery = router_hook_subparsers.add_parser(
+        "working-flow-delivery-proof"
+    )
+    router_hook_working_flow_delivery.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    router_hook_working_flow_delivery.add_argument(
+        "--codex-exec-jsonl-file",
+        required=True,
+    )
+    router_hook_working_flow_delivery.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_origin = router_hook_subparsers.add_parser(
+        "custom-origin-proof"
+    )
+    router_hook_custom_origin.add_argument(
+        "--integrated-live-provider-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin.add_argument(
+        "--working-flow-delivery-proof-file",
+        required=True,
+    )
+    router_hook_custom_origin.add_argument(
+        "--strict-sealed-evidence",
+        action="store_true",
+    )
+    router_hook_custom_origin.add_argument(
+        "--integrated-live-provider-proof-seal-file",
+    )
+    router_hook_custom_origin.add_argument(
+        "--working-flow-delivery-proof-seal-file",
+    )
+    router_hook_custom_origin.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_proof_seal_create = router_hook_subparsers.add_parser(
+        "proof-seal-create"
+    )
+    router_hook_proof_seal_create.add_argument("--packet-file", required=True)
+    router_hook_proof_seal_create.add_argument("--seal-file")
+    router_hook_proof_seal_create.add_argument("--producer-kind", required=True)
+    router_hook_proof_seal_create.add_argument(
+        "--producer-command-digest",
+        required=True,
+    )
+    router_hook_proof_seal_create.add_argument("--producer-inputs-digest")
+    router_hook_proof_seal_create.add_argument(
+        "--input-packet-file",
+        action="append",
+        default=[],
+    )
+    router_hook_proof_seal_create.add_argument("--runtime-context-digest")
+    router_hook_proof_seal_create.add_argument("--hook-ledger-digest")
+    router_hook_proof_seal_create.add_argument("--profile-hook-config-digest")
+    router_hook_proof_seal_create.add_argument("--git-commit-sha")
+    router_hook_proof_seal_create.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_proof_seal_verify = router_hook_subparsers.add_parser(
+        "proof-seal-verify"
+    )
+    router_hook_proof_seal_verify.add_argument("--packet-file", required=True)
+    router_hook_proof_seal_verify.add_argument("--seal-file")
+    router_hook_proof_seal_verify.add_argument("--expected-packet-kind")
+    router_hook_proof_seal_verify.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_install = router_hook_subparsers.add_parser(
+        "user-prompt-submit-install"
+    )
+    install_mode = router_hook_user_prompt_submit_install.add_mutually_exclusive_group(
+        required=True
+    )
+    install_mode.add_argument("--dry-run", action="store_true")
+    install_mode.add_argument("--apply", action="store_true")
+    router_hook_user_prompt_submit_install.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_readiness = router_hook_subparsers.add_parser(
+        "user-prompt-submit-readiness"
+    )
+    router_hook_user_prompt_submit_readiness.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_custom_codex_auth_session = router_hook_subparsers.add_parser(
+        "custom-codex-auth-session-readiness"
+    )
+    router_hook_custom_codex_auth_session.add_argument("--custom-user-data-dir")
+    router_hook_custom_codex_auth_session.add_argument("--process-inventory-file")
+    router_hook_custom_codex_auth_session.add_argument(
+        "--skip-hook-readiness-probe",
+        action="store_true",
+    )
+    router_hook_custom_codex_auth_session.add_argument(
+        "--skip-account-app-server-probe",
+        action="store_true",
+    )
+    router_hook_custom_codex_auth_session.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+    router_hook_user_prompt_submit_trust_repair = router_hook_subparsers.add_parser(
+        "user-prompt-submit-trust-repair"
+    )
+    trust_repair_mode = router_hook_user_prompt_submit_trust_repair.add_mutually_exclusive_group(
+        required=True
+    )
+    trust_repair_mode.add_argument("--dry-run", action="store_true")
+    trust_repair_mode.add_argument("--apply", action="store_true")
+    router_hook_user_prompt_submit_trust_repair.add_argument(
+        "--json",
+        action="store_true",
+        required=True,
+    )
+
+    accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
 
     accounts_list = accounts_subparsers.add_parser("list")
@@ -128,6 +1781,7 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_hold = accounts_subparsers.add_parser("hold")
     accounts_hold.add_argument("id")
     accounts_hold.add_argument("reason", nargs="?")
+    accounts_hold.add_argument("--dry-run", action="store_true")
     accounts_hold.add_argument("--json", action="store_true", required=True)
 
     accounts_onboard = accounts_subparsers.add_parser("onboard")
@@ -157,27 +1811,27 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_login_cancel.add_argument("--session", required=True)
     accounts_login_cancel.add_argument("--json", action="store_true", required=True)
 
-    diagnostics = subparsers.add_parser("diagnostics")
+    diagnostics = subparsers.add_parser("diagnostics", help="Собрать redacted диагностику")
     diagnostics_subparsers = diagnostics.add_subparsers(
         dest="diagnostics_command", required=True
     )
     diagnostics_export = diagnostics_subparsers.add_parser("export")
     diagnostics_export.add_argument("--json", action="store_true", required=True)
 
-    installer = subparsers.add_parser("installer")
+    installer = subparsers.add_parser("installer", help="Инициализировать локальную установку")
     installer_subparsers = installer.add_subparsers(
         dest="installer_command", required=True
     )
     installer_init = installer_subparsers.add_parser("init")
     installer_init.add_argument("--json", action="store_true", required=True)
 
-    legacy = subparsers.add_parser("legacy")
+    legacy = subparsers.add_parser("legacy", help="Импортировать legacy-конфигурацию")
     legacy_subparsers = legacy.add_subparsers(dest="legacy_command", required=True)
     legacy_import = legacy_subparsers.add_parser("import")
     legacy_import.add_argument("--source-dir", required=True)
     legacy_import.add_argument("--json", action="store_true", required=True)
 
-    companion = subparsers.add_parser("companion")
+    companion = subparsers.add_parser("companion", help="Запустить локальные companion surfaces")
     companion_subparsers = companion.add_subparsers(
         dest="companion_command", required=True
     )
@@ -186,7 +1840,7 @@ def build_parser() -> argparse.ArgumentParser:
     companion_uninstall = companion_subparsers.add_parser("uninstall")
     companion_uninstall.add_argument("--json", action="store_true", required=True)
 
-    mode = subparsers.add_parser("mode")
+    mode = subparsers.add_parser("mode", help="Управлять желаемым runtime mode")
     mode_subparsers = mode.add_subparsers(dest="mode_command", required=True)
 
     mode_get_parser = mode_subparsers.add_parser("get")
@@ -196,7 +1850,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode_set.add_argument("value", choices=["stable", "managed"])
     mode_set.add_argument("--json", action="store_true", required=True)
 
-    policy = subparsers.add_parser("policy")
+    policy = subparsers.add_parser("policy", help="Управлять staged pool policy")
     policy_subparsers = policy.add_subparsers(dest="policy_command", required=True)
     policy_stage = policy_subparsers.add_parser("stage")
     policy_stage_subparsers = policy_stage.add_subparsers(
@@ -206,7 +1860,7 @@ def build_parser() -> argparse.ArgumentParser:
     policy_stage_set.add_argument("value")
     policy_stage_set.add_argument("--json", action="store_true", required=True)
 
-    rollout = subparsers.add_parser("rollout")
+    rollout = subparsers.add_parser("rollout", help="Проверить staged rollout evidence")
     rollout_subparsers = rollout.add_subparsers(dest="rollout_command", required=True)
     rollout_rotation = rollout_subparsers.add_parser("rotation")
     rollout_rotation_subparsers = rollout_rotation.add_subparsers(
@@ -240,7 +1894,7 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_advance.add_argument("id")
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
 
-    package = subparsers.add_parser("package")
+    package = subparsers.add_parser("package", help="Собрать или проверить локальный package")
     package_subparsers = package.add_subparsers(dest="package_command", required=True)
     package_experimental = package_subparsers.add_parser("experimental")
     package_experimental_subparsers = package_experimental.add_subparsers(
@@ -264,7 +1918,7 @@ def build_parser() -> argparse.ArgumentParser:
     package_launchable_verify.add_argument("--manifest", required=True)
     package_launchable_verify.add_argument("--json", action="store_true", required=True)
 
-    external_models = subparsers.add_parser("external-models")
+    external_models = subparsers.add_parser("external-models", help="Управлять внешними API-маршрутами")
     external_models_subparsers = external_models.add_subparsers(
         dest="external_models_command", required=True
     )
@@ -368,14 +2022,415 @@ def emit_json(payload: dict[str, Any]) -> int:
     return int(payload["exit_code"])
 
 
+def _read_router_prompt_for_output(args: argparse.Namespace) -> str:
+    prompt = getattr(args, "prompt", None)
+    if prompt is not None:
+        return str(prompt)
+    prompt_file = str(getattr(args, "prompt_file", "-") or "-")
+    if prompt_file == "-":
+        text = sys.stdin.read()
+    else:
+        from pathlib import Path
+
+        text = Path(prompt_file).expanduser().read_text(encoding="utf-8")
+    return text[:-1] if text.endswith("\n") else text
+
+
+def _auto_route_visible_output(packet: dict[str, Any]) -> str:
+    exact_plain_visible = packet.get("exact_plain_reply_matched") is True
+    if exact_plain_visible and packet.get("repo_bridge_used") is True:
+        exact_plain_visible = bool(
+            packet.get("repo_bridge_evidence_response_proven") is True
+            or (
+                packet.get("direct_provider_response_observed") is True
+                and packet.get("positive_provider_proof_gate_satisfied") is True
+            )
+        )
+    direct_ok = (
+        packet.get("status") == "ok"
+        and packet.get("auto_router_proven") is True
+        and packet.get("direct_reply_proven") is True
+        and (
+            exact_plain_visible
+            or packet.get("output_passthrough_required") is True
+            or packet.get("repo_bridge_evidence_response_proven") is True
+            or packet.get("direct_reply_visible_output_proven") is True
+        )
+        and packet.get("output_text") is not None
+    )
+    if direct_ok:
+        return str(packet.get("output_text"))
+    if packet.get("status") == "ok" and packet.get("auto_router_proven") is True:
+        return "WBP_ROUTER_OUTPUT_NOT_AVAILABLE"
+    return str(packet.get("machine_error_code") or "WBP_ROUTER_OUTPUT_INVALID")
+
+
+@contextlib.contextmanager
+def _stderr_progress_heartbeat(
+    *,
+    enabled: bool,
+    label: str,
+    interval_seconds: float,
+):
+    if not enabled:
+        yield
+        return
+    stop = threading.Event()
+    safe_interval = max(0.001, float(interval_seconds or 20.0))
+    started = time.monotonic()
+
+    def emit(message: str) -> None:
+        sys.stderr.write(message + "\n")
+        sys.stderr.flush()
+
+    def run() -> None:
+        emit(f"WBP_ROUTER_PROGRESS {label} started")
+        while not stop.wait(safe_interval):
+            elapsed = int(time.monotonic() - started)
+            emit(f"WBP_ROUTER_PROGRESS {label} elapsed_seconds={elapsed}")
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.join(timeout=min(1.0, safe_interval))
+
+
+def command_effect_from_args(args: argparse.Namespace) -> str | None:
+    command = getattr(args, "command", None)
+    if command in {"status", "invariant-check"}:
+        return EFFECT_READ
+    if command == "sync":
+        return EFFECT_MUTATE
+    if command == "token":
+        return EFFECT_READ
+    if command == "healthcheck":
+        return EFFECT_REPAIR if getattr(args, "repair", False) else EFFECT_PROBE
+    if command == "stable":
+        stable_command = getattr(args, "stable_command", None)
+        if stable_command == "repair":
+            return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_READ
+        if (
+            stable_command == "target"
+            and getattr(args, "stable_target_command", None) == "switch"
+        ):
+            return EFFECT_MUTATE if getattr(args, "apply", False) else EFFECT_READ
+    if command == "dip":
+        if getattr(args, "dip_command", None) == "preflight":
+            return EFFECT_PROBE
+        if getattr(args, "dip_command", None) == "work":
+            return EFFECT_MUTATE
+        if getattr(args, "dip_command", None) == "acceptance":
+            return EFFECT_MUTATE
+        if getattr(args, "dip_command", None) == "status":
+            return EFFECT_READ
+        if getattr(args, "dip_command", None) == "chain-join":
+            return EFFECT_READ
+        if getattr(args, "dip_command", None) == "run":
+            return EFFECT_MUTATE
+    if command == "launch":
+        launch_command = getattr(args, "launch_command", None)
+        if launch_command == "smoke":
+            return EFFECT_MUTATE
+        if launch_command == "client":
+            return EFFECT_MUTATE
+        if launch_command == "custom-app-identity-repair":
+            return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        in {
+            "full-runtime-dispatch-admission",
+            "full-runtime-dispatch-admission-seal",
+        }
+    ):
+        return EFFECT_READ
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) == "smoke":
+        return EFFECT_PROBE
+    if (
+        command == "codex-runner"
+        and getattr(args, "codex_runner_command", None) == "repeatable-proof-status"
+    ):
+        return EFFECT_PROBE
+    if (
+        command == "codex-runner"
+        and getattr(args, "codex_runner_command", None)
+        in {
+            "e2e-mode-matrix",
+            "gpt-api-dip-acceptance-gate",
+            "gpt-api-dip-product-ready-gate",
+        }
+    ):
+        return EFFECT_MUTATE if getattr(args, "proof_dir", None) else EFFECT_READ
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
+        "admission",
+        "operator-proof",
+        "working-flow-visible-source-proof",
+        "fresh-live-e2e-proof",
+        "fresh-sealed-e2e-proof",
+        "fresh-router-ready-proof",
+        "real-custom-dip-proof",
+        "native-ui-observer-proof",
+        "native-response-matrix",
+    }:
+        return EFFECT_MUTATE
+    if command == "codex-runner" and getattr(args, "codex_runner_command", None) in {
+        "interactive-preflight",
+        "interactive-collect",
+        "interactive-working-flow-delivery",
+        "live-manual-gate-proof",
+    }:
+        return EFFECT_MUTATE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "direct-reply"
+    ):
+        if getattr(args, "proof_dir", None):
+            return EFFECT_MUTATE
+        repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+            prompt_text=getattr(args, "prompt", ""),
+            repo_bridge_mode=getattr(args, "repo_bridge", None),
+        )
+        return (
+            EFFECT_PROBE
+            if repo_bridge_mode == "off"
+            else EFFECT_MUTATE
+        )
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "auto-route"
+    ):
+        if getattr(args, "proof_dir", None):
+            return EFFECT_MUTATE
+        repo_bridge_mode = resolve_prompt_repo_bridge_mode(
+            prompt_text=getattr(args, "prompt", ""),
+            repo_bridge_mode=getattr(args, "repo_bridge", None),
+        )
+        return (
+            EFFECT_PROBE
+            if repo_bridge_mode == "off"
+            else EFFECT_MUTATE
+        )
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "auto-route-output"
+    ):
+        return EFFECT_MUTATE
+    if command == "router-hook" and getattr(args, "router_hook_command", None) in {
+        "entry",
+        "dispatch",
+        "handoff",
+        "deliver",
+        "ingress",
+        "dispatch-proof",
+        "handoff-proof",
+        "transcript-observe",
+        "assistant-continuation-proof",
+        "visible-source-observe",
+        "visible-source-binding-proof",
+        "custom-codex-ui-visibility-proof",
+        "user-prompt-submit-proof",
+        "user-prompt-submit-ledger-proof",
+        "ledger-bound-dispatch-proof",
+        "custom-origin-bound-dispatch-proof",
+        "custom-origin-bound-live-provider-join",
+        "official-mcp-ledger-bound-dispatch-join",
+        "wbp-dip-hook-origin-proof",
+        "official-mcp-handoff-source-proof",
+        "official-mcp-working-flow-handoff-source-proof",
+        "official-mcp-transcript-tool-result-observe",
+        "official-mcp-assistant-continuation-observe",
+        "official-mcp-approved-codex-exec-source-observe",
+        "official-mcp-delivery-candidate-join",
+        "official-mcp-working-flow-delivery-join",
+        "official-e2e-working-flow-proof-join",
+        "official-e2e-working-flow-proof-runner",
+        "full-runtime-dispatch-proof",
+        "custom-app-submit-ledger-proof",
+        "custom-ui-origin-admission",
+        "custom-codex-auth-session-readiness",
+        "handoff-working-flow-join",
+        "working-flow-delivery-proof",
+        "user-prompt-submit-readiness",
+    }:
+        return EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        in {
+            "official-e2e-fresh-working-flow-proof-runner",
+            "full-runtime-dispatch-proof-runner",
+        }
+    ):
+        return EFFECT_MUTATE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "user-prompt-submit-trust-repair"
+    ):
+        return EFFECT_REPAIR if getattr(args, "apply", False) else EFFECT_PROBE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None) == "dispatch-admission"
+    ):
+        return EFFECT_MUTATE
+    if (
+        command == "router-hook"
+        and getattr(args, "router_hook_command", None)
+        == "user-prompt-submit-install"
+    ):
+        return EFFECT_MUTATE if getattr(args, "apply", False) else EFFECT_READ
+    if command == "mode":
+        mode_command = getattr(args, "mode_command", None)
+        if mode_command == "get":
+            return EFFECT_READ
+        if mode_command == "set":
+            return EFFECT_MUTATE
+    if command == "rollback":
+        if getattr(args, "apply", False):
+            return EFFECT_REPAIR
+        if getattr(args, "dry_run", False):
+            return EFFECT_READ
+    if (
+        command == "policy"
+        and getattr(args, "policy_command", None) == "stage"
+        and getattr(args, "policy_stage_command", None) == "set"
+    ):
+        return EFFECT_MUTATE
+    if command == "rollout":
+        rollout_command = getattr(args, "rollout_command", None)
+        if (
+            rollout_command == "rotation"
+            and getattr(args, "rollout_rotation_command", None) == "inspect"
+        ):
+            return EFFECT_READ
+        if (
+            rollout_command == "posture"
+            and getattr(args, "rollout_posture_command", None) == "inspect"
+        ):
+            return EFFECT_READ
+        if (
+            rollout_command == "evidence"
+            and getattr(args, "rollout_evidence_command", None) == "capture"
+        ):
+            return EFFECT_MUTATE
+        if rollout_command == "stage":
+            rollout_stage_command = getattr(args, "rollout_stage_command", None)
+            if rollout_stage_command == "prove":
+                return EFFECT_PROBE
+            if rollout_stage_command == "advance":
+                return EFFECT_MUTATE
+    if command == "accounts":
+        accounts_command = getattr(args, "accounts_command", None)
+        if accounts_command == "list":
+            return EFFECT_READ
+        if accounts_command == "validate":
+            return EFFECT_PROBE
+        if accounts_command in {
+            "demote",
+            "hold",
+            "onboard",
+            "promote",
+            "release",
+            "retire",
+        }:
+            return EFFECT_MUTATE
+        if accounts_command == "login":
+            login_command = getattr(args, "accounts_login_command", None)
+            if login_command == "status":
+                return EFFECT_READ
+            if login_command in {"start", "complete", "cancel"}:
+                return EFFECT_MUTATE
+    if command == "diagnostics" and getattr(args, "diagnostics_command", None) == "export":
+        return EFFECT_MUTATE
+    if command == "installer" and getattr(args, "installer_command", None) == "init":
+        return EFFECT_MUTATE
+    if command == "legacy" and getattr(args, "legacy_command", None) == "import":
+        return EFFECT_MUTATE
+    if command == "companion" and getattr(args, "companion_command", None) in {
+        "reset",
+        "uninstall",
+    }:
+        return EFFECT_MUTATE
+    if command == "package":
+        package_command = getattr(args, "package_command", None)
+        if package_command == "experimental":
+            package_experimental_command = getattr(
+                args, "package_experimental_command", None
+            )
+            if package_experimental_command == "build":
+                return EFFECT_MUTATE
+            if package_experimental_command == "verify":
+                return EFFECT_READ
+        if package_command == "launchable":
+            package_launchable_command = getattr(
+                args, "package_launchable_command", None
+            )
+            if package_launchable_command == "build":
+                return EFFECT_MUTATE
+            if package_launchable_command == "verify":
+                return EFFECT_READ
+    if command == "external-models":
+        external_models_command = getattr(args, "external_models_command", None)
+        if external_models_command in {"start", "stop"}:
+            return EFFECT_MUTATE
+        if external_models_command in {"status", "models"}:
+            return EFFECT_READ
+        if external_models_command == "check":
+            return EFFECT_MUTATE
+        if external_models_command == "live-format-check":
+            return EFFECT_PROBE
+        if external_models_command == "routes":
+            routes_command = getattr(args, "routes_command", None)
+            if routes_command in {"add", "update", "remove", "enable", "disable"}:
+                return EFFECT_MUTATE
+            if routes_command == "list":
+                return EFFECT_READ
+            if routes_command == "validate":
+                return EFFECT_MUTATE
+        if external_models_command == "credentials":
+            credentials_command = getattr(args, "credentials_command", None)
+            if credentials_command == "admit":
+                return EFFECT_MUTATE
+            if credentials_command == "status":
+                return EFFECT_READ
+        if (
+            external_models_command == "profile"
+            and getattr(args, "profile_command", None) == "codex-desktop"
+        ):
+            return EFFECT_READ
+        if (
+            external_models_command == "evidence"
+            and getattr(args, "evidence_command", None) == "capture"
+        ):
+            return EFFECT_MUTATE
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     paths = RuntimePaths.from_env()
+    command_effect = command_effect_from_args(args)
 
     try:
         if args.command == "healthcheck":
-            return emit_json(run_healthcheck(paths, args.model))
+            if args.repair:
+                return emit_json(
+                    run_healthcheck_repair(
+                        paths,
+                        args.model,
+                        dependencies=_healthcheck_repair_dependencies(),
+                    )
+                )
+            return emit_json(
+                run_healthcheck_probe(
+                    paths,
+                    args.model,
+                    dependencies=_health_probe_dependencies(),
+                )
+            )
         if args.command == "status":
             return emit_json(summarize_status(paths))
         if args.command == "invariant-check":
@@ -401,14 +2456,1073 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(
                 run_stable_target_switch_contract(paths, apply=bool(args.apply))
             )
+        if args.command == "rollback":
+            if args.apply:
+                return emit_json(run_rollback_latest_apply(paths))
+            return emit_json(run_rollback_latest_dry_run(paths))
         if args.command == "sync":
             return emit_json(run_sync(paths, args.model))
         if args.command == "launch" and args.launch_command == "smoke":
             return emit_json(run_launch_smoke(paths))
         if args.command == "launch" and args.launch_command == "client":
             return emit_json(run_launch_client(paths, args.client_path))
+        if (
+            args.command == "launch"
+            and args.launch_command == "custom-app-identity-repair"
+        ):
+            return emit_json(
+                build_custom_app_identity_repair_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    backup_dir=args.backup_dir,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "preflight":
+            return emit_json(
+                run_real_custom_dip_operator_preflight_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "work":
+            return emit_json(
+                run_real_custom_dip_operator_work_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "acceptance":
+            return emit_json(
+                run_real_custom_dip_operator_acceptance_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runs=args.runs,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "status":
+            return emit_json(
+                run_dip_operator_status_command(
+                    paths=paths,
+                    proof_file=args.proof_file,
+                    max_age_seconds=args.max_age_seconds,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "chain-join":
+            return emit_json(
+                run_dip_work_chain_join_command(
+                    status_file=args.status_file,
+                    work_file=args.work_file,
+                    runner_file=args.runner_file,
+                    max_status_age_seconds=args.max_status_age_seconds,
+                )
+            )
+        if args.command == "dip" and args.dip_command == "run":
+            return emit_json(
+                run_real_custom_dip_operator_run_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                    max_status_age_seconds=args.max_status_age_seconds,
+                )
+            )
         if args.command == "codex-runner" and args.codex_runner_command == "smoke":
             return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
+        if args.command == "codex-runner" and args.codex_runner_command == "admission":
+            return emit_json(
+                run_custom_codex_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "operator-proof"
+        ):
+            return emit_json(
+                run_repeatable_operator_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "real-custom-dip-proof"
+        ):
+            return emit_json(
+                run_real_custom_dip_proof_runner_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    run_mode=args.mode,
+                    api_backed_gate_required=bool(args.api_backed_gate),
+                    expected_alias=args.expected_alias,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    codex_hook_current_hash=args.codex_hook_current_hash,
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "gpt-api-dip-acceptance-gate"
+        ):
+            return emit_json(
+                run_gpt_api_dip_acceptance_gate_command(
+                    paths=paths,
+                    fresh_sealed_proof_file=args.fresh_sealed_proof_file,
+                    dip_feature_proof_file=args.dip_feature_proof_file,
+                    dip_action_proof_file=args.dip_action_proof_file,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "gpt-api-dip-product-ready-gate"
+        ):
+            return emit_json(
+                run_gpt_api_dip_product_ready_gate_command(
+                    paths=paths,
+                    acceptance_gate_file=args.acceptance_gate_file,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "e2e-mode-matrix"
+        ):
+            return emit_json(
+                run_e2e_mode_matrix_command(
+                    paths=paths,
+                    gpt_proof_file=args.gpt_proof_file,
+                    api_proof_file=args.api_proof_file,
+                    gpt_api_proof_file=args.gpt_api_proof_file,
+                    dip_ping_proof_file=args.dip_ping_proof_file,
+                    dip_repo_audit_dummy_proof_file=(
+                        args.dip_repo_audit_dummy_proof_file
+                    ),
+                    dip_repo_audit_wbp_proof_file=args.dip_repo_audit_wbp_proof_file,
+                    dip_code_edit_tests_dummy_proof_file=(
+                        args.dip_code_edit_tests_dummy_proof_file
+                    ),
+                    api_agent_direct_reply_proof_file=(
+                        args.api_agent_direct_reply_proof_file
+                    ),
+                    api_agent_custom_alias_proof_file=(
+                        args.api_agent_custom_alias_proof_file
+                    ),
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "repeatable-proof-status"
+        ):
+            return emit_json(
+                run_repeatable_proof_status_command(
+                    paths=paths,
+                    route_id=args.route,
+                    fresh_proof_file=args.fresh_proof_file,
+                    provider_expected_text=args.provider_expected_text,
+                    run_provider_preflight=args.run_provider_preflight,
+                    external_models_dir=args.external_models_dir,
+                    codex_hook_current_hash=args.codex_hook_current_hash or "",
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "working-flow-visible-source-proof"
+        ):
+            return emit_json(
+                run_working_flow_visible_source_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-live-e2e-proof"
+        ):
+            return emit_json(
+                run_fresh_live_custom_codex_e2e_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-sealed-e2e-proof"
+        ):
+            return emit_json(
+                run_fresh_sealed_e2e_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                    native_auto_launch_custom_codex=(
+                        args.native_auto_launch_custom_codex
+                    ),
+                    native_auto_launch_endpoint=args.native_auto_launch_endpoint,
+                    native_auto_launch_model=args.native_auto_launch_model,
+                    native_auto_launch_owner_authorization_phrase=(
+                        args.native_auto_launch_owner_authorization_phrase
+                    ),
+                    native_auto_launch_repo_root=args.native_auto_launch_repo_root,
+                    native_auto_launch_stable_runtime_generated_config_file=(
+                        args.native_auto_launch_stable_runtime_generated_config_file
+                    ),
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "fresh-router-ready-proof"
+        ):
+            return emit_json(
+                run_fresh_router_ready_proof_command(
+                    paths=paths,
+                    route_id=args.route,
+                    prompt_text=args.prompt,
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    codex_bin=args.codex_bin,
+                    codex_model=args.codex_model,
+                    proof_dir=args.proof_dir,
+                    codex_cwd=args.codex_cwd,
+                    expected_text=args.expected_text,
+                    sandbox=args.sandbox,
+                    timeout_seconds=args.timeout_seconds,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                    native_auto_launch_custom_codex=(
+                        args.native_auto_launch_custom_codex
+                    ),
+                    native_auto_launch_endpoint=args.native_auto_launch_endpoint,
+                    native_auto_launch_model=args.native_auto_launch_model,
+                    native_auto_launch_owner_authorization_phrase=(
+                        args.native_auto_launch_owner_authorization_phrase
+                    ),
+                    native_auto_launch_repo_root=args.native_auto_launch_repo_root,
+                    native_auto_launch_stable_runtime_generated_config_file=(
+                        args.native_auto_launch_stable_runtime_generated_config_file
+                    ),
+                    provider_expected_text=args.provider_expected_text,
+                    external_models_dir=args.external_models_dir,
+                    codex_hook_current_hash=args.codex_hook_current_hash or "",
+                    probe_codex_app_server=args.probe_codex_app_server,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "native-ui-observer-proof"
+        ):
+            return emit_json(
+                run_native_ui_observer_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    request_id=args.request_id,
+                    expected_text=args.expected_text,
+                    proof_dir=args.proof_dir,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                    auto_launch_custom_codex=args.auto_launch_custom_codex,
+                    auto_launch_endpoint=args.auto_launch_endpoint,
+                    auto_launch_model=args.auto_launch_model,
+                    auto_launch_owner_authorization_phrase=(
+                        args.auto_launch_owner_authorization_phrase
+                    ),
+                    auto_launch_repo_root=args.auto_launch_repo_root,
+                    auto_launch_stable_runtime_generated_config_file=(
+                        args.auto_launch_stable_runtime_generated_config_file
+                    ),
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "native-response-matrix"
+        ):
+            return emit_json(
+                run_native_response_matrix_command(
+                    paths=paths,
+                    proof_dir=args.proof_dir,
+                    matrix_id=args.matrix_id,
+                    request_prefix=args.request_prefix,
+                    expected_prefix=args.expected_prefix,
+                    persistent_profile_id=args.persistent_profile_id,
+                    persistent_profile_base_dir=args.persistent_profile_base_dir,
+                    observer_timeout_seconds=args.observer_timeout_seconds,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-preflight"
+        ):
+            return emit_json(
+                run_interactive_custom_codex_preflight_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-collect"
+        ):
+            return emit_json(
+                run_interactive_custom_codex_collect_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    preflight_packet_file=args.preflight_packet_file,
+                    proof_dir=args.proof_dir,
+                    expected_text=args.expected_text,
+                    live_provider_proof_file=args.live_provider_proof_file,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "interactive-working-flow-delivery"
+        ):
+            return emit_json(
+                run_interactive_codex_working_flow_delivery_command(
+                    interactive_proof_file=args.interactive_proof_file,
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    proof_dir=args.proof_dir,
+                    delivery_source_kind=args.delivery_source_kind,
+                )
+            )
+        if (
+            args.command == "codex-runner"
+            and args.codex_runner_command == "live-manual-gate-proof"
+        ):
+            return emit_json(
+                run_live_manual_gate_proof_command(
+                    paths=paths,
+                    interactive_working_flow_delivery_file=(
+                        args.interactive_working_flow_delivery_file
+                    ),
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "entry":
+            return emit_json(
+                run_router_hook_entry_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "dispatch":
+            return emit_json(
+                run_controlled_api_dispatch_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "auto-route":
+            with _stderr_progress_heartbeat(
+                enabled=args.progress_stderr,
+                label="auto-route",
+                interval_seconds=args.progress_stderr_interval,
+            ):
+                packet = run_api_agent_auto_router_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    active_project_root_arg=args.active_project_root,
+                    target_repo_arg=args.target_repo,
+                    repo_bridge_mode=args.repo_bridge,
+                    work_mode=args.work_mode,
+                    timeout_seconds=args.timeout_seconds,
+                    proof_dir=args.proof_dir,
+                )
+            return emit_json(packet)
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "auto-route-output"
+        ):
+            packet = run_api_agent_auto_router_command(
+                paths=paths,
+                prompt_text=_read_router_prompt_for_output(args),
+                runtime_context_file=args.runtime_context_file,
+                hook_surface_kind=args.hook_surface_kind,
+                active_project_root_arg=args.active_project_root,
+                target_repo_arg=args.target_repo,
+                repo_bridge_mode=args.repo_bridge,
+                work_mode=args.work_mode,
+                timeout_seconds=args.timeout_seconds,
+                proof_dir=args.proof_dir,
+            )
+            sys.stdout.write(_auto_route_visible_output(packet) + "\n")
+            return 0
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "direct-reply"
+        ):
+            with _stderr_progress_heartbeat(
+                enabled=args.progress_stderr,
+                label="direct-reply",
+                interval_seconds=args.progress_stderr_interval,
+            ):
+                packet = run_api_agent_direct_reply_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    active_project_root_arg=args.active_project_root,
+                    target_repo_arg=args.target_repo,
+                    repo_bridge_mode=args.repo_bridge,
+                    work_mode=args.work_mode,
+                    timeout_seconds=args.timeout_seconds,
+                    proof_dir=args.proof_dir,
+                )
+            return emit_json(packet)
+        if args.command == "router-hook" and args.router_hook_command == "handoff":
+            return emit_json(
+                run_approved_handoff_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    handoff_surface_kind=args.handoff_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "deliver":
+            return emit_json(
+                run_observed_machine_handoff_delivery_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                    delivery_surface_kind=args.delivery_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "ingress":
+            return emit_json(
+                run_custom_codex_ingress_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "dispatch-proof":
+            return emit_json(
+                run_controlled_ingress_api_dispatch_proof_command(
+                    paths=paths,
+                    ingress_proof_file=args.ingress_proof_file,
+                    prompt_text=args.prompt,
+                    runtime_context_file=args.runtime_context_file,
+                    hook_surface_kind=args.hook_surface_kind,
+                )
+            )
+        if args.command == "router-hook" and args.router_hook_command == "handoff-proof":
+            return emit_json(
+                run_controlled_dispatch_handoff_proof_command(
+                    dispatch_proof_file=args.dispatch_proof_file,
+                    handoff_surface_kind=args.handoff_surface_kind,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "transcript-observe"
+        ):
+            return emit_json(
+                run_codex_transcript_delivery_observation_command(
+                    handoff_proof_file=args.handoff_proof_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "assistant-continuation-proof"
+        ):
+            return emit_json(
+                run_codex_exec_assistant_continuation_proof_command(
+                    transcript_observation_file=args.transcript_observation_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "visible-source-observe"
+        ):
+            return emit_json(
+                run_custom_codex_approved_visible_source_observation_command(
+                    assistant_continuation_proof_file=(
+                        args.assistant_continuation_proof_file
+                    ),
+                    visible_source_kind=args.visible_source_kind,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "visible-source-binding-proof"
+        ):
+            return emit_json(
+                run_custom_codex_visible_source_binding_proof_command(
+                    paths=paths,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                    visible_source_kind=args.visible_source_kind,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-codex-ui-visibility-proof"
+        ):
+            return emit_json(
+                run_custom_codex_ui_visibility_proof_command(
+                    visible_source_binding_proof_file=(
+                        args.visible_source_binding_proof_file
+                    ),
+                    native_ui_observer_packet_file=(
+                        args.native_ui_observer_packet_file
+                    ),
+                    expected_visible_text=args.expected_visible_text,
+                    request_id=args.request_id,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-proof"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_proof_command(
+                    official_e2e_working_flow_proof_file=(
+                        args.official_e2e_working_flow_proof_file
+                    ),
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    proof_dir=args.proof_dir,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-proof-runner"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_proof_runner_command(
+                    real_custom_hook_proof_file=args.real_custom_hook_proof_file,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    custom_codex_ui_visibility_proof_file=(
+                        args.custom_codex_ui_visibility_proof_file
+                    ),
+                    proof_dir=args.proof_dir,
+                    freshness_anchor_digest=args.freshness_anchor_digest,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-admission"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_admission_command(
+                    proof_dir=args.proof_dir,
+                    expected_freshness_anchor_digest=(
+                        args.expected_freshness_anchor_digest
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "full-runtime-dispatch-admission-seal"
+        ):
+            return emit_json(
+                run_full_runtime_dispatch_admission_seal_command(
+                    proof_dir=args.proof_dir,
+                    expected_freshness_anchor_digest=(
+                        args.expected_freshness_anchor_digest
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-proof"
+        ):
+            return emit_json(
+                run_real_custom_codex_hook_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    live_provider_expected_text=args.live_provider_expected_text,
+                    live_provider_proof_file=args.live_provider_proof_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-ledger-proof"
+        ):
+            return emit_json(
+                run_real_user_prompt_submit_ledger_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "ledger-bound-dispatch-proof"
+        ):
+            return emit_json(
+                run_real_ledger_bound_api_dispatch_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-bound-dispatch-proof"
+        ):
+            return emit_json(
+                run_custom_origin_bound_api_dispatch_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    ledger_mtime_before_ns=args.ledger_mtime_before_ns,
+                    launch_surface=args.launch_surface,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    process_inventory_file=args.process_inventory_file,
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    custom_profile_dir=args.custom_profile_dir,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    custom_launcher_path=args.custom_launcher_path,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-bound-live-provider-join"
+        ):
+            return emit_json(
+                run_custom_origin_bound_live_provider_join_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    custom_origin_bound_dispatch_proof_file=(
+                        args.custom_origin_bound_dispatch_proof_file
+                    ),
+                    live_provider_proof_file=args.live_provider_proof_file,
+                    live_provider_expected_text=args.live_provider_expected_text,
+                    runtime_context_file=args.runtime_context_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-ledger-bound-dispatch-join"
+        ):
+            return emit_json(
+                run_official_mcp_ledger_bound_dispatch_join_command(
+                    official_mcp_case_file=args.official_mcp_case_file,
+                    ledger_bound_dispatch_proof_file=(
+                        args.ledger_bound_dispatch_proof_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "wbp-dip-hook-origin-proof"
+        ):
+            return emit_json(
+                run_wbp_dip_hook_origin_proof_command(
+                    prompt_text=args.prompt,
+                    expected_alias=args.expected_alias,
+                    ledger_proof_file=args.ledger_proof_file,
+                    wbp_dip_proof_file=args.wbp_dip_proof_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-handoff-source-proof"
+        ):
+            return emit_json(
+                run_official_mcp_handoff_source_proof_command(
+                    dispatch_join_file=args.dispatch_join_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-working-flow-handoff-source-proof"
+        ):
+            return emit_json(
+                run_official_mcp_working_flow_handoff_source_proof_command(
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-transcript-tool-result-observe"
+        ):
+            return emit_json(
+                run_official_mcp_transcript_tool_result_observation_command(
+                    handoff_source_file=args.handoff_source_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-assistant-continuation-observe"
+        ):
+            return emit_json(
+                run_official_mcp_assistant_continuation_observation_command(
+                    transcript_observation_file=args.transcript_observation_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-mcp-approved-codex-exec-source-observe"
+        ):
+            return emit_json(
+                run_official_mcp_approved_codex_exec_source_observation_command(
+                    assistant_continuation_observation_file=(
+                        args.assistant_continuation_observation_file
+                    ),
+                    approved_source_kind=args.approved_source_kind,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-delivery-candidate-join"
+        ):
+            return emit_json(
+                run_official_mcp_delivery_candidate_join_command(
+                    approved_exec_source_observation_file=(
+                        args.approved_exec_source_observation_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-mcp-working-flow-delivery-join"
+        ):
+            return emit_json(
+                run_official_mcp_working_flow_delivery_join_command(
+                    delivery_candidate_file=args.delivery_candidate_file,
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-e2e-working-flow-proof-join"
+        ):
+            return emit_json(
+                run_official_e2e_working_flow_proof_join_command(
+                    real_custom_hook_proof_file=args.real_custom_hook_proof_file,
+                    official_working_flow_delivery_join_file=(
+                        args.official_working_flow_delivery_join_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "official-e2e-working-flow-proof-runner"
+        ):
+            return emit_json(
+                run_official_e2e_working_flow_proof_runner_command(
+                    inputs_file=args.inputs_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command
+            == "official-e2e-fresh-working-flow-proof-runner"
+        ):
+            return emit_json(
+                run_official_e2e_fresh_working_flow_proof_runner_command(
+                    inputs_file=args.inputs_file,
+                    proof_output_dir=args.proof_output_dir,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-app-submit-ledger-proof"
+        ):
+            return emit_json(
+                run_real_custom_app_submit_ledger_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    ledger_mtime_before_ns=args.ledger_mtime_before_ns,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    process_inventory_file=args.process_inventory_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-ui-origin-admission"
+        ):
+            return emit_json(
+                run_custom_ui_origin_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    ledger_mtime_before_ns=args.ledger_mtime_before_ns,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    process_inventory_file=args.process_inventory_file,
+                    stock_app_path=args.stock_app_path,
+                    custom_app_path=args.custom_app_path,
+                    custom_profile_dir=args.custom_profile_dir,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    custom_launcher_path=args.custom_launcher_path,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "dispatch-admission"
+        ):
+            return emit_json(
+                run_native_free_chat_router_dispatch_admission_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_ledger_file=args.hook_ledger_file,
+                    runtime_context_file=args.runtime_context_file,
+                    handoff_file=args.handoff_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "handoff-working-flow-join"
+        ):
+            return emit_json(
+                run_handoff_to_working_flow_join_command(
+                    dispatch_admission_file=args.dispatch_admission_file,
+                    dispatch_handoff_file=args.dispatch_handoff_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "natural-free-chat-router-proof"
+        ):
+            return emit_json(
+                run_natural_free_chat_router_proof_command(
+                    paths=paths,
+                    prompt_text=args.prompt,
+                    hook_proof_file=args.hook_proof_file,
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                    runtime_context_file=args.runtime_context_file,
+                    entry_evidence_file=args.entry_evidence_file,
+                    handoff_working_flow_join_file=(
+                        args.handoff_working_flow_join_file
+                    ),
+                    codex_exec_exit_code=args.codex_exec_exit_code,
+                    codex_exec_stderr_file=args.codex_exec_stderr_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "working-flow-delivery-proof"
+        ):
+            return emit_json(
+                run_codex_working_flow_delivery_proof_command(
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    codex_exec_jsonl_file=args.codex_exec_jsonl_file,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-origin-proof"
+        ):
+            return emit_json(
+                run_custom_codex_hook_origin_proof_command(
+                    paths=paths,
+                    integrated_live_provider_proof_file=(
+                        args.integrated_live_provider_proof_file
+                    ),
+                    working_flow_delivery_proof_file=(
+                        args.working_flow_delivery_proof_file
+                    ),
+                    strict_sealed_evidence=bool(args.strict_sealed_evidence),
+                    integrated_live_provider_proof_seal_file=(
+                        args.integrated_live_provider_proof_seal_file
+                    ),
+                    working_flow_delivery_proof_seal_file=(
+                        args.working_flow_delivery_proof_seal_file
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "proof-seal-create"
+        ):
+            return emit_json(
+                run_proof_seal_create_command(
+                    packet_file=args.packet_file,
+                    seal_file=args.seal_file,
+                    producer_kind=args.producer_kind,
+                    producer_command_digest=args.producer_command_digest,
+                    producer_inputs_digest=args.producer_inputs_digest or "",
+                    input_packet_files=args.input_packet_file,
+                    runtime_context_digest=args.runtime_context_digest or "",
+                    hook_ledger_digest=args.hook_ledger_digest or "",
+                    profile_hook_config_digest=(
+                        args.profile_hook_config_digest or ""
+                    ),
+                    git_commit_sha=args.git_commit_sha or "",
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "proof-seal-verify"
+        ):
+            return emit_json(
+                run_proof_seal_verify_command(
+                    packet_file=args.packet_file,
+                    seal_file=args.seal_file,
+                    expected_packet_kind=args.expected_packet_kind or "",
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-install"
+        ):
+            return emit_json(
+                build_user_prompt_submit_install_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-readiness"
+        ):
+            return emit_json(
+                build_user_prompt_submit_readiness_packet(
+                    paths=paths,
+                    probe_codex_app_server=True,
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "custom-codex-auth-session-readiness"
+        ):
+            return emit_json(
+                run_custom_codex_auth_session_readiness_command(
+                    paths=paths,
+                    custom_user_data_dir=args.custom_user_data_dir,
+                    process_inventory_file=args.process_inventory_file,
+                    probe_hook_readiness=not bool(args.skip_hook_readiness_probe),
+                    probe_account_app_server=not bool(
+                        args.skip_account_app_server_probe
+                    ),
+                )
+            )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "user-prompt-submit-trust-repair"
+        ):
+            return emit_json(
+                build_user_prompt_submit_trust_repair_packet(
+                    paths=paths,
+                    apply=bool(args.apply),
+                    probe_codex_app_server=True,
+                )
+            )
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
@@ -425,7 +3539,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "accounts" and args.accounts_command == "demote":
             return emit_json(run_demote(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "hold":
-            return emit_json(run_hold(paths, args.id, args.reason))
+            return emit_json(run_hold(paths, args.id, args.reason, dry_run=args.dry_run))
         if args.command == "accounts" and args.accounts_command == "release":
             return emit_json(run_release(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "retire":
@@ -562,15 +3676,32 @@ def main(argv: list[str] | None = None) -> int:
             operator_action="user_action",
         )
     except RuntimeErrorInfo as exc:
+        next_action = str(getattr(exc, "next_action", exc.operator_action))
+        operator_action = (
+            exc.operator_action
+            if exc.operator_action in command_packets.COMMAND_OPERATOR_ACTION_VALUES
+            else "user_action"
+        )
         payload = {
             "status": "error",
             "exit_code": exc.exit_code,
             "human_message": exc.message,
             "machine_error_code": exc.machine_error_code,
             "changed_files": [],
-            "next_action": exc.operator_action,
+            "next_action": next_action,
             "liveness": "unknown",
             "severity": exc.severity,
-            "operator_action": exc.operator_action,
+            "operator_action": operator_action,
         }
+        if command_effect is not None:
+            payload["effect"] = command_effect
+        if (
+            args.command == "accounts"
+            and getattr(args, "accounts_command", None) == "promote"
+        ):
+            payload["mutation_id"] = None
         return emit_json(payload)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

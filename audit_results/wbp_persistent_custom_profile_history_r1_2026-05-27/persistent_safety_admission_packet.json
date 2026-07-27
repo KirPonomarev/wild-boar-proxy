@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-27T02:52:07.270601Z",
-  "counts_as_history_proof": false,
-  "fresh_live_admission_required_before_native_launch": true,
-  "inspection_only": true,
-  "native_launch_attempted": false,
-  "packet_kind": "persistent_safety_admission",
-  "status": "ok"
-}

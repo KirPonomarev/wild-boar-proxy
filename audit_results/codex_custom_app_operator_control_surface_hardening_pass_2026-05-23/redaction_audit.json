@@ -1,9 +1,0 @@
-{
-  "captured_at_utc": "2026-05-23T16:07:53.803737Z",
-  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_HARDENING_PASS",
-  "files_scanned": 16,
-  "findings": [],
-  "passed": true,
-  "screenshot_binary_scanned_as_text": false,
-  "secret_value_recorded": false
-}

@@ -25,7 +25,7 @@ from wild_boar_proxy.codex_custom_sessions import (  # noqa: E402
 )
 
 
-PRIMARY_MODEL_ID = "gpt-5.3-codex"
+PRIMARY_MODEL_ID = "gpt-5.5"
 API_MODEL_ID = "wbp-web-primary-openrouter"
 
 

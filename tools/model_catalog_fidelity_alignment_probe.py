@@ -26,7 +26,7 @@ from wild_boar_proxy.model_availability import (
 TARGET_STATUS = "WBP_MODEL_CATALOG_FIDELITY_AND_AVAILABILITY_ALIGNED_R2"
 CURRENT_OPERATOR_MODEL_IDS = [
     "gpt-5.2",
-    "gpt-5.3-codex",
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.5",
@@ -35,7 +35,7 @@ CURRENT_OPERATOR_MODEL_IDS = [
     "wbp-web-primary-openrouter",
 ]
 CURRENT_LIVE_NATIVE_MODEL_IDS = [
-    "gpt-5.3-codex",
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.5",
@@ -122,7 +122,7 @@ def historical_external_route_packets() -> list[dict[str, Any]]:
 def out_of_catalog_negative_packets() -> list[dict[str, Any]]:
     return [
         build_model_direct_preflight_packet(
-            model_id="gpt-5.3-codex-spark",
+            model_id="gpt-5.5-spark",
             source="fresh_out_of_catalog_negative_anchor",
             listed=False,
             selectable=False,
@@ -253,7 +253,7 @@ def build_alignment_packets() -> dict[str, dict[str, Any]]:
             "all_listed_models_equally_usable_claimed": False,
             "all_models_work_claimed": False,
             "spark_reintroduced_into_current_catalog": any(
-                model.get("model_id") == "gpt-5.3-codex-spark"
+                model.get("model_id") == "gpt-5.5-spark"
                 for model in aligned_catalog_packet.get("models", [])
                 if isinstance(model, dict)
             ),

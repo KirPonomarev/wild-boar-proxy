@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from wild_boar_proxy.command_effects import EFFECT_MUTATE, EFFECT_PROBE, EFFECT_READ
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
@@ -22,13 +23,58 @@ from .validate import (
 )
 
 
+def _command_effect_for_args(args: Any) -> str | None:
+    external_models_command = getattr(args, "external_models_command", None)
+    if external_models_command in {"start", "stop"}:
+        return EFFECT_MUTATE
+    if external_models_command in {"status", "models"}:
+        return EFFECT_READ
+    if external_models_command == "check":
+        return EFFECT_MUTATE
+    if external_models_command == "live-format-check":
+        return EFFECT_PROBE
+    if external_models_command == "routes":
+        routes_command = getattr(args, "routes_command", None)
+        if routes_command in {"add", "update", "remove", "enable", "disable"}:
+            return EFFECT_MUTATE
+        if routes_command == "list":
+            return EFFECT_READ
+        if routes_command == "validate":
+            return EFFECT_MUTATE
+    if external_models_command == "credentials":
+        credentials_command = getattr(args, "credentials_command", "")
+        if credentials_command == "admit":
+            return EFFECT_MUTATE
+        if credentials_command == "status":
+            return EFFECT_READ
+    if (
+        external_models_command == "profile"
+        and getattr(args, "profile_command", None) == "codex-desktop"
+    ):
+        return EFFECT_READ
+    if (
+        external_models_command == "evidence"
+        and getattr(args, "evidence_command", None) == "capture"
+    ):
+        return EFFECT_MUTATE
+    return None
+
+
+def _build_external_models_payload_for_args(args: Any, **payload_kwargs: Any) -> dict[str, Any]:
+    effect = _command_effect_for_args(args)
+    if effect is not None and "effect" not in payload_kwargs:
+        payload_kwargs["effect"] = effect
+    return contracts.build_external_models_payload(**payload_kwargs)
+
+
 def run_external_models_command(args: Any) -> dict[str, Any]:
     try:
         paths = ExternalModelsPaths.from_env()
         if args.external_models_command == "start":
             state_payload, changed_files, token_created = start_synthetic_adapter(paths)
             if not changed_files:
-                return contracts.build_external_models_payload(
+                return _build_external_models_payload_for_args(
+                    args,
                     ok=True,
                     human_message="External-models synthetic adapter already started.",
                     machine_error_code=errors.ALREADY_RUNNING,
@@ -39,7 +85,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                         "token_created": False,
                     },
                 )
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models synthetic adapter started without claiming listener truth.",
                 machine_error_code=errors.OK,
@@ -54,7 +101,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
         if args.external_models_command == "stop":
             state_payload, changed_files = stop_synthetic_adapter(paths)
             if not changed_files:
-                return contracts.build_external_models_payload(
+                return _build_external_models_payload_for_args(
+                    args,
                     ok=True,
                     human_message="External-models synthetic adapter already stopped.",
                     machine_error_code=errors.OK,
@@ -64,7 +112,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                         "runtime_claim_blocked": True,
                     },
                 )
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models synthetic adapter stopped without touching any live listener.",
                 machine_error_code=errors.OK,
@@ -76,7 +125,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                 },
             )
         if args.external_models_command == "status":
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models synthetic lifecycle status collected without live runtime claims.",
                 machine_error_code=errors.OK,
@@ -84,7 +134,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             )
         if args.external_models_command == "models":
             models = routes.models_listing(paths)
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models route models listed from local registry.",
                 machine_error_code=errors.OK,
@@ -98,7 +149,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             )
         if args.external_models_command == "check":
             data, changed_files = check_route_provider(paths, args.route)
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models route smoke check captured provider evidence without claiming runtime readiness.",
                 machine_error_code=errors.OK,
@@ -112,7 +164,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                 user_prompt=args.prompt,
                 expected_text=args.expected_text,
             )
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="External-models route live format check captured one provider response without writing state or evidence.",
                 machine_error_code=errors.OK,
@@ -125,7 +178,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             return _run_credentials_command(paths, args)
         if args.external_models_command == "profile" and args.profile_command == "codex-desktop":
             data = routes.profile_packet(paths, args.route)
-            return contracts.build_external_models_payload(
+            return _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="Codex Desktop profile contract generated without mutating config.",
                 machine_error_code=errors.OK,
@@ -134,7 +188,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
         if args.external_models_command == "evidence" and args.evidence_command == "capture":
             route = routes.find_route(routes.load_routes_file(paths.routes_file), args.route)
             ensure_secrets_permissions(paths.secrets_file)
-            packet = contracts.build_external_models_payload(
+            packet = _build_external_models_payload_for_args(
+                args,
                 ok=True,
                 human_message="Local external-models evidence captured from foundation contract.",
                 machine_error_code=errors.OK,
@@ -159,10 +214,11 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             human_message=exc.message,
             machine_error_code=exc.machine_error_code,
             changed_files=getattr(exc, "changed_files", []),
-            next_action=exc.operator_action,
+            next_action=str(getattr(exc, "next_action", exc.operator_action)),
             severity=exc.severity,
             liveness="unknown",
             exit_code=exc.exit_code,
+            effect=_command_effect_for_args(args),
             data=getattr(exc, "data", {}),
         )
 
@@ -172,7 +228,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
     if action == "add":
         route = routes.load_route_input(file_path=args.file, use_stdin=args.stdin)
         changed_files = routes.add_route(paths, route)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message=f"External-models route added: {route['route_id']}.",
             machine_error_code=errors.OK,
@@ -182,7 +239,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
     if action == "update":
         route = routes.load_route_input(file_path=args.file, use_stdin=args.stdin)
         changed_files = routes.update_route(paths, args.route, route)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message=f"External-models route updated: {args.route}.",
             machine_error_code=errors.OK,
@@ -191,7 +249,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     if action == "remove":
         changed_files = routes.remove_route(paths, args.route)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message=f"External-models route removed: {args.route}.",
             machine_error_code=errors.OK,
@@ -200,7 +259,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     if action == "list":
         listed = routes.list_routes(paths)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message="External-models routes listed from local registry.",
             machine_error_code=errors.OK,
@@ -208,7 +268,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     if action == "enable":
         changed_files = routes.set_route_enabled(paths, args.route, True)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message=f"External-models route enabled: {args.route}.",
             machine_error_code=errors.OK,
@@ -217,7 +278,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     if action == "disable":
         changed_files = routes.set_route_enabled(paths, args.route, False)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message=f"External-models route disabled: {args.route}.",
             machine_error_code=errors.OK,
@@ -226,7 +288,8 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     if action == "validate":
         data, changed_files = validate_route_provider(paths, args.route)
-        return contracts.build_external_models_payload(
+        return _build_external_models_payload_for_args(
+            args,
             ok=True,
             human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
             machine_error_code=errors.OK,
@@ -264,6 +327,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
                 next_action="owner_action",
                 severity=exc.severity,
                 exit_code=exc.exit_code,
+                effect=EFFECT_MUTATE,
                 data={"credential_result": credential_result},
             )
         return contracts.build_external_models_payload(
@@ -272,6 +336,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
             machine_error_code=errors.OK,
             changed_files=changed_files,
             next_action="api_route_connect",
+            effect=EFFECT_MUTATE,
             data={"credential_result": credential_result},
         )
     if action == "status":
@@ -279,6 +344,7 @@ def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str,
             ok=True,
             human_message="External-models credential status collected from sandbox owner paths.",
             machine_error_code=errors.OK,
+            effect=EFFECT_READ,
             data={"credential_result": credential_status(paths, provider=args.provider)},
         )
     raise RuntimeErrorInfo(

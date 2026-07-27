@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-26T03:15:00Z",
-  "direct_api_openai_egress_detected": false,
-  "egress_observation_method": "codex error url inspection",
-  "observed_url": "http://127.0.0.1:8318/v1/responses",
-  "api_openai_com_not_observed": true,
-  "evidence": "Codex CLI error message explicitly shows request destination as http://127.0.0.1:8318/v1/responses, not api.openai.com"
-}

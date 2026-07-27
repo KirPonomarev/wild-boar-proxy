@@ -244,8 +244,9 @@ Current canonical `activation_outcome` values:
 
 Deterministic stable recovery may refresh this same snapshot topic through the
 serialized runtime-state mutation path.
-The current recovery owner path in `healthcheck --json` reuses this snapshot
-surface and does not require a separate persisted recovery snapshot by default.
+The current recovery owner path in `healthcheck --repair --json` reuses this
+snapshot surface and does not require a separate persisted recovery snapshot by
+default.
 `stable_service_disabled` entry-lane classification remains command-packet truth
 by default and does not widen this snapshot schema or introduce a separate
 persisted recovery metadata file.

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tools.persistent_custom_profile_history_r2b_probe as persistent_r2b_probe
 import wild_boar_proxy.native_filesystem_probe as native_fs_probe
+from wild_boar_proxy.runtime import repo_managed_default_launcher_recognized
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
@@ -247,6 +248,37 @@ from tools.persistent_custom_profile_backup_repair_r1_probe import (
 
 
 class NativeFilesystemProbeTests(unittest.TestCase):
+    def test_process_inventory_distinguishes_official_chatgpt_custom_instance(self) -> None:
+        custom_user_data_dir = (
+            "/Users/k/Library/Application Support/WildBoarProxy/"
+            "CodexProfiles/wbp-custom-main/electron-user-data"
+        )
+        default_user_data_dir = "/Users/k/Library/Application Support/Codex"
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                " 101 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n"
+                f" 102 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT --user-data-dir={custom_user_data_dir}\n"
+                f" 103 /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Helpers/Codex (Renderer) --user-data-dir={custom_user_data_dir}\n"
+                f" 104 /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Helpers/Codex (Renderer) --user-data-dir={default_user_data_dir}\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=custom_user_data_dir,
+                default_user_data_dir=default_user_data_dir,
+            )
+
+        self.assertEqual(inventory["custom_process_count"], 2)
+        self.assertEqual(inventory["default_process_count"], 1)
+        self.assertEqual(inventory["root_app_pids"], [101, 102])
+        self.assertIn("ChatGPT.app/Contents/MacOS/ChatGPT", inventory["custom_process_lines"][0])
+
     def test_codex_process_inventory_uses_ps_command_lines_with_spaced_user_data_dir(self) -> None:
         completed = subprocess.CompletedProcess(
             args=["ps"],
@@ -265,9 +297,71 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         ) as run:
             lines = native_fs_probe._collect_codex_process_lines()
 
-        self.assertEqual(run.call_args.args[0], ["ps", "-axo", "pid=,command="])
+        self.assertEqual(run.call_args.args[0], ["ps", "axww", "-o", "pid=,command="])
         self.assertEqual(len(lines), 3)
         self.assertIn("wbp-custom-main/electron-user-data", lines[0])
+
+    def test_codex_process_inventory_keeps_helper_user_data_lines(self) -> None:
+        custom_user_data_dir = "/Users/k/Library/Application Support/Codex WBP Clean"
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                " 101 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex\n"
+                " 102 /Users/k/Applications/Codex WBP Clean.app/Contents/Resources/codex app-server --analytics-default-enabled\n"
+                " 103 /Users/k/Applications/Codex WBP Clean.app/Contents/Frameworks/Codex Framework.framework/Versions/149.0.7827.115/Helpers/Codex (Renderer).app/Contents/MacOS/Codex (Renderer) --type=renderer --user-data-dir=/Users/k/Library/Application Support/Codex WBP Clean\n"
+                " 104 /Applications/Codex.app/Contents/MacOS/Codex\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=custom_user_data_dir,
+            )
+
+        self.assertEqual(inventory["line_count"], 4)
+        self.assertEqual(inventory["custom_process_count"], 2)
+        self.assertEqual(inventory["default_process_count"], 0)
+        self.assertTrue(
+            any("--user-data-dir=" in line for line in inventory["custom_process_lines"])
+        )
+        self.assertTrue(
+            any(
+                "Codex WBP Clean.app/Contents/MacOS/Codex" in line
+                for line in inventory["custom_process_lines"]
+            )
+        )
+
+    def test_codex_process_inventory_accepts_installed_custom_app_user_data_alias(self) -> None:
+        profile_user_data_dir = (
+            "/Users/k/Library/Application Support/WildBoarProxy/"
+            "CodexProfiles/wbp-custom-main/electron-user-data"
+        )
+        installed_user_data_dir = native_fs_probe.DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR
+        completed = subprocess.CompletedProcess(
+            args=["ps"],
+            returncode=0,
+            stdout=(
+                f" 101 /Users/k/Applications/Codex WBP Clean.app/Contents/MacOS/Codex --user-data-dir={installed_user_data_dir}\n"
+                " 102 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/Users/k/Library/Application Support/Codex\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe.subprocess.run",
+            return_value=completed,
+        ):
+            inventory = native_fs_probe.collect_codex_process_inventory(
+                custom_user_data_dir=profile_user_data_dir,
+                default_user_data_dir="/Users/k/Library/Application Support/Codex",
+            )
+
+        self.assertEqual(inventory["custom_process_count"], 1)
+        self.assertEqual(inventory["default_process_count"], 1)
+        self.assertIn("Codex WBP Clean", inventory["custom_process_lines"][0])
 
     def test_remove_tree_with_retry_unlinks_runtime_tmp_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -301,7 +395,7 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertIn("requires_openai_auth = false", config)
         self.assertNotIn("experimental_bearer_token", config)
 
-    def test_provider_config_bearer_branch_is_explicit_auth_surface(self) -> None:
+    def test_provider_config_prefers_auth_command_when_cli_proxy_key_exists(self) -> None:
         with mock.patch(
             "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
             return_value="fixture-token",
@@ -312,10 +406,30 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
             )
 
-        self.assertIn('experimental_bearer_token = "fixture-token"', config)
-        self.assertNotIn("[model_providers.wbp.auth]", config)
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertNotIn("experimental_bearer_token", config)
+        self.assertNotIn("fixture-token", config)
         self.assertIn('wire_api = "responses"', config)
         self.assertIn('sandbox_mode = "workspace-write"', config)
+
+    def test_provider_config_never_embeds_explicit_local_token(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
+            return_value="stale-cli-token",
+        ):
+            config = build_provider_config(
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.4-mini",
+                auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
+                local_token="fresh-local-token",
+            )
+
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertNotIn("experimental_bearer_token", config)
+        self.assertNotIn("fresh-local-token", config)
+        self.assertNotIn("stale-cli-token", config)
 
     def test_provider_config_rejects_unadmitted_sandbox_mode(self) -> None:
         with self.assertRaises(ValueError):
@@ -3277,6 +3391,20 @@ class NativeFilesystemProbeTests(unittest.TestCase):
     def test_owner_execution_probe_entrypoint_no_evidence_blocks(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         tool = repo_root / "tools" / "native_custom_owner_external_terminal_execution_probe.py"
+        # Derive the canonical quiescent-safety-retry command from repo_root so
+        # the test is path-agnostic and passes in any worktree (primary, plan,
+        # or CI clone), matching the probe's runtime-derived expected command.
+        root_str = str(repo_root)
+        evidence_dir_name = (
+            "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
+        )
+        external_evidence_dir = f"{root_str}/audit_results/{evidence_dir_name}"
+        shell_command = (
+            f"cd {root_str} && python3 "
+            f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py "
+            f"--repo-root {root_str} "
+            f"--evidence-dir {external_evidence_dir}"
+        )
         with tempfile.TemporaryDirectory(
             dir=repo_root / "audit_results",
             prefix="owner_execution_test_",
@@ -3286,32 +3414,22 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             command = {
                 "argv": [
                     "python3",
-                    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py",
+                    f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py",
                     "--repo-root",
-                    "/Volumes/Work/wild-boar-proxy",
+                    root_str,
                     "--evidence-dir",
-                    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+                    external_evidence_dir,
                 ],
                 "command_executed": False,
-                "cwd": "/Volumes/Work/wild-boar-proxy",
-                "evidence_dir": (
-                    "/Volumes/Work/wild-boar-proxy/audit_results/"
-                    "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
-                ),
+                "cwd": root_str,
+                "evidence_dir": external_evidence_dir,
                 "external_result_imported": False,
                 "native_launch_attempted_from_current_thread": False,
                 "packet_kind": "external_detached_command",
-                "shell_command": (
-                "cd /Volumes/Work/wild-boar-proxy && python3 "
-                "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py "
-                "--repo-root /Volumes/Work/wild-boar-proxy "
-                "--evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/"
-                "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
-                ),
+                "shell_command": shell_command,
                 "status": "ok",
                 "target_tool": (
-                    "/Volumes/Work/wild-boar-proxy/tools/"
-                    "native_custom_quiescent_safety_retry_probe.py"
+                    f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py"
                 ),
             }
             handoff_packet.write_text(json.dumps(command), encoding="utf-8")
@@ -4530,6 +4648,335 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(env["WBP_STABLE_CONFIG"], str(runtime_paths.stable_config))
         self.assertEqual(env["WBP_RUNTIME_TMPDIR"], str(layout.tmp_root / "runtime-bind"))
         self.assertEqual(env["WBP_PYTHON_BIN"], sys.executable)
+        self.assertEqual(
+            env["WBP_ACTIVE_PROJECT_ROOT"],
+            str(root.resolve(strict=False)),
+        )
+
+    def test_materialize_probe_profile_writes_agent_runtime_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            mirror_context_path = root / "owner-profile" / "wbp-agent-runtime-context.json"
+            context = {
+                "packet_kind": "codex_custom_native_agent_runtime_context",
+                "primary_aliases": ["Codex", "Agent 1"],
+                "coding_aliases": ["DIP", "Agent 2"],
+                "api_model_id": "wbp-deepseek-chat",
+                "allowed_api_route_ids": ["wbp-deepseek-chat"],
+                "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+                "deepseek_live_format_check_bridge": {
+                    "url_candidates": [
+                        "http://127.0.0.1:50555/v1/responses",
+                        "http://localhost:50555/v1/responses",
+                    ],
+                    "curl_no_proxy_required": True,
+                },
+                "deepseek_live_format_check_file_bridge": {
+                    "request_dir": str(root / "file-bridge" / "requests"),
+                    "response_dir": str(root / "file-bridge" / "responses"),
+                    "preferred_when_socket_connect_fails_with_errno_1": True,
+                },
+                "deepseek_live_format_check_cli_command": [
+                    sys.executable,
+                    "-m",
+                    "wild_boar_proxy.cli",
+                    "external-models",
+                    "live-format-check",
+                    "--route",
+                    "wbp-deepseek-chat",
+                    "--json",
+                ],
+                "secret_value_exposed": False,
+            }
+
+            packet = native_fs_probe.materialize_probe_profile(
+                layout=layout,
+                endpoint="http://127.0.0.1:8788/v1",
+                model="gpt-5.5",
+                auth_command_path=root / "auth.py",
+                local_token="local-token",
+                agent_runtime_context=context,
+                extra_agent_runtime_context_paths=[mirror_context_path],
+            )
+
+            context_path = layout.profile_dir / "wbp-agent-runtime-context.json"
+            written = json.loads(context_path.read_text(encoding="utf-8"))
+            mirror_written = json.loads(mirror_context_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(packet["agent_runtime_context_written"])
+        self.assertEqual(packet["agent_runtime_context_extra_write_count"], 1)
+        self.assertTrue(packet["native_alias_context_written"])
+        self.assertTrue(packet["context_file_present"])
+        self.assertTrue(packet["context_file_sha256_present"])
+        self.assertEqual(
+            packet["agent_runtime_context_profile_relative_path"],
+            "wbp-agent-runtime-context.json",
+        )
+        self.assertEqual(written["api_model_id"], "wbp-deepseek-chat")
+        self.assertEqual(mirror_written, written)
+        self.assertEqual(written["coding_aliases"], ["DIP", "Agent 2"])
+        self.assertEqual(written["forbidden_stale_route_ids"], ["wbp-deepseek-v3"])
+        self.assertTrue(
+            written["deepseek_live_format_check_bridge"]["curl_no_proxy_required"]
+        )
+        self.assertIn(
+            "http://localhost:50555/v1/responses",
+            written["deepseek_live_format_check_bridge"]["url_candidates"],
+        )
+        self.assertTrue(
+            written["deepseek_live_format_check_file_bridge"][
+                "preferred_when_socket_connect_fails_with_errno_1"
+            ]
+        )
+        self.assertTrue(
+            written["deepseek_live_format_check_file_bridge"]["request_dir"].endswith(
+                "/file-bridge/requests"
+            )
+        )
+        self.assertEqual(
+            written["deepseek_live_format_check_cli_command"][1:],
+            [
+                "-m",
+                "wild_boar_proxy.cli",
+                "external-models",
+                "live-format-check",
+                "--route",
+                "wbp-deepseek-chat",
+                "--json",
+            ],
+        )
+        self.assertNotIn("secret_ref", written)
+        self.assertNotIn("local-token", json.dumps(written))
+        self.assertEqual(len(packet["agent_runtime_context_sha256"]), 64)
+
+    def test_materialize_probe_profile_preserves_hook_trust_sections_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            layout.profile_dir.mkdir(parents=True, exist_ok=True)
+            trust_key = f"{layout.profile_dir / 'hooks.json'}:user_prompt_submit:0:0"
+            (layout.profile_dir / "config.toml").write_text(
+                'model = "old-model"\n'
+                'experimental_bearer_token = "must-not-survive"\n\n'
+                "[hooks]\n"
+                "enabled = true\n\n"
+                "[hooks.state."
+                + json.dumps(trust_key)
+                + "]\n"
+                'trusted_hash = "sha256:'
+                + ("1" * 64)
+                + '"\n\n'
+                "[model_providers.old.auth]\n"
+                'command = "must-not-survive"\n',
+                encoding="utf-8",
+            )
+
+            packet = native_fs_probe.materialize_probe_profile(
+                layout=layout,
+                endpoint="http://127.0.0.1:8788/v1",
+                model="gpt-5.5",
+                auth_command_path=root / "auth.py",
+                local_token="local-token",
+            )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            auth_wrapper = (
+                layout.profile_dir / "managed" / "bin" / "wbp-codex-auth-command"
+            )
+            auth_wrapper_text = auth_wrapper.read_text(encoding="utf-8")
+            stable_config = (
+                layout.profile_dir / "managed" / "stable-runtime-config.generated.yaml"
+            )
+            auth_wrapper_is_file = auth_wrapper.is_file()
+            auth_wrapper_is_executable = os.access(auth_wrapper, os.X_OK)
+            stable_config_is_file = stable_config.is_file()
+            stable_config_text = stable_config.read_text(encoding="utf-8")
+
+        self.assertTrue(packet["hooks_config_sections_preserved"])
+        self.assertTrue(packet["auth_command_wrapper_written"])
+        self.assertTrue(packet["stable_runtime_token_config_written"])
+        self.assertTrue(packet["config_uses_auth_command"])
+        self.assertFalse(packet["config_uses_experimental_bearer_token"])
+        self.assertEqual(
+            packet["hooks_config_preservation_scope"],
+            "top_level_hooks_toml_tables_only",
+        )
+        self.assertIn("[hooks]", config_text)
+        self.assertIn("[hooks.state.", config_text)
+        self.assertIn('trusted_hash = "sha256:' + ("1" * 64) + '"', config_text)
+        self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertIn("[model_providers.wbp.auth]", config_text)
+        self.assertIn(str(auth_wrapper), config_text)
+        self.assertTrue(auth_wrapper_is_file)
+        self.assertTrue(auth_wrapper_is_executable)
+        self.assertIn("export WBP_STABLE_CONFIG=", auth_wrapper_text)
+        self.assertIn(".codex-custom-cli/managed/stable-runtime-config.generated.yaml", auth_wrapper_text)
+        self.assertTrue(stable_config_is_file)
+        self.assertIn("local-token", stable_config_text)
+        self.assertNotIn("old-model", config_text)
+        self.assertNotIn("must-not-survive", config_text)
+        self.assertNotIn("local-token", config_text)
+        self.assertNotIn("experimental_bearer_token", config_text)
+
+    def test_materialize_probe_profile_validates_model_before_writing_config(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4"}]}
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            with mock.patch(
+                "wild_boar_proxy.native_filesystem_probe.urllib.request.urlopen",
+                return_value=response,
+            ) as urlopen:
+                packet = native_fs_probe.materialize_probe_profile(
+                    layout=layout,
+                    endpoint="http://127.0.0.1:8788/v1",
+                    model="gpt-5.5",
+                    auth_command_path=root / "auth.py",
+                    local_token="local-token",
+                    validate_model_against_endpoint=True,
+                )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            launcher_recognized = repo_managed_default_launcher_recognized(
+                layout.launcher_path
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["configured_model_validation_attempted"])
+        self.assertTrue(packet["configured_model_available"])
+        self.assertTrue(packet["model_config_written"])
+        self.assertTrue(packet["auth_command_wrapper_written"])
+        self.assertTrue(packet["stable_runtime_token_config_written"])
+        self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertIn("[model_providers.wbp.auth]", config_text)
+        self.assertNotIn("experimental_bearer_token", config_text)
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 3.0)
+        self.assertTrue(launcher_recognized)
+
+    def test_materialize_probe_profile_blocks_unadvertised_model_without_config_write(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4-mini"}]}
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            with mock.patch(
+                "wild_boar_proxy.native_filesystem_probe.urllib.request.urlopen",
+                return_value=response,
+            ):
+                packet = native_fs_probe.materialize_probe_profile(
+                    layout=layout,
+                    endpoint="http://127.0.0.1:8788/v1",
+                    model="not-server-issued",
+                    auth_command_path=root / "auth.py",
+                    local_token="local-token",
+                    validate_model_against_endpoint=True,
+                )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT",
+        )
+        self.assertFalse(packet["configured_model_available"])
+        self.assertFalse(packet["model_config_written"])
+        self.assertFalse((layout.profile_dir / "config.toml").exists())
+        self.assertNotIn("local-token", json.dumps(packet, sort_keys=True))
+
+    def test_materialize_probe_profile_repairs_stale_native_model_to_advertised_default(
+        self,
+    ) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"data": [{"id": "gpt-5.5"}, {"id": "gpt-5.4-mini"}]}
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            with mock.patch(
+                "wild_boar_proxy.native_filesystem_probe.urllib.request.urlopen",
+                return_value=response,
+            ):
+                packet = native_fs_probe.materialize_probe_profile(
+                    layout=layout,
+                    endpoint="http://127.0.0.1:8788/v1",
+                    model="gpt-5.3-codex",
+                    auth_command_path=root / "auth.py",
+                    local_token="local-token",
+                    validate_model_against_endpoint=True,
+                )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+            launcher_recognized = repo_managed_default_launcher_recognized(
+                layout.launcher_path
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["configured_model_auto_repaired"])
+        self.assertTrue(packet["configured_model_stale"])
+        self.assertEqual(packet["requested_configured_model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["effective_configured_model_id"], "gpt-5.5")
+        self.assertTrue(packet["model_config_written"])
+        self.assertIn('model = "gpt-5.5"', config_text)
+        self.assertNotIn('model = "gpt-5.3-codex"', config_text)
+        self.assertTrue(launcher_recognized)
+
+    def test_materialize_probe_profile_repairs_default_after_catalog_drift(
+        self,
+    ) -> None:
+        response = mock.MagicMock()
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=None)
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"data": [{"id": "gpt-5.6-sol"}, {"id": "wbp-deepseek-chat"}]}
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            layout = native_fs_probe.create_native_probe_layout(root)
+            with mock.patch(
+                "wild_boar_proxy.native_filesystem_probe.urllib.request.urlopen",
+                return_value=response,
+            ):
+                packet = native_fs_probe.materialize_probe_profile(
+                    layout=layout,
+                    endpoint="http://127.0.0.1:8788/v1",
+                    model="gpt-5.5",
+                    auth_command_path=root / "auth.py",
+                    local_token="local-token",
+                    validate_model_against_endpoint=True,
+                )
+            config_text = (layout.profile_dir / "config.toml").read_text(
+                encoding="utf-8"
+            )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["configured_model_catalog_drift"])
+        self.assertTrue(packet["configured_model_auto_repaired"])
+        self.assertEqual(packet["requested_configured_model_id"], "gpt-5.5")
+        self.assertEqual(packet["effective_configured_model_id"], "gpt-5.6-sol")
+        self.assertIn('model = "gpt-5.6-sol"', config_text)
+        self.assertNotIn('model = "gpt-5.5"', config_text)
 
     def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
         packet = classify_external_detached_context_outcome(

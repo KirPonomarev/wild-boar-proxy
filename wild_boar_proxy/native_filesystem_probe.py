@@ -15,21 +15,26 @@ import os
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .runtime import (
+    CODEX_REMOTE_DEBUGGING_PORT,
     DETERMINISTIC_RUNTIME_PATH,
     RuntimePaths,
     build_repo_owned_default_launcher_script_text,
     write_text_atomic,
 )
+from .active_project_root import ACTIVE_PROJECT_ROOT_ENV
 from .token_command import emit_local_token
 
 
@@ -40,6 +45,9 @@ DEFAULT_IDLE_WINDOW_SECONDS = 3.0
 DEFAULT_DEFAULT_USER_DATA_DIR = str(
     Path.home() / "Library" / "Application Support" / "Codex"
 )
+DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR = str(
+    Path.home() / "Library" / "Application Support" / "Codex WBP Clean"
+)
 PROTECTED_SURFACE_PATHS = {
     "codex_dir": Path.home() / ".codex",
     "default_app_support_codex": Path.home() / "Library" / "Application Support" / "Codex",
@@ -47,11 +55,28 @@ PROTECTED_SURFACE_PATHS = {
     "default_httpstorage_codex": Path.home() / "Library" / "HTTPStorages" / "com.openai.codex",
 }
 DEFAULT_CODEX_PROCESS_PATTERNS = (
+    "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
     "/Applications/Codex.app/Contents/MacOS/Codex",
     "Codex WBP Clean.app/Contents/MacOS/Codex",
     "Codex Helper",
     "Contents/Resources/codex app-server",
 )
+AGENT_RUNTIME_CONTEXT_FILENAME = "wbp-agent-runtime-context.json"
+REMOTE_DEBUGGING_PORT_FILENAME = "codex-remote-debugging-port.txt"
+DEFAULT_CUSTOM_NATIVE_MODEL = "gpt-5.5"
+STALE_CUSTOM_NATIVE_MODEL_IDS = frozenset({"gpt-5.3-codex"})
+CUSTOM_NATIVE_MODEL_REPAIR_TARGETS = (
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    DEFAULT_CUSTOM_NATIVE_MODEL,
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+)
+CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS = 3.0
+AUTH_COMMAND_WRAPPER_NAME = "wbp-codex-auth-command"
+DEFAULT_AUTH_COMMAND_PYTHON = "/opt/homebrew/opt/python@3.14/bin/python3.14"
 
 
 def utc_now() -> str:
@@ -67,7 +92,13 @@ def _host_process_chain_contains_protected_codex(
     host_process_chain: list[dict[str, Any]],
 ) -> tuple[bool, bool]:
     codex_app_detected = any(
-        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
+        any(
+            app_root in entry.get("command", "")
+            for app_root in (
+                "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Applications/Codex.app/Contents/MacOS/Codex",
+            )
+        )
         for entry in host_process_chain
     )
     codex_app_server_detected = any(
@@ -1744,19 +1775,81 @@ def diff_protected_surfaces(before: dict[str, Any], after: dict[str, Any]) -> di
     }
 
 
-def _collect_codex_process_lines() -> list[str]:
+def _collect_codex_process_lines(
+    *,
+    extra_patterns: Sequence[str] | None = None,
+) -> list[str]:
     process = subprocess.run(
-        ["ps", "-axo", "pid=,command="],
+        ["ps", "axww", "-o", "pid=,command="],
         text=True,
         capture_output=True,
         check=False,
     )
     lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
+    patterns = [
+        *DEFAULT_CODEX_PROCESS_PATTERNS,
+        *[
+            str(pattern)
+            for pattern in (extra_patterns or [])
+            if str(pattern).strip()
+        ],
+    ]
     return [
         line
         for line in lines
-        if any(pattern in line for pattern in DEFAULT_CODEX_PROCESS_PATTERNS)
+        if any(pattern in line for pattern in patterns)
     ]
+
+
+def _line_has_user_data_dir(line: str, user_data_dir: str) -> bool:
+    user_data = str(user_data_dir or "").strip()
+    return bool(user_data) and f"--user-data-dir={user_data}" in line
+
+
+def _custom_user_data_dir_aliases(custom_user_data_dir: str) -> list[str]:
+    user_data = str(custom_user_data_dir or "").strip()
+    aliases = [user_data] if user_data else []
+    if user_data and user_data.endswith(
+        "/CodexProfiles/wbp-custom-main/electron-user-data"
+    ):
+        aliases.append(DEFAULT_CUSTOM_APP_COPY_USER_DATA_DIR)
+    deduped: list[str] = []
+    for alias in aliases:
+        if alias and alias not in deduped:
+            deduped.append(alias)
+    return deduped
+
+
+def _line_has_any_user_data_dir(line: str, user_data_dirs: list[str]) -> bool:
+    return any(
+        _line_has_user_data_dir(line, user_data_dir)
+        for user_data_dir in user_data_dirs
+    )
+
+
+def _line_is_custom_app_copy_root(line: str) -> bool:
+    return (
+        "Codex WBP Clean.app/Contents/MacOS/Codex" in line
+        and "/Contents/Frameworks/" not in line
+        and "Codex Helper" not in line
+    )
+
+
+def _line_is_native_app_root(line: str) -> bool:
+    return (
+        any(
+            app_root in line
+            for app_root in (
+                "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Codex.app/Contents/MacOS/Codex",
+                "/Codex WBP Clean.app/Contents/MacOS/Codex",
+            )
+        )
+        and "/Contents/Frameworks/" not in line
+        and "Codex Helper" not in line
+        and "Codex (Renderer)" not in line
+        and "Codex (Service)" not in line
+    )
 
 
 def collect_codex_process_inventory(
@@ -1764,13 +1857,27 @@ def collect_codex_process_inventory(
     custom_user_data_dir: str,
     default_user_data_dir: str = DEFAULT_DEFAULT_USER_DATA_DIR,
 ) -> dict[str, Any]:
-    lines = _collect_codex_process_lines()
-    custom_lines = [line for line in lines if custom_user_data_dir in line]
-    default_lines = [line for line in lines if default_user_data_dir in line]
+    custom_user_data_dirs = _custom_user_data_dir_aliases(custom_user_data_dir)
+    lines = _collect_codex_process_lines(
+        extra_patterns=[*custom_user_data_dirs, default_user_data_dir]
+    )
+    custom_lines = [
+        line
+        for line in lines
+        if _line_has_any_user_data_dir(line, custom_user_data_dirs)
+        or _line_is_custom_app_copy_root(line)
+    ]
+    default_lines = [
+        line
+        for line in lines
+        if _line_has_user_data_dir(line, default_user_data_dir)
+        and not _line_has_any_user_data_dir(line, custom_user_data_dirs)
+        and not _line_is_custom_app_copy_root(line)
+    ]
     root_lines = [
         line
         for line in lines
-        if "/Contents/MacOS/Codex" in line
+        if _line_is_native_app_root(line)
     ]
     root_pids = sorted(
         int(line.split(" ", 1)[0])
@@ -4191,24 +4298,11 @@ def build_provider_config(
     endpoint: str,
     model: str,
     auth_command_path: Path,
+    local_token: str = "",
     sandbox_mode: str = NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
 ) -> str:
     if sandbox_mode not in NATIVE_CUSTOM_ADMITTED_SANDBOX_MODES:
         raise ValueError(f"unsupported native custom sandbox mode: {sandbox_mode}")
-    cli_key = _cli_proxy_api_key()
-    if cli_key:
-        return (
-            f'model = "{model}"\n'
-            'model_provider = "wbp"\n'
-            'approval_policy = "never"\n'
-            f'sandbox_mode = "{sandbox_mode}"\n\n'
-            "[model_providers.wbp]\n"
-            'name = "Wild Boar Proxy"\n'
-            f'base_url = "{endpoint}"\n'
-            'wire_api = "responses"\n'
-            "requires_openai_auth = false\n"
-            f'experimental_bearer_token = "{cli_key}"\n'
-        )
     auth_command = str(auth_command_path.resolve())
     return (
         f'model = "{model}"\n'
@@ -4222,6 +4316,40 @@ def build_provider_config(
         "requires_openai_auth = false\n\n"
         "[model_providers.wbp.auth]\n"
         f'command = "{auth_command}"\n'
+    )
+
+
+def build_auth_command_wrapper_script(
+    *,
+    profile_dir: Path,
+    auth_command_path: Path,
+    python_bin: str = DEFAULT_AUTH_COMMAND_PYTHON,
+) -> str:
+    owner_stable_config = (
+        Path.home() / ".codex-custom-cli" / "managed" / "stable-runtime-config.generated.yaml"
+    )
+    return (
+        "#!/bin/sh\n"
+        f"export WBP_PROFILE_DIR={shlex.quote(str(profile_dir))}\n"
+        f"export WBP_MANAGED_DIR={shlex.quote(str(profile_dir / 'managed'))}\n"
+        f'export WBP_STABLE_CONFIG="${{WBP_STABLE_CONFIG:-{shlex.quote(str(owner_stable_config))}}}"\n'
+        f"exec {shlex.quote(python_bin)} {shlex.quote(str(auth_command_path.resolve()))}\n"
+    )
+
+
+def build_stable_runtime_token_config(*, endpoint: str, local_token: str) -> str:
+    parsed = urllib.parse.urlparse(endpoint)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return (
+        f"host: {json.dumps(host)}\n"
+        f"port: {int(port)}\n\n"
+        "remote-management:\n"
+        "  allow-remote: false\n"
+        "  secret-key: \"\"\n"
+        "  disable-control-panel: true\n\n"
+        "api-keys:\n"
+        f"  - {json.dumps(str(local_token).strip())}\n"
     )
 
 
@@ -4277,6 +4405,228 @@ def create_persistent_custom_profile_layout(
     )
 
 
+def remote_debugging_port_file(profile_dir: Path) -> Path:
+    return profile_dir / REMOTE_DEBUGGING_PORT_FILENAME
+
+
+def read_profile_remote_debugging_port(profile_dir: Path) -> int:
+    default_port = int(CODEX_REMOTE_DEBUGGING_PORT)
+    try:
+        raw_value = remote_debugging_port_file(profile_dir).read_text(
+            encoding="utf-8"
+        ).strip()
+        port = int(raw_value)
+    except (OSError, TypeError, ValueError):
+        return default_port
+    return port if 1024 <= port <= 65535 else default_port
+
+
+def _allocate_loopback_remote_debugging_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _toml_table_header_name(line: str) -> str:
+    stripped = line.strip()
+    if not stripped.startswith("[") or not stripped.endswith("]"):
+        return ""
+    while stripped.startswith("[") and stripped.endswith("]"):
+        stripped = stripped[1:-1].strip()
+    return stripped
+
+
+def preserved_hooks_toml_sections(config_text: str) -> str:
+    preserved: list[str] = []
+    keep = False
+    for line in config_text.splitlines():
+        header = _toml_table_header_name(line)
+        if header:
+            keep = header == "hooks" or header.startswith("hooks.")
+        if keep:
+            preserved.append(line)
+    return "\n".join(preserved).strip()
+
+
+def _models_endpoint_from_base_url(endpoint: str) -> str:
+    parsed = urllib.parse.urlparse(endpoint)
+    path = (parsed.path or "").rstrip("/")
+    if path.endswith("/responses"):
+        path = path[: -len("/responses")]
+    elif path.endswith("/chat/completions"):
+        path = path[: -len("/chat/completions")]
+
+    if path.endswith("/models"):
+        models_path = path
+    elif path.endswith("/v1"):
+        models_path = f"{path}/models"
+    elif path in {"", "/"}:
+        models_path = "/v1/models"
+    else:
+        models_path = f"{path}/models"
+
+    return urllib.parse.urlunparse(
+        parsed._replace(path=models_path, params="", query="", fragment="")
+    )
+
+
+def _extract_model_ids_from_models_payload(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    model_ids: list[str] = []
+    raw_data = payload.get("data")
+    if isinstance(raw_data, list):
+        for item in raw_data:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            if model_id:
+                model_ids.append(model_id)
+    raw_model_ids = payload.get("model_ids")
+    if isinstance(raw_model_ids, list):
+        for item in raw_model_ids:
+            model_id = str(item or "").strip()
+            if model_id:
+                model_ids.append(model_id)
+    return list(dict.fromkeys(model_ids))
+
+
+def _repair_target_for_stale_custom_native_model(model_ids: list[str]) -> str:
+    available = set(model_ids)
+    for candidate in CUSTOM_NATIVE_MODEL_REPAIR_TARGETS:
+        if candidate in available:
+            return candidate
+    return ""
+
+
+def build_configured_model_availability_packet(
+    *,
+    endpoint: str,
+    model: str,
+    local_token: str = "",
+    timeout_seconds: float = CUSTOM_NATIVE_MODEL_AVAILABILITY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    configured_model = str(model or "").strip()
+    models_endpoint = _models_endpoint_from_base_url(endpoint)
+    base = {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "custom_native_configured_model_availability",
+        "configured_model_id": configured_model,
+        "models_endpoint_redacted": True,
+        "models_endpoint_localhost_only": urllib.parse.urlparse(models_endpoint).hostname
+        in {"127.0.0.1", "localhost", "::1"},
+        "models_endpoint_probe_attempted": True,
+        "available_model_ids_recorded": True,
+        "configured_model_available": False,
+    }
+    if not configured_model:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODEL_MISSING",
+            "reason_class": "configured_model_missing",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": "",
+        }
+    try:
+        headers = {}
+        if str(local_token or "").strip():
+            headers["Authorization"] = f"Bearer {str(local_token).strip()}"
+        request = urllib.request.Request(models_endpoint, headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(getattr(response, "status", response.getcode()) or 0)
+            body = response.read()
+    except Exception as exc:  # pragma: no cover - exact urllib exception varies by host
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_UNAVAILABLE",
+            "reason_class": "models_endpoint_unavailable",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": type(exc).__name__,
+        }
+    if status_code < 200 or status_code >= 300:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_HTTP_ERROR",
+            "reason_class": "models_endpoint_http_error",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "http_status_code": status_code,
+            "transport_error_class": "",
+        }
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_MODELS_ENDPOINT_BAD_JSON",
+            "reason_class": "models_endpoint_bad_json",
+            "available_model_count": 0,
+            "available_model_ids": [],
+            "transport_error_class": type(exc).__name__,
+        }
+    model_ids = _extract_model_ids_from_models_payload(payload)
+    requested_model_available = configured_model in model_ids
+    configured_model_catalog_drift = (
+        configured_model == DEFAULT_CUSTOM_NATIVE_MODEL
+        and not requested_model_available
+    )
+    configured_model_stale = (
+        configured_model in STALE_CUSTOM_NATIVE_MODEL_IDS
+        or configured_model_catalog_drift
+    )
+    repaired_model = (
+        _repair_target_for_stale_custom_native_model(model_ids)
+        if configured_model_stale
+        else configured_model
+    )
+    model_available = bool(repaired_model and repaired_model in model_ids and not configured_model_stale)
+    if configured_model_stale and repaired_model:
+        model_available = True
+    if configured_model_stale and not repaired_model:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "CUSTOM_NATIVE_CONFIG_STALE_MODEL_REPAIR_TARGET_UNAVAILABLE",
+            "reason_class": "configured_model_stale_repair_target_unavailable",
+            "available_model_count": len(model_ids),
+            "available_model_ids": model_ids[:100],
+            "transport_error_class": "",
+            "configured_model_available": False,
+            "requested_configured_model_id": configured_model,
+            "requested_configured_model_available": requested_model_available,
+            "effective_configured_model_id": "",
+            "configured_model_stale": True,
+            "configured_model_catalog_drift": configured_model_catalog_drift,
+            "configured_model_auto_repaired": False,
+        }
+    return {
+        **base,
+        "status": "ok" if model_available else "blocked",
+        "machine_error_code": (
+            "OK"
+            if model_available
+            else "CUSTOM_NATIVE_CONFIG_MODEL_NOT_IN_MODELS_ENDPOINT"
+        ),
+        "reason_class": "" if model_available else "configured_model_not_advertised",
+        "available_model_count": len(model_ids),
+        "available_model_ids": model_ids[:100],
+        "transport_error_class": "",
+        "configured_model_available": model_available,
+        "requested_configured_model_id": configured_model,
+        "requested_configured_model_available": requested_model_available,
+        "effective_configured_model_id": repaired_model if model_available else configured_model,
+        "configured_model_stale": configured_model_stale,
+        "configured_model_catalog_drift": configured_model_catalog_drift,
+        "configured_model_auto_repaired": configured_model_stale and model_available,
+    }
+
+
 def materialize_probe_profile(
     *,
     layout: NativeProbeLayout,
@@ -4284,16 +4634,141 @@ def materialize_probe_profile(
     model: str,
     auth_command_path: Path,
     local_token: str,
+    agent_runtime_context: Mapping[str, Any] | None = None,
+    extra_agent_runtime_context_paths: Sequence[Path] | None = None,
+    validate_model_against_endpoint: bool = False,
 ) -> dict[str, Any]:
+    model_availability_packet = (
+        build_configured_model_availability_packet(
+            endpoint=endpoint,
+            model=model,
+            local_token=local_token,
+        )
+        if validate_model_against_endpoint
+        else {
+            "captured_at_utc": utc_now(),
+            "packet_kind": "custom_native_configured_model_availability",
+            "status": "not_required",
+            "machine_error_code": "NOT_REQUIRED",
+            "configured_model_id": str(model or "").strip(),
+            "configured_model_available": False,
+            "models_endpoint_probe_attempted": False,
+            "models_endpoint_redacted": True,
+            "available_model_ids_recorded": False,
+            "available_model_ids": [],
+            "requested_configured_model_id": str(model or "").strip(),
+            "requested_configured_model_available": False,
+            "effective_configured_model_id": str(model or "").strip(),
+            "configured_model_stale": False,
+            "configured_model_auto_repaired": False,
+        }
+    )
+    effective_model = str(
+        model_availability_packet.get("effective_configured_model_id")
+        or model
+        or ""
+    ).strip()
+    base_packet = {
+        "profile_dir": str(layout.profile_dir),
+        "launcher_path": str(layout.launcher_path),
+        "config_path": str(layout.profile_dir / "config.toml"),
+        "hooks_config_sections_preserved": False,
+        "hooks_config_preservation_scope": "top_level_hooks_toml_tables_only",
+        "hooks_config_preserved_sha256": "",
+        "auth_path": str(layout.profile_dir / "auth.json"),
+        "agent_runtime_context_path": "",
+        "agent_runtime_context_profile_relative_path": "",
+        "agent_runtime_context_written": False,
+        "agent_runtime_context_extra_write_count": 0,
+        "agent_runtime_context_sha256": "",
+        "native_alias_context_written": False,
+        "context_file_present": False,
+        "context_file_sha256_present": False,
+        "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
+        "custom_user_data_dir": str(layout.custom_user_data_dir),
+        "custom_home_dir": str(layout.custom_home_dir),
+        "custom_tmp_dir": str(layout.custom_tmp_dir),
+        "configured_model_validation_attempted": validate_model_against_endpoint,
+        "configured_model_validation_packet": model_availability_packet,
+        "configured_model_available": (
+            model_availability_packet.get("configured_model_available") is True
+        ),
+        "requested_configured_model_id": str(
+            model_availability_packet.get("requested_configured_model_id")
+            or model
+            or ""
+        ).strip(),
+        "requested_configured_model_available": (
+            model_availability_packet.get("requested_configured_model_available") is True
+        ),
+        "effective_configured_model_id": effective_model,
+        "configured_model_stale": (
+            model_availability_packet.get("configured_model_stale") is True
+        ),
+        "configured_model_catalog_drift": (
+            model_availability_packet.get("configured_model_catalog_drift") is True
+        ),
+        "configured_model_auto_repaired": (
+            model_availability_packet.get("configured_model_auto_repaired") is True
+        ),
+        "model_config_written": False,
+    }
+    if model_availability_packet.get("status") == "blocked":
+        return {
+            **base_packet,
+            "status": "blocked",
+            "machine_error_code": str(
+                model_availability_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_CONFIG_MODEL_NOT_AVAILABLE"
+            ),
+            "reason_class": str(model_availability_packet.get("reason_class") or ""),
+            "human_message": (
+                "Custom native profile config was not written because the configured "
+                "model is not available from the local models endpoint."
+            ),
+            "next_action": "select_model_advertised_by_local_models_endpoint",
+        }
     layout.tmp_root.mkdir(parents=True, exist_ok=True)
     layout.profile_dir.mkdir(parents=True, exist_ok=True)
+    profile_managed_dir = layout.profile_dir / "managed"
+    profile_managed_bin_dir = profile_managed_dir / "bin"
+    profile_managed_dir.mkdir(parents=True, exist_ok=True)
+    profile_managed_bin_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_user_data_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_home_dir.mkdir(parents=True, exist_ok=True)
     layout.custom_codex_home.mkdir(parents=True, exist_ok=True)
     layout.custom_tmp_dir.mkdir(parents=True, exist_ok=True)
+    config_path = layout.profile_dir / "config.toml"
+    existing_config_text = ""
+    if config_path.exists():
+        try:
+            existing_config_text = config_path.read_text(encoding="utf-8")
+        except OSError:
+            existing_config_text = ""
+    preserved_hooks_sections = preserved_hooks_toml_sections(existing_config_text)
+    auth_command_wrapper_path = profile_managed_bin_dir / AUTH_COMMAND_WRAPPER_NAME
     write_text_atomic(
-        layout.profile_dir / "config.toml",
-        build_provider_config(endpoint=endpoint, model=model, auth_command_path=auth_command_path),
+        profile_managed_dir / "stable-runtime-config.generated.yaml",
+        build_stable_runtime_token_config(endpoint=endpoint, local_token=local_token),
+    )
+    write_text_atomic(
+        auth_command_wrapper_path,
+        build_auth_command_wrapper_script(
+            profile_dir=layout.profile_dir,
+            auth_command_path=auth_command_path,
+        ),
+    )
+    auth_command_wrapper_path.chmod(0o755)
+    provider_config = build_provider_config(
+        endpoint=endpoint,
+        model=effective_model,
+        auth_command_path=auth_command_wrapper_path,
+    )
+    if preserved_hooks_sections:
+        provider_config = provider_config.rstrip() + "\n\n" + preserved_hooks_sections + "\n"
+    write_text_atomic(
+        config_path,
+        provider_config,
     )
     write_text_atomic(
         layout.profile_dir / "auth.json",
@@ -4301,18 +4776,62 @@ def materialize_probe_profile(
     )
     write_text_atomic(
         layout.launcher_path,
-        build_repo_owned_default_launcher_script_text() + "\n",
+        build_repo_owned_default_launcher_script_text(),
     )
+    agent_runtime_context_path = layout.profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+    agent_runtime_context_written = False
+    agent_runtime_context_extra_write_count = 0
+    agent_runtime_context_sha256 = ""
+    if agent_runtime_context is not None:
+        agent_runtime_context_text = (
+            json.dumps(dict(agent_runtime_context), indent=2, sort_keys=True) + "\n"
+        )
+        write_text_atomic(agent_runtime_context_path, agent_runtime_context_text)
+        agent_runtime_context_written = True
+        agent_runtime_context_sha256 = hashlib.sha256(
+            agent_runtime_context_text.encode("utf-8")
+        ).hexdigest()
+        seen_context_paths = {str(agent_runtime_context_path)}
+        for extra_context_path in extra_agent_runtime_context_paths or []:
+            extra_path = Path(extra_context_path).expanduser()
+            key = str(extra_path)
+            if key in seen_context_paths:
+                continue
+            seen_context_paths.add(key)
+            try:
+                write_text_atomic(extra_path, agent_runtime_context_text)
+            except OSError:
+                continue
+            agent_runtime_context_extra_write_count += 1
     layout.launcher_path.chmod(0o755)
     return {
-        "profile_dir": str(layout.profile_dir),
-        "launcher_path": str(layout.launcher_path),
-        "config_path": str(layout.profile_dir / "config.toml"),
-        "auth_path": str(layout.profile_dir / "auth.json"),
-        "sandbox_mode": NATIVE_CUSTOM_EXECUTOR_SANDBOX_MODE,
-        "custom_user_data_dir": str(layout.custom_user_data_dir),
-        "custom_home_dir": str(layout.custom_home_dir),
-        "custom_tmp_dir": str(layout.custom_tmp_dir),
+        **base_packet,
+        "status": "ok",
+        "machine_error_code": "OK",
+        "hooks_config_sections_preserved": bool(preserved_hooks_sections),
+        "hooks_config_preservation_scope": "top_level_hooks_toml_tables_only",
+        "hooks_config_preserved_sha256": (
+            hashlib.sha256(preserved_hooks_sections.encode("utf-8")).hexdigest()
+            if preserved_hooks_sections
+            else ""
+        ),
+        "agent_runtime_context_path": (
+            str(agent_runtime_context_path) if agent_runtime_context_written else ""
+        ),
+        "agent_runtime_context_profile_relative_path": (
+            AGENT_RUNTIME_CONTEXT_FILENAME if agent_runtime_context_written else ""
+        ),
+        "agent_runtime_context_written": agent_runtime_context_written,
+        "agent_runtime_context_extra_write_count": agent_runtime_context_extra_write_count,
+        "agent_runtime_context_sha256": agent_runtime_context_sha256,
+        "native_alias_context_written": agent_runtime_context_written,
+        "context_file_present": agent_runtime_context_written,
+        "context_file_sha256_present": bool(agent_runtime_context_sha256),
+        "model_config_written": True,
+        "auth_command_wrapper_written": True,
+        "stable_runtime_token_config_written": True,
+        "config_uses_auth_command": True,
+        "config_uses_experimental_bearer_token": False,
     }
 
 
@@ -4324,6 +4843,9 @@ def launch_native_candidate(
     startup_wait_seconds: float = DEFAULT_STARTUP_WAIT_SECONDS,
     post_observation_wait_seconds: float = 2.0,
 ) -> dict[str, Any]:
+    remote_debugging_port = _allocate_loopback_remote_debugging_port()
+    remote_debugging_port_path = remote_debugging_port_file(layout.profile_dir)
+    write_text_atomic(remote_debugging_port_path, f"{remote_debugging_port}\n")
     env = clean_env()
     env.update(
         {
@@ -4332,6 +4854,8 @@ def launch_native_candidate(
             "WBP_STABLE_CONFIG": str(real_runtime_paths.stable_config),
             "WBP_RUNTIME_TMPDIR": str(layout.tmp_root / "runtime-bind"),
             "WBP_PYTHON_BIN": sys.executable,
+            "WBP_CODEX_REMOTE_DEBUGGING_PORT": str(remote_debugging_port),
+            ACTIVE_PROJECT_ROOT_ENV: str(repo_root.resolve(strict=False)),
         }
     )
     stdout_handle = layout.launcher_stdout.open("w", encoding="utf-8")
@@ -4383,6 +4907,10 @@ def launch_native_candidate(
         "launcher_stderr_path": str(layout.launcher_stderr),
         "launcher_stdout_size": layout.launcher_stdout.stat().st_size if layout.launcher_stdout.exists() else 0,
         "launcher_stderr_size": layout.launcher_stderr.stat().st_size if layout.launcher_stderr.exists() else 0,
+        "remote_debugging_port": remote_debugging_port,
+        "remote_debugging_port_source": "allocated_loopback_launch_port",
+        "remote_debugging_port_file_written": remote_debugging_port_path.is_file(),
+        "remote_debugging_port_file_path_recorded": False,
     }
 
 

@@ -9,14 +9,22 @@ builders, and bounded cleanup model.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
+import re
+import socket
 import subprocess
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
 from .native_filesystem_probe import (
+    AGENT_RUNTIME_CONTEXT_FILENAME,
     NativeProbeLayout,
     clean_env,
     collect_codex_process_inventory,
@@ -26,6 +34,8 @@ from .native_filesystem_probe import (
     json_write,
     launch_native_candidate,
     materialize_probe_profile,
+    read_profile_remote_debugging_port,
+    remote_debugging_port_file,
     remove_tree_with_retry,
     terminate_custom_processes,
     utc_now,
@@ -44,18 +54,77 @@ from .native_launch_dispatch import (
     build_native_window_observation_packet,
     build_native_window_usability_packet,
 )
+from .runtime import CODEX_REMOTE_DEBUGGING_PORT
 from .runtime import RuntimePaths
-from .token_command import emit_local_token
+from .token_command import emit_local_token, emit_local_token_from_config_path
 
 
 OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
 WINDOW_OBSERVATION_WAIT_SECONDS = 12.0
 WINDOW_OBSERVATION_POLL_SECONDS = 0.5
+CODEX_RENDERER_RECOVERY_WAIT_SECONDS = 2.0
+POST_LAUNCH_USABILITY_RECHECK_SECONDS = 8.0
+POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS = 0.5
+CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_SECONDS = 20.0
+CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_POLL_SECONDS = 0.25
+WINDOW_LIFECYCLE_SCOPE_FRESHNESS_SECONDS = 30.0
 DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID = "wbp-custom-main"
 RUNTIME_READY_STDOUT_MARKERS = (
     "Handled 'ready' message",
     "method=model/list",
     "browser_use_iab_backend_startup_ready",
+)
+CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER = (
+    "Sign in to ChatGPT in Codex Desktop to check remote control authorization."
+)
+CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS = (
+    "desktop_fetch_auth_401",
+    "hadToken=false",
+    "no_token_attached",
+)
+CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS = 12000
+CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS = 12000
+CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS = 240.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS = 240.0
+CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS = 0.5
+CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS = 24
+CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS = 4.0
+CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS = 0.25
+REMOTE_DEBUGGING_PORT_ARG_RE = re.compile(r"--remote-debugging-port=(\d+)")
+CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS = frozenset(
+    {
+        "cdp_renderer_input_surface_not_observed",
+        "input_capable_window_not_proven_for_pid",
+    }
+)
+NATIVE_VOICE_ICON_HINTS = (
+    "voice",
+    "dictation",
+    "microphone",
+    "mic",
+    "audio",
+    "record",
+    "speech",
+    "голос",
+    "микрофон",
+    "диктов",
+    "запис",
+)
+NATIVE_VOICE_ICON_FORBIDDEN_HINTS = (
+    "settings",
+    "preferences",
+    "permission",
+    "permissions",
+    "privacy",
+    "help",
+    "device",
+    "devices",
+    "learn",
+    "tooltip",
+    "настрой",
+    "разреш",
+    "помощ",
+    "устрой",
 )
 
 
@@ -113,12 +182,133 @@ def _custom_root_app_pids(process_inventory: dict[str, Any]) -> list[int]:
         {
             pid
             for line in custom_lines
-            if isinstance(line, str) and "/Contents/MacOS/Codex" in line
+            if (
+                isinstance(line, str)
+                and any(
+                    app_root in line
+                    for app_root in (
+                        "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                        "/Codex.app/Contents/MacOS/Codex",
+                        "/Codex WBP Clean.app/Contents/MacOS/Codex",
+                    )
+                )
+                and "/Contents/Frameworks/" not in line
+                and "Codex Helper" not in line
+                and "Codex (Renderer)" not in line
+                and "Codex (Service)" not in line
+            )
             for pid in [_pid_from_process_line(line)]
             if pid is not None
         }
     )
     return custom_root_pids
+
+
+def _default_profile_process_pids(process_inventory: dict[str, Any]) -> list[int]:
+    default_lines = process_inventory.get("default_process_lines", [])
+    if not isinstance(default_lines, list):
+        default_lines = []
+    return sorted(
+        {
+            pid
+            for line in default_lines
+            if isinstance(line, str)
+            for pid in [_pid_from_process_line(line)]
+            if pid is not None
+        }
+    )
+
+
+def _custom_profile_process_pids(process_inventory: dict[str, Any]) -> list[int]:
+    custom_lines = process_inventory.get("custom_process_lines", [])
+    if not isinstance(custom_lines, list):
+        custom_lines = []
+    return sorted(
+        {
+            pid
+            for line in custom_lines
+            if isinstance(line, str)
+            for pid in [_pid_from_process_line(line)]
+            if pid is not None
+        }
+    )
+
+
+def _custom_window_candidate_pids(process_inventory: dict[str, Any]) -> list[int]:
+    root_pids = _custom_root_app_pids(process_inventory)
+    profile_pids = _custom_profile_process_pids(process_inventory)
+    default_pids = set(_default_profile_process_pids(process_inventory))
+    candidate_pids: list[int] = []
+    for pid in [*root_pids, *profile_pids]:
+        if pid not in default_pids and pid not in candidate_pids:
+            candidate_pids.append(pid)
+    return candidate_pids
+
+
+def _remote_debugging_port_from_process_line(line: str) -> int | None:
+    if not isinstance(line, str):
+        return None
+    match = REMOTE_DEBUGGING_PORT_ARG_RE.search(line)
+    if not match:
+        return None
+    try:
+        port = int(match.group(1))
+    except ValueError:
+        return None
+    return port if 1024 <= port <= 65535 else None
+
+
+def _custom_runtime_cdp_port(
+    process_inventory: dict[str, Any],
+    *,
+    profile_root: Path,
+) -> tuple[int, str]:
+    persisted_port = read_profile_remote_debugging_port(profile_root)
+    custom_lines = process_inventory.get("custom_process_lines", [])
+    if not isinstance(custom_lines, list):
+        custom_lines = []
+    preferred_lines = [
+        line
+        for line in custom_lines
+        if isinstance(line, str)
+        and any(
+            app_root in line
+            for app_root in (
+                "/ChatGPT.app/Contents/MacOS/ChatGPT",
+                "/Codex.app/Contents/MacOS/Codex",
+                "/Codex WBP Clean.app/Contents/MacOS/Codex",
+            )
+        )
+    ]
+    for candidate_line in [*preferred_lines, *custom_lines]:
+        port = _remote_debugging_port_from_process_line(candidate_line)
+        if port is not None:
+            return port, "custom_process_command_line_remote_debugging_port"
+    return persisted_port, "persistent_profile_remote_debugging_port"
+
+
+def _custom_pid_binding_fields(
+    process_inventory: dict[str, Any],
+    *,
+    candidate_pids: list[int] | None = None,
+) -> dict[str, Any]:
+    root_pids = _custom_root_app_pids(process_inventory)
+    profile_pids = _custom_profile_process_pids(process_inventory)
+    default_pids = _default_profile_process_pids(process_inventory)
+    candidates = (
+        candidate_pids
+        if candidate_pids is not None
+        else _custom_window_candidate_pids(process_inventory)
+    )
+    return {
+        "custom_root_process_pids": root_pids,
+        "custom_profile_process_pids": profile_pids,
+        "default_profile_process_pids": default_pids,
+        "custom_window_candidate_pids": candidates,
+        "custom_window_candidate_count": len(candidates),
+        "window_pid_candidate_strategy": "custom_root_first_then_same_profile_processes",
+        "browser_cdp_authority_widened": False,
+    }
 
 
 def _parse_ax_point(value: str) -> list[int]:
@@ -145,14 +335,17 @@ def _window_bounds_from_ax(position: str, size: str) -> dict[str, int]:
     }
 
 
-def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
-    root_pids = _custom_root_app_pids(process_inventory)
-    if not root_pids:
-        return build_native_window_observation_packet(
-            window_observed=False,
-            blocked_reason_class="custom_process_pid_not_observed",
-        )
-    observed_pid = int(root_pids[0])
+def _window_observation_for_pid_via_ax(
+    process_inventory: dict[str, Any],
+    *,
+    observed_pid: int,
+    candidate_pids: list[int],
+    candidate_index: int,
+) -> dict[str, Any]:
+    pid_binding_fields = _custom_pid_binding_fields(
+        process_inventory,
+        candidate_pids=candidate_pids,
+    )
     script = (
         'tell application "System Events"\n'
         f'  set p to first process whose unix id is {observed_pid}\n'
@@ -199,7 +392,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         packet = build_native_window_observation_packet(window_observed=True)
         packet.update(
             {
+                **pid_binding_fields,
                 "observed_pid": observed_pid,
+                "window_candidate_index": candidate_index,
+                "window_candidate_source": (
+                    "custom_root_process"
+                    if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                    else "custom_profile_process"
+                ),
                 "window_query": stdout,
                 "window_query_method": "AX/System Events process window count",
                 "window_query_rc": result.returncode,
@@ -219,7 +419,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         packet = build_native_window_observation_packet(window_observed=True)
         packet.update(
             {
+                **pid_binding_fields,
                 "observed_pid": observed_pid,
+                "window_candidate_index": candidate_index,
+                "window_candidate_source": (
+                    "custom_root_process"
+                    if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                    else "custom_profile_process"
+                ),
                 "window_query": cg_result,
                 "window_query_method": "CGWindowList pid-bound on-screen window",
                 "window_query_rc": result.returncode,
@@ -243,7 +450,14 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     )
     packet.update(
         {
+            **pid_binding_fields,
             "observed_pid": observed_pid,
+            "window_candidate_index": candidate_index,
+            "window_candidate_source": (
+                "custom_root_process"
+                if observed_pid in pid_binding_fields["custom_root_process_pids"]
+                else "custom_profile_process"
+            ),
             "window_query": stdout,
             "window_query_method": "AX/System Events process window count",
             "window_query_rc": result.returncode,
@@ -258,6 +472,200 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
         }
     )
     return packet
+
+
+def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, Any]:
+    candidate_pids = _custom_window_candidate_pids(process_inventory)
+    if not candidate_pids:
+        blocked_reason = (
+            "custom_process_pid_overlaps_default_profile"
+            if _custom_profile_process_pids(process_inventory)
+            else "custom_process_pid_not_observed"
+        )
+        packet = build_native_window_observation_packet(
+            window_observed=False,
+            blocked_reason_class=blocked_reason,
+        )
+        packet.update(
+            _custom_pid_binding_fields(
+                process_inventory,
+                candidate_pids=candidate_pids,
+            )
+        )
+        return packet
+    last_packet: dict[str, Any] | None = None
+    for index, observed_pid in enumerate(candidate_pids):
+        packet = _window_observation_for_pid_via_ax(
+            process_inventory,
+            observed_pid=observed_pid,
+            candidate_pids=candidate_pids,
+            candidate_index=index,
+        )
+        if packet.get("window_observed") is True:
+            packet["window_candidate_attempt_count"] = index + 1
+            return packet
+        last_packet = packet
+    if last_packet is not None:
+        last_packet["window_candidate_attempt_count"] = len(candidate_pids)
+        return last_packet
+    packet = build_native_window_observation_packet(
+        window_observed=False,
+        blocked_reason_class="custom_process_pid_not_observed",
+    )
+    packet.update(
+        _custom_pid_binding_fields(
+            process_inventory,
+            candidate_pids=candidate_pids,
+        )
+    )
+    return packet
+
+
+def _profile_window_lifecycle_scope_packet(
+    profile_dir: Path,
+    *,
+    freshness_seconds: float = WINDOW_LIFECYCLE_SCOPE_FRESHNESS_SECONDS,
+) -> dict[str, Any]:
+    scope_path = profile_dir / "electron-user-data" / "sentry" / "scope_v3.json"
+    try:
+        stat_result = scope_path.stat()
+        payload = json.loads(scope_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {
+            "status": "blocked",
+            "machine_error_code": "PROFILE_WINDOW_LIFECYCLE_SCOPE_MISSING",
+            "window_lifecycle_scope_present": False,
+            "window_lifecycle_scope_fresh": False,
+            "window_lifecycle_created_observed": False,
+            "window_lifecycle_show_observed": False,
+            "window_lifecycle_focus_observed": False,
+            "window_lifecycle_ready_to_show_observed": False,
+            "window_lifecycle_main_frame_loaded_observed": False,
+            "window_lifecycle_observed": False,
+            "window_lifecycle_scope_path_redacted": True,
+        }
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "blocked",
+            "machine_error_code": "PROFILE_WINDOW_LIFECYCLE_SCOPE_INVALID",
+            "window_lifecycle_scope_present": True,
+            "window_lifecycle_scope_fresh": False,
+            "window_lifecycle_created_observed": False,
+            "window_lifecycle_show_observed": False,
+            "window_lifecycle_focus_observed": False,
+            "window_lifecycle_ready_to_show_observed": False,
+            "window_lifecycle_main_frame_loaded_observed": False,
+            "window_lifecycle_observed": False,
+            "window_lifecycle_scope_path_redacted": True,
+        }
+    breadcrumbs = payload.get("scope", {}).get("breadcrumbs", [])
+    if not isinstance(breadcrumbs, list):
+        breadcrumbs = []
+    created_observed = False
+    show_observed = False
+    focus_observed = False
+    ready_to_show_observed = False
+    main_frame_loaded_observed = False
+    for crumb in breadcrumbs:
+        if not isinstance(crumb, dict):
+            continue
+        message = str(crumb.get("message") or "")
+        if message == "app.browser-window-created":
+            created_observed = True
+        elif message == "window.show":
+            show_observed = True
+        elif message in {"window.focus", "app.browser-window-focus"}:
+            focus_observed = True
+        elif "window ready-to-show" in message:
+            ready_to_show_observed = True
+        elif "window main frame finished load" in message:
+            main_frame_loaded_observed = True
+    scope_fresh = (time.time() - stat_result.st_mtime) <= freshness_seconds
+    lifecycle_observed = (
+        scope_fresh
+        and created_observed
+        and show_observed
+        and focus_observed
+    )
+    return {
+        "status": "ok" if lifecycle_observed else "blocked",
+        "machine_error_code": "OK"
+        if lifecycle_observed
+        else "PROFILE_WINDOW_LIFECYCLE_NOT_PROVEN",
+        "window_lifecycle_scope_present": True,
+        "window_lifecycle_scope_fresh": scope_fresh,
+        "window_lifecycle_created_observed": created_observed,
+        "window_lifecycle_show_observed": show_observed,
+        "window_lifecycle_focus_observed": focus_observed,
+        "window_lifecycle_ready_to_show_observed": ready_to_show_observed,
+        "window_lifecycle_main_frame_loaded_observed": main_frame_loaded_observed,
+        "window_lifecycle_observed": lifecycle_observed,
+        "window_lifecycle_scope_path_redacted": True,
+    }
+
+
+def _window_observation_from_profile_window_lifecycle(
+    process_inventory: dict[str, Any],
+    *,
+    profile_dir: Path,
+) -> dict[str, Any] | None:
+    lifecycle_packet = _profile_window_lifecycle_scope_packet(profile_dir)
+    if lifecycle_packet.get("window_lifecycle_observed") is not True:
+        return None
+    candidate_pids = _custom_window_candidate_pids(process_inventory)
+    if not candidate_pids:
+        return None
+    root_pids = _custom_root_app_pids(process_inventory)
+    observed_pid = root_pids[0] if root_pids else candidate_pids[0]
+    candidate_index = (
+        candidate_pids.index(observed_pid) if observed_pid in candidate_pids else 0
+    )
+    packet = build_native_window_observation_packet(window_observed=True)
+    packet.update(
+        {
+            **_custom_pid_binding_fields(
+                process_inventory,
+                candidate_pids=candidate_pids,
+            ),
+            "observed_pid": observed_pid,
+            "window_candidate_index": candidate_index,
+            "window_candidate_source": (
+                "custom_root_process"
+                if observed_pid in root_pids
+                else "custom_profile_process"
+            ),
+            "window_candidate_attempt_count": candidate_index + 1,
+            "window_query": "window_created=true\twindow_show=true\twindow_focus=true",
+            "window_query_method": "Electron/Sentry window lifecycle scope",
+            "window_query_rc": 0,
+            "window_query_error_class": "",
+            "window_count": 1,
+            "window_frontmost": True,
+            "window_visible": True,
+            "window_background_only": False,
+            "window_bounds": {},
+            "window_position": "",
+            "window_size": "",
+            "window_lifecycle_scope_fallback_used": True,
+            "window_lifecycle_scope_packet": lifecycle_packet,
+        }
+    )
+    return packet
+
+
+def _window_observation_packet_for_process_inventory(
+    process_inventory: dict[str, Any],
+    *,
+    profile_dir: Path | None = None,
+) -> dict[str, Any]:
+    packet = _window_observation_via_ax(process_inventory)
+    if packet.get("window_observed") is True or profile_dir is None:
+        return packet
+    lifecycle_packet = _window_observation_from_profile_window_lifecycle(
+        process_inventory,
+        profile_dir=profile_dir,
+    )
+    return lifecycle_packet if lifecycle_packet is not None else packet
 
 
 def _focus_custom_window_by_pid(
@@ -329,9 +737,18 @@ def show_custom_native_window_packet(
         base_dir=persistent_profile_base_dir,
     )
     user_data_dir = str(paths["user_data_dir"])
+    profile_root = Path(str(paths["persistent_profile_root"])).expanduser()
     inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
     root_pids = _custom_root_app_pids(inventory)
-    if not root_pids:
+    profile_pids = _custom_profile_process_pids(inventory)
+    candidate_pids = _custom_window_candidate_pids(inventory)
+    if not candidate_pids:
+        voice_packet = _native_voice_icon_blocked_packet(
+            machine_error_code="CUSTOM_CODEX_CUSTOM_PROCESS_NOT_FOUND",
+            human_message="Native voice icon observation requires a running Custom Codex process.",
+            observed_pid=None,
+            allowed_owner_pids=candidate_pids,
+        )
         return {
             "schema_version": 1,
             "captured_at_utc": utc_now(),
@@ -341,11 +758,29 @@ def show_custom_native_window_packet(
             "human_message": "No Custom Codex process using the WBP profile was found.",
             "persistent_profile_id": persistent_profile_id,
             "persistent_user_data_dir": user_data_dir,
+            "cdp_port": read_profile_remote_debugging_port(profile_root),
+            "cdp_port_source": "persistent_profile_remote_debugging_port",
             "custom_process_observed": False,
+            "custom_profile_process_pids": profile_pids,
+            "custom_root_process_pids": root_pids,
+            "default_profile_process_pids": _default_profile_process_pids(inventory),
+            "custom_window_candidate_pids": candidate_pids,
             "custom_process_pid": None,
+            "custom_window_observed_pid": None,
             "custom_window_observed": False,
             "custom_window_visible": False,
             "custom_window_frontmost": False,
+            "native_voice_icon_observed": False,
+            "native_voice_shortcut_available": False,
+            "native_voice_shortcut_tested": False,
+            "voice_blocked_reason_code": str(voice_packet.get("voice_blocked_reason_code") or ""),
+            "voice_shortcut_blocked_reason_code": str(
+                voice_packet.get("voice_shortcut_blocked_reason_code") or ""
+            ),
+            "microphone_permission_check_required": False,
+            "native_voice_observation_packet": voice_packet,
+            "does_not_patch_codex_ui": True,
+            "voice_is_not_locally_imitated": True,
             "window_focus_action_attempted": False,
             "window_focus_action_succeeded": False,
             "original_codex_touched": False,
@@ -353,29 +788,150 @@ def show_custom_native_window_packet(
             "next_action": "launch_custom_codex_first",
         }
 
-    observed_pid = int(root_pids[0])
-    before = _window_observation_via_ax(inventory)
-    focus = _focus_custom_window_by_pid(observed_pid)
+    observed_pid = int(root_pids[0] if root_pids else candidate_pids[0])
+    before = _window_observation_packet_for_process_inventory(
+        inventory,
+        profile_dir=profile_root,
+    )
+    focus_pid = (
+        before.get("observed_pid")
+        if before.get("window_observed") is True
+        else observed_pid
+    )
+    if not isinstance(focus_pid, int):
+        focus_pid = observed_pid
+    focus = _focus_custom_window_by_pid(focus_pid)
     after_inventory = collect_codex_process_inventory(custom_user_data_dir=user_data_dir)
-    after = _window_observation_via_ax(after_inventory)
+    after_profile_pids = _custom_profile_process_pids(after_inventory)
+    after_candidate_pids = _custom_window_candidate_pids(after_inventory)
+    after = _window_observation_packet_for_process_inventory(
+        after_inventory,
+        profile_dir=profile_root,
+    )
+    focus_visibility_proven = (
+        focus.get("window_focus_visible") is True
+        and focus.get("window_focus_frontmost") is True
+    )
+    cdp_port, cdp_port_source = _custom_runtime_cdp_port(
+        after_inventory,
+        profile_root=profile_root,
+    )
+    after_observed_pid = after.get("observed_pid")
+    if not isinstance(after_observed_pid, int):
+        after_observed_pid = focus_pid
+    if (
+        after.get("window_observed") is not True
+        and focus_visibility_proven
+        and isinstance(after_observed_pid, int)
+    ):
+        after = {
+            **after,
+            "window_observed": True,
+            "window_visible": True,
+            "window_frontmost": True,
+            "observed_pid": after_observed_pid,
+            "window_bounds": after.get("window_bounds") or focus.get("window_focus_bounds") or {},
+            "window_query_method": "AX/System Events focus-visible process fallback",
+            "window_focus_visibility_fallback_used": True,
+            "window_focus_visibility_packet": focus,
+        }
+    usability_packet = _window_usability_from_observation(after, cdp_port=cdp_port)
+    usability_packet = _apply_codex_desktop_auth_blocker(
+        usability_packet,
+        profile_dir=profile_root,
+    )
+    usability_packet, renderer_recovery_packet, recovered_after = _recover_startup_loader_if_needed(
+        usability_packet,
+        window_packet=after,
+        observed_pid=after_observed_pid,
+        allowed_cdp_owner_pids=after_candidate_pids,
+        profile_dir=profile_root,
+        custom_user_data_dir=user_data_dir,
+        cdp_port=cdp_port,
+    )
+    if recovered_after is not None:
+        after = recovered_after
+        recovered_observed_pid = recovered_after.get("observed_pid")
+        if isinstance(recovered_observed_pid, int):
+            after_observed_pid = recovered_observed_pid
     visible = after.get("window_observed") is True and after.get("window_visible") is True
     frontmost = after.get("window_frontmost") is True
-    status_ok = visible and focus.get("window_focus_action_succeeded") is True
+    native_app_usable = usability_packet.get("native_window_usable") is True
+    native_app_usability_source = (
+        str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
+        if native_app_usable
+        else "not_proven"
+    )
+    window_focused = (
+        focus.get("window_focus_action_succeeded") is True or focus_visibility_proven
+    )
+    status_ok = visible and window_focused and native_app_usable
+    window_visible_but_unusable = visible and window_focused and not native_app_usable
+    desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
+    usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+    renderer_surface_blocked_reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class") or usability_blocked_reason
+    )
+    renderer_startup_loader_stuck = (
+        renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+    )
+    if native_app_usable:
+        voice_packet = _cdp_voice_icon_observation(
+            after_observed_pid,
+            port=cdp_port,
+            allowed_owner_pids=after_candidate_pids,
+        )
+    else:
+        voice_packet = _native_voice_icon_blocked_packet(
+            machine_error_code="NATIVE_VOICE_ICON_NOT_TESTED_WINDOW_UNUSABLE",
+            human_message="Native voice icon observation requires a visible, input-capable Custom Codex window.",
+            observed_pid=after_observed_pid,
+            cdp_port=cdp_port,
+            allowed_owner_pids=after_candidate_pids,
+        )
     return {
         "schema_version": 1,
         "captured_at_utc": utc_now(),
         "packet_kind": "custom_codex_show_window",
         "status": "ok" if status_ok else "blocked",
-        "machine_error_code": "OK" if status_ok else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN",
-        "human_message": (
-            "Custom Codex window is visible and frontmost."
+        "machine_error_code": (
+            "OK"
             if status_ok
-            else "Custom Codex window could not be proven visible and frontmost."
+            else (
+                "CUSTOM_CODEX_RENDERER_STARTUP_LOADER_STUCK"
+                if window_visible_but_unusable and renderer_startup_loader_stuck
+                else
+                "CUSTOM_CODEX_WINDOW_USABILITY_NOT_PROVEN"
+                if window_visible_but_unusable
+                else "CUSTOM_CODEX_WINDOW_VISIBILITY_NOT_PROVEN"
+            )
+        ),
+        "human_message": (
+            "Custom Codex window is visible, frontmost, and input-capable UI was proven."
+            if status_ok
+            else (
+                "Custom Codex window is visible and frontmost, but Codex Desktop sign-in is required before input-capable UI can be proven."
+                if window_visible_but_unusable and desktop_auth_blocker
+                else "Custom Codex window is visible and frontmost, but the renderer is still on the startup loader."
+                if window_visible_but_unusable and renderer_startup_loader_stuck
+                else "Custom Codex window is visible and frontmost, but input-capable UI was not proven."
+                if window_visible_but_unusable
+                else "Custom Codex window could not be proven visible and frontmost."
+            )
         ),
         "persistent_profile_id": persistent_profile_id,
         "persistent_user_data_dir": user_data_dir,
+        "cdp_port": cdp_port,
+        "cdp_port_source": cdp_port_source,
         "custom_process_observed": True,
         "custom_process_pid": observed_pid,
+        "custom_profile_process_pids": after_profile_pids,
+        "custom_root_process_pids": root_pids,
+        "custom_root_process_observed": bool(root_pids),
+        "default_profile_process_pids": _default_profile_process_pids(after_inventory),
+        "custom_window_candidate_pids": after_candidate_pids,
+        "custom_window_observed_pid": after_observed_pid,
+        "custom_window_focus_pid": focus_pid,
         "custom_window_observed": after.get("window_observed") is True,
         "custom_window_visible": visible,
         "custom_window_frontmost": frontmost,
@@ -383,26 +939,90 @@ def show_custom_native_window_packet(
         "window_focus_action_attempted": focus.get("window_focus_action_attempted") is True,
         "window_focus_action_succeeded": focus.get("window_focus_action_succeeded") is True,
         "window_focus_packet": focus,
+        "native_app_usable": native_app_usable,
+        "input_capable_ui_observed": usability_packet.get("input_capable_ui_observed") is True,
+        "native_app_usability_source": native_app_usability_source,
+        "native_voice_icon_observed": voice_packet.get("native_voice_icon_observed") is True,
+        "native_voice_shortcut_available": (
+            voice_packet.get("native_voice_shortcut_available") is True
+        ),
+        "native_voice_shortcut_tested": (
+            voice_packet.get("native_voice_shortcut_tested") is True
+        ),
+        "voice_blocked_reason_code": str(voice_packet.get("voice_blocked_reason_code") or ""),
+        "voice_shortcut_blocked_reason_code": str(
+            voice_packet.get("voice_shortcut_blocked_reason_code") or ""
+        ),
+        "microphone_permission_check_required": (
+            voice_packet.get("microphone_permission_check_required") is True
+        ),
+        "native_voice_observation_packet": voice_packet,
+        "does_not_patch_codex_ui": True,
+        "voice_is_not_locally_imitated": True,
+        "native_app_usability_blocked_reason_class": str(
+            "" if native_app_usable else usability_packet.get("blocked_reason_class") or ""
+        ),
+        "cdp_localhost_only": usability_packet.get("cdp_localhost_only") is True,
+        "cdp_endpoint_redacted": usability_packet.get("cdp_endpoint_redacted") is True,
+        "cdp_target_bound_to_custom_launch": usability_packet.get("cdp_target_bound_to_custom_launch") is True,
+        "cdp_editable_surface_observed": usability_packet.get("cdp_editable_surface_observed") is True,
+        "raw_dom_exposed": usability_packet.get("raw_dom_exposed") is True,
+        "raw_ax_tree_exposed": usability_packet.get("raw_ax_tree_exposed") is True,
+        "browser_cdp_authority_widened": usability_packet.get("browser_cdp_authority_widened") is True,
+        "codex_desktop_auth_blocker_observed": desktop_auth_blocker,
+        "codex_desktop_auth_blocked_reason_class": str(
+            usability_packet.get("codex_desktop_auth_blocked_reason_class") or ""
+        ),
+        "codex_desktop_auth_error_class": str(
+            usability_packet.get("codex_desktop_auth_error_class") or ""
+        ),
+        "renderer_surface_blocked_reason_class": str(
+            renderer_surface_blocked_reason if not native_app_usable else ""
+        ),
+        "renderer_startup_loader_observed": (
+            usability_packet.get("renderer_startup_loader_observed") is True
+        ),
+        "renderer_mounted": usability_packet.get("renderer_mounted") is True,
+        "renderer_recovery_attempted": renderer_recovery_packet.get("attempted") is True,
+        "renderer_recovery_status": str(renderer_recovery_packet.get("status") or ""),
+        "renderer_recovery_action": str(renderer_recovery_packet.get("action") or ""),
+        "renderer_recovery_packet": renderer_recovery_packet,
+        "native_window_usability_packet": usability_packet,
         "window_observation_before_focus": before,
         "window_observation_after_focus": after,
         "original_codex_touched": False,
         "asar_touched": False,
-        "next_action": "none" if status_ok else "stop_and_diagnose_window_visibility",
+        "next_action": (
+            "none"
+            if status_ok
+            else (
+                "stop_and_diagnose_window_usability"
+                if window_visible_but_unusable
+                else "stop_and_diagnose_window_visibility"
+            )
+        ),
     }
 
 
 def _wait_for_window_observation_via_ax(
     process_inventory: dict[str, Any],
     *,
+    profile_dir: Path | None = None,
     timeout_seconds: float = WINDOW_OBSERVATION_WAIT_SECONDS,
     poll_seconds: float = WINDOW_OBSERVATION_POLL_SECONDS,
 ) -> dict[str, Any]:
     deadline = time.time() + timeout_seconds
-    last_packet = _window_observation_via_ax(process_inventory)
+    last_packet = _window_observation_packet_for_process_inventory(
+        process_inventory,
+        profile_dir=profile_dir,
+    )
     attempt_count = 1
     while last_packet.get("window_observed") is not True and time.time() < deadline:
         time.sleep(poll_seconds)
-        last_packet = _window_observation_via_ax(process_inventory)
+        last_packet = _window_observation_packet_for_process_inventory(
+            process_inventory,
+            profile_dir=profile_dir,
+        )
         attempt_count += 1
     last_packet["window_observation_attempt_count"] = attempt_count
     last_packet["window_observation_wait_seconds"] = timeout_seconds
@@ -417,7 +1037,7 @@ def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
         '  set w to front window of p\n'
         '  set hasField to false\n'
         '  try\n'
-        '    set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '    set hasField to exists (first UI element of (entire contents of w) whose role is "AXTextField" or role is "AXTextArea")\n'
         '  end try\n'
         '  return {name of w, hasField}\n'
         'end tell\n'
@@ -447,7 +1067,7 @@ def _ax_input_capable_by_name(
         '  set w to front window of p\n'
         '  set hasField to false\n'
         '  try\n'
-        '    set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '    set hasField to exists (first UI element of (entire contents of w) whose role is "AXTextField" or role is "AXTextArea")\n'
         '  end try\n'
         '  return (name of p as text) & tab & (name of w as text) & tab & (hasField as text)\n'
         'end tell\n'
@@ -504,7 +1124,3706 @@ def _cg_window_presence(observed_pid: int) -> tuple[bool, str]:
     return False, cg_result
 
 
-def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
+def _read_exact(sock: socket.socket, byte_count: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = byte_count
+    while remaining > 0:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise OSError("websocket_closed")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _websocket_send_text(sock: socket.socket, payload: str) -> None:
+    data = payload.encode("utf-8")
+    if len(data) < 126:
+        header = bytes([0x81, 0x80 | len(data)])
+    elif len(data) < 65536:
+        header = bytes([0x81, 0x80 | 126]) + len(data).to_bytes(2, "big")
+    else:
+        header = bytes([0x81, 0x80 | 127]) + len(data).to_bytes(8, "big")
+    mask = os.urandom(4)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(data))
+    sock.sendall(header + mask + masked)
+
+
+def _websocket_read_text(sock: socket.socket) -> str:
+    first = _read_exact(sock, 2)
+    opcode = first[0] & 0x0F
+    length = first[1] & 0x7F
+    if length == 126:
+        length = int.from_bytes(_read_exact(sock, 2), "big")
+    elif length == 127:
+        length = int.from_bytes(_read_exact(sock, 8), "big")
+    masked = bool(first[1] & 0x80)
+    mask = _read_exact(sock, 4) if masked else b""
+    payload = bytearray(_read_exact(sock, length))
+    if masked:
+        for index, byte in enumerate(payload):
+            payload[index] = byte ^ mask[index % 4]
+    if opcode == 8:
+        raise OSError("websocket_closed")
+    if opcode not in {1, 0}:
+        return ""
+    return payload.decode("utf-8", errors="replace")
+
+
+def _cdp_command(ws_url: str, message: dict[str, Any], *, timeout_seconds: float = 2.0) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(ws_url)
+    if parsed.scheme != "ws" or parsed.hostname != "127.0.0.1" or parsed.port is None:
+        return {"status": "blocked", "error": "cdp_websocket_url_not_loopback"}
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    with socket.create_connection(("127.0.0.1", int(parsed.port)), timeout=timeout_seconds) as sock:
+        sock.settimeout(timeout_seconds)
+        sock.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{parsed.port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+        header = b""
+        while b"\r\n\r\n" not in header:
+            header += sock.recv(4096)
+            if not header:
+                raise OSError("cdp_websocket_handshake_empty")
+        if b" 101 " not in header.split(b"\r\n", 1)[0]:
+            return {"status": "blocked", "error": "cdp_websocket_handshake_not_upgraded"}
+        _websocket_send_text(sock, json.dumps(message, separators=(",", ":")))
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            text = _websocket_read_text(sock)
+            if not text:
+                continue
+            packet = json.loads(text)
+            if packet.get("id") == message.get("id"):
+                return packet
+    return {"status": "blocked", "error": "cdp_response_timeout"}
+
+
+def _normalize_pid_set(pids: list[int] | tuple[int, ...] | set[int] | None) -> set[int]:
+    normalized: set[int] = set()
+    if not pids:
+        return normalized
+    for pid in pids:
+        try:
+            normalized.add(int(pid))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _pid_csv_to_ints(value: str) -> set[int]:
+    parsed: set[int] = set()
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            parsed.add(int(item))
+        except ValueError:
+            continue
+    return parsed
+
+
+def _devtools_port_owned_by_pid(
+    observed_pid: int,
+    port: int,
+    *,
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> tuple[bool, str]:
+    result = subprocess.run(
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    pids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode != 0 or not pids:
+        return False, str(result.stderr.strip() or "cdp_port_not_listening")
+    owner_pid_set = _pid_csv_to_ints(",".join(pids))
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    if not allowed_pid_set:
+        allowed_pid_set = {int(observed_pid)}
+    else:
+        allowed_pid_set.add(int(observed_pid))
+    return bool(owner_pid_set & allowed_pid_set), ",".join(pids)
+
+
+def _cdp_app_page_targets(port: int) -> tuple[list[dict[str, Any]], str]:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/json/list",
+            timeout=1.5,
+        ) as response:
+            targets = json.loads(response.read().decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], f"cdp_target_list_failed:{type(exc).__name__}"
+    if not isinstance(targets, list):
+        return [], "cdp_target_list_not_array"
+    pages = [
+        target
+        for target in targets
+        if isinstance(target, dict)
+        and target.get("type") == "page"
+        and str(target.get("url") or "").startswith("app://-/")
+        and isinstance(target.get("webSocketDebuggerUrl"), str)
+    ]
+    if not pages:
+        return [], "cdp_app_page_target_not_found"
+    return pages, ""
+
+
+def _cdp_input_capable(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> tuple[bool, str]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if not port_owned:
+        return False, f"cdp_port_owner_mismatch_or_absent:{owner_result}"
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return False, page_error
+    expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const visibleNodes = nodes.filter((node) => visible(node, 80, 20) && node.disabled !== true);
+  const root = document.getElementById('root');
+  const startupLoaders = Array.from(document.querySelectorAll('.startup-loader'));
+  const visibleStartupLoaders = startupLoaders.filter((node) => visible(node));
+  return {
+    readyState: document.readyState,
+    url: location.href,
+    title: document.title,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: visibleNodes.length,
+    bodyTextLength: (document.body?.innerText || '').trim().length,
+    rootChildCount: root ? root.children.length : 0,
+    startupLoaderCount: startupLoaders.length,
+    visibleStartupLoaderCount: visibleStartupLoaders.length,
+    textValueCaptured: false,
+    selector
+  };
+})()
+""".strip()
+    blocked_result: dict[str, Any] | None = None
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_runtime_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = (
+            (cdp_result.get("result") or {})
+            .get("result", {})
+            .get("value", {})
+        )
+        if not isinstance(value, dict):
+            last_error = "cdp_runtime_evaluate_missing_value"
+            continue
+        input_capable = (
+            value.get("url") == "app://-/index.html"
+            and value.get("readyState") in {"interactive", "complete"}
+            and int(value.get("visibleInputCandidateCount") or 0) > 0
+            and value.get("textValueCaptured") is False
+        )
+        bounded = {
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": page.get("url"),
+            "cdp_target_type": page.get("type"),
+            "cdp_ready_state": value.get("readyState"),
+            "cdp_input_candidate_count": value.get("inputCandidateCount"),
+            "cdp_visible_input_candidate_count": value.get("visibleInputCandidateCount"),
+            "cdp_body_text_length": value.get("bodyTextLength"),
+            "cdp_root_child_count": value.get("rootChildCount"),
+            "cdp_startup_loader_count": value.get("startupLoaderCount"),
+            "cdp_visible_startup_loader_count": value.get("visibleStartupLoaderCount"),
+            "cdp_text_value_captured": value.get("textValueCaptured") is True,
+            "cdp_prompt_attempted": False,
+            "cdp_route_trace_bound": False,
+            "browser_cdp_authority_widened": False,
+        }
+        if input_capable:
+            return True, json.dumps(bounded, sort_keys=True)
+        if blocked_result is None or value.get("url") == "app://-/index.html":
+            blocked_result = bounded
+    if blocked_result is not None:
+        return False, json.dumps(blocked_result, sort_keys=True)
+    return False, last_error or "cdp_runtime_evaluate_missing_value"
+
+
+def _cdp_prompt_submit_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    prompt: str,
+    request_id: str = "",
+    blocking_reasons: list[str] | None = None,
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    cdp_result: str = "",
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_prompt_submit",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "request_id": request_id,
+        "blocking_reasons": blocking_reasons or [machine_error_code],
+        "custom_process_pid": observed_pid,
+        "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        if prompt
+        else "",
+        "prompt_length": len(prompt),
+        "prompt_text_recorded": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "input_text_insert_attempted": False,
+        "input_text_insert_succeeded": False,
+        "prompt_submitted": False,
+        "submit_mechanism": "none",
+        "cdp_result": cdp_result[:512],
+        "secret_value_exposed": False,
+        "next_action": "stop_and_diagnose_native_input_blocked",
+    }
+
+
+def _cdp_result_value(packet: dict[str, Any]) -> dict[str, Any]:
+    value = (packet.get("result") or {}).get("result", {}).get("value", {})
+    return value if isinstance(value, dict) else {}
+
+
+def _cdp_wait_for_prompt_acceptance(
+    ws_url: str,
+    *,
+    expected_prompt: str,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    expected_prompt = str(expected_prompt or "")
+    expected_literal = json.dumps(expected_prompt, ensure_ascii=False)
+    expression = f"""
+(async () => {{
+  const expectedPrompt = {expected_literal};
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').replace(/\\r\\n/g, '\\n').trim();
+  const inputText = (node) => (
+    ('value' in node ? node.value : (node.innerText || node.textContent || '')) || ''
+  );
+  const nodes = Array.from(document.querySelectorAll(selector)).filter((node) => visible(node));
+  const promptInputs = nodes.filter((node) => {{
+    const text = inputText(node);
+    const normalizedText = normalize(text);
+    return expectedPrompt.length > 0 && (
+      text === expectedPrompt ||
+      normalizedText === expectedPrompt ||
+      text.includes(expectedPrompt)
+    );
+  }});
+  const inputLengths = nodes.map((node) => inputText(node).length);
+  const submitLikeButtons = Array.from(document.querySelectorAll('button')).filter((button) => {{
+    const label = [
+      button.getAttribute('aria-label') || '',
+      button.getAttribute('title') || '',
+      button.innerText || '',
+      button.textContent || ''
+    ].join(' ').toLowerCase();
+    return visible(button) && (
+      button.type === 'submit' ||
+      label.includes('send') ||
+      label.includes('submit') ||
+      label.includes('отправ') ||
+      label.includes('arrow')
+    );
+  }});
+  return {{
+    promptAcceptanceScanPerformed: true,
+    promptAccepted: promptInputs.length === 0,
+    promptStillInInput: promptInputs.length > 0,
+    inputCandidateCount: nodes.length,
+    inputContainingPromptCandidateCount: promptInputs.length,
+    maxVisibleInputLength: inputLengths.length ? Math.max(...inputLengths) : 0,
+    disabledSubmitLikeButtonCount: submitLikeButtons.filter((button) => button.disabled).length,
+    submitLikeButtonCount: submitLikeButtons.length,
+    textValueCaptured: false,
+    rawDomExposed: false,
+    rawPromptRecorded: false
+  }};
+}})()
+""".strip()
+    if timeout_seconds is None:
+        timeout_seconds = CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS
+    timeout_seconds = max(0.0, min(float(timeout_seconds), CUSTOM_NATIVE_PROMPT_ACCEPTANCE_WAIT_SECONDS))
+    last_packet: dict[str, Any] = {}
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3650,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": expression,
+                        "returnByValue": True,
+                        "awaitPromise": True,
+                    },
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            return {
+                "native_prompt_turn_accepted": False,
+                "native_prompt_acceptance_scan_performed": False,
+                "native_prompt_acceptance_machine_error_code": (
+                    f"CUSTOM_NATIVE_PROMPT_ACCEPTANCE_CDP_FAILED:{type(exc).__name__}"
+                ),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        last_packet = _cdp_result_value(packet)
+        if last_packet.get("promptAccepted") is True:
+            return {
+                "native_prompt_turn_accepted": True,
+                "native_prompt_still_in_input": False,
+                "native_prompt_acceptance_scan_performed": (
+                    last_packet.get("promptAcceptanceScanPerformed") is True
+                ),
+                "native_prompt_acceptance_machine_error_code": "OK",
+                "native_prompt_acceptance_input_candidate_count": int(
+                    last_packet.get("inputCandidateCount") or 0
+                ),
+                "native_prompt_acceptance_input_containing_prompt_candidate_count": int(
+                    last_packet.get("inputContainingPromptCandidateCount") or 0
+                ),
+                "native_prompt_acceptance_max_visible_input_length": int(
+                    last_packet.get("maxVisibleInputLength") or 0
+                ),
+                "native_prompt_acceptance_disabled_submit_like_button_count": int(
+                    last_packet.get("disabledSubmitLikeButtonCount") or 0
+                ),
+                "native_prompt_acceptance_submit_like_button_count": int(
+                    last_packet.get("submitLikeButtonCount") or 0
+                ),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        if timeout_seconds <= 0 or time.monotonic() >= deadline:
+            break
+        time.sleep(CUSTOM_NATIVE_PROMPT_ACCEPTANCE_POLL_SECONDS)
+    return {
+        "native_prompt_turn_accepted": False,
+        "native_prompt_still_in_input": last_packet.get("promptStillInInput") is True,
+        "native_prompt_acceptance_scan_performed": bool(last_packet),
+        "native_prompt_acceptance_machine_error_code": "CUSTOM_NATIVE_PROMPT_NOT_ACCEPTED_BY_CODEX_FLOW",
+        "native_prompt_acceptance_input_candidate_count": int(
+            last_packet.get("inputCandidateCount") or 0
+        ),
+        "native_prompt_acceptance_input_containing_prompt_candidate_count": int(
+            last_packet.get("inputContainingPromptCandidateCount") or 0
+        ),
+        "native_prompt_acceptance_max_visible_input_length": int(
+            last_packet.get("maxVisibleInputLength") or 0
+        ),
+        "native_prompt_acceptance_disabled_submit_like_button_count": int(
+            last_packet.get("disabledSubmitLikeButtonCount") or 0
+        ),
+        "native_prompt_acceptance_submit_like_button_count": int(
+            last_packet.get("submitLikeButtonCount") or 0
+        ),
+        "raw_dom_exposed": False,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "text_value_captured": False,
+    }
+
+
+def _native_free_text_observer_defaults() -> dict[str, Any]:
+    return {
+        "assistant_turn_probe_attempted": False,
+        "assistant_turn_probe_scan_performed": False,
+        "assistant_turn_activity_observed": False,
+        "assistant_turn_started_observed": False,
+        "assistant_turn_completed_observed": False,
+        "assistant_turn_activity_ended_observed": False,
+        "assistant_turn_post_completion_scan_performed": False,
+        "assistant_turn_last_scan_active": False,
+        "assistant_turn_failed_observed": False,
+        "assistant_turn_machine_error_code": "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED",
+        "assistant_turn_progress_candidate_count": 0,
+        "assistant_turn_stop_generating_candidate_count": 0,
+        "auth_or_backend_blocker_observed": False,
+        "model_or_runtime_blocker_observed": False,
+        "response_surface_candidate_count": 0,
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": False,
+        "custom_response_exact_token_observed": False,
+        "custom_response_bound_to_request": False,
+        "custom_response_candidate_map_available": False,
+        "custom_response_candidate_map_schema_version": 1,
+        "custom_response_candidate_map_truncated": False,
+        "custom_response_candidate_map_candidate_count": 0,
+        "custom_response_candidate_map": [],
+        "native_codex_subagent_used_as_dip": False,
+        "native_codex_subagent_absence_proven": False,
+        "native_free_text_observer_source": "not_observable_by_prompt_submit",
+        "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+    }
+
+
+def _safe_bool(value: object) -> bool:
+    return value is True
+
+
+def _safe_non_negative_int(value: object, *, limit: int = 1_000_000) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(parsed, limit))
+
+
+def _safe_response_candidate_label(value: object, *, limit: int = 48) -> str:
+    text = str(value or "").lower()[:limit]
+    return "".join(ch for ch in text if ch.isalnum() or ch in {"-", "_", ":"})
+
+
+def _safe_sha256_hex(value: object) -> str:
+    text = str(value or "").lower()
+    if len(text) != 64:
+        return ""
+    if any(ch not in "0123456789abcdef" for ch in text):
+        return ""
+    return text
+
+
+def _native_free_text_request_binding_texts(request_id: str) -> list[str]:
+    text = str(request_id or "").strip()
+    if not text:
+        return []
+    variants = [text]
+    slug_chars: list[str] = []
+    previous_separator = False
+    for character in text:
+        if character.isalnum():
+            slug_chars.append(character)
+            previous_separator = False
+        elif not previous_separator:
+            slug_chars.append("_")
+            previous_separator = True
+    slug = "".join(slug_chars).strip("_")
+    if slug and slug not in variants:
+        variants.append(slug)
+    return variants
+
+
+def _safe_candidate_bounds(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {"x": 0, "y": 0, "width": 0, "height": 0}
+    return {
+        "x": _safe_non_negative_int(value.get("x"), limit=100_000),
+        "y": _safe_non_negative_int(value.get("y"), limit=100_000),
+        "width": _safe_non_negative_int(value.get("width"), limit=100_000),
+        "height": _safe_non_negative_int(value.get("height"), limit=100_000),
+    }
+
+
+def _bounded_response_candidate_map(value: dict[str, Any]) -> dict[str, Any]:
+    raw_candidates = value.get("responseCandidateMap")
+    if not isinstance(raw_candidates, list):
+        return {
+            "custom_response_candidate_map_available": False,
+            "custom_response_candidate_map_schema_version": 1,
+            "custom_response_candidate_map_truncated": False,
+            "custom_response_candidate_map_candidate_count": 0,
+            "custom_response_candidate_map": [],
+        }
+    candidates: list[dict[str, Any]] = []
+    for raw_candidate in raw_candidates[:CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS]:
+        if not isinstance(raw_candidate, dict):
+            continue
+        candidates.append({
+            "candidate_kind": _safe_response_candidate_label(
+                raw_candidate.get("candidateKind")
+            ),
+            "tag_name": _safe_response_candidate_label(
+                raw_candidate.get("tagName"),
+                limit=32,
+            ),
+            "role": _safe_response_candidate_label(raw_candidate.get("role")),
+            "text_sha256": _safe_sha256_hex(raw_candidate.get("textSha256")),
+            "text_length": _safe_non_negative_int(raw_candidate.get("textLength")),
+            "line_count": _safe_non_negative_int(raw_candidate.get("lineCount")),
+            "child_count": _safe_non_negative_int(raw_candidate.get("childCount")),
+            "contains_expected_text": _safe_bool(raw_candidate.get("containsExpectedText")),
+            "contains_request_id": _safe_bool(raw_candidate.get("containsRequestId")),
+            "contains_prompt_marker": _safe_bool(raw_candidate.get("containsPromptMarker")),
+            "prompt_echo": _safe_bool(raw_candidate.get("promptEcho")),
+            "prompt_suffix_echo": _safe_bool(raw_candidate.get("promptSuffixEcho")),
+            "exact_token": _safe_bool(raw_candidate.get("exactToken")),
+            "response_like": _safe_bool(raw_candidate.get("responseLike")),
+            "response_surface": _safe_bool(raw_candidate.get("responseSurface")),
+            "inside_button": _safe_bool(raw_candidate.get("insideButton")),
+            "visible_child_contains_expected": _safe_bool(
+                raw_candidate.get("visibleChildContainsExpected")
+            ),
+            "expected_text_offset_class": _safe_response_candidate_label(
+                raw_candidate.get("expectedTextOffsetClass")
+            ),
+            "bounds": _safe_candidate_bounds(raw_candidate.get("bounds")),
+        })
+    total_count = _safe_non_negative_int(
+        value.get("responseCandidateMapTotalCount"),
+        limit=10_000,
+    )
+    if total_count < len(candidates):
+        total_count = len(candidates)
+    return {
+        "custom_response_candidate_map_available": bool(candidates),
+        "custom_response_candidate_map_schema_version": 1,
+        "custom_response_candidate_map_truncated": _safe_bool(
+            value.get("responseCandidateMapTruncated")
+        )
+        or total_count > len(candidates),
+        "custom_response_candidate_map_candidate_count": total_count,
+        "custom_response_candidate_map": candidates,
+    }
+
+
+def _message_text_from_session_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    if isinstance(payload.get("message"), str):
+        return str(payload.get("message") or "")
+    if isinstance(payload.get("last_agent_message"), str):
+        return str(payload.get("last_agent_message") or "")
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") in {"input_text", "output_text", "text"}:
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+    return "".join(parts)
+
+
+def _custom_session_external_route_response_observer_packet(
+    *,
+    profile_root: Path,
+    prompt: str,
+    request_id: str,
+    expected_text: str,
+    submitted_after_epoch_seconds: float,
+) -> dict[str, Any]:
+    sessions_dir = profile_root / "sessions"
+    prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else ""
+    expected_sha256 = hashlib.sha256(expected_text.encode("utf-8")).hexdigest()
+    packet_base = {
+        **_native_free_text_observer_defaults(),
+        "schema_version": 1,
+        "packet_kind": "custom_native_session_external_route_response_observer",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_NATIVE_SESSION_EXTERNAL_ROUTE_RESPONSE_NOT_PROVEN",
+        "custom_session_jsonl_observer_attempted": True,
+        "custom_session_jsonl_seen": False,
+        "custom_session_jsonl_fresh": False,
+        "custom_session_prompt_digest_bound": False,
+        "custom_session_external_route_message_observed": False,
+        "custom_session_agent_message_observed": False,
+        "custom_session_task_complete_observed": False,
+        "custom_session_router_command_attempted": False,
+        "custom_session_tool_call_count": 0,
+        "custom_session_file_count_scanned": 0,
+        "custom_session_line_count_scanned": 0,
+        "prompt_sha256": prompt_sha256,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "custom_response_expected_sha256": expected_sha256,
+        "text_value_captured": False,
+    }
+    if not expected_text or not request_id:
+        return packet_base | {"blocking_reasons": ["expected_text_or_request_id_missing"]}
+    try:
+        session_paths = sorted(
+            sessions_dir.rglob("*.jsonl"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )[:16] if sessions_dir.exists() else []
+    except OSError:
+        session_paths = []
+    prompt_seen = False
+    external_route_seen = False
+    agent_message_seen = False
+    task_complete_seen = False
+    router_command_attempted = False
+    tool_call_count = 0
+    line_count = 0
+    fresh_file_seen = False
+    for session_path in session_paths:
+        try:
+            stat = session_path.stat()
+        except OSError:
+            continue
+        if stat.st_mtime + 5.0 < submitted_after_epoch_seconds:
+            continue
+        fresh_file_seen = True
+        try:
+            lines = session_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines[-400:]:
+            line_count += 1
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            payload = entry.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            entry_type = str(entry.get("type") or "")
+            payload_type = str(payload.get("type") or "")
+            text = _message_text_from_session_payload(payload)
+            if payload_type == "function_call":
+                tool_call_count += 1
+                name = str(payload.get("name") or "")
+                arguments = str(payload.get("arguments") or "")
+                if name == "exec_command" and "router-hook auto-route-output" in arguments:
+                    router_command_attempted = True
+            if (
+                payload_type == "message"
+                and payload.get("role") == "user"
+                and text.strip() == prompt.strip()
+            ) or (
+                entry_type == "event_msg"
+                and payload_type == "user_message"
+                and text.strip() == prompt.strip()
+            ):
+                prompt_seen = True
+            if (
+                payload_type == "message"
+                and payload.get("role") == "assistant"
+                and str(payload.get("id") or "") == "msg_wbp_external_route"
+                and text.strip() == expected_text
+            ):
+                external_route_seen = True
+            if (
+                entry_type == "event_msg"
+                and payload_type == "agent_message"
+                and text.strip() == expected_text
+            ):
+                agent_message_seen = True
+            if (
+                entry_type == "event_msg"
+                and payload_type == "task_complete"
+                and text.strip() == expected_text
+            ):
+                task_complete_seen = True
+    ok = bool(prompt_seen and external_route_seen and task_complete_seen)
+    if not ok:
+        reasons = []
+        if not session_paths:
+            reasons.append("session_jsonl_missing")
+        if not fresh_file_seen:
+            reasons.append("fresh_session_jsonl_missing")
+        if not prompt_seen:
+            reasons.append("session_prompt_not_bound")
+        if not external_route_seen:
+            reasons.append("external_route_message_not_observed")
+        if not task_complete_seen:
+            reasons.append("task_complete_not_observed")
+        return packet_base | {
+            "custom_session_jsonl_seen": bool(session_paths),
+            "custom_session_jsonl_fresh": fresh_file_seen,
+            "custom_session_router_command_attempted": router_command_attempted,
+            "custom_session_tool_call_count": tool_call_count,
+            "custom_session_file_count_scanned": len(session_paths),
+            "custom_session_line_count_scanned": line_count,
+            "blocking_reasons": reasons,
+        }
+    return packet_base | {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "custom_session_jsonl_seen": bool(session_paths),
+        "custom_session_jsonl_fresh": fresh_file_seen,
+        "custom_session_prompt_digest_bound": True,
+        "custom_session_external_route_message_observed": True,
+        "custom_session_agent_message_observed": agent_message_seen,
+        "custom_session_task_complete_observed": True,
+        "custom_session_router_command_attempted": router_command_attempted,
+        "custom_session_tool_call_count": tool_call_count,
+        "custom_session_file_count_scanned": len(session_paths),
+        "custom_session_line_count_scanned": line_count,
+        "assistant_turn_probe_attempted": True,
+        "assistant_turn_probe_scan_performed": True,
+        "assistant_turn_activity_observed": True,
+        "assistant_turn_started_observed": True,
+        "assistant_turn_completed_observed": True,
+        "assistant_turn_activity_ended_observed": True,
+        "assistant_turn_post_completion_scan_performed": True,
+        "assistant_turn_machine_error_code": "OK",
+        "native_agent_provider_call_directly_observed": False,
+        "custom_codex_response_text_read_proven": True,
+        "custom_response_exact_token_observed": True,
+        "custom_response_bound_to_request": True,
+        "custom_response_text_read_without_storing": True,
+        "custom_response_exact_token_candidate_count": 1,
+        "custom_response_like_candidate_count": 1,
+        "native_codex_subagent_used_as_dip": False,
+        "native_codex_subagent_absence_proven": True,
+        "native_free_text_observer_source": "custom_session_jsonl_external_route",
+        "native_free_text_observer_machine_error_code": "OK",
+        "custom_response_observer_attempted": True,
+        "custom_response_observer_scan_performed": True,
+        "blocking_reasons": [],
+    }
+
+
+def _merge_session_external_route_observer(
+    packet: dict[str, Any],
+    session_packet: dict[str, Any],
+) -> dict[str, Any]:
+    packet["custom_session_external_route_observer_packet"] = session_packet
+    if session_packet.get("status") != "ok":
+        return packet
+    for key in (
+        "assistant_turn_probe_attempted",
+        "assistant_turn_probe_scan_performed",
+        "assistant_turn_activity_observed",
+        "assistant_turn_started_observed",
+        "assistant_turn_completed_observed",
+        "assistant_turn_activity_ended_observed",
+        "assistant_turn_post_completion_scan_performed",
+        "assistant_turn_machine_error_code",
+        "native_agent_provider_call_directly_observed",
+        "custom_codex_response_text_read_proven",
+        "custom_response_exact_token_observed",
+        "custom_response_bound_to_request",
+        "custom_response_text_read_without_storing",
+        "custom_response_expected_sha256",
+        "custom_response_exact_token_candidate_count",
+        "custom_response_like_candidate_count",
+        "native_codex_subagent_used_as_dip",
+        "native_codex_subagent_absence_proven",
+        "native_free_text_observer_source",
+        "native_free_text_observer_machine_error_code",
+        "custom_response_observer_attempted",
+        "custom_response_observer_scan_performed",
+    ):
+        packet[key] = session_packet.get(key)
+    return packet
+
+
+def _apply_native_prompt_submit_claim_ceiling(packet: dict[str, Any]) -> dict[str, Any]:
+    packet.setdefault("custom_codex_ui_visibility_proven", False)
+    packet.setdefault("delivery_counts_as_custom_codex_ui", False)
+    packet.setdefault("native_free_chat_router_proven", False)
+    packet.setdefault("product_ready", False)
+    packet.setdefault("fallback_used", False)
+    packet.setdefault("local_imitation_used", False)
+    packet.setdefault("raw_backend_details_exposed", False)
+    packet.setdefault("raw_provider_response_recorded", False)
+    packet.setdefault("provider_response_text_recorded", False)
+    packet.setdefault("provider_response_preview_recorded", False)
+    return packet
+
+
+def _cdp_observe_custom_response_token(
+    ws_url: str,
+    *,
+    expected_text: str,
+    request_id: str,
+    timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
+) -> dict[str, Any]:
+    expected_text = str(expected_text or "")
+    request_id = str(request_id or "")
+    if not expected_text:
+        return _native_free_text_observer_defaults() | {
+            "custom_response_observer_attempted": False,
+            "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_EXPECTED_TEXT_REQUIRED",
+        }
+    timeout_seconds = max(
+        0.0,
+        min(float(timeout_seconds), CUSTOM_NATIVE_RESPONSE_OBSERVER_MAX_WAIT_SECONDS),
+    )
+    expected_literal = json.dumps(expected_text, ensure_ascii=False)
+    request_id_literal = json.dumps(request_id, ensure_ascii=False)
+    request_binding_texts_literal = json.dumps(
+        _native_free_text_request_binding_texts(request_id),
+        ensure_ascii=False,
+    )
+    expression = f"""
+(async () => {{
+  const expectedText = {expected_literal};
+  const requestId = {request_id_literal};
+  const requestBindingTexts = {request_binding_texts_literal};
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').replace(/\\r\\n/g, '\\n').trim();
+  const promptMarkers = [
+    'expected_token',
+    'native_free_text_agent_ack',
+    'custom_codex_native_free_text_agent_proof',
+    'schema_version=1',
+    'Создай UTF-8 JSON файл',
+    'Запиши один JSON object'
+  ].filter(Boolean);
+  const subagentMarkers = [
+    'subagent',
+    'sub-agent',
+    'sub agent',
+    'субагент',
+    'субагенты',
+    'создано1 агент',
+    'создано 1 агент',
+    'created 1 agent'
+  ];
+  const authOrBackendMarkers = [
+    'sign in',
+    'login',
+    'auth',
+    'authentication',
+    'network error',
+    'backend',
+    'войдите',
+    'авторизац',
+    'сеть'
+  ];
+  const modelOrRuntimeMarkers = [
+    'rate limit',
+    'quota',
+    'model unavailable',
+    'model overloaded',
+    'unknown provider for model',
+    'bad gateway',
+    'runtime error',
+    'try again',
+    'please try again',
+    '502',
+    'лимит',
+    'модель недоступ',
+    'ошибка выполнения',
+    'попробуйте ещё',
+    'попробуйте позже'
+  ];
+  const stopMarkers = [
+    'stop',
+    'interrupt',
+    'cancel',
+    'останов',
+    'прервать',
+    'отмена'
+  ];
+  const hasVisibleChildWith = (node, needle) => (
+    Array.from(node.children || []).some((child) => visible(child) && normalize(child.innerText || child.textContent).includes(needle))
+  );
+  const elements = Array.from(document.querySelectorAll('main, [role="main"], article, section, div, p, pre, code, span'));
+  const textElements = elements.filter((node) => {{
+    if (!visible(node)) return false;
+    const text = normalize(node.innerText || node.textContent);
+    return text.length > 0;
+  }});
+  const tokenLeafs = textElements.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text.includes(expectedText) && !hasVisibleChildWith(node, expectedText);
+  }});
+  const textLines = (text) => text.split('\\n').map((line) => line.trim()).filter(Boolean);
+  const containsRequestBinding = (text) => (
+    requestBindingTexts.some((bindingText) => bindingText && text.includes(bindingText))
+  );
+  const promptSuffixEchoLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const beforeChars = text.indexOf(expectedText);
+    const afterChars = text.length - beforeChars - expectedText.length;
+    return beforeChars > 0 && afterChars === 0 && text.length > expectedText.length;
+  }});
+  const promptEchoLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return promptMarkers.some((marker) => marker && text.includes(marker)) ||
+      promptSuffixEchoLeafs.includes(node);
+  }});
+  const exactLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text === expectedText || textLines(text).some((line) => line === expectedText);
+  }});
+  const responseLikeLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const tokenLineExact = text === expectedText ||
+      textLines(text).some((line) => line === expectedText);
+    return tokenLineExact && !promptEchoLeafs.includes(node);
+  }});
+  const visibleSelectorCount = (selector) => (
+    Array.from(document.querySelectorAll(selector)).filter((node) => visible(node)).length
+  );
+  const buttonLabel = (button) => ([
+    button.getAttribute('aria-label') || '',
+    button.getAttribute('title') || '',
+    button.innerText || '',
+    button.textContent || ''
+  ].join(' ').toLowerCase());
+  const visibleButtons = Array.from(document.querySelectorAll('button')).filter((button) => visible(button));
+  const stopGeneratingButtons = visibleButtons.filter((button) => (
+    stopMarkers.some((marker) => buttonLabel(button).includes(marker))
+  ));
+  const progressCandidateCount = (
+    visibleSelectorCount('[aria-busy="true"]') +
+    visibleSelectorCount('[role="progressbar"]') +
+    visibleSelectorCount('[data-testid*="spinner"]')
+  );
+  const requestTokenLeafs = tokenLeafs.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    return text.includes(expectedText) || containsRequestBinding(text);
+  }});
+  const requestPromptBottom = requestTokenLeafs.reduce((maxBottom, node) => {{
+    const rect = node.getBoundingClientRect();
+    return Math.max(maxBottom, Number(rect.bottom || 0));
+  }}, 0);
+  const currentTurnRegion = (node) => {{
+    if (requestPromptBottom <= 0) return true;
+    const rect = node.getBoundingClientRect();
+    return Number(rect.top || 0) >= requestPromptBottom - 4;
+  }};
+  const blockerCandidateCount = (markers) => (
+    textElements.filter((node) => {{
+      if (!currentTurnRegion(node)) return false;
+      const text = normalize(node.innerText || node.textContent);
+      if (!text) return false;
+      if (text.includes(expectedText) || containsRequestBinding(text)) return false;
+      if (hasVisibleChildWith(node, expectedText) || requestBindingTexts.some((bindingText) => bindingText && hasVisibleChildWith(node, bindingText))) return false;
+      if (promptMarkers.some((marker) => marker && text.includes(marker))) return false;
+      const lower = text.toLowerCase();
+      return markers.some((marker) => marker && lower.includes(marker));
+    }}).length
+  );
+  const authOrBackendBlockerCandidateCount = blockerCandidateCount(authOrBackendMarkers);
+  const modelOrRuntimeBlockerCandidateCount = blockerCandidateCount(modelOrRuntimeMarkers);
+  const responseSurfaceLeafs = textElements.filter((node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    if (text.length < 20) return false;
+    if (text.includes(expectedText)) return false;
+    if (node.closest && node.closest('button')) return false;
+    if (promptMarkers.some((marker) => marker && text.includes(marker))) return false;
+    return true;
+  }});
+  const subagentMarkerLeafs = textElements.filter((node) => {{
+    if (hasVisibleChildWith(node, 'Subagents') || hasVisibleChildWith(node, 'Субагенты')) return false;
+    const text = normalize(node.innerText || node.textContent).toLowerCase();
+    return subagentMarkers.some((marker) => text.includes(marker));
+  }});
+  const canHash = !!(globalThis.crypto && crypto.subtle && globalThis.TextEncoder);
+  const sha256Hex = async (text) => {{
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }};
+  const nodeSet = new Set();
+  const addNodes = (nodes) => nodes.forEach((node) => nodeSet.add(node));
+  addNodes(tokenLeafs);
+  addNodes(exactLeafs);
+  addNodes(responseLikeLeafs);
+  addNodes(promptEchoLeafs);
+  addNodes(responseSurfaceLeafs.slice(0, 12));
+  const candidateNodes = Array.from(nodeSet);
+  const responseCandidateMapMaxItems = {CUSTOM_NATIVE_RESPONSE_CANDIDATE_MAP_MAX_ITEMS};
+  const expectedOffsetClass = (text) => {{
+    const beforeChars = text.indexOf(expectedText);
+    if (beforeChars < 0) return 'absent';
+    const afterChars = text.length - beforeChars - expectedText.length;
+    if (beforeChars === 0 && afterChars === 0) return 'standalone';
+    if (beforeChars > 0 && afterChars === 0) return 'suffix';
+    if (beforeChars === 0 && afterChars > 0) return 'prefix';
+    return 'surrounded';
+  }};
+  const candidateKind = (node) => {{
+    if (responseLikeLeafs.includes(node)) return 'response_like';
+    if (exactLeafs.includes(node)) return 'exact';
+    if (promptEchoLeafs.includes(node)) return 'prompt_echo';
+    if (tokenLeafs.includes(node)) return 'token_leaf';
+    if (responseSurfaceLeafs.includes(node)) return 'response_surface';
+    return 'text_surface';
+  }};
+  const summarizeCandidate = async (node) => {{
+    const text = normalize(node.innerText || node.textContent);
+    const rect = node.getBoundingClientRect();
+    return {{
+      candidateKind: candidateKind(node),
+      tagName: String(node.tagName || '').toLowerCase().slice(0, 32),
+      role: String(node.getAttribute('role') || '').toLowerCase().slice(0, 48),
+      textSha256: await sha256Hex(text),
+      textLength: text.length,
+      lineCount: textLines(text).length,
+      childCount: Array.from(node.children || []).length,
+      containsExpectedText: text.includes(expectedText),
+      containsRequestId: containsRequestBinding(text),
+      containsPromptMarker: promptMarkers.some((marker) => marker && text.includes(marker)),
+      promptEcho: promptEchoLeafs.includes(node),
+      promptSuffixEcho: promptSuffixEchoLeafs.includes(node),
+      exactToken: exactLeafs.includes(node),
+      responseLike: responseLikeLeafs.includes(node),
+      responseSurface: responseSurfaceLeafs.includes(node),
+      insideButton: !!(node.closest && node.closest('button')),
+      visibleChildContainsExpected: hasVisibleChildWith(node, expectedText),
+      expectedTextOffsetClass: expectedOffsetClass(text),
+      bounds: {{
+        x: Math.max(0, Math.round(rect.x || 0)),
+        y: Math.max(0, Math.round(rect.y || 0)),
+        width: Math.max(0, Math.round(rect.width || 0)),
+        height: Math.max(0, Math.round(rect.height || 0))
+      }}
+    }};
+  }};
+  const responseCandidateMap = canHash
+    ? await Promise.all(candidateNodes.slice(0, responseCandidateMapMaxItems).map(summarizeCandidate))
+    : [];
+  const responseExactTokenObserved = responseLikeLeafs.length > 0 && exactLeafs.length > 0;
+  const requestBoundExpectedToken = requestBindingTexts.some((bindingText) => (
+    bindingText && expectedText.includes(bindingText)
+  ));
+  const assistantTurnActivityObserved = responseExactTokenObserved ||
+    stopGeneratingButtons.length > 0;
+  const assistantTurnFailedObserved = authOrBackendBlockerCandidateCount > 0 ||
+    modelOrRuntimeBlockerCandidateCount > 0;
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    assistantTurnProbeScanPerformed: true,
+    assistantTurnActivityObserved: assistantTurnActivityObserved,
+    assistantTurnStartedObserved: assistantTurnActivityObserved,
+    assistantTurnCompletedObserved: responseExactTokenObserved,
+    assistantTurnFailedObserved: assistantTurnFailedObserved && !responseExactTokenObserved,
+    authOrBackendBlockerObserved: authOrBackendBlockerCandidateCount > 0,
+    modelOrRuntimeBlockerObserved: modelOrRuntimeBlockerCandidateCount > 0,
+    progressCandidateCount,
+    stopGeneratingCandidateCount: stopGeneratingButtons.length,
+    responseSurfaceCandidateCount: responseSurfaceLeafs.length,
+    responseObserverScanPerformed: true,
+    responseTextReadWithoutStoring: true,
+    textValueCaptured: false,
+    rawDomExposed: false,
+    rawPromptRecorded: false,
+    assistantTurnActiveSignalCount: stopGeneratingButtons.length,
+    tokenLeafCandidateCount: tokenLeafs.length,
+    promptEchoCandidateCount: promptEchoLeafs.length,
+    promptSuffixEchoCandidateCount: promptSuffixEchoLeafs.length,
+    exactTokenCandidateCount: exactLeafs.length,
+    responseLikeCandidateCount: responseLikeLeafs.length,
+    responseCandidateMap,
+    responseCandidateMapTotalCount: candidateNodes.length,
+    responseCandidateMapTruncated: candidateNodes.length > responseCandidateMap.length,
+    subagentMarkerCandidateCount: subagentMarkerLeafs.length,
+    customResponseExactTokenObserved: responseExactTokenObserved,
+    nativeCodexSubagentUsedAsDip: subagentMarkerLeafs.length > 0,
+    nativeCodexSubagentAbsenceProven: responseExactTokenObserved && subagentMarkerLeafs.length === 0,
+    customResponseBoundToRequest: responseExactTokenObserved && requestBoundExpectedToken
+  }};
+}})()
+""".strip()
+    last_packet: dict[str, Any] = {}
+    assistant_turn_activity_observed = False
+    assistant_turn_completion_observed = False
+    assistant_turn_activity_ended_observed = False
+    assistant_turn_post_completion_scan_performed = False
+    assistant_turn_last_scan_active = False
+    assistant_turn_failed = False
+    auth_or_backend_blocker = False
+    model_or_runtime_blocker = False
+    max_progress_candidate_count = 0
+    max_stop_generating_candidate_count = 0
+    max_response_surface_candidate_count = 0
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() <= deadline:
+        try:
+            cdp_result = _cdp_command(
+                ws_url,
+                {
+                    "id": 3700,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": expression,
+                        "returnByValue": True,
+                        "awaitPromise": True,
+                    },
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            return _native_free_text_observer_defaults() | {
+                "custom_response_observer_attempted": True,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_RESPONSE_OBSERVER_CDP_FAILED",
+                "cdp_result": f"cdp_response_observer_failed:{type(exc).__name__}",
+            }
+        value = _cdp_result_value(cdp_result)
+        last_packet = value
+        token_observed = value.get("customResponseExactTokenObserved") is True
+        subagent_used = value.get("nativeCodexSubagentUsedAsDip") is True
+        absence_proven = value.get("nativeCodexSubagentAbsenceProven") is True
+        request_bound = token_observed and value.get("customResponseBoundToRequest") is True
+        current_active_signal = (
+            value.get("assistantTurnActivityObserved") is True
+            or value.get("assistantTurnStartedObserved") is True
+            or token_observed
+        )
+        if current_active_signal:
+            assistant_turn_activity_observed = True
+        elif assistant_turn_activity_observed:
+            assistant_turn_completion_observed = True
+            assistant_turn_activity_ended_observed = True
+            assistant_turn_post_completion_scan_performed = (
+                value.get("assistantTurnProbeScanPerformed") is True
+            )
+        assistant_turn_last_scan_active = current_active_signal
+        auth_or_backend_blocker = (
+            auth_or_backend_blocker or value.get("authOrBackendBlockerObserved") is True
+        )
+        model_or_runtime_blocker = (
+            model_or_runtime_blocker or value.get("modelOrRuntimeBlockerObserved") is True
+        )
+        assistant_turn_failed = (
+            assistant_turn_failed or value.get("assistantTurnFailedObserved") is True
+        )
+        max_progress_candidate_count = max(
+            max_progress_candidate_count,
+            int(value.get("progressCandidateCount") or 0),
+        )
+        max_stop_generating_candidate_count = max(
+            max_stop_generating_candidate_count,
+            int(value.get("stopGeneratingCandidateCount") or 0),
+        )
+        max_response_surface_candidate_count = max(
+            max_response_surface_candidate_count,
+            int(value.get("responseSurfaceCandidateCount") or 0),
+        )
+        if token_observed or subagent_used:
+            assistant_turn_activity_observed = (
+                assistant_turn_activity_observed or token_observed
+            )
+            assistant_turn_completion_observed = token_observed
+            machine_code = "OK"
+            if subagent_used:
+                machine_code = "CUSTOM_NATIVE_FREE_TEXT_CODEX_SUBAGENT_USED_AS_DIP"
+            elif not absence_proven or not request_bound:
+                machine_code = "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN"
+            return {
+                "assistant_turn_probe_attempted": True,
+                "assistant_turn_probe_scan_performed": (
+                    value.get("assistantTurnProbeScanPerformed") is True
+                ),
+                "assistant_turn_activity_observed": assistant_turn_activity_observed,
+                "assistant_turn_started_observed": assistant_turn_activity_observed,
+                "assistant_turn_completed_observed": assistant_turn_completion_observed,
+                "assistant_turn_activity_ended_observed": (
+                    assistant_turn_activity_ended_observed or token_observed
+                ),
+                "assistant_turn_post_completion_scan_performed": (
+                    assistant_turn_post_completion_scan_performed or token_observed
+                ),
+                "assistant_turn_last_scan_active": current_active_signal,
+                "assistant_turn_failed_observed": assistant_turn_failed,
+                "assistant_turn_machine_error_code": (
+                    "OK"
+                    if token_observed and absence_proven and request_bound
+                    else "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_PROVEN"
+                ),
+                "assistant_turn_progress_candidate_count": max_progress_candidate_count,
+                "assistant_turn_stop_generating_candidate_count": (
+                    max_stop_generating_candidate_count
+                ),
+                "auth_or_backend_blocker_observed": auth_or_backend_blocker,
+                "model_or_runtime_blocker_observed": model_or_runtime_blocker,
+                "response_surface_candidate_count": max_response_surface_candidate_count,
+                "native_agent_provider_call_directly_observed": False,
+                "custom_codex_response_text_read_proven": token_observed,
+                "custom_response_exact_token_observed": token_observed,
+                "custom_response_bound_to_request": request_bound,
+                "native_codex_subagent_used_as_dip": subagent_used,
+                "native_codex_subagent_absence_proven": absence_proven,
+                "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+                "native_free_text_observer_machine_error_code": machine_code,
+                "custom_response_observer_attempted": True,
+                "custom_response_observer_scan_performed": (
+                    value.get("responseObserverScanPerformed") is True
+                ),
+                "custom_response_text_read_without_storing": (
+                    value.get("responseTextReadWithoutStoring") is True
+                ),
+                "custom_response_expected_sha256": hashlib.sha256(
+                    expected_text.encode("utf-8")
+                ).hexdigest(),
+                "custom_response_token_leaf_candidate_count": int(
+                    value.get("tokenLeafCandidateCount") or 0
+                ),
+                "custom_response_prompt_echo_candidate_count": int(
+                    value.get("promptEchoCandidateCount") or 0
+                ),
+                "custom_response_prompt_suffix_echo_candidate_count": int(
+                    value.get("promptSuffixEchoCandidateCount") or 0
+                ),
+                "custom_response_exact_token_candidate_count": int(
+                    value.get("exactTokenCandidateCount") or 0
+                ),
+                "custom_response_like_candidate_count": int(
+                    value.get("responseLikeCandidateCount") or 0
+                ),
+                **_bounded_response_candidate_map(value),
+                "native_codex_subagent_marker_candidate_count": int(
+                    value.get("subagentMarkerCandidateCount") or 0
+                ),
+                "raw_dom_exposed": False,
+                "prompt_text_recorded": False,
+                "raw_prompt_recorded": False,
+                "text_value_captured": False,
+            }
+        if assistant_turn_completion_observed:
+            break
+        if timeout_seconds <= 0:
+            break
+        time.sleep(CUSTOM_NATIVE_RESPONSE_OBSERVER_POLL_SECONDS)
+    assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_NOT_OBSERVED"
+    prompt_echo_only = (
+        int(last_packet.get("tokenLeafCandidateCount") or 0) > 0
+        and int(last_packet.get("promptEchoCandidateCount") or 0) > 0
+        and int(last_packet.get("exactTokenCandidateCount") or 0) == 0
+        and int(last_packet.get("responseLikeCandidateCount") or 0) == 0
+    )
+    if assistant_turn_failed:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_FAILED_OR_BLOCKED"
+    elif assistant_turn_activity_observed and not assistant_turn_completion_observed:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_STILL_RUNNING"
+    elif assistant_turn_completion_observed:
+        assistant_turn_machine_error_code = (
+            "CUSTOM_NATIVE_ASSISTANT_TURN_COMPLETED_WITHOUT_EXACT_TOKEN"
+        )
+    elif prompt_echo_only:
+        assistant_turn_machine_error_code = "CUSTOM_NATIVE_ASSISTANT_TURN_PROMPT_ECHO_ONLY"
+    return _native_free_text_observer_defaults() | {
+        "assistant_turn_probe_attempted": True,
+        "assistant_turn_probe_scan_performed": bool(last_packet),
+        "assistant_turn_activity_observed": assistant_turn_activity_observed,
+        "assistant_turn_started_observed": assistant_turn_activity_observed,
+        "assistant_turn_completed_observed": assistant_turn_completion_observed,
+        "assistant_turn_activity_ended_observed": assistant_turn_activity_ended_observed,
+        "assistant_turn_post_completion_scan_performed": (
+            assistant_turn_post_completion_scan_performed
+        ),
+        "assistant_turn_last_scan_active": assistant_turn_last_scan_active,
+        "assistant_turn_failed_observed": assistant_turn_failed,
+        "assistant_turn_machine_error_code": assistant_turn_machine_error_code,
+        "assistant_turn_progress_candidate_count": max_progress_candidate_count,
+        "assistant_turn_stop_generating_candidate_count": (
+            max_stop_generating_candidate_count
+        ),
+        "auth_or_backend_blocker_observed": auth_or_backend_blocker,
+        "model_or_runtime_blocker_observed": model_or_runtime_blocker,
+        "response_surface_candidate_count": max_response_surface_candidate_count,
+        "custom_response_observer_attempted": True,
+        "custom_response_observer_scan_performed": bool(last_packet),
+        "native_free_text_observer_source": "bounded_cdp_response_token_scan",
+        "native_free_text_observer_machine_error_code": "CUSTOM_NATIVE_FREE_TEXT_OBSERVER_NOT_PROVEN",
+        "custom_response_expected_sha256": hashlib.sha256(
+            expected_text.encode("utf-8")
+        ).hexdigest(),
+        "custom_response_text_read_without_storing": (
+            last_packet.get("responseTextReadWithoutStoring") is True
+        ),
+        "custom_response_token_leaf_candidate_count": int(
+            last_packet.get("tokenLeafCandidateCount") or 0
+        ),
+        "custom_response_prompt_echo_candidate_count": int(
+            last_packet.get("promptEchoCandidateCount") or 0
+        ),
+        "custom_response_prompt_suffix_echo_candidate_count": int(
+            last_packet.get("promptSuffixEchoCandidateCount") or 0
+        ),
+        "custom_response_exact_token_candidate_count": int(
+            last_packet.get("exactTokenCandidateCount") or 0
+        ),
+        "custom_response_like_candidate_count": int(
+            last_packet.get("responseLikeCandidateCount") or 0
+        ),
+        **_bounded_response_candidate_map(last_packet),
+        "native_codex_subagent_marker_candidate_count": int(
+            last_packet.get("subagentMarkerCandidateCount") or 0
+        ),
+        "raw_dom_exposed": False,
+        "prompt_text_recorded": False,
+        "raw_prompt_recorded": False,
+        "text_value_captured": False,
+    }
+
+
+def _custom_paste_packet_base(
+    *,
+    packet_kind: str,
+    request_id: str,
+    draft_text: str = "",
+    draft_length: int | None = None,
+    draft_sha256: str = "",
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    length = len(draft_text) if draft_length is None else max(int(draft_length), 0)
+    sha256 = draft_sha256 or (
+        hashlib.sha256(draft_text.encode("utf-8")).hexdigest() if draft_text else ""
+    )
+    return {
+        "schema_version": 1,
+        "packet_kind": packet_kind,
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": "PENDING",
+        "human_message": "",
+        "request_id": request_id,
+        "custom_process_pid": observed_pid,
+        "custom_window_found": False,
+        "custom_window_identity": "unknown",
+        "custom_window_identity_proven": False,
+        "target_input_candidate": "unknown",
+        "target_input_unique": False,
+        "target_input_focused": False,
+        "target_input_before_length": 0,
+        "target_input_after_length": 0,
+        "draft_sha256": sha256,
+        "draft_length": length,
+        "draft_text_recorded": False,
+        "draft_text_in_packet": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "clipboard_backup_captured": False,
+        "clipboard_handoff_attempted": False,
+        "clipboard_write_attempted": False,
+        "clipboard_restore_attempted": False,
+        "clipboard_restored": False,
+        "paste_attempted": False,
+        "paste_ok": False,
+        "custom_mutation_scope": "none",
+        "custom_window_mutation_attempted": False,
+        "input_text_insert_attempted": False,
+        "input_text_insert_succeeded": False,
+        "prompt_submitted": False,
+        "submit_action_planned": False,
+        "enter_key_planned": False,
+        "enter_key_pressed": False,
+        "send_button_planned": False,
+        "send_button_pressed": False,
+        "api_called": False,
+        "model_endpoint_called": False,
+        "operator_run_called": False,
+        "session_prompt_endpoint_called": False,
+        "secret_value_exposed": False,
+        "blocking_reasons": [],
+        "next_action": "stop_and_diagnose_custom_paste_bridge",
+    }
+
+
+def _custom_paste_blocked_packet(
+    *,
+    packet_kind: str,
+    machine_error_code: str,
+    human_message: str,
+    request_id: str,
+    draft_text: str = "",
+    draft_length: int | None = None,
+    draft_sha256: str = "",
+    blocking_reasons: list[str] | None = None,
+    observed_pid: int | None = None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    cdp_result: str = "",
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    next_action: str = "stop_and_diagnose_custom_paste_bridge",
+) -> dict[str, Any]:
+    packet = _custom_paste_packet_base(
+        packet_kind=packet_kind,
+        request_id=request_id,
+        draft_text=draft_text,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        observed_pid=observed_pid,
+        cdp_port=cdp_port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    packet.update(
+        {
+            "status": "blocked",
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "blocking_reasons": blocking_reasons or [machine_error_code],
+            "cdp_result": cdp_result[:512],
+            "next_action": next_action,
+        }
+    )
+    return packet
+
+
+def _paste_target_probe_expression(*, focus: bool = False) -> str:
+    focus_line = "target.focus();" if focus else ""
+    return f"""
+(() => {{
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const editable = nodes.filter((node) =>
+    visible(node) &&
+    node.disabled !== true &&
+    node.readOnly !== true &&
+    node.getAttribute('aria-disabled') !== 'true'
+  );
+  const target = editable.length === 1 ? editable[0] : null;
+  if (target) {{
+    {focus_line}
+  }}
+  const value = target ? (('value' in target ? target.value : target.innerText) || '') : '';
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: editable.length,
+    targetInputUnique: editable.length === 1,
+    targetInputFocused: target ? document.activeElement === target : false,
+    targetInputLength: value.length,
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+
+
+def _cdp_probe_custom_paste_target(
+    observed_pid: int,
+    *,
+    request_id: str,
+    draft_length: int = 0,
+    draft_sha256: str = "",
+    focus: bool = False,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    if not port_owned:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Custom paste target check requires the Custom Codex renderer CDP port to be pid-bound.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code=page_error.upper(),
+            human_message="Custom paste target check could not find a Custom Codex app page target.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 3600 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": _paste_target_probe_expression(focus=focus),
+                        "returnByValue": True,
+                    },
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_paste_target_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = _cdp_result_value(cdp_result)
+        if value.get("url") != "app://-/index.html":
+            last_error = "cdp_target_url_mismatch"
+            continue
+        visible_count = int(value.get("visibleInputCandidateCount") or 0)
+        if visible_count != 1:
+            return _custom_paste_blocked_packet(
+                packet_kind="custom_codex_native_paste_target_preflight",
+                machine_error_code=(
+                    "TARGET_INPUT_NOT_FOUND" if visible_count <= 0 else "TARGET_INPUT_NOT_UNIQUE"
+                ),
+                human_message="Custom paste target must have exactly one visible editable input.",
+                request_id=request_id,
+                draft_length=draft_length,
+                draft_sha256=draft_sha256,
+                observed_pid=observed_pid,
+                cdp_port=port,
+                blocking_reasons=["target_input_not_unique"],
+                cdp_result=json.dumps(value, sort_keys=True),
+                allowed_owner_pids=allowed_owner_pids,
+            )
+        if focus and value.get("targetInputFocused") is not True:
+            return _custom_paste_blocked_packet(
+                packet_kind="custom_codex_native_paste_target_preflight",
+                machine_error_code="TARGET_INPUT_FOCUS_FAILED",
+                human_message="Custom paste target input could not be focused.",
+                request_id=request_id,
+                draft_length=draft_length,
+                draft_sha256=draft_sha256,
+                observed_pid=observed_pid,
+                cdp_port=port,
+                blocking_reasons=["target_input_focus_failed"],
+                cdp_result=json.dumps(value, sort_keys=True),
+                allowed_owner_pids=allowed_owner_pids,
+            )
+        packet = _custom_paste_packet_base(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet.update(
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "human_message": "Custom Codex paste target is unique and safe for paste-only handoff.",
+                "custom_window_found": True,
+                "custom_window_identity": "custom_codex",
+                "custom_window_identity_proven": True,
+                "target_input_candidate": "single",
+                "target_input_unique": True,
+                "target_input_focused": value.get("targetInputFocused") is True,
+                "target_input_before_length": int(value.get("targetInputLength") or 0),
+                "cdp_port_owner_pids": owner_result,
+                "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+                "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+                "cdp_page_target_count": len(pages),
+                "cdp_target_url": str(page.get("url") or ""),
+                "cdp_target_type": str(page.get("type") or ""),
+                "cdp_target_bound_to_custom_launch": True,
+                "cdp_ready_state": str(value.get("readyState") or ""),
+                "cdp_input_candidate_count": int(value.get("inputCandidateCount") or 0),
+                "cdp_visible_input_candidate_count": visible_count,
+                "next_action": "none",
+            }
+        )
+        return packet
+    return _custom_paste_blocked_packet(
+        packet_kind="custom_codex_native_paste_target_preflight",
+        machine_error_code="CUSTOM_NATIVE_PASTE_TARGET_CHECK_FAILED",
+        human_message="Custom paste target check could not evaluate the pid-bound renderer.",
+        request_id=request_id,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        blocking_reasons=[last_error or "cdp_paste_target_check_failed"],
+        cdp_result=last_error,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+
+
+def _read_macos_clipboard_text() -> tuple[bool, str, str]:
+    result = subprocess.run(
+        ["pbpaste"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, "", str(result.stderr.strip() or "pbpaste_failed")
+    return True, result.stdout, ""
+
+
+def _write_macos_clipboard_text(value: str) -> tuple[bool, str]:
+    result = subprocess.run(
+        ["pbcopy"],
+        input=value,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, str(result.stderr.strip() or "pbcopy_failed")
+    return True, ""
+
+
+def _cdp_paste_clipboard_into_custom_target(
+    observed_pid: int,
+    draft_text: str,
+    *,
+    request_id: str,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    if not draft_text:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="EMPTY_DRAFT",
+            human_message="Custom paste requires a non-empty draft.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            next_action="dictate_or_type_draft",
+        )
+    if len(draft_text) > CUSTOM_NATIVE_PROMPT_PASTE_MAX_CHARS:
+        return _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CUSTOM_NATIVE_PASTE_DRAFT_TOO_LONG",
+            human_message="Custom paste refused an oversized draft.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["draft_too_long"],
+        )
+    target_packet = _cdp_probe_custom_paste_target(
+        observed_pid,
+        request_id=request_id,
+        draft_length=len(draft_text),
+        draft_sha256=hashlib.sha256(draft_text.encode("utf-8")).hexdigest(),
+        focus=True,
+        port=port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if target_packet.get("status") != "ok":
+        target_packet["packet_kind"] = "custom_codex_native_paste_only"
+        return target_packet
+    clipboard_ok, previous_clipboard, clipboard_error = _read_macos_clipboard_text()
+    if not clipboard_ok:
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CLIPBOARD_BACKUP_FAILED",
+            human_message="Custom paste could not backup the current clipboard.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["clipboard_backup_failed"],
+            cdp_result=clipboard_error,
+        )
+        packet["target_packet"] = target_packet
+        return packet
+    write_ok, write_error = _write_macos_clipboard_text(draft_text)
+    if not write_ok:
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CLIPBOARD_WRITE_FAILED",
+            human_message="Custom paste could not write the WBP draft to clipboard.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            allowed_owner_pids=allowed_owner_pids,
+            blocking_reasons=["clipboard_write_failed"],
+            cdp_result=write_error,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        restore_ok, _restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        return packet
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if not port_owned:
+        restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Custom paste requires the Custom Codex renderer CDP port to remain pid-bound.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        if not restore_ok:
+            packet["machine_error_code"] = "CLIPBOARD_RESTORE_FAILED"
+            packet["blocking_reasons"] = ["clipboard_restore_failed"]
+            packet["cdp_result"] = restore_error[:512]
+        return packet
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code=page_error.upper(),
+            human_message="Custom paste could not find a Custom Codex app page target.",
+            request_id=request_id,
+            draft_text=draft_text,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+        packet["target_packet"] = target_packet
+        packet["clipboard_backup_captured"] = True
+        packet["clipboard_handoff_attempted"] = True
+        packet["clipboard_write_attempted"] = True
+        packet["clipboard_restore_attempted"] = True
+        packet["clipboard_restored"] = restore_ok
+        if not restore_ok:
+            packet["machine_error_code"] = "CLIPBOARD_RESTORE_FAILED"
+            packet["blocking_reasons"] = ["clipboard_restore_failed"]
+            packet["cdp_result"] = restore_error[:512]
+        return packet
+
+    target_input_before_length = int(target_packet.get("target_input_before_length") or 0)
+    draft_text_literal = json.dumps(draft_text, ensure_ascii=False)
+    verify_expression = f"""
+(() => {{
+  const expectedDraftText = {draft_text_literal};
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const editable = nodes.filter((node) =>
+    visible(node) &&
+    node.disabled !== true &&
+    node.readOnly !== true &&
+    node.getAttribute('aria-disabled') !== 'true'
+  );
+  const target = editable.length === 1 ? editable[0] : null;
+  const text = target ? (('value' in target ? target.value : target.innerText) || '') : '';
+  const expectedAppendLength = {target_input_before_length + len(draft_text)};
+  const expectedReplaceLength = {len(draft_text)};
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    visibleInputCandidateCount: editable.length,
+    targetInputUnique: editable.length === 1,
+    targetInputFocused: target ? document.activeElement === target : false,
+    afterLength: text.length,
+    expectedAppendLength,
+    expectedReplaceLength,
+    draftTextPresent: expectedDraftText.length > 0 && text.includes(expectedDraftText),
+    pasteLengthDeltaMatches: text.length === expectedAppendLength,
+    pasteReplaceLengthMatches: text.length === expectedReplaceLength,
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+    paste_error = ""
+    paste_value: dict[str, Any] = {}
+    page_used: dict[str, Any] | None = None
+    for index, page in enumerate(pages, start=1):
+        try:
+            ws_url = str(page["webSocketDebuggerUrl"])
+            down = _cdp_command(
+                ws_url,
+                {
+                    "id": 3700 + index,
+                    "method": "Input.dispatchKeyEvent",
+                    "params": {
+                        "type": "rawKeyDown",
+                        "modifiers": 4,
+                        "key": "v",
+                        "code": "KeyV",
+                        "windowsVirtualKeyCode": 86,
+                        "commands": ["Paste"],
+                    },
+                },
+            )
+            up = _cdp_command(
+                ws_url,
+                {
+                    "id": 3800 + index,
+                    "method": "Input.dispatchKeyEvent",
+                    "params": {
+                        "type": "keyUp",
+                        "modifiers": 4,
+                        "key": "v",
+                        "code": "KeyV",
+                        "windowsVirtualKeyCode": 86,
+                    },
+                },
+            )
+            if down.get("status") == "blocked" or "error" in down or "error" in up:
+                paste_error = "cdp_paste_key_event_failed"
+                continue
+            verify_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3900 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": verify_expression, "returnByValue": True},
+                },
+            )
+            paste_value = _cdp_result_value(verify_packet)
+            paste_length_matches = (
+                paste_value.get("pasteLengthDeltaMatches") is True
+                or paste_value.get("pasteReplaceLengthMatches") is True
+            )
+            if paste_value.get("draftTextPresent") is not True or not paste_length_matches:
+                paste_error = "cdp_paste_verification_failed"
+                continue
+            page_used = page
+            break
+        except (OSError, json.JSONDecodeError) as exc:
+            paste_error = f"cdp_paste_failed:{type(exc).__name__}"
+            continue
+
+    restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+    base = _custom_paste_packet_base(
+        packet_kind="custom_codex_native_paste_only",
+        request_id=request_id,
+        draft_text=draft_text,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    base.update(
+        {
+            "target_packet": target_packet,
+            "custom_window_found": True,
+            "custom_window_identity": "custom_codex",
+            "custom_window_identity_proven": True,
+            "target_input_candidate": "single",
+            "target_input_unique": True,
+            "target_input_focused": paste_value.get("targetInputFocused") is True,
+            "target_input_before_length": target_input_before_length,
+            "target_input_after_length": int(paste_value.get("afterLength") or 0),
+            "draft_text_present_after_paste": paste_value.get("draftTextPresent") is True,
+            "paste_length_delta_matches": paste_value.get("pasteLengthDeltaMatches") is True,
+            "paste_replace_length_matches": paste_value.get("pasteReplaceLengthMatches") is True,
+            "clipboard_backup_captured": True,
+            "clipboard_handoff_attempted": True,
+            "clipboard_write_attempted": True,
+            "clipboard_restore_attempted": True,
+            "clipboard_restored": restore_ok,
+            "paste_attempted": True,
+            "custom_mutation_scope": "paste_only",
+            "custom_window_mutation_attempted": True,
+            "input_text_insert_attempted": True,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_port_owner_bound_to_custom_profile": True,
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": str((page_used or {}).get("url") or ""),
+            "cdp_target_type": str((page_used or {}).get("type") or ""),
+            "cdp_target_bound_to_custom_launch": page_used is not None,
+        }
+    )
+    if page_used is None:
+        base.update(
+            {
+                "status": "blocked",
+                "machine_error_code": "PASTE_FAILED",
+                "human_message": "Custom Codex paste key event did not pass verification.",
+                "blocking_reasons": [paste_error or "paste_failed"],
+                "paste_ok": False,
+                "input_text_insert_succeeded": False,
+                "cdp_result": paste_error[:512],
+                "next_action": "stop_and_diagnose_custom_paste",
+            }
+        )
+        return base
+    if not restore_ok:
+        base.update(
+            {
+                "status": "blocked",
+                "machine_error_code": "CLIPBOARD_RESTORE_FAILED",
+                "human_message": "Custom Codex paste succeeded, but clipboard restore failed.",
+                "blocking_reasons": ["clipboard_restore_failed"],
+                "paste_ok": True,
+                "input_text_insert_succeeded": True,
+                "cdp_result": restore_error[:512],
+                "next_action": "stop_and_restore_clipboard_manually",
+            }
+        )
+        return base
+    base.update(
+        {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex draft was pasted into the input without submit.",
+            "paste_ok": True,
+            "input_text_insert_succeeded": True,
+            "blocking_reasons": [],
+            "next_action": "none",
+        }
+    )
+    return base
+
+
+def _native_voice_icon_blocked_packet(
+    *,
+    machine_error_code: str,
+    human_message: str,
+    observed_pid: int | None,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    cdp_result: str = "",
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_native_voice_icon_observation",
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "custom_process_pid": observed_pid,
+        "cdp_port": cdp_port,
+        "cdp_allowed_owner_pids": sorted(_normalize_pid_set(allowed_owner_pids)),
+        "cdp_port_owner_bound_to_custom_profile": False,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": False,
+        "native_voice_icon_observed": False,
+        "native_voice_shortcut_available": False,
+        "native_voice_shortcut_tested": False,
+        "voice_blocked_reason_code": machine_error_code,
+        "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_ICON_NOT_PROVEN",
+        "microphone_permission_check_required": False,
+        "native_voice_candidate_count": 0,
+        "visible_native_voice_candidate_count": 0,
+        "button_candidate_count": 0,
+        "visible_button_candidate_count": 0,
+        "voice_detector_hint_count": len(NATIVE_VOICE_ICON_HINTS),
+        "input_candidate_count": 0,
+        "visible_input_candidate_count": 0,
+        "semantic_voice_candidate_count": 0,
+        "dedicated_voice_candidate_count": 0,
+        "composer_bound_voice_candidate_count": 0,
+        "forbidden_voice_candidate_count": 0,
+        "local_forbidden_voice_context_count": 0,
+        "semantic_attribute_scan_performed": False,
+        "dom_text_content_scanned": False,
+        "text_value_captured": False,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "raw_label_recorded": False,
+        "raw_backend_details_exposed": False,
+        "no_secret_exposed": True,
+        "secret_value_exposed": False,
+        "prompt_attempted": False,
+        "prompt_submitted": False,
+        "does_not_patch_codex_ui": True,
+        "voice_is_not_locally_imitated": True,
+        "browser_cdp_authority_widened": False,
+        "cdp_result": cdp_result[:512],
+        "next_action": "stop_and_diagnose_native_voice_icon",
+    }
+
+
+def _cdp_voice_icon_observation(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    try:
+        port_owned, owner_result = _devtools_port_owned_by_pid(
+            observed_pid,
+            port,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    except OSError as exc:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_PROBE_FAILED",
+            human_message="Native voice icon observation could not prove the Custom Codex renderer CDP port owner.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=f"cdp_port_owner_probe_failed:{type(exc).__name__}",
+        )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    if not port_owned:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Native voice icon observation requires the Custom Codex renderer CDP port to be pid-bound.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=owner_result,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _native_voice_icon_blocked_packet(
+            machine_error_code=page_error.upper(),
+            human_message="Native voice icon observation could not find a Custom Codex app page target.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=page_error,
+        )
+
+    hints_json = json.dumps(list(NATIVE_VOICE_ICON_HINTS), ensure_ascii=False)
+    forbidden_hints_json = json.dumps(list(NATIVE_VOICE_ICON_FORBIDDEN_HINTS), ensure_ascii=False)
+    expression = f"""
+(() => {{
+  const hints = {hints_json};
+  const forbiddenHints = {forbidden_hints_json};
+  const visible = (node, minWidth = 1, minHeight = 1) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const normalize = (value) => String(value || '').toLowerCase();
+  const semanticText = (node) => {{
+    const attrs = [
+      'aria-label',
+      'title',
+      'data-testid',
+      'data-test-id',
+      'data-cy',
+      'data-icon',
+      'data-lucide',
+      'id',
+      'class',
+      'name',
+      'role'
+    ];
+    const values = attrs.map((attr) => node.getAttribute(attr) || '');
+    for (const child of Array.from(node.querySelectorAll('svg,[aria-label],[title],[data-icon],[data-lucide]'))) {{
+      values.push(child.getAttribute('aria-label') || '');
+      values.push(child.getAttribute('title') || '');
+      values.push(child.getAttribute('data-icon') || '');
+      values.push(child.getAttribute('data-lucide') || '');
+      values.push(child.getAttribute('class') || '');
+    }}
+    return normalize(values.join(' '));
+  }};
+  const hasVoiceHint = (node) => {{
+    const text = semanticText(node);
+    return hints.some((hint) => text.includes(hint));
+  }};
+  const hasForbiddenVoiceContext = (node) => {{
+    const text = semanticText(node);
+    return forbiddenHints.some((hint) => text.includes(hint));
+  }};
+  const inputSelector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const inputNodes = Array.from(document.querySelectorAll(inputSelector));
+  const visibleInputs = inputNodes.filter((node) => visible(node, 80, 20) && node.disabled !== true);
+  const submitButtonHint = (button) => {{
+    const text = semanticText(button);
+    return button.type === 'submit' ||
+      text.includes('send') ||
+      text.includes('submit') ||
+      text.includes('arrow-up') ||
+      text.includes('arrow up') ||
+      text.includes('отправ');
+  }};
+  const buttonLooksIconSized = (button) => {{
+    const rect = button.getBoundingClientRect();
+    return rect.width >= 16 && rect.height >= 16 && rect.width <= 96 && rect.height <= 96;
+  }};
+  const buttonHasIconSurface = (button) => (
+    !!button.querySelector('svg,[data-icon],[data-lucide]') ||
+    !!button.getAttribute('data-icon') ||
+    !!button.getAttribute('data-lucide')
+  );
+  const ancestorChain = (node) => {{
+    const chain = [];
+    let current = node;
+    for (let depth = 0; current && depth < 8; depth += 1) {{
+      chain.push(current);
+      current = current.parentElement;
+    }}
+    return chain;
+  }};
+  const buttonHasForbiddenLocalContext = (button) => (
+    ancestorChain(button).slice(0, 4).some((node) => hasForbiddenVoiceContext(node))
+  );
+  const composerContainers = [];
+  for (const input of visibleInputs) {{
+    for (const container of ancestorChain(input)) {{
+      const buttons = Array.from(container.querySelectorAll('button,[role="button"]'))
+        .filter((node) => visible(node) && node.disabled !== true);
+      const hasSubmit = buttons.some((button) => submitButtonHint(button));
+      if (hasSubmit) {{
+        composerContainers.push(container);
+        break;
+      }}
+    }}
+  }}
+  const buttonIsInComposerContainer = (button) => (
+    composerContainers.some((container) => container.contains(button))
+  );
+  const nodes = Array.from(document.querySelectorAll('button,[role="button"]'));
+  const visibleButtons = nodes.filter((node) => visible(node) && node.disabled !== true);
+  const semanticCandidates = visibleButtons.filter((node) => hasVoiceHint(node));
+  const forbiddenCandidates = semanticCandidates.filter((node) => hasForbiddenVoiceContext(node));
+  const localForbiddenCandidates = semanticCandidates.filter((node) => (
+    buttonHasForbiddenLocalContext(node)
+  ));
+  const composerBoundCandidates = semanticCandidates.filter((node) => (
+    buttonIsInComposerContainer(node) && !buttonHasForbiddenLocalContext(node)
+  ));
+  const dedicatedCandidates = semanticCandidates.filter((node) => (
+    buttonIsInComposerContainer(node) &&
+    !buttonHasForbiddenLocalContext(node) &&
+    buttonLooksIconSized(node) &&
+    buttonHasIconSurface(node)
+  ));
+  return {{
+    readyState: document.readyState,
+    url: location.href,
+    title: document.title,
+    inputCandidateCount: inputNodes.length,
+    visibleInputCandidateCount: visibleInputs.length,
+    composerContainerCandidateCount: composerContainers.length,
+    buttonCandidateCount: nodes.length,
+    visibleButtonCandidateCount: visibleButtons.length,
+    semanticVoiceCandidateCount: semanticCandidates.length,
+    composerBoundVoiceCandidateCount: composerBoundCandidates.length,
+    forbiddenVoiceCandidateCount: forbiddenCandidates.length,
+    localForbiddenVoiceContextCount: localForbiddenCandidates.length,
+    dedicatedVoiceCandidateCount: dedicatedCandidates.length,
+    nativeVoiceCandidateCount: dedicatedCandidates.length,
+    visibleNativeVoiceCandidateCount: dedicatedCandidates.length,
+    voiceDetectorHintCount: hints.length,
+    semanticAttributeScanPerformed: true,
+    domTextContentScanned: false,
+    textValueCaptured: false,
+    rawLabelCaptured: false
+  }};
+}})()
+""".strip()
+    blocked_result: dict[str, Any] | None = None
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        try:
+            cdp_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 5000 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expression, "returnByValue": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_voice_icon_evaluate_failed:{type(exc).__name__}"
+            continue
+        value = _cdp_result_value(cdp_result)
+        if not value:
+            last_error = "cdp_voice_icon_evaluate_missing_value"
+            continue
+        icon_observed = (
+            value.get("url") == "app://-/index.html"
+            and value.get("readyState") in {"interactive", "complete"}
+            and int(value.get("visibleInputCandidateCount") or 0) > 0
+            and int(value.get("visibleNativeVoiceCandidateCount") or 0) > 0
+            and value.get("textValueCaptured") is False
+            and value.get("rawLabelCaptured") is False
+            and value.get("domTextContentScanned") is False
+        )
+        bounded = {
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": page.get("url"),
+            "cdp_target_type": page.get("type"),
+            "cdp_ready_state": value.get("readyState"),
+            "input_candidate_count": value.get("inputCandidateCount"),
+            "visible_input_candidate_count": value.get("visibleInputCandidateCount"),
+            "composer_container_candidate_count": value.get("composerContainerCandidateCount"),
+            "button_candidate_count": value.get("buttonCandidateCount"),
+            "visible_button_candidate_count": value.get("visibleButtonCandidateCount"),
+            "semantic_voice_candidate_count": value.get("semanticVoiceCandidateCount"),
+            "composer_bound_voice_candidate_count": value.get("composerBoundVoiceCandidateCount"),
+            "forbidden_voice_candidate_count": value.get("forbiddenVoiceCandidateCount"),
+            "local_forbidden_voice_context_count": value.get("localForbiddenVoiceContextCount"),
+            "dedicated_voice_candidate_count": value.get("dedicatedVoiceCandidateCount"),
+            "native_voice_candidate_count": value.get("nativeVoiceCandidateCount"),
+            "visible_native_voice_candidate_count": value.get("visibleNativeVoiceCandidateCount"),
+            "voice_detector_hint_count": value.get("voiceDetectorHintCount"),
+            "semantic_attribute_scan_performed": (
+                value.get("semanticAttributeScanPerformed") is True
+            ),
+            "dom_text_content_scanned": value.get("domTextContentScanned") is True,
+            "text_value_captured": value.get("textValueCaptured") is True,
+            "raw_label_recorded": value.get("rawLabelCaptured") is True,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "raw_backend_details_exposed": False,
+            "no_secret_exposed": True,
+            "secret_value_exposed": False,
+            "prompt_attempted": False,
+            "prompt_submitted": False,
+            "browser_cdp_authority_widened": False,
+        }
+        if icon_observed:
+            return {
+                "schema_version": 1,
+                "packet_kind": "custom_codex_native_voice_icon_observation",
+                "captured_at_utc": utc_now(),
+                "status": "ok",
+                "machine_error_code": "OK",
+                "human_message": "Custom Codex native voice icon was observed in the pid-bound renderer.",
+                "custom_process_pid": observed_pid,
+                "cdp_localhost_only": True,
+                "cdp_endpoint_redacted": True,
+                "cdp_target_bound_to_custom_launch": True,
+                "native_voice_icon_observed": True,
+                "native_voice_shortcut_available": False,
+                "native_voice_shortcut_tested": False,
+                "voice_blocked_reason_code": "",
+                "voice_shortcut_blocked_reason_code": "VOICE_SHORTCUT_NOT_TESTED_NO_UI_MUTATION",
+                "microphone_permission_check_required": True,
+                "does_not_patch_codex_ui": True,
+                "voice_is_not_locally_imitated": True,
+                "next_action": "native_microphone_permission_check"
+                if not value.get("microphonePermissionChecked")
+                else "none",
+                **bounded,
+            }
+        if blocked_result is None or value.get("url") == "app://-/index.html":
+            blocked_result = bounded
+    if blocked_result is not None:
+        try:
+            semantic_voice_count = int(blocked_result.get("semantic_voice_candidate_count") or 0)
+        except (TypeError, ValueError):
+            semantic_voice_count = 0
+        machine_error_code = (
+            "NATIVE_VOICE_ICON_DEDICATED_CONTROL_NOT_OBSERVED"
+            if semantic_voice_count > 0
+            else "NATIVE_VOICE_ICON_NOT_OBSERVED"
+        )
+        return _native_voice_icon_blocked_packet(
+            machine_error_code=machine_error_code,
+            human_message="Custom Codex native voice icon was not observed in the pid-bound renderer.",
+            observed_pid=observed_pid,
+            cdp_port=port,
+            allowed_owner_pids=allowed_owner_pids,
+            cdp_result=json.dumps(blocked_result, sort_keys=True),
+        ) | blocked_result
+    return _native_voice_icon_blocked_packet(
+        machine_error_code="NATIVE_VOICE_ICON_CDP_EVALUATION_FAILED",
+        human_message="Custom Codex native voice icon observation could not evaluate the pid-bound renderer.",
+        observed_pid=observed_pid,
+        cdp_port=port,
+        allowed_owner_pids=allowed_owner_pids,
+        cdp_result=last_error or "cdp_voice_icon_evaluate_failed",
+    )
+
+
+def _cdp_submit_prompt_to_app_page(
+    observed_pid: int,
+    prompt: str,
+    *,
+    request_id: str,
+    expected_text: str = "",
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    observer_timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
+) -> dict[str, Any]:
+    if not prompt:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_PROMPT_EMPTY",
+            human_message="Native prompt submit requires a non-empty prompt.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["prompt_empty"],
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    if len(prompt) > CUSTOM_NATIVE_PROMPT_SUBMIT_MAX_CHARS:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CUSTOM_NATIVE_PROMPT_TOO_LONG",
+            human_message="Native prompt submit refused an oversized prompt.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["prompt_too_long"],
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    allowed_pid_set = _normalize_pid_set(allowed_owner_pids)
+    allowed_pid_set.add(int(observed_pid))
+    owner_pid_set = _pid_csv_to_ints(owner_result)
+    if not port_owned:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            human_message="Native prompt submit requires the Custom Codex renderer CDP port to be pid-bound.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=["cdp_port_owner_mismatch_or_absent"],
+            cdp_result=owner_result,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _cdp_prompt_submit_blocked_packet(
+            machine_error_code=page_error.upper(),
+            human_message="Native prompt submit could not find a Custom Codex app page target.",
+            prompt=prompt,
+            request_id=request_id,
+            observed_pid=observed_pid,
+            cdp_port=port,
+            blocking_reasons=[page_error],
+            cdp_result=page_error,
+            allowed_owner_pids=allowed_owner_pids,
+        )
+
+    focus_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const node = nodes.find((candidate) => visible(candidate) && candidate.disabled !== true);
+  if (!node) {
+    return {
+      focused: false,
+      readyState: document.readyState,
+      url: location.href,
+      inputCandidateCount: nodes.length,
+      visibleInputCandidateCount: nodes.filter((candidate) => visible(candidate)).length,
+      textValueCaptured: false
+    };
+  }
+  node.focus();
+  if ('value' in node) {
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(node), 'value');
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(node, '');
+    } else {
+      node.value = '';
+    }
+  } else {
+    node.textContent = '';
+  }
+  node.dispatchEvent(new InputEvent('input', {inputType: 'deleteContentBackward', bubbles: true, composed: true}));
+  return {
+    focused: document.activeElement === node,
+    readyState: document.readyState,
+    url: location.href,
+    inputCandidateCount: nodes.length,
+    visibleInputCandidateCount: nodes.filter((candidate) => visible(candidate)).length,
+    textValueCaptured: false
+  };
+})()
+""".strip()
+    expected_prompt_literal = json.dumps(prompt, ensure_ascii=False)
+    verify_expression = f"""
+(() => {{
+  const expectedPrompt = {expected_prompt_literal};
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 80, minHeight = 20) => {{
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  }};
+  const nodes = Array.from(document.querySelectorAll(selector));
+  const node = document.activeElement && visible(document.activeElement)
+    ? document.activeElement
+    : nodes.find((candidate) => visible(candidate) && candidate.disabled !== true);
+  const text = node ? (('value' in node ? node.value : node.innerText) || '') : '';
+  const expectedLength = expectedPrompt.length;
+  const normalizedText = text.replace(/\\r\\n/g, "\\n").replace(/\\n\\n/g, "\\n");
+  return {{
+    inputFocused: !!node,
+    insertedLengthMatches: text === expectedPrompt || normalizedText === expectedPrompt,
+    insertedLength: text.length,
+    expectedLength,
+    insertedTextPresent: (
+      expectedPrompt.length > 0 &&
+      (text.includes(expectedPrompt) || normalizedText === expectedPrompt)
+    ),
+    insertedNormalizedLengthMatches: normalizedText.length === expectedLength,
+    textValueCaptured: false
+  }};
+}})()
+""".strip()
+    submit_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const textNode = document.activeElement || document.querySelector(selector);
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const labeledSubmitButton = buttons.find((button) => {
+    if (!visible(button) || button.disabled) return false;
+    const label = [
+      button.getAttribute('aria-label') || '',
+      button.getAttribute('title') || '',
+      button.innerText || '',
+      button.textContent || ''
+    ].join(' ').toLowerCase();
+    return button.type === 'submit' ||
+      label.includes('send') ||
+      label.includes('submit') ||
+      label.includes('отправ') ||
+      label.includes('arrow');
+  });
+  const textRect = textNode ? textNode.getBoundingClientRect() : null;
+  const nearbyComposerButton = textRect
+    ? buttons
+        .filter((button) => visible(button) && !button.disabled)
+        .map((button) => ({button, rect: button.getBoundingClientRect()}))
+        .filter(({rect}) =>
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.width <= 48 &&
+          rect.height <= 48 &&
+          rect.x >= Math.max(textRect.x + textRect.width - 96, 0) &&
+          Math.abs((rect.y + rect.height / 2) - (textRect.y + textRect.height / 2)) <= 48
+        )
+        .sort((left, right) => right.rect.x - left.rect.x)[0]
+    : null;
+  const submitButton = labeledSubmitButton || (nearbyComposerButton ? nearbyComposerButton.button : null);
+  if (submitButton) {
+    submitButton.click();
+    return {
+      submitted: true,
+      submitButtonObserved: true,
+      submitMechanism: labeledSubmitButton ? 'cdp_button_click' : 'cdp_nearby_button_click',
+      textValueCaptured: false
+    };
+  }
+  if (textNode) {
+    textNode.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+    textNode.dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+    return {
+      submitted: true,
+      submitButtonObserved: false,
+      submitMechanism: 'cdp_keyboard_event_enter',
+      textValueCaptured: false
+    };
+  }
+  return {
+    submitted: false,
+    submitButtonObserved: false,
+    submitMechanism: 'none',
+    textValueCaptured: false
+  };
+})()
+""".strip()
+    enter_submit_expression = """
+(() => {
+  const selector = 'textarea,input:not([type="hidden"]),[contenteditable="true"],[role="textbox"]';
+  const visible = (node, minWidth = 1, minHeight = 1) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return rect.width >= minWidth && rect.height >= minHeight &&
+      style.display !== 'none' && style.visibility !== 'hidden' &&
+      node.getAttribute('aria-hidden') !== 'true';
+  };
+  const textNode = document.activeElement && visible(document.activeElement)
+    ? document.activeElement
+    : Array.from(document.querySelectorAll(selector)).find((node) => visible(node));
+  if (!textNode) {
+    return {
+      submitted: false,
+      submitButtonObserved: false,
+      submitMechanism: 'none',
+      textValueCaptured: false
+    };
+  }
+  textNode.focus();
+  textNode.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+  textNode.dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true}));
+  return {
+    submitted: true,
+    submitButtonObserved: false,
+    submitMechanism: 'cdp_keyboard_event_enter',
+    textValueCaptured: false
+  };
+})()
+""".strip()
+
+    last_error = ""
+    for index, page in enumerate(pages, start=1):
+        ws_url = str(page["webSocketDebuggerUrl"])
+        insert_method = ""
+        clipboard_backup_captured = False
+        clipboard_handoff_attempted = False
+        clipboard_write_attempted = False
+        clipboard_restore_attempted = False
+        clipboard_restored = False
+        try:
+            focus_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3000 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": focus_expression, "returnByValue": True},
+                },
+            )
+            focus_value = _cdp_result_value(focus_packet)
+            if focus_value.get("url") != "app://-/index.html":
+                last_error = "cdp_target_url_mismatch"
+                continue
+            if focus_value.get("focused") is not True:
+                last_error = "cdp_editable_focus_failed"
+                continue
+            insert_succeeded = False
+            insert_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3100 + index,
+                    "method": "Input.insertText",
+                    "params": {"text": prompt},
+                },
+            )
+            if insert_packet.get("status") == "blocked" or "error" in insert_packet:
+                last_error = "cdp_insert_text_failed"
+            else:
+                verify_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3200 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": verify_expression, "returnByValue": True},
+                    },
+                )
+                verify_value = _cdp_result_value(verify_packet)
+                if verify_value.get("insertedLengthMatches") is True:
+                    insert_succeeded = True
+                    insert_method = "cdp_insert_text"
+                else:
+                    last_error = "cdp_insert_text_verification_failed"
+            if not insert_succeeded:
+                clipboard_ok, previous_clipboard, clipboard_error = _read_macos_clipboard_text()
+                clipboard_backup_captured = clipboard_ok
+                if not clipboard_ok:
+                    last_error = f"clipboard_backup_failed:{clipboard_error[:120]}"
+                    continue
+                clipboard_handoff_attempted = True
+                write_ok, write_error = _write_macos_clipboard_text(prompt)
+                clipboard_write_attempted = True
+                if not write_ok:
+                    restore_ok, _restore_error = _write_macos_clipboard_text(previous_clipboard)
+                    clipboard_restore_attempted = True
+                    clipboard_restored = restore_ok
+                    last_error = f"clipboard_write_failed:{write_error[:120]}"
+                    continue
+                refocus_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3350 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": focus_expression, "returnByValue": True},
+                    },
+                )
+                refocus_value = _cdp_result_value(refocus_packet)
+                if refocus_value.get("focused") is not True:
+                    restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+                    clipboard_restore_attempted = True
+                    clipboard_restored = restore_ok
+                    last_error = "cdp_clipboard_paste_refocus_failed"
+                    if not restore_ok:
+                        last_error = f"clipboard_restore_failed:{restore_error[:120]}"
+                    continue
+                paste_down = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3400 + index,
+                        "method": "Input.dispatchKeyEvent",
+                        "params": {
+                            "type": "rawKeyDown",
+                            "modifiers": 4,
+                            "key": "v",
+                            "code": "KeyV",
+                            "windowsVirtualKeyCode": 86,
+                            "commands": ["Paste"],
+                        },
+                    },
+                )
+                paste_up = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3500 + index,
+                        "method": "Input.dispatchKeyEvent",
+                        "params": {
+                            "type": "keyUp",
+                            "modifiers": 4,
+                            "key": "v",
+                            "code": "KeyV",
+                            "windowsVirtualKeyCode": 86,
+                        },
+                    },
+                )
+                verify_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3600 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": verify_expression, "returnByValue": True},
+                    },
+                )
+                verify_value = _cdp_result_value(verify_packet)
+                restore_ok, restore_error = _write_macos_clipboard_text(previous_clipboard)
+                clipboard_restore_attempted = True
+                clipboard_restored = restore_ok
+                if not restore_ok:
+                    last_error = f"clipboard_restore_failed:{restore_error[:120]}"
+                    continue
+                if (
+                    paste_down.get("status") == "blocked"
+                    or "error" in paste_down
+                    or "error" in paste_up
+                ):
+                    last_error = "cdp_clipboard_paste_key_event_failed"
+                    continue
+                if verify_value.get("insertedLengthMatches") is not True:
+                    last_error = "cdp_clipboard_paste_verification_failed"
+                    continue
+                insert_succeeded = True
+                insert_method = "cdp_clipboard_paste"
+            submit_packet = _cdp_command(
+                ws_url,
+                {
+                    "id": 3300 + index,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": submit_expression, "returnByValue": True},
+                },
+            )
+            submit_value = _cdp_result_value(submit_packet)
+            if submit_value.get("submitted") is not True:
+                last_error = "cdp_submit_event_failed"
+                continue
+            acceptance_packet = _cdp_wait_for_prompt_acceptance(
+                ws_url,
+                expected_prompt=prompt,
+            )
+            if acceptance_packet.get("native_prompt_turn_accepted") is not True:
+                enter_submit_packet = _cdp_command(
+                    ws_url,
+                    {
+                        "id": 3625 + index,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": enter_submit_expression, "returnByValue": True},
+                    },
+                )
+                enter_submit_value = _cdp_result_value(enter_submit_packet)
+                if enter_submit_value.get("submitted") is True:
+                    submit_value["submitMechanism"] = (
+                        f"{str(submit_value.get('submitMechanism') or '')}+"
+                        f"{str(enter_submit_value.get('submitMechanism') or '')}"
+                    ).strip("+")
+                    acceptance_packet = _cdp_wait_for_prompt_acceptance(
+                        ws_url,
+                        expected_prompt=prompt,
+                    )
+            if acceptance_packet.get("native_prompt_turn_accepted") is not True:
+                return _cdp_prompt_submit_blocked_packet(
+                    machine_error_code="CUSTOM_NATIVE_PROMPT_NOT_ACCEPTED_BY_CODEX_FLOW",
+                    human_message="Custom Codex native prompt text remained in the input surface after submit attempts.",
+                    prompt=prompt,
+                    request_id=request_id,
+                    blocking_reasons=["custom_native_prompt_not_accepted_by_codex_flow"],
+                    observed_pid=observed_pid,
+                    cdp_port=port,
+                    cdp_result=str(
+                        acceptance_packet.get("native_prompt_acceptance_machine_error_code") or ""
+                    ),
+                    allowed_owner_pids=allowed_pid_set,
+                ) | {
+                    "cdp_port_owner_pids": owner_result,
+                    "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+                    "cdp_page_target_count": len(pages),
+                    "cdp_target_url": str(page.get("url") or ""),
+                    "cdp_target_type": str(page.get("type") or ""),
+                    "cdp_target_bound_to_custom_launch": True,
+                    "input_text_insert_attempted": True,
+                    "input_text_insert_succeeded": True,
+                    "input_text_insert_method": insert_method,
+                    "submit_button_observed": submit_value.get("submitButtonObserved") is True,
+                    "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
+                    **acceptance_packet,
+                    **_native_free_text_observer_defaults(),
+                }
+            observer_packet = (
+                _cdp_observe_custom_response_token(
+                    ws_url,
+                    expected_text=expected_text,
+                    request_id=request_id,
+                    timeout_seconds=observer_timeout_seconds,
+                )
+                if expected_text
+                else _native_free_text_observer_defaults()
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            last_error = f"cdp_prompt_submit_failed:{type(exc).__name__}"
+            continue
+        return {
+            "schema_version": 1,
+            "packet_kind": "custom_codex_native_prompt_submit",
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Custom Codex native prompt text was inserted into the input-capable renderer and submitted.",
+            "request_id": request_id,
+            "custom_process_pid": observed_pid,
+            "cdp_port": port,
+            "cdp_port_owner_pids": owner_result,
+            "cdp_allowed_owner_pids": sorted(allowed_pid_set),
+            "cdp_port_owner_bound_to_custom_profile": bool(owner_pid_set & allowed_pid_set),
+            "cdp_page_target_count": len(pages),
+            "cdp_target_url": str(page.get("url") or ""),
+            "cdp_target_type": str(page.get("type") or ""),
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "prompt_length": len(prompt),
+            "prompt_text_recorded": False,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+            "input_text_insert_attempted": True,
+            "input_text_insert_succeeded": True,
+            "input_text_insert_method": insert_method,
+            "clipboard_backup_captured": clipboard_backup_captured,
+            "clipboard_handoff_attempted": clipboard_handoff_attempted,
+            "clipboard_write_attempted": clipboard_write_attempted,
+            "clipboard_restore_attempted": clipboard_restore_attempted,
+            "clipboard_restored": clipboard_restored,
+            "prompt_submitted": True,
+            **acceptance_packet,
+            "submit_button_observed": submit_value.get("submitButtonObserved") is True,
+            "submit_mechanism": str(submit_value.get("submitMechanism") or ""),
+            **observer_packet,
+            "secret_value_exposed": False,
+            "next_action": "none",
+        }
+    return _cdp_prompt_submit_blocked_packet(
+        machine_error_code="CUSTOM_NATIVE_CDP_PROMPT_SUBMIT_FAILED",
+        human_message="Custom Codex native prompt submit could not prove insert and submit through the pid-bound renderer.",
+        prompt=prompt,
+        request_id=request_id,
+        observed_pid=observed_pid,
+        cdp_port=port,
+        blocking_reasons=[last_error or "cdp_prompt_submit_failed"],
+        cdp_result=last_error,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+
+
+def submit_custom_native_window_prompt_packet(
+    *,
+    prompt: str,
+    request_id: str,
+    expected_text: str = "",
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+    observer_timeout_seconds: float = CUSTOM_NATIVE_RESPONSE_OBSERVER_WAIT_SECONDS,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        packet = _cdp_prompt_submit_blocked_packet(
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Native prompt submit requires a visible, input-capable Custom Codex window.",
+            prompt=prompt,
+            request_id=request_id,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
+            if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+            else None,
+        ) | {
+            "native_window_observed": show_packet.get("custom_window_observed") is True,
+            "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
+            **_native_free_text_observer_defaults(),
+            "show_window_packet": show_packet,
+        }
+        return _apply_native_prompt_submit_claim_ceiling(packet)
+    packet = _cdp_submit_prompt_to_app_page(
+        int(observed_pid),
+        prompt,
+        request_id=request_id,
+        expected_text=expected_text,
+        port=cdp_port,
+        allowed_owner_pids=show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None,
+        observer_timeout_seconds=observer_timeout_seconds,
+    )
+    profile_paths = default_persistent_custom_profile_paths(
+        profile_id=persistent_profile_id,
+        base_dir=persistent_profile_base_dir,
+    )
+    if expected_text:
+        session_packet = _custom_session_external_route_response_observer_packet(
+            profile_root=Path(str(profile_paths["persistent_profile_root"])).expanduser(),
+            prompt=prompt,
+            request_id=request_id,
+            expected_text=expected_text,
+            submitted_after_epoch_seconds=time.time() - float(observer_timeout_seconds),
+        )
+        packet = _merge_session_external_route_observer(packet, session_packet)
+    packet["native_window_observed"] = show_packet.get("custom_window_observed") is True
+    packet["input_capable_ui_observed"] = show_packet.get("input_capable_ui_observed") is True
+    packet["native_app_usable"] = show_packet.get("native_app_usable") is True
+    for key, value in _native_free_text_observer_defaults().items():
+        packet.setdefault(key, value)
+    packet["show_window_packet"] = show_packet
+    return _apply_native_prompt_submit_claim_ceiling(packet)
+
+
+def inspect_custom_native_paste_target_packet(
+    *,
+    request_id: str = "",
+    draft_length: int = 0,
+    draft_sha256: str = "",
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
+    candidate_pids = (
+        show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None
+    )
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_target_preflight",
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Custom paste target requires a visible, input-capable Custom Codex window.",
+            request_id=request_id,
+            draft_length=draft_length,
+            draft_sha256=draft_sha256,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=candidate_pids,
+        )
+        packet.update(
+            {
+                "custom_window_found": show_packet.get("custom_window_observed") is True,
+                "custom_window_identity": (
+                    "custom_codex" if show_packet.get("custom_process_observed") is True else "unknown"
+                ),
+                "custom_window_identity_proven": (
+                    show_packet.get("custom_process_observed") is True
+                    and show_packet.get("original_codex_touched") is not True
+                ),
+                "show_window_packet": show_packet,
+            }
+        )
+        return packet
+    packet = _cdp_probe_custom_paste_target(
+        int(observed_pid),
+        request_id=request_id,
+        draft_length=draft_length,
+        draft_sha256=draft_sha256,
+        focus=False,
+        port=cdp_port,
+        allowed_owner_pids=candidate_pids,
+    )
+    packet["show_window_packet"] = show_packet
+    packet["custom_window_found"] = show_packet.get("custom_window_observed") is True
+    packet["custom_window_identity"] = "custom_codex"
+    packet["custom_window_identity_proven"] = show_packet.get("original_codex_touched") is not True
+    return packet
+
+
+def paste_custom_native_window_draft_packet(
+    *,
+    draft_text: str,
+    request_id: str,
+    persistent_profile_id: str = DEFAULT_PERSISTENT_CUSTOM_PROFILE_ID,
+    persistent_profile_base_dir: Path | None = None,
+) -> dict[str, Any]:
+    show_packet = show_custom_native_window_packet(
+        persistent_profile_id=persistent_profile_id,
+        persistent_profile_base_dir=persistent_profile_base_dir,
+    )
+    observed_pid = show_packet.get("custom_process_pid")
+    cdp_port = int(show_packet.get("cdp_port") or CODEX_REMOTE_DEBUGGING_PORT)
+    candidate_pids = (
+        show_packet.get("custom_window_candidate_pids")
+        if isinstance(show_packet.get("custom_window_candidate_pids"), list)
+        else None
+    )
+    if (
+        show_packet.get("status") != "ok"
+        or show_packet.get("native_app_usable") is not True
+        or not isinstance(observed_pid, int)
+    ):
+        packet = _custom_paste_blocked_packet(
+            packet_kind="custom_codex_native_paste_only",
+            machine_error_code=str(
+                show_packet.get("machine_error_code")
+                or "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+            ),
+            human_message="Custom paste requires a visible, input-capable Custom Codex window.",
+            request_id=request_id,
+            draft_text=draft_text,
+            blocking_reasons=["native_window_not_input_capable"],
+            observed_pid=observed_pid if isinstance(observed_pid, int) else None,
+            cdp_port=cdp_port,
+            cdp_result=str(show_packet.get("native_app_usability_blocked_reason_class") or ""),
+            allowed_owner_pids=candidate_pids,
+        )
+        packet.update(
+            {
+                "custom_window_found": show_packet.get("custom_window_observed") is True,
+                "custom_window_identity": (
+                    "custom_codex" if show_packet.get("custom_process_observed") is True else "unknown"
+                ),
+                "custom_window_identity_proven": (
+                    show_packet.get("custom_process_observed") is True
+                    and show_packet.get("original_codex_touched") is not True
+                ),
+                "show_window_packet": show_packet,
+            }
+        )
+        return packet
+    packet = _cdp_paste_clipboard_into_custom_target(
+        int(observed_pid),
+        draft_text,
+        request_id=request_id,
+        port=cdp_port,
+        allowed_owner_pids=candidate_pids,
+    )
+    packet["show_window_packet"] = show_packet
+    packet["custom_window_found"] = show_packet.get("custom_window_observed") is True
+    packet["custom_window_identity"] = "custom_codex"
+    packet["custom_window_identity_proven"] = show_packet.get("original_codex_touched") is not True
+    return packet
+
+
+def _renderer_recovery_packet(
+    *,
+    status: str,
+    machine_error_code: str,
+    reason_class: str = "",
+    attempted: bool = True,
+    action: str = "cdp_page_reload",
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    owner_pids: str = "",
+    reload_targets: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    targets = reload_targets or []
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_renderer_recovery",
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "reason_class": reason_class,
+        "attempted": attempted,
+        "action": action if attempted else "none",
+        "cdp_port": port,
+        "cdp_port_owner_pids": owner_pids,
+        "cdp_localhost_only": True,
+        "cdp_endpoint_redacted": True,
+        "cdp_target_bound_to_custom_launch": True,
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+        "browser_route_injection": False,
+        "reload_attempt_count": len(targets),
+        "reload_targets": targets,
+    }
+
+
+def _renderer_recovery_not_required_packet() -> dict[str, Any]:
+    return _renderer_recovery_packet(
+        status="not_required",
+        machine_error_code="NOT_REQUIRED",
+        reason_class="",
+        attempted=False,
+    )
+
+
+def _renderer_startup_loader_stuck(usability_packet: dict[str, Any]) -> bool:
+    reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or usability_packet.get("blocked_reason_class")
+        or ""
+    )
+    return reason == "cdp_renderer_startup_loader_stuck"
+
+
+def _cdp_reload_app_page_for_pid(
+    observed_pid: int,
+    *,
+    port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    allowed_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+) -> dict[str, Any]:
+    port_owned, owner_result = _devtools_port_owned_by_pid(
+        observed_pid,
+        port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if not port_owned:
+        return _renderer_recovery_packet(
+            status="blocked",
+            machine_error_code="CDP_PORT_OWNER_MISMATCH_OR_ABSENT",
+            reason_class="cdp_port_owner_mismatch_or_absent",
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=[],
+        )
+    pages, page_error = _cdp_app_page_targets(port)
+    if page_error:
+        return _renderer_recovery_packet(
+            status="blocked",
+            machine_error_code=page_error.upper(),
+            reason_class=page_error,
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=[],
+        )
+    reload_targets: list[dict[str, Any]] = []
+    for index, page in enumerate(pages, start=1):
+        attempt = {
+            "target_url": str(page.get("url") or ""),
+            "target_type": str(page.get("type") or ""),
+            "reload_ok": False,
+            "error_class": "",
+        }
+        try:
+            reload_result = _cdp_command(
+                str(page["webSocketDebuggerUrl"]),
+                {
+                    "id": 100 + index,
+                    "method": "Page.reload",
+                    "params": {"ignoreCache": True},
+                },
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            attempt["error_class"] = f"cdp_page_reload_failed:{type(exc).__name__}"
+            reload_targets.append(attempt)
+            continue
+        if reload_result.get("status") == "blocked":
+            attempt["error_class"] = str(reload_result.get("error") or "cdp_page_reload_blocked")
+        elif "error" in reload_result:
+            attempt["error_class"] = "cdp_page_reload_protocol_error"
+        else:
+            attempt["reload_ok"] = True
+        reload_targets.append(attempt)
+    if any(target.get("reload_ok") is True for target in reload_targets):
+        return _renderer_recovery_packet(
+            status="ok",
+            machine_error_code="OK",
+            reason_class="",
+            port=port,
+            owner_pids=owner_result,
+            reload_targets=reload_targets,
+        )
+    return _renderer_recovery_packet(
+        status="blocked",
+        machine_error_code="CDP_PAGE_RELOAD_FAILED",
+        reason_class="cdp_page_reload_failed",
+        port=port,
+        owner_pids=owner_result,
+        reload_targets=reload_targets,
+    )
+
+
+def _recover_startup_loader_if_needed(
+    usability_packet: dict[str, Any],
+    *,
+    window_packet: dict[str, Any],
+    observed_pid: int,
+    allowed_cdp_owner_pids: list[int] | tuple[int, ...] | set[int] | None = None,
+    profile_dir: Path,
+    custom_user_data_dir: str,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    if not _renderer_startup_loader_stuck(usability_packet):
+        return usability_packet, _renderer_recovery_not_required_packet(), None
+    recovery_packet = _cdp_reload_app_page_for_pid(
+        observed_pid,
+        port=cdp_port,
+        allowed_owner_pids=allowed_cdp_owner_pids,
+    )
+    if recovery_packet.get("status") != "ok":
+        return usability_packet, recovery_packet, None
+    time.sleep(CODEX_RENDERER_RECOVERY_WAIT_SECONDS)
+    recovered_inventory = collect_codex_process_inventory(
+        custom_user_data_dir=custom_user_data_dir
+    )
+    recovered_observation = _window_observation_packet_for_process_inventory(
+        recovered_inventory,
+        profile_dir=profile_dir,
+    )
+    if (
+        window_packet.get("window_observed") is True
+        and recovered_observation.get("window_observed") is not True
+    ):
+        recovered_observation = {
+            **window_packet,
+            "window_observation_regressed_after_renderer_recovery": True,
+            "regressed_window_observation_packet": recovered_observation,
+        }
+    recovered_usability = _window_usability_from_observation(
+        recovered_observation,
+        cdp_port=cdp_port,
+    )
+    recovered_usability = _apply_codex_desktop_auth_blocker(
+        recovered_usability,
+        profile_dir=profile_dir,
+    )
+    return recovered_usability, recovery_packet, recovered_observation
+
+
+def _post_launch_usability_recheck_packet(
+    *,
+    attempted: bool,
+    status: str,
+    machine_error_code: str,
+    attempt_count: int = 0,
+    timeout_seconds: float = 0.0,
+    reason_class: str = "",
+    usability_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    usability = usability_packet if isinstance(usability_packet, dict) else {}
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_post_launch_usability_recheck",
+        "captured_at_utc": utc_now(),
+        "attempted": attempted,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "attempt_count": attempt_count,
+        "timeout_seconds": timeout_seconds,
+        "reason_class": reason_class,
+        "native_app_usable": usability.get("native_window_usable") is True,
+        "input_capable_ui_observed": usability.get("input_capable_ui_observed") is True,
+        "native_app_usability_source": str(
+            usability.get("native_app_usability_source") or ""
+        ),
+        "native_app_usability_blocked_reason_class": str(
+            usability.get("blocked_reason_class") or ""
+        ),
+        "cdp_localhost_only": usability.get("cdp_localhost_only") is True,
+        "cdp_target_bound_to_custom_launch": (
+            usability.get("cdp_target_bound_to_custom_launch") is True
+        ),
+        "cdp_editable_surface_observed": (
+            usability.get("cdp_editable_surface_observed") is True
+        ),
+        "raw_dom_exposed": False,
+        "raw_ax_tree_exposed": False,
+        "browser_cdp_authority_widened": False,
+    }
+
+
+def _post_launch_usability_recheck_candidate(
+    usability_packet: dict[str, Any],
+) -> bool:
+    blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+    renderer_reason = str(
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or blocked_reason
+    )
+    return bool(
+        usability_packet.get("native_window_usable") is not True
+        and (
+            usability_packet.get("cdp_target_bound_to_custom_launch") is True
+            or renderer_reason.startswith("cdp_renderer_")
+            or blocked_reason.startswith("cdp_renderer_")
+            or renderer_reason == "cdp_port_owner_mismatch_or_absent"
+            or blocked_reason == "cdp_port_owner_mismatch_or_absent"
+        )
+    )
+
+
+def _wait_for_post_launch_window_usability(
+    *,
+    initial_window_packet: dict[str, Any],
+    profile_dir: Path,
+    custom_user_data_dir: str,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+    timeout_seconds: float = POST_LAUNCH_USABILITY_RECHECK_SECONDS,
+    poll_seconds: float = POST_LAUNCH_USABILITY_RECHECK_POLL_SECONDS,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    deadline = time.time() + timeout_seconds
+    attempt_count = 0
+    window_packet = initial_window_packet
+    usability_packet: dict[str, Any] = {}
+    while True:
+        attempt_count += 1
+        inventory = collect_codex_process_inventory(
+            custom_user_data_dir=custom_user_data_dir
+        )
+        window_packet = _window_observation_packet_for_process_inventory(
+            inventory,
+            profile_dir=profile_dir,
+        )
+        usability_packet = _window_usability_from_observation(
+            window_packet,
+            cdp_port=cdp_port,
+        )
+        usability_packet = _apply_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=profile_dir,
+        )
+        if usability_packet.get("native_window_usable") is True:
+            return (
+                _post_launch_usability_recheck_packet(
+                    attempted=True,
+                    status="ok",
+                    machine_error_code="OK",
+                    attempt_count=attempt_count,
+                    timeout_seconds=timeout_seconds,
+                    usability_packet=usability_packet,
+                ),
+                window_packet,
+                usability_packet,
+            )
+        if time.time() >= deadline:
+            return (
+                _post_launch_usability_recheck_packet(
+                    attempted=True,
+                    status="blocked",
+                    machine_error_code="POST_LAUNCH_WINDOW_USABILITY_RECHECK_NOT_PROVEN",
+                    attempt_count=attempt_count,
+                    timeout_seconds=timeout_seconds,
+                    reason_class=str(usability_packet.get("blocked_reason_class") or ""),
+                    usability_packet=usability_packet,
+                ),
+                window_packet,
+                usability_packet,
+            )
+        time.sleep(poll_seconds)
+
+
+def _cdp_blocked_surface_details(result: str) -> dict[str, Any]:
+    try:
+        packet = json.loads(result)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(packet, dict):
+        return {}
+    target_url = str(packet.get("cdp_target_url") or "")
+    ready_state = str(packet.get("cdp_ready_state") or "")
+    try:
+        visible_count = int(packet.get("cdp_visible_input_candidate_count") or 0)
+    except (TypeError, ValueError):
+        visible_count = -1
+    try:
+        startup_loader_count = int(packet.get("cdp_startup_loader_count") or 0)
+    except (TypeError, ValueError):
+        startup_loader_count = 0
+    try:
+        visible_startup_loader_count = int(packet.get("cdp_visible_startup_loader_count") or 0)
+    except (TypeError, ValueError):
+        visible_startup_loader_count = 0
+    if target_url == "app://-/index.html" and ready_state in {"interactive", "complete"} and visible_count <= 0:
+        startup_loader_observed = startup_loader_count > 0 or visible_startup_loader_count > 0
+        reason_class = (
+            "cdp_renderer_startup_loader_stuck"
+            if startup_loader_observed
+            else "cdp_renderer_input_surface_not_observed"
+        )
+        usability_source = (
+            "cdp_renderer_startup_loader_without_editable_surface"
+            if startup_loader_observed
+            else "cdp_renderer_target_without_editable_surface"
+        )
+        return {
+            "blocked_reason_class": reason_class,
+            "renderer_surface_blocked_reason_class": reason_class,
+            "native_app_usability_source": usability_source,
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "cdp_editable_surface_observed": False,
+            "renderer_startup_loader_observed": startup_loader_observed,
+            "renderer_mounted": not startup_loader_observed,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+        }
+    return {}
+
+
+def _latest_launch_stderr_segment(text: str) -> str:
+    marker = "DevTools listening"
+    index = text.rfind(marker)
+    return text[index:] if index >= 0 else text
+
+
+def _codex_desktop_auth_blocker_from_profile(
+    profile_dir: Path,
+    *,
+    launcher_stderr_path: Path | str | None = None,
+) -> dict[str, Any]:
+    stderr_path = (
+        Path(launcher_stderr_path)
+        if launcher_stderr_path is not None
+        else profile_dir / "tmp" / "launcher.stderr.log"
+    )
+    try:
+        text = stderr_path.read_text(errors="replace")
+    except OSError:
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_diagnostic_source": "launcher_stderr_missing",
+        }
+    segment = _latest_launch_stderr_segment(text)
+    sign_in_required = CODEX_DESKTOP_SIGN_IN_REQUIRED_MARKER in segment
+    no_token_auth_401 = all(marker in segment for marker in CODEX_DESKTOP_NO_TOKEN_AUTH_MARKERS)
+    if not sign_in_required and not no_token_auth_401:
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_diagnostic_source": "launcher_stderr_latest_segment",
+        }
+    return {
+        "codex_desktop_auth_blocker_observed": True,
+        "codex_desktop_auth_blocked_reason_class": (
+            "codex_desktop_sign_in_required_for_renderer_surface"
+        ),
+        "codex_desktop_auth_error_class": (
+            "codex_desktop_remote_control_authorization_sign_in_required"
+            if sign_in_required
+            else "codex_desktop_chatgpt_auth_token_missing"
+        ),
+        "codex_desktop_auth_diagnostic_source": "launcher_stderr_latest_segment",
+        "launcher_stderr_redacted": True,
+    }
+
+
+def _codex_desktop_profile_auth_state_blocker(profile_dir: Path) -> dict[str, Any]:
+    custom_home_dir = profile_dir / "home"
+    if not custom_home_dir.exists():
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_error_class": "",
+            "codex_desktop_auth_diagnostic_source": "custom_profile_home_missing",
+        }
+    desktop_auth_json = (
+        custom_home_dir
+        / "Library"
+        / "Application Support"
+        / "Codex"
+        / "auth.json"
+    )
+    if desktop_auth_json.is_file():
+        return {
+            "codex_desktop_auth_blocker_observed": False,
+            "codex_desktop_auth_blocked_reason_class": "",
+            "codex_desktop_auth_error_class": "",
+            "codex_desktop_auth_diagnostic_source": "custom_profile_chatgpt_auth_state_present",
+            "desktop_auth_state_path_redacted": True,
+        }
+    profile_auth_json = profile_dir / "auth.json"
+    if profile_auth_json.is_file():
+        try:
+            profile_auth = json.loads(profile_auth_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            profile_auth = {}
+        if isinstance(profile_auth, dict):
+            auth_mode = str(profile_auth.get("auth_mode") or "").strip().lower()
+            api_key_present = bool(str(profile_auth.get("OPENAI_API_KEY") or "").strip())
+            if auth_mode == "apikey" or api_key_present:
+                return {
+                    "codex_desktop_auth_blocker_observed": False,
+                    "codex_desktop_auth_blocked_reason_class": "",
+                    "codex_desktop_auth_error_class": "",
+                    "codex_desktop_auth_diagnostic_source": (
+                        "custom_profile_api_key_auth_present"
+                    ),
+                    "desktop_auth_state_path_redacted": True,
+                }
+    return {
+        "codex_desktop_auth_blocker_observed": True,
+        "codex_desktop_auth_blocked_reason_class": (
+            "codex_desktop_sign_in_required_for_renderer_surface"
+        ),
+        "codex_desktop_auth_error_class": (
+            "codex_desktop_custom_profile_chatgpt_auth_state_missing"
+        ),
+        "codex_desktop_auth_diagnostic_source": (
+            "custom_profile_chatgpt_auth_state_missing"
+        ),
+        "desktop_auth_state_path_redacted": True,
+    }
+
+
+def _apply_codex_desktop_auth_blocker(
+    usability_packet: dict[str, Any],
+    *,
+    profile_dir: Path,
+    launcher_stderr_path: Path | str | None = None,
+    allow_profile_auth_state_fallback: bool = False,
+    profile_auth_state_fallback_allowed_by_current_launch: bool = False,
+) -> dict[str, Any]:
+    blocked_reason_class = str(usability_packet.get("blocked_reason_class") or "")
+    if blocked_reason_class not in CODEX_DESKTOP_AUTH_BLOCKER_REFINABLE_REASONS:
+        return usability_packet
+    if launcher_stderr_path is None:
+        return usability_packet
+    auth_blocker = _codex_desktop_auth_blocker_from_profile(
+        profile_dir,
+        launcher_stderr_path=launcher_stderr_path,
+    )
+    if (
+        auth_blocker.get("codex_desktop_auth_blocker_observed") is not True
+        and allow_profile_auth_state_fallback
+        and profile_auth_state_fallback_allowed_by_current_launch
+    ):
+        auth_blocker = _codex_desktop_profile_auth_state_blocker(profile_dir)
+    if auth_blocker.get("codex_desktop_auth_blocker_observed") is not True:
+        return usability_packet
+    packet = dict(usability_packet)
+    packet.update(auth_blocker)
+    packet["renderer_surface_blocked_reason_class"] = str(
+        usability_packet.get("renderer_surface_blocked_reason_class")
+        or blocked_reason_class
+    )
+    packet["blocked_reason_class"] = str(
+        auth_blocker["codex_desktop_auth_blocked_reason_class"]
+    )
+    packet["native_app_usability_source"] = "codex_desktop_auth_blocker"
+    return packet
+
+
+def _bounded_recheck_codex_desktop_auth_blocker(
+    usability_packet: dict[str, Any],
+    *,
+    profile_dir: Path,
+    launcher_stderr_path: Path | str | None,
+    allow_profile_auth_state_fallback: bool = False,
+    profile_auth_state_fallback_allowed_by_current_launch: bool = False,
+) -> dict[str, Any]:
+    if usability_packet.get("codex_desktop_auth_blocker_observed") is True:
+        return usability_packet
+    if usability_packet.get("native_window_usable") is True:
+        return usability_packet
+    if launcher_stderr_path is None:
+        return usability_packet
+    deadline = time.time() + CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_SECONDS
+    current_packet = usability_packet
+    while time.time() < deadline:
+        time.sleep(CODEX_DESKTOP_AUTH_BLOCKER_RECHECK_POLL_SECONDS)
+        current_packet = _apply_codex_desktop_auth_blocker(
+            current_packet,
+            profile_dir=profile_dir,
+            launcher_stderr_path=launcher_stderr_path,
+            allow_profile_auth_state_fallback=allow_profile_auth_state_fallback,
+            profile_auth_state_fallback_allowed_by_current_launch=(
+                profile_auth_state_fallback_allowed_by_current_launch
+            ),
+        )
+        if current_packet.get("codex_desktop_auth_blocker_observed") is True:
+            return current_packet
+    return current_packet
+
+
+def _custom_native_launch_blocked_machine_error(
+    *,
+    launcher_failed_before_process: bool,
+    process_started: bool,
+    process_still_alive: bool,
+    custom_window_visible: bool,
+    native_app_usable: bool,
+    desktop_auth_blocker: bool,
+    renderer_surface_blocked_reason: str,
+) -> str:
+    if launcher_failed_before_process:
+        return "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
+    if process_started and not process_still_alive:
+        return "CUSTOM_NATIVE_PROCESS_EXITED_AFTER_START"
+    if desktop_auth_blocker:
+        return "CUSTOM_NATIVE_CODEX_DESKTOP_AUTH_REQUIRED"
+    if custom_window_visible and not native_app_usable:
+        if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck":
+            return "CUSTOM_NATIVE_RENDERER_STARTUP_LOADER_STUCK"
+        return "CUSTOM_NATIVE_WINDOW_USABILITY_NOT_PROVEN"
+    return "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
+
+
+def _custom_native_launch_blocked_human_message(
+    *,
+    launcher_failed_before_process: bool,
+    process_started: bool,
+    process_still_alive: bool,
+    custom_window_visible: bool,
+    native_app_usable: bool,
+    desktop_auth_blocker: bool,
+    renderer_surface_blocked_reason: str,
+) -> str:
+    if launcher_failed_before_process:
+        return "Custom Codex launcher exited before a Custom process was observed."
+    if process_started and not process_still_alive:
+        return "Custom Codex process was observed after launch, then exited before proof completed."
+    if desktop_auth_blocker:
+        return "Custom Codex native launch reached Codex Desktop, but Codex Desktop sign-in is required before input-capable UI can be proven."
+    if (
+        custom_window_visible
+        and not native_app_usable
+        and renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+    ):
+        return "Custom Codex native window was observed, but the renderer is still on the startup loader."
+    if custom_window_visible and not native_app_usable:
+        return "Custom Codex native window was observed, but input-capable UI was not proven."
+    return "Custom Codex native launch did not satisfy process/window proof."
+
+
+def _window_usability_from_observation(
+    window_observation: dict[str, Any],
+    *,
+    cdp_port: int = int(CODEX_REMOTE_DEBUGGING_PORT),
+) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
     if not window_observed:
         return build_native_window_usability_packet(
@@ -531,8 +4850,101 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
             "input_capable_query_method": "AX/System Events process-name UI scripting (Mechanism 1)",
         })
         return packet
+    input_capable_m0, result_m0 = _ax_input_capable(observed_pid)
+    if input_capable_m0:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=True,
+            blocked_reason_class="",
+        )
+        packet.update({
+            "ax_query_result": f"mechanism_1_pid_guarded: {result_m1}; mechanism_0_pid_fallback: {result_m0}",
+            "input_capable_query_method": "AX/System Events pid-bound UI scripting fallback (Mechanism 0)",
+        })
+        return packet
+    allowed_owner_pids = window_observation.get("custom_window_candidate_pids")
+    if not isinstance(allowed_owner_pids, list):
+        allowed_owner_pids = []
+    input_capable_cdp, result_cdp = _cdp_input_capable(
+        observed_pid,
+        port=cdp_port,
+        allowed_owner_pids=allowed_owner_pids,
+    )
+    if input_capable_cdp:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=True,
+            blocked_reason_class="",
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": "CDP localhost launched-renderer DOM/AX editable-surface proof",
+            "native_app_usability_source": "cdp_renderer_input_capable_ui",
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": True,
+            "cdp_editable_surface_observed": True,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+        })
+        return packet
+    cdp_blocked_surface = _cdp_blocked_surface_details(result_cdp)
+    if cdp_blocked_surface:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=False,
+            blocked_reason_class=str(cdp_blocked_surface["blocked_reason_class"]),
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": (
+                "CDP localhost launched-renderer target observed, editable surface not proven"
+            ),
+            **cdp_blocked_surface,
+        })
+        return packet
+    if result_cdp.startswith("cdp_port_owner_mismatch_or_absent:"):
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=False,
+            blocked_reason_class="cdp_port_owner_mismatch_or_absent",
+        )
+        packet.update({
+            "ax_query_result": (
+                f"mechanism_1_pid_guarded: {result_m1}; "
+                f"mechanism_0_pid_fallback: {result_m0}; "
+                f"mechanism_cdp_pid_bound_dom_input: {result_cdp}"
+            ),
+            "input_capable_query_method": (
+                "CDP localhost launched-renderer port owner not yet pid-bound"
+            ),
+            "renderer_surface_blocked_reason_class": "cdp_port_owner_mismatch_or_absent",
+            "native_app_usability_source": "cdp_renderer_port_owner_not_bound",
+            "cdp_localhost_only": True,
+            "cdp_endpoint_redacted": True,
+            "cdp_target_bound_to_custom_launch": False,
+            "cdp_editable_surface_observed": False,
+            "raw_dom_exposed": False,
+            "raw_ax_tree_exposed": False,
+            "browser_cdp_authority_widened": False,
+        })
+        return packet
     input_capable_m2, result_m2 = _cg_input_capable(observed_pid)
-    query_result = f"mechanism_1_pid_guarded: {result_m1}; mechanism_2_cg_pid_window_only: {result_m2}"
+    query_result = (
+        f"mechanism_1_pid_guarded: {result_m1}; "
+        f"mechanism_0_pid_fallback: {result_m0}; "
+        f"mechanism_cdp_pid_bound_dom_input: {result_cdp}; "
+        f"mechanism_2_cg_pid_window_only: {result_m2}"
+    )
     query_method = (
         "CGWindowList inspection (pid-bound window present, input-capable UI not proven)"
         if input_capable_m2
@@ -626,6 +5038,35 @@ def _runtime_ready_from_launcher_stdout(
     }
 
 
+def _runtime_ready_with_input_capable_renderer_fallback(
+    runtime_ready_packet: dict[str, Any],
+    usability_packet: dict[str, Any],
+) -> dict[str, Any]:
+    if runtime_ready_packet.get("runtime_ready_observed") is True:
+        return {
+            **runtime_ready_packet,
+            "runtime_ready_renderer_fallback_used": False,
+        }
+    renderer_ready = (
+        usability_packet.get("native_window_usable") is True
+        and usability_packet.get("cdp_localhost_only") is True
+        and usability_packet.get("cdp_target_bound_to_custom_launch") is True
+        and usability_packet.get("cdp_editable_surface_observed") is True
+    )
+    if not renderer_ready:
+        return {
+            **runtime_ready_packet,
+            "runtime_ready_renderer_fallback_used": False,
+        }
+    return {
+        **runtime_ready_packet,
+        "runtime_ready_observed": True,
+        "runtime_ready_source": "cdp_pid_bound_input_capable_renderer",
+        "runtime_ready_missing_markers": [],
+        "runtime_ready_renderer_fallback_used": True,
+    }
+
+
 def _build_identity_binding(
     window_packet: dict[str, Any],
     layout: NativeProbeLayout,
@@ -634,22 +5075,44 @@ def _build_identity_binding(
     window_observed = window_packet.get("window_observed") is True
     window_name = window_packet.get("window_query", "")
     observed_pid = window_packet.get("observed_pid")
-    startup_inventory = launch_result.get("startup_inventory", {})
-    custom_root_pids = _custom_root_app_pids(startup_inventory) if isinstance(startup_inventory, dict) else []
+    process_inventory = _launch_window_process_inventory(launch_result)
+    custom_root_pids = (
+        _custom_root_app_pids(process_inventory)
+        if isinstance(process_inventory, dict)
+        else []
+    )
+    default_profile_pids = (
+        _default_profile_process_pids(process_inventory)
+        if isinstance(process_inventory, dict)
+        else []
+    )
+    custom_profile_pids = (
+        _custom_profile_process_pids(process_inventory)
+        if isinstance(process_inventory, dict)
+        else []
+    )
+    custom_candidate_pids = (
+        _custom_window_candidate_pids(process_inventory)
+        if isinstance(process_inventory, dict)
+        else []
+    )
     bound = (
         window_observed
         and isinstance(window_name, str)
         and len(window_name) > 0
         and isinstance(observed_pid, int)
-        and observed_pid in custom_root_pids
+        and observed_pid in custom_candidate_pids
     )
-    distinguishable = bound and "/Applications/Codex.app/Contents/MacOS/Codex" in str(
-        launch_result.get("startup_inventory", {}).get("sample", [])
+    distinguishable = (
+        bound
+        and isinstance(observed_pid, int)
+        and observed_pid in custom_profile_pids
+        and observed_pid not in default_profile_pids
     )
     identity_chain = [
         "repo_canonical_custom_proxy_auth_isolated_home",
         str(layout.launcher_path),
-        "/Applications/Codex.app/Contents/MacOS/Codex",
+        "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
         f"process_group_or_pid:{launch_result['launcher_pid']}",
         f"window_binding:{'proven' if bound else 'unproven'}",
     ]
@@ -661,8 +5124,22 @@ def _build_identity_binding(
         "machine_error_code": "OK" if bound else "NATIVE_WINDOW_IDENTITY_NOT_PROVEN",
         "window_bound_to_custom_launch": bound,
         "window_distinguishable_from_original_codex": distinguishable,
+        "custom_root_process_pids": custom_root_pids,
+        "custom_profile_process_pids": custom_profile_pids,
+        "default_profile_process_pids": default_profile_pids,
+        "custom_window_candidate_pids": custom_candidate_pids,
         "identity_chain": identity_chain,
     }
+
+
+def _launch_window_process_inventory(launch_result: dict[str, Any]) -> dict[str, Any]:
+    stability_inventory = launch_result.get("stability_inventory")
+    if isinstance(stability_inventory, dict) and stability_inventory:
+        return stability_inventory
+    startup_inventory = launch_result.get("startup_inventory")
+    if isinstance(startup_inventory, dict):
+        return startup_inventory
+    return {}
 
 
 def launch_custom_native_app_packet(
@@ -675,6 +5152,8 @@ def launch_custom_native_app_packet(
     persistent_profile_base_dir: Path | None = None,
     keep_running_on_window_observed: bool = False,
     reuse_existing_window_if_present: bool = False,
+    agent_runtime_context: dict[str, Any] | None = None,
+    stable_runtime_generated_config_file: Path | None = None,
 ) -> dict[str, Any]:
     admission = build_native_custom_preflight_packet(
         native_window_probe_command(),
@@ -745,9 +5224,32 @@ def launch_custom_native_app_packet(
         "reuse_existing_window_if_present": reuse_existing_window_if_present,
         "existing_custom_window_detected": False,
         "existing_custom_window_reused": False,
+        "reused_existing_window": False,
         "new_launch_started": False,
+        "fresh_launch_started": False,
+        "launch_origin": "not_started",
         "launcher_exit_code_early": None,
         "launcher_failed_before_custom_process": False,
+        "agent_runtime_context_written": False,
+        "native_alias_context_written": False,
+        "context_file_present": False,
+        "context_file_sha256_present": False,
+        "agent_runtime_context_profile_relative_path": "",
+        "agent_runtime_context_sha256": "",
+        "agent_runtime_context_path_redacted": True,
+        "stable_runtime_generated_config_override_used": (
+            stable_runtime_generated_config_file is not None
+        ),
+        "stable_runtime_generated_config_file_present": False,
+        "stable_runtime_generated_config_file_path_recorded": False,
+        "stable_runtime_generated_config_default_present": False,
+        "observed_stable_config_fallback_used": False,
+        "observed_stable_config_file_present": False,
+        "token_config_file_present": False,
+        "token_config_source_kind": "",
+        "local_token_source_kind": "",
+        "local_token_present": False,
+        "local_token_value_recorded": False,
     }
     if auth["status"] != "ok":
         return {
@@ -764,7 +5266,29 @@ def launch_custom_native_app_packet(
     cleanup_error = ""
     try:
         real_runtime_paths = RuntimePaths.from_env()
-        local_token = emit_local_token(real_runtime_paths)
+        generated_config_path = getattr(
+            real_runtime_paths, "stable_runtime_generated_config_file", None
+        )
+        stable_config_path = getattr(real_runtime_paths, "stable_config", None)
+        token_config_path = (
+            stable_runtime_generated_config_file.expanduser()
+            if stable_runtime_generated_config_file is not None
+            else generated_config_path
+        )
+        observed_stable_config_fallback_used = False
+        token_config_source_kind = "stable_runtime_generated_config"
+        if stable_runtime_generated_config_file is not None:
+            token_config_source_kind = "stable_runtime_generated_config_override"
+            local_token = emit_local_token_from_config_path(token_config_path)
+        elif isinstance(generated_config_path, Path) and generated_config_path.is_file():
+            local_token = emit_local_token(real_runtime_paths)
+        elif isinstance(stable_config_path, Path) and stable_config_path.is_file():
+            token_config_path = stable_config_path
+            token_config_source_kind = "observed_stable_config_fallback"
+            observed_stable_config_fallback_used = True
+            local_token = emit_local_token_from_config_path(stable_config_path)
+        else:
+            local_token = emit_local_token(real_runtime_paths)
         paths = default_persistent_custom_profile_paths(
             profile_id=persistent_profile_id,
             base_dir=persistent_profile_base_dir,
@@ -774,12 +5298,21 @@ def launch_custom_native_app_packet(
             base_dir=persistent_profile_base_dir,
         )
         tmp_root = layout.tmp_root
-        materialize_probe_profile(
+        extra_agent_runtime_context_paths: list[Path] = []
+        runtime_profile_dir = getattr(real_runtime_paths, "profile_dir", None)
+        if isinstance(runtime_profile_dir, Path):
+            extra_agent_runtime_context_paths.append(
+                runtime_profile_dir / AGENT_RUNTIME_CONTEXT_FILENAME
+            )
+        materialized_profile = materialize_probe_profile(
             layout=layout,
             endpoint=endpoint,
             model=model,
             auth_command_path=repo_root / "wbp_codex_auth_command.py",
             local_token=local_token,
+            agent_runtime_context=agent_runtime_context,
+            extra_agent_runtime_context_paths=extra_agent_runtime_context_paths,
+            validate_model_against_endpoint=True,
         )
         persistent_fields = {
             "profile_mode": "persistent_custom",
@@ -795,7 +5328,95 @@ def launch_custom_native_app_packet(
             "cleanup_scope": "runtime_tmp_only_or_deferred_running_process",
             "browser_client_path_authority": False,
             "original_codex_profile_runtime_dependency": False,
+            "agent_runtime_context_written": materialized_profile.get(
+                "agent_runtime_context_written"
+            )
+            is True,
+            "native_alias_context_written": materialized_profile.get(
+                "native_alias_context_written"
+            )
+            is True,
+            "context_file_present": materialized_profile.get("context_file_present")
+            is True,
+            "context_file_sha256_present": materialized_profile.get(
+                "context_file_sha256_present"
+            )
+            is True,
+            "agent_runtime_context_profile_relative_path": str(
+                materialized_profile.get("agent_runtime_context_profile_relative_path")
+                or ""
+            ),
+            "agent_runtime_context_sha256": str(
+                materialized_profile.get("agent_runtime_context_sha256") or ""
+            ),
+            "agent_runtime_context_path_redacted": True,
+            "stable_runtime_generated_config_file_present": (
+                generated_config_path.is_file()
+                if isinstance(generated_config_path, Path)
+                else False
+            ),
+            "stable_runtime_generated_config_file_path_recorded": False,
+            "stable_runtime_generated_config_default_present": (
+                generated_config_path.is_file()
+                if isinstance(generated_config_path, Path)
+                else False
+            ),
+            "observed_stable_config_fallback_used": (
+                observed_stable_config_fallback_used
+            ),
+            "observed_stable_config_file_present": (
+                stable_config_path.is_file()
+                if isinstance(stable_config_path, Path)
+                else False
+            ),
+            "token_config_file_present": (
+                token_config_path.is_file() if isinstance(token_config_path, Path) else False
+            ),
+            "token_config_source_kind": token_config_source_kind,
+            "local_token_source_kind": token_config_source_kind,
+            "local_token_present": bool(local_token),
+            "local_token_value_recorded": False,
+            "configured_model_validation_attempted": materialized_profile.get(
+                "configured_model_validation_attempted"
+            )
+            is True,
+            "configured_model_available": materialized_profile.get(
+                "configured_model_available"
+            )
+            is True,
+            "configured_model_validation_packet": materialized_profile.get(
+                "configured_model_validation_packet",
+                {},
+            ),
+            "model_config_written": materialized_profile.get("model_config_written")
+            is True,
         }
+        if materialized_profile.get("status") == "blocked":
+            cleanup_error = remove_tree_with_retry(tmp_root)
+            return {
+                **base,
+                **persistent_fields,
+                "status": "blocked",
+                "machine_error_code": str(
+                    materialized_profile.get("machine_error_code")
+                    or "CUSTOM_NATIVE_CONFIG_MODEL_NOT_AVAILABLE"
+                ),
+                "human_message": str(
+                    materialized_profile.get("human_message")
+                    or "Custom native launch stopped before launch because the configured model is unavailable."
+                ),
+                "next_action": str(
+                    materialized_profile.get("next_action")
+                    or "select_model_advertised_by_local_models_endpoint"
+                ),
+                "selection_model_id": model,
+                "cleanup_result": {
+                    "attempted": True,
+                    "status": "ok" if not cleanup_error else "blocked",
+                    "termination": {},
+                    "cleanup_error_class": cleanup_error,
+                },
+            }
         keychain_preflight = prepare_isolated_home_keychain(
             isolated_home=layout.custom_home_dir,
         )
@@ -851,25 +5472,39 @@ def launch_custom_native_app_packet(
                     persistent_profile_id=persistent_profile_id,
                     persistent_profile_base_dir=persistent_profile_base_dir,
                 )
-                existing_window_visible = show_packet.get("status") == "ok"
+                existing_window_visible = bool(
+                    show_packet.get("custom_window_observed") is True
+                    and show_packet.get("custom_window_visible") is True
+                    and show_packet.get("custom_window_frontmost") is True
+                )
+                existing_window_usable = show_packet.get("native_app_usable") is True
+                existing_machine_error = (
+                    "OK"
+                    if existing_window_usable
+                    else (
+                        "CUSTOM_NATIVE_EXISTING_WINDOW_USABILITY_NOT_PROVEN"
+                        if existing_window_visible
+                        else "CUSTOM_CODEX_EXISTING_WINDOW_VISIBILITY_NOT_PROVEN"
+                    )
+                )
                 return {
                     **base,
                     **persistent_fields,
                     **keychain_fields,
-                    "status": "ok" if existing_window_visible else "blocked",
-                    "machine_error_code": (
-                        "OK"
-                        if existing_window_visible
-                        else "CUSTOM_CODEX_EXISTING_WINDOW_VISIBILITY_NOT_PROVEN"
-                    ),
+                    "status": "ok" if existing_window_usable else "blocked",
+                    "machine_error_code": existing_machine_error,
                     "human_message": (
                         "Existing Custom Codex window was reused; no new launch was started."
-                        if existing_window_visible
-                        else "Existing Custom Codex process was found, but window visibility was not proven."
+                        if existing_window_usable
+                        else (
+                            "Existing Custom Codex window is visible, but input-capable UI was not proven."
+                            if existing_window_visible
+                            else "Existing Custom Codex process was found, but window visibility was not proven."
+                        )
                     ),
                     "next_action": (
                         "none"
-                        if existing_window_visible
+                        if existing_window_usable
                         else "show_existing_custom_codex_window_or_stop_same_profile_process"
                     ),
                     "running_status": existing_window_visible,
@@ -885,10 +5520,48 @@ def launch_custom_native_app_packet(
                     "custom_window_bounds": show_packet.get("custom_window_bounds", {}),
                     "window_focus_action_attempted": show_packet.get("window_focus_action_attempted") is True,
                     "window_focus_action_succeeded": show_packet.get("window_focus_action_succeeded") is True,
-                    "native_app_usable": existing_window_visible,
+                    "native_app_usable": existing_window_usable,
                     "native_app_usability_source": (
-                        "existing_visible_custom_window" if existing_window_visible else "not_proven"
+                        str(show_packet.get("native_app_usability_source") or "")
+                        if existing_window_usable
+                        else "not_proven"
                     ),
+                    "remote_debugging_port": int(
+                        show_packet.get("cdp_port")
+                        or read_profile_remote_debugging_port(layout.profile_dir)
+                    ),
+                    "remote_debugging_port_source": str(
+                        show_packet.get("cdp_port_source")
+                        or "persistent_profile_remote_debugging_port"
+                    ),
+                    "remote_debugging_port_file_written": (
+                        remote_debugging_port_file(layout.profile_dir).is_file()
+                    ),
+                    "remote_debugging_port_file_path_recorded": False,
+                    "native_app_usability_blocked_reason_class": str(
+                        show_packet.get("native_app_usability_blocked_reason_class") or ""
+                    ),
+                    "renderer_recovery_attempted": (
+                        show_packet.get("renderer_recovery_attempted") is True
+                    ),
+                    "renderer_recovery_status": str(
+                        show_packet.get("renderer_recovery_status") or ""
+                    ),
+                    "renderer_recovery_action": str(
+                        show_packet.get("renderer_recovery_action") or ""
+                    ),
+                    "renderer_recovery_packet": show_packet.get(
+                        "renderer_recovery_packet",
+                        _renderer_recovery_not_required_packet(),
+                    ),
+                    "cdp_localhost_only": show_packet.get("cdp_localhost_only") is True,
+                    "cdp_endpoint_redacted": show_packet.get("cdp_endpoint_redacted") is True,
+                    "cdp_target_bound_to_custom_launch": show_packet.get("cdp_target_bound_to_custom_launch") is True,
+                    "cdp_editable_surface_observed": show_packet.get("cdp_editable_surface_observed") is True,
+                    "raw_dom_exposed": show_packet.get("raw_dom_exposed") is True,
+                    "raw_ax_tree_exposed": show_packet.get("raw_ax_tree_exposed") is True,
+                    "browser_cdp_authority_widened": show_packet.get("browser_cdp_authority_widened") is True,
+                    "input_capable_ui_observed": show_packet.get("input_capable_ui_observed") is True,
                     "real_codex_app_launched": False,
                     "isolated_home": True,
                     "isolated_codex_home": True,
@@ -902,12 +5575,23 @@ def launch_custom_native_app_packet(
                     "cleanup_deferred_while_running": existing_window_visible,
                     "keep_running_on_window_observed": keep_running_on_window_observed,
                     "existing_custom_window_detected": True,
-                    "existing_custom_window_reused": existing_window_visible,
+                    "existing_custom_window_reused": existing_window_usable,
+                    "reused_existing_window": existing_window_usable,
                     "new_launch_started": False,
+                    "fresh_launch_started": False,
+                    "launch_origin": (
+                        "existing_window"
+                        if existing_window_usable
+                        else "existing_window_unproven"
+                    ),
                     "show_existing_window_packet": show_packet,
                     "cleanup_result": {
                         "attempted": False,
-                        "status": "existing_window_reused" if existing_window_visible else "existing_process_left_running",
+                        "status": (
+                            "existing_window_reused"
+                            if existing_window_usable
+                            else "existing_process_left_running"
+                        ),
                         "termination": {},
                         "cleanup_error_class": "",
                     },
@@ -950,6 +5634,21 @@ def launch_custom_native_app_packet(
             layout=layout,
             real_runtime_paths=real_runtime_paths,
         )
+        window_inventory = _launch_window_process_inventory(launch_result)
+        cdp_port_source = str(launch_result.get("remote_debugging_port_source") or "")
+        raw_cdp_port = launch_result.get("remote_debugging_port")
+        if not raw_cdp_port:
+            raw_cdp_port, cdp_port_source = _custom_runtime_cdp_port(
+                window_inventory,
+                profile_root=layout.profile_dir,
+            )
+        cdp_port = int(raw_cdp_port) if raw_cdp_port else 0
+        if not cdp_port_source:
+            cdp_port_source = (
+                "launch_result_remote_debugging_port"
+                if raw_cdp_port
+                else "remote_debugging_port_not_observed"
+            )
         process_started = launch_result.get("custom_process_observed") is True
         launcher_exit_code_early = launch_result.get("launcher_exit_code_early")
         launcher_failed_before_process = (
@@ -960,25 +5659,116 @@ def launch_custom_native_app_packet(
         process_still_alive = (
             launch_result.get("custom_process_still_observed_after_wait") is True
         )
-        window_packet = _wait_for_window_observation_via_ax(launch_result["startup_inventory"])
+        window_packet = _wait_for_window_observation_via_ax(
+            window_inventory,
+            profile_dir=layout.profile_dir,
+        )
+        root_window_candidate_pids = _custom_root_app_pids(window_inventory)
+        all_window_candidate_pids = _custom_window_candidate_pids(window_inventory)
         focus_packet: dict[str, Any] = {
             "window_focus_action_attempted": False,
             "window_focus_action_succeeded": False,
         }
-        observed_pid_for_focus = window_packet.get("observed_pid")
+        observed_pid_for_focus = (
+            window_packet.get("observed_pid")
+            if window_packet.get("window_observed") is True
+            else (
+                root_window_candidate_pids[0]
+                if root_window_candidate_pids
+                else (
+                    all_window_candidate_pids[0]
+                    if all_window_candidate_pids
+                    else window_packet.get("observed_pid")
+                )
+            )
+        )
         if isinstance(observed_pid_for_focus, int) and (
             window_packet.get("window_observed") is not True
             or window_packet.get("window_visible") is not True
             or window_packet.get("window_frontmost") is not True
         ):
             focus_packet = _focus_custom_window_by_pid(observed_pid_for_focus)
-            window_packet = _window_observation_via_ax(
+            window_packet = _window_observation_packet_for_process_inventory(
                 collect_codex_process_inventory(
                     custom_user_data_dir=str(layout.custom_user_data_dir)
-                )
+                ),
+                profile_dir=layout.profile_dir,
             )
-        usability_packet = _window_usability_from_observation(window_packet)
+        usability_packet = _window_usability_from_observation(
+            window_packet,
+            cdp_port=cdp_port,
+        )
+        usability_packet = _apply_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+        )
+        usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+        )
+        renderer_recovery_packet = _renderer_recovery_not_required_packet()
+        observed_pid_for_recovery = window_packet.get("observed_pid")
+        if isinstance(observed_pid_for_recovery, int):
+            (
+                usability_packet,
+                renderer_recovery_packet,
+                recovered_window_packet,
+            ) = _recover_startup_loader_if_needed(
+                usability_packet,
+                window_packet=window_packet,
+                observed_pid=observed_pid_for_recovery,
+                allowed_cdp_owner_pids=window_packet.get("custom_window_candidate_pids")
+                if isinstance(window_packet.get("custom_window_candidate_pids"), list)
+                else None,
+                profile_dir=layout.profile_dir,
+                custom_user_data_dir=str(layout.custom_user_data_dir),
+                cdp_port=cdp_port,
+            )
+            if recovered_window_packet is not None:
+                window_packet = recovered_window_packet
+        elif _renderer_startup_loader_stuck(usability_packet):
+            renderer_recovery_packet = _renderer_recovery_packet(
+                status="blocked",
+                machine_error_code="OBSERVED_PID_MISSING_FOR_RENDERER_RECOVERY",
+                reason_class="observed_pid_missing_for_renderer_recovery",
+                reload_targets=[],
+            )
+        post_launch_usability_recheck_packet = _post_launch_usability_recheck_packet(
+            attempted=False,
+            status="not_required",
+            machine_error_code="NOT_REQUIRED",
+        )
+        if (
+            process_started
+            and process_still_alive
+            and window_packet.get("window_observed") is True
+            and _post_launch_usability_recheck_candidate(usability_packet)
+        ):
+            (
+                post_launch_usability_recheck_packet,
+                rechecked_window_packet,
+                rechecked_usability_packet,
+            ) = _wait_for_post_launch_window_usability(
+                initial_window_packet=window_packet,
+                profile_dir=layout.profile_dir,
+                custom_user_data_dir=str(layout.custom_user_data_dir),
+                cdp_port=cdp_port,
+            )
+            if post_launch_usability_recheck_packet.get("status") == "ok":
+                window_packet = rechecked_window_packet
+                usability_packet = rechecked_usability_packet
+        usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+            usability_packet,
+            profile_dir=layout.profile_dir,
+            launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+        )
         runtime_ready_packet = _runtime_ready_from_launcher_stdout(launch_result, layout)
+        runtime_ready_packet = _runtime_ready_with_input_capable_renderer_fallback(
+            runtime_ready_packet,
+            usability_packet,
+        )
         identity_packet = _build_identity_binding(window_packet, layout, launch_result)
         expected_identity = identity_packet.get("window_bound_to_custom_launch") is True
         native_window_observed = window_packet.get("window_observed") is True
@@ -988,11 +5778,34 @@ def launch_custom_native_app_packet(
         custom_window_frontmost = window_packet.get("window_frontmost") is True
         input_capable_ui_observed = usability_packet.get("native_window_usable") is True
         runtime_ready_observed = runtime_ready_packet.get("runtime_ready_observed") is True
-        native_app_usable = input_capable_ui_observed or custom_window_visible
+        native_app_usable = input_capable_ui_observed
+        desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
         native_app_usability_source = (
-            "input_capable_ui"
-            if input_capable_ui_observed
-            else ("visible_custom_window" if custom_window_visible else "not_proven")
+            str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
+            if input_capable_ui_observed or desktop_auth_blocker
+            else "not_proven"
+        )
+        usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+        renderer_surface_blocked_reason = str(
+            usability_packet.get("renderer_surface_blocked_reason_class") or usability_blocked_reason
+        )
+        blocked_machine_error = _custom_native_launch_blocked_machine_error(
+            launcher_failed_before_process=launcher_failed_before_process,
+            process_started=process_started,
+            process_still_alive=process_still_alive,
+            custom_window_visible=custom_window_visible,
+            native_app_usable=native_app_usable,
+            desktop_auth_blocker=desktop_auth_blocker,
+            renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+        )
+        blocked_human_message = _custom_native_launch_blocked_human_message(
+            launcher_failed_before_process=launcher_failed_before_process,
+            process_started=process_started,
+            process_still_alive=process_still_alive,
+            custom_window_visible=custom_window_visible,
+            native_app_usable=native_app_usable,
+            desktop_auth_blocker=desktop_auth_blocker,
+            renderer_surface_blocked_reason=renderer_surface_blocked_reason,
         )
         success = (
             process_started
@@ -1012,6 +5825,48 @@ def launch_custom_native_app_packet(
 
         if not success and not keep_running_with_limited_proof:
             termination = terminate_custom_processes(str(layout.custom_user_data_dir))
+            usability_packet = _bounded_recheck_codex_desktop_auth_blocker(
+                usability_packet,
+                profile_dir=layout.profile_dir,
+                launcher_stderr_path=launch_result.get("launcher_stderr_path"),
+                allow_profile_auth_state_fallback=True,
+                profile_auth_state_fallback_allowed_by_current_launch=(
+                    process_started
+                    and process_still_alive
+                    and not launcher_failed_before_process
+                ),
+            )
+            input_capable_ui_observed = usability_packet.get("native_window_usable") is True
+            native_app_usable = input_capable_ui_observed
+            desktop_auth_blocker = usability_packet.get("codex_desktop_auth_blocker_observed") is True
+            native_app_usability_source = (
+                str(usability_packet.get("native_app_usability_source") or "input_capable_ui")
+                if input_capable_ui_observed or desktop_auth_blocker
+                else "not_proven"
+            )
+            usability_blocked_reason = str(usability_packet.get("blocked_reason_class") or "")
+            renderer_surface_blocked_reason = str(
+                usability_packet.get("renderer_surface_blocked_reason_class")
+                or usability_blocked_reason
+            )
+            blocked_machine_error = _custom_native_launch_blocked_machine_error(
+                launcher_failed_before_process=launcher_failed_before_process,
+                process_started=process_started,
+                process_still_alive=process_still_alive,
+                custom_window_visible=custom_window_visible,
+                native_app_usable=native_app_usable,
+                desktop_auth_blocker=desktop_auth_blocker,
+                renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+            )
+            blocked_human_message = _custom_native_launch_blocked_human_message(
+                launcher_failed_before_process=launcher_failed_before_process,
+                process_started=process_started,
+                process_still_alive=process_still_alive,
+                custom_window_visible=custom_window_visible,
+                native_app_usable=native_app_usable,
+                desktop_auth_blocker=desktop_auth_blocker,
+                renderer_surface_blocked_reason=renderer_surface_blocked_reason,
+            )
             cleanup_error = remove_tree_with_retry(tmp_root)
 
         return {
@@ -1020,29 +5875,18 @@ def launch_custom_native_app_packet(
             **keychain_fields,
             **prelaunch_fields,
             "status": "ok" if success else "blocked",
-            "machine_error_code": (
-                "OK"
-                if success
-                else (
-                    "CUSTOM_NATIVE_LAUNCHER_EXIT_NONZERO"
-                    if launcher_failed_before_process
-                    else "CUSTOM_NATIVE_WINDOW_NOT_PROVEN"
-                )
-            ),
+            "machine_error_code": "OK" if success else blocked_machine_error,
             "human_message": (
                 "Custom Codex native app launched and pid-bound window proof passed."
                 if success
-                else (
-                    "Custom Codex launcher exited before a Custom process was observed."
-                    if launcher_failed_before_process
-                    else "Custom Codex native launch did not satisfy process/window proof."
-                )
+                else blocked_human_message
             ),
             "running_status": success or keep_running_with_limited_proof,
             "process_started": process_started,
             "custom_process_observed": process_started,
             "custom_process_pid": window_packet.get("observed_pid"),
             "process_still_observed_after_wait": process_still_alive,
+            "process_exited_after_start": process_started and not process_still_alive,
             "post_observation_wait_seconds": launch_result.get(
                 "post_observation_wait_seconds",
                 0,
@@ -1059,6 +5903,52 @@ def launch_custom_native_app_packet(
             "native_app_usable": native_app_usable,
             "native_app_usability_source": native_app_usability_source,
             "input_capable_ui_observed": input_capable_ui_observed,
+            "remote_debugging_port": cdp_port,
+            "remote_debugging_port_source": cdp_port_source,
+            "remote_debugging_port_file_written": (
+                launch_result.get("remote_debugging_port_file_written") is True
+            ),
+            "remote_debugging_port_file_path_recorded": False,
+            "cdp_localhost_only": usability_packet.get("cdp_localhost_only") is True,
+            "cdp_endpoint_redacted": usability_packet.get("cdp_endpoint_redacted") is True,
+            "cdp_target_bound_to_custom_launch": usability_packet.get("cdp_target_bound_to_custom_launch") is True,
+            "cdp_editable_surface_observed": usability_packet.get("cdp_editable_surface_observed") is True,
+            "raw_dom_exposed": usability_packet.get("raw_dom_exposed") is True,
+            "raw_ax_tree_exposed": usability_packet.get("raw_ax_tree_exposed") is True,
+            "browser_cdp_authority_widened": usability_packet.get("browser_cdp_authority_widened") is True,
+            "codex_desktop_auth_blocker_observed": desktop_auth_blocker,
+            "codex_desktop_auth_blocked_reason_class": str(
+                usability_packet.get("codex_desktop_auth_blocked_reason_class") or ""
+            ),
+            "codex_desktop_auth_error_class": str(
+                usability_packet.get("codex_desktop_auth_error_class") or ""
+            ),
+            "renderer_surface_blocked_reason_class": str(
+                renderer_surface_blocked_reason if not native_app_usable else ""
+            ),
+            "renderer_startup_loader_observed": (
+                usability_packet.get("renderer_startup_loader_observed") is True
+            ),
+            "renderer_mounted": usability_packet.get("renderer_mounted") is True,
+            "renderer_recovery_attempted": renderer_recovery_packet.get("attempted") is True,
+            "renderer_recovery_status": str(renderer_recovery_packet.get("status") or ""),
+            "renderer_recovery_action": str(renderer_recovery_packet.get("action") or ""),
+            "renderer_recovery_packet": renderer_recovery_packet,
+            "post_launch_usability_recheck_attempted": (
+                post_launch_usability_recheck_packet.get("attempted") is True
+            ),
+            "post_launch_usability_recheck_status": str(
+                post_launch_usability_recheck_packet.get("status") or ""
+            ),
+            "post_launch_usability_recheck_machine_error_code": str(
+                post_launch_usability_recheck_packet.get("machine_error_code") or ""
+            ),
+            "post_launch_usability_recheck_attempt_count": int(
+                post_launch_usability_recheck_packet.get("attempt_count") or 0
+            ),
+            "post_launch_usability_recheck_packet": (
+                post_launch_usability_recheck_packet
+            ),
             **runtime_ready_packet,
             "real_codex_app_launched": success,
             "isolated_home": True,
@@ -1082,7 +5972,17 @@ def launch_custom_native_app_packet(
                 else (
                     "stop_and_diagnose_custom_native_launcher"
                     if launcher_failed_before_process
-                    else "stop_and_diagnose_native_launch"
+                    else (
+                        "relaunch_custom_codex_after_process_exit"
+                        if process_started and not process_still_alive
+                        else "sign_in_to_codex_desktop_custom_profile"
+                        if desktop_auth_blocker
+                        else "stop_and_diagnose_custom_renderer_startup_loader"
+                        if renderer_surface_blocked_reason == "cdp_renderer_startup_loader_stuck"
+                        else "stop_and_diagnose_custom_window_usability"
+                        if custom_window_visible and not native_app_usable
+                        else "stop_and_diagnose_native_launch"
+                    )
                 )
             ),
             "new_launch_started": True,
@@ -1094,6 +5994,7 @@ def launch_custom_native_app_packet(
                 if native_app_usable
                 else usability_packet.get("blocked_reason_class") or ""
             ),
+            "native_window_usability_packet": usability_packet,
             "identity_chain_status": identity_packet.get("status"),
             "launch_receipt": {
                 "tmp_root_redacted": True,
@@ -1133,6 +6034,14 @@ def launch_custom_native_app_packet(
                 "termination": termination or {},
                 "cleanup_error_class": cleanup_error,
                 "exception_class": type(exc).__name__,
+                "exception_machine_error_code": str(
+                    getattr(exc, "machine_error_code", "") or ""
+                ),
+                "exception_severity": str(getattr(exc, "severity", "") or ""),
+                "exception_operator_action": str(
+                    getattr(exc, "operator_action", "") or ""
+                ),
+                "exception_message_recorded": False,
             },
         }
 
@@ -1237,10 +6146,13 @@ def run_native_window_probe(
     process_packet.update(
         {
             "process_id": launch_result["launcher_pid"],
-            "process_lineage": launch_result["startup_inventory"].get("sample", []),
+            "process_lineage": _launch_window_process_inventory(launch_result).get("sample", []),
         }
     )
-    window_packet = _window_observation_via_ax(launch_result["startup_inventory"])
+    window_packet = _window_observation_packet_for_process_inventory(
+        _launch_window_process_inventory(launch_result),
+        profile_dir=layout.profile_dir,
+    )
     usability_packet = _window_usability_from_observation(window_packet)
     protection_before = build_native_current_codex_protection_packet(
         before_snapshot_captured=True,

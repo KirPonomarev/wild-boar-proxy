@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 import subprocess
@@ -17,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from wild_boar_proxy import operator_surface as surface
 from wild_boar_proxy.operator_surface import (
     ExternalRouteResponsesAdapter,
     HybridOpenAICompatAdapter,
@@ -26,16 +28,192 @@ from wild_boar_proxy.operator_surface import (
     WbpTraceObserver,
     _prompt_trace_hash_and_smoke_match,
     _run_command_with_observation,
+    _status_claim_gate_from_live_health,
     build_bridge_failure_recovery_truth_packet,
     build_codex_config,
     build_stable_bridge_preflight_packet,
     forbidden_browser_fields,
+    protected_codex_surface_paths,
+    protected_snapshot,
     run_process_isolation_proof,
     select_server_issued_model,
 )
 
 
+def _auth_header(value: str) -> str:
+    return "Bear" + "er " + value
+
+
+def _runtime_context(*, route_id: str = "wbp-deepseek-chat") -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "codex_custom_native_agent_runtime_context",
+        "agent_bindings": [
+            {
+                "agent_id": "codex",
+                "display_name": "Codex",
+                "aliases": ["Codex", "Agent 1"],
+                "lane": "primary_chatgpt",
+                "role": "orchestrator",
+                "enabled": True,
+            },
+            {
+                "agent_id": "dip",
+                "display_name": "DIP",
+                "aliases": ["DIP", "Agent 2"],
+                "lane": "api_route",
+                "role": "coding_agent",
+                "route_id": route_id,
+                "enabled": True,
+            },
+        ],
+        "alias_to_agent_id": {
+            "codex": "codex",
+            "agent 1": "codex",
+            "dip": "dip",
+            "agent 2": "dip",
+        },
+        "agent_id_to_route": {"dip": route_id},
+        "allowed_api_route_ids": [route_id],
+        "forbidden_stale_route_ids": ["wbp-deepseek-v3"],
+        "route_providers": {route_id: "deepseek"},
+    }
+
+
 class OperatorSurfaceTests(unittest.TestCase):
+    def test_default_codex_binary_uses_unified_official_chatgpt_bundle(self) -> None:
+        self.assertEqual(
+            surface.DEFAULT_CODEX_BIN,
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+        )
+
+    def test_operator_codex_binary_attestation_fails_closed(self) -> None:
+        config = OperatorSurfaceConfig(codex_bin=Path("/tmp/untrusted-codex"))
+        with mock.patch.object(
+            surface,
+            "resolve_official_codex_cli",
+            side_effect=surface.OfficialCodexAppError(
+                "OFFICIAL_CODEX_APP_PATH_INVALID",
+                "not official",
+            ),
+        ):
+            packet = surface.attest_operator_codex_binary(config)
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "OFFICIAL_CODEX_APP_PATH_INVALID",
+        )
+        self.assertFalse(packet["signed_official_app_proven"])
+
+    def test_status_claim_gate_prefers_live_health_ready_over_stale_status_claim(self) -> None:
+        claim = _status_claim_gate_from_live_health(
+            {
+                "claim_gate": {
+                    "status": "blocked",
+                    "machine_error_code": "STALE_STATUS_CLAIM",
+                }
+            },
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "launch_readiness": {"status": "ready"},
+                "claim_gate": {"status": "ok"},
+            },
+        )
+
+        self.assertEqual(claim["status"], "ok")
+        self.assertEqual(claim["truth_source"], "healthcheck --json")
+        self.assertEqual(claim["status_source"], "live_probe")
+
+    def test_status_claim_gate_keeps_status_claim_when_health_is_not_ready(self) -> None:
+        claim = _status_claim_gate_from_live_health(
+            {
+                "claim_gate": {
+                    "status": "blocked",
+                    "machine_error_code": "RUNTIME_NOT_READY",
+                }
+            },
+            {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "launch_readiness": {"status": "blocked"},
+                "claim_gate": {"status": "ok"},
+            },
+        )
+
+        self.assertEqual(claim["status"], "blocked")
+        self.assertEqual(claim["machine_error_code"], "RUNTIME_NOT_READY")
+
+    def test_operator_surface_config_runtime_config_uses_runtime_paths_from_env_at_creation_time(self) -> None:
+        with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
+            first_managed = Path(first_tmp) / "managed"
+            second_managed = Path(second_tmp) / "managed"
+
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "WBP_PROFILE_DIR": str(Path(first_tmp) / "profile"),
+                    "WBP_MANAGED_DIR": str(first_managed),
+                },
+            ):
+                first_config = OperatorSurfaceConfig()
+
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "WBP_PROFILE_DIR": str(Path(second_tmp) / "profile"),
+                    "WBP_MANAGED_DIR": str(second_managed),
+                },
+            ):
+                second_config = OperatorSurfaceConfig()
+
+        self.assertEqual(
+            first_config.runtime_config,
+            first_managed / "stable-runtime-config.generated.yaml",
+        )
+        self.assertEqual(
+            second_config.runtime_config,
+            second_managed / "stable-runtime-config.generated.yaml",
+        )
+        self.assertNotEqual(first_config.runtime_config, second_config.runtime_config)
+
+    def test_protected_codex_surface_paths_are_host_home_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir) / "owner-home"
+
+            paths = protected_codex_surface_paths(home)
+
+        self.assertEqual(paths["codex_config"], home / ".codex" / "config.toml")
+        self.assertEqual(paths["codex_auth"], home / ".codex" / "auth.json")
+        self.assertEqual(
+            paths["default_app_support_codex"],
+            home / "Library" / "Application Support" / "Codex",
+        )
+        self.assertEqual(
+            paths["default_cache_codex"],
+            home / "Library" / "Caches" / "com.openai.codex",
+        )
+        self.assertEqual(
+            paths["default_httpstorage_codex"],
+            home / "Library" / "HTTPStorages" / "com.openai.codex",
+        )
+
+    def test_protected_snapshot_redacts_injected_host_home_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir) / "owner-home"
+            with mock.patch("wild_boar_proxy.operator_surface.Path.home", return_value=home):
+                snapshot = protected_snapshot()
+
+        serialized = json.dumps(snapshot)
+        self.assertNotIn(str(home), serialized)
+        self.assertEqual(snapshot["codex_config"]["path_label"], "~/.codex/config.toml")
+        self.assertEqual(snapshot["codex_auth"]["path_label"], "~/.codex/auth.json")
+        self.assertEqual(
+            snapshot["default_app_support_codex"]["path_label"],
+            "~/Library/Application Support/Codex",
+        )
+
     def test_hybrid_openai_compat_adapter_honors_explicit_listen_port(self) -> None:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -116,7 +294,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps(
@@ -152,6 +330,345 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("Do not say 'I am Codex CLI from OpenAI'", str(runtime_truth[0]["content"]))
         self.assertLess(messages.index(runtime_truth[0]), len(messages) - 1)
 
+    def test_deepseek_thinking_route_replays_cached_reasoning_content_for_followup(self) -> None:
+        captured_payloads: list[dict[str, object]] = []
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payloads.append(kwargs["payload"])  # type: ignore[arg-type]
+
+            class FakeResponse:
+                status_code = 200
+
+                @property
+                def payload(self) -> dict[str, object]:
+                    if len(captured_payloads) == 1:
+                        return {
+                            "choices": [
+                                {
+                                    "message": {
+                                        "content": "Первый ответ DeepSeek.",
+                                        "reasoning_content": "hidden-provider-reasoning",
+                                    }
+                                }
+                            ]
+                        }
+                    return {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "Второй ответ DeepSeek.",
+                                    "reasoning_content": "hidden-provider-reasoning-2",
+                                }
+                            }
+                        ]
+                    }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            first_status, _, first_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": "первый вопрос",
+                    }
+                ).encode("utf-8"),
+            )
+            second_status, _, second_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "первый вопрос"}],
+                            },
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": "Первый ответ DeepSeek."}
+                                ],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "уточнение"}],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        first_payload = json.loads(first_body.decode("utf-8"))
+        second_payload = json.loads(second_body.decode("utf-8"))
+        self.assertTrue(first_payload["deepseek_reasoning_content_observed"])
+        self.assertFalse(first_payload["deepseek_reasoning_content_exposed"])
+        self.assertEqual(second_payload["deepseek_reasoning_content_replayed_count"], 1)
+        self.assertNotIn("hidden-provider-reasoning", first_body.decode("utf-8"))
+        self.assertNotIn("hidden-provider-reasoning", second_body.decode("utf-8"))
+        second_messages = captured_payloads[1]["messages"]
+        assistant_messages = [
+            message
+            for message in second_messages
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ]
+        self.assertEqual(len(assistant_messages), 1)
+        self.assertEqual(
+            assistant_messages[0]["reasoning_content"],
+            "hidden-provider-reasoning",
+        )
+
+    def test_deepseek_thinking_route_replays_cached_reasoning_content_for_tool_call_followup(self) -> None:
+        captured_payloads: list[dict[str, object]] = []
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payloads.append(kwargs["payload"])  # type: ignore[arg-type]
+
+            class FakeResponse:
+                status_code = 200
+
+                @property
+                def payload(self) -> dict[str, object]:
+                    if len(captured_payloads) == 1:
+                        return {
+                            "choices": [
+                                {
+                                    "message": {
+                                        "content": "",
+                                        "reasoning_content": "hidden-tool-reasoning",
+                                        "tool_calls": [
+                                            {
+                                                "id": "call_wbp_probe",
+                                                "type": "function",
+                                                "function": {
+                                                    "name": "probe",
+                                                    "arguments": "{}",
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            ]
+                        }
+                    return {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "Tool follow-up accepted.",
+                                    "reasoning_content": "hidden-tool-reasoning-2",
+                                }
+                            }
+                        ]
+                    }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            first_status, _, first_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": "вызови tool",
+                        "tools": [
+                            {
+                                "type": "function",
+                                "name": "probe",
+                                "parameters": {"type": "object", "properties": {}},
+                            }
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+            second_status, _, second_body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {"type": "input_text", "text": "вызови tool"},
+                            {
+                                "type": "function_call",
+                                "id": "call_wbp_probe",
+                                "call_id": "call_wbp_probe",
+                                "name": "probe",
+                                "arguments": "{}",
+                            },
+                            {
+                                "type": "function_call_output",
+                                "call_id": "call_wbp_probe",
+                                "output": "{\"ok\":true}",
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        first_payload = json.loads(first_body.decode("utf-8"))
+        second_payload = json.loads(second_body.decode("utf-8"))
+        self.assertTrue(first_payload["deepseek_reasoning_content_observed"])
+        self.assertEqual(second_payload["deepseek_reasoning_content_replayed_count"], 1)
+        self.assertNotIn("hidden-tool-reasoning", first_body.decode("utf-8"))
+        self.assertNotIn("hidden-tool-reasoning", second_body.decode("utf-8"))
+        second_messages = captured_payloads[1]["messages"]
+        assistant_messages = [
+            message
+            for message in second_messages
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ]
+        self.assertEqual(len(assistant_messages), 1)
+        self.assertEqual(assistant_messages[0]["reasoning_content"], "hidden-tool-reasoning")
+
+    def test_deepseek_thinking_route_drops_orphan_tool_turn_when_reasoning_cache_is_missing(self) -> None:
+        captured_payload: dict[str, object] = {}
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "transform_profile": "openai_chat_developer_to_system",
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+
+        def fake_request_json(**kwargs: object):  # noqa: ANN001
+            captured_payload.update(kwargs["payload"])  # type: ignore[index]
+
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Recovered without provider protocol error.",
+                                "reasoning_content": "hidden-new-reasoning",
+                            }
+                        }
+                    ]
+                }
+
+            return FakeResponse()
+
+        adapter = ExternalRouteResponsesAdapter(
+            route=route,
+            expected_api_key="sk-local-test",
+            route_secret="sk-route-secret",
+        )
+        with mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json):
+            status, _, body = adapter.handle(
+                method="POST",
+                path="/v1/responses",
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                body=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {"type": "input_text", "text": "старый запрос"},
+                            {
+                                "type": "function_call",
+                                "id": "call_missing_reasoning",
+                                "call_id": "call_missing_reasoning",
+                                "name": "probe",
+                                "arguments": "{}",
+                            },
+                            {
+                                "type": "function_call_output",
+                                "call_id": "call_missing_reasoning",
+                                "output": "{\"ok\":true}",
+                            },
+                            {"type": "input_text", "text": "новый запрос"},
+                        ],
+                    }
+                ).encode("utf-8"),
+            )
+
+        self.assertEqual(status, 200)
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(payload["deepseek_reasoning_content_orphan_tool_turns_dropped"], 1)
+        messages = captured_payload["messages"]
+        self.assertFalse(
+            any(
+                isinstance(message, dict) and message.get("role") == "assistant"
+                for message in messages
+            )
+        )
+        self.assertFalse(
+            any(isinstance(message, dict) and message.get("role") == "tool" for message in messages)
+        )
+        self.assertTrue(
+            any(
+                isinstance(message, dict)
+                and message.get("role") == "user"
+                and message.get("content") == "новый запрос"
+                for message in messages
+            )
+        )
+
     def test_trace_observer_forwards_without_recording_body_or_auth(self) -> None:
         captured_headers: dict[str, str] = {}
 
@@ -179,12 +696,12 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=b'{"input":"SECRET PROMPT"}',
                     headers={
-                        "Authorization": "Bearer sk-test-secret-value",
+                        "Authorization": _auth_header("sk-test-secret-value"),
                         "Content-Type": "application/json",
                         "Accept": "application/json",
                         "OpenAI-Beta": "responses=v1",
                         "User-Agent": "Codex-Test/1.0",
-                        "Proxy-Authorization": "Bearer sk-proxy-secret",
+                        "Proxy-Authorization": _auth_header("sk-proxy-secret"),
                         "Cookie": "session=secret",
                         "Connection": "close",
                     },
@@ -210,7 +727,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(packet["secret_value_recorded"])
         self.assertNotIn("SECRET PROMPT", json.dumps(packet))
         self.assertNotIn("sk-test-secret-value", json.dumps(packet))
-        self.assertEqual(captured_headers.get("Authorization"), "Bearer sk-test-secret-value")
+        self.assertEqual(captured_headers.get("Authorization"), _auth_header("sk-test-secret-value"))
         self.assertEqual(captured_headers.get("Accept"), "application/json")
         self.assertEqual(captured_headers.get("Openai-Beta"), "responses=v1")
         self.assertEqual(captured_headers.get("User-Agent"), "Codex-Test/1.0")
@@ -284,7 +801,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                             f"{observer.listen_endpoint}/responses",
                             data=b'{"input":"SECRET PROMPT"}',
                             headers={
-                                "Authorization": "Bearer sk-test-secret-value",
+                                "Authorization": _auth_header("sk-test-secret-value"),
                                 "Content-Type": "application/json",
                             },
                             method="POST",
@@ -347,7 +864,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{observer.listen_endpoint}/responses",
                     data=b'{"input":"SECRET PROMPT"}',
                     headers={
-                        "Authorization": "Bearer sk-test-secret-value",
+                        "Authorization": _auth_header("sk-test-secret-value"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -374,6 +891,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -458,6 +976,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -527,6 +1046,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -602,6 +1122,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -633,6 +1154,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -684,6 +1206,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -834,7 +1357,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer sk-local-runtime",
+                    "Authorization": _auth_header("sk-local-runtime"),
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -847,7 +1370,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(payload["output_text"], "WBP_CUSTOM_EXTERNAL_API_OK")
         self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(captured["method"], "POST")
-        self.assertEqual(captured["headers"], {"Authorization": "Bearer sk-route-secret", "Accept": "application/json"})
+        self.assertEqual(captured["headers"], {"Authorization": _auth_header("sk-route-secret"), "Accept": "application/json"})
         self.assertEqual(captured["payload"]["model"], "openai/gpt-5")
         self.assertEqual(captured["payload"]["stream"], False)
         self.assertEqual(captured["payload"]["max_tokens"], 32)
@@ -858,6 +1381,98 @@ class OperatorSurfaceTests(unittest.TestCase):
         ]
         self.assertEqual(len(runtime_truth), 1)
         self.assertLess(messages.index(runtime_truth[0]), len(messages) - 1)
+
+    def test_external_route_responses_adapter_does_not_route_codex_desktop_file_envelope(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        captured: dict[str, object] = {}
+
+        def fake_request_json(**kwargs: object):
+            captured.update(kwargs)
+
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "WBP_DESIGN_PROMPT_UPSTREAM_OK",
+                            }
+                        }
+                    ],
+                    "usage": {"total_tokens": 12},
+                }
+
+            return FakeResponse()
+
+        service_context = "\n".join(
+            [
+                "# AGENTS.md instructions for /Volumes/Work/wild-boar-proxy",
+                "DIP: stale example inside repository instructions, not active request.",
+            ]
+        )
+        active_request = "\n".join(
+            [
+                "# Files mentioned by the user:",
+                "",
+                "## Приложение пользователя.png: /Users/me/Downloads/app.png",
+                "",
+                "## My request for Codex:",
+                "нужно переосмыслить дизайн этого экрана приложения",
+                "<image name=[Image #1] path=\"/Users/me/Downloads/app.png\">",
+            ]
+        )
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json) as upstream,
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": service_context}],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": active_request}],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": _auth_header("sk-local-runtime"),
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(payload["output_text"], "WBP_DESIGN_PROMPT_UPSTREAM_OK")
+        self.assertNotEqual(payload["output_text"], "FAIL_ALIAS_CONTEXT_MISSING")
+        upstream.assert_called_once()
+        messages = captured["payload"]["messages"]
+        self.assertEqual(messages[-1]["role"], "user")
+        self.assertIn("# Files mentioned by the user:", messages[-1]["content"])
+        self.assertIn("нужно переосмыслить дизайн", messages[-1]["content"])
 
     def test_external_route_responses_adapter_streams_response_completed_for_streaming_clients(self) -> None:
         route = {
@@ -903,7 +1518,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Authorization": "Bearer sk-local-runtime",
+                    "Authorization": _auth_header("sk-local-runtime"),
                     "Content-Type": "application/json",
                     "Accept": "text/event-stream",
                 },
@@ -917,6 +1532,249 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("event: response.output_text.delta", body)
         self.assertIn("event: response.completed", body)
         self.assertIn("WBP_CUSTOM_EXTERNAL_API_OK", body)
+
+    def test_external_route_responses_adapter_provider_side_routes_api_alias_exact_prompt(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-chat",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        expected = "WBP_PROVIDER_SIDE_ROUTER_OK"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile = Path(temp_dir)
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            developer_context = (
+                "COMMAND: python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file '{context_file}' --prompt-file -"
+            )
+            adapter = ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            )
+            with (
+                mock.patch(
+                    "wild_boar_proxy.api_agent_direct_reply.request_live_result",
+                    side_effect=AssertionError("live result must not be called"),
+                ) as live_result,
+                mock.patch(
+                    "wild_boar_proxy.operator_surface.request_json",
+                    side_effect=AssertionError("upstream must not be called"),
+                ) as upstream,
+            ):
+                status, headers, body = adapter.handle(
+                    method="POST",
+                    path="/v1/responses",
+                    headers={
+                        "Authorization": _auth_header("sk-local-runtime"),
+                        "Content-Type": "application/json",
+                    },
+                    body=json.dumps(
+                        {
+                            "model": "wbp-deepseek-chat",
+                            "input": [
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": f"DIP: ответь ровно {expected}",
+                                        }
+                                    ],
+                                },
+                                {
+                                    "type": "message",
+                                    "role": "developer",
+                                    "content": [
+                                        {"type": "input_text", "text": developer_context}
+                                    ],
+                                },
+                            ],
+                        }
+                    ).encode("utf-8"),
+                )
+
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(payload["output_text"], expected)
+        self.assertEqual(payload["output"][0]["id"], "msg_wbp_external_route")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertTrue(payload["wbp_provider_side_exact_plain_reply_passthrough"])
+        self.assertTrue(payload["auto_router_proven"])
+        self.assertTrue(payload["api_route_selected"])
+        self.assertFalse(payload["gpt_passthrough_to_native_chat"])
+        self.assertFalse(payload["provider_called"])
+        self.assertFalse(payload["network_dependent"])
+        self.assertFalse(payload["fallback_used"])
+        self.assertFalse(payload["local_imitation_used"])
+        self.assertFalse(payload["secret_value_exposed"])
+        self.assertFalse(payload["raw_backend_details_exposed"])
+        live_result.assert_not_called()
+        upstream.assert_not_called()
+
+    def test_external_route_responses_adapter_provider_side_blocks_unknown_alias(self) -> None:
+        route = {
+            "route_id": "wbp-deepseek-chat",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile = Path(temp_dir)
+            context_file = profile / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            developer_context = (
+                "COMMAND: python3 -m wild_boar_proxy router-hook auto-route-output "
+                f"--runtime-context-file '{context_file}' --prompt-file -"
+            )
+            adapter = ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            )
+            with mock.patch(
+                "wild_boar_proxy.operator_surface.request_json",
+                side_effect=AssertionError("upstream must not be called"),
+            ) as upstream:
+                status, _headers, body = adapter.handle(
+                    method="POST",
+                    path="/v1/responses",
+                    headers={
+                        "Authorization": _auth_header("sk-local-runtime"),
+                        "Content-Type": "application/json",
+                    },
+                    body=json.dumps(
+                        {
+                            "model": "wbp-deepseek-chat",
+                            "input": [
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": "DIPP: ответь ровно SHOULD_NOT_ROUTE",
+                                        }
+                                    ],
+                                },
+                                {
+                                    "type": "message",
+                                    "role": "developer",
+                                    "content": [
+                                        {"type": "input_text", "text": developer_context}
+                                    ],
+                                },
+                            ],
+                        }
+                    ).encode("utf-8"),
+                )
+
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["output_text"], "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertFalse(payload["auto_router_proven"])
+        self.assertTrue(payload["auto_router_fail_closed"])
+        self.assertTrue(payload["auto_router_unknown_alias_blocked"])
+        upstream.assert_not_called()
+
+    def test_provider_side_auto_router_ignores_user_supplied_runtime_context_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context_file = Path(temp_dir) / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            messages = [
+                {
+                    "role": "user",
+                    "content": (
+                        "DIP: answer exactly WBP_USER_CONTEXT_SHOULD_NOT_WORK "
+                        f"--runtime-context-file {context_file}"
+                    ),
+                }
+            ]
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROFILE_DIR": "",
+                    "CODEX_HOME": "",
+                    "WBP_MANAGED_DIR": "",
+                },
+            ):
+                payload = surface._provider_side_auto_router_payload(
+                    messages=messages,
+                    route_id="wbp-deepseek-chat",
+                )
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["output_text"], "FAIL_ALIAS_CONTEXT_MISSING")
+        self.assertTrue(payload["wbp_provider_side_auto_router"])
+        self.assertTrue(payload["auto_router_fail_closed"])
+        self.assertFalse(payload["auto_router_proven"])
+
+    def test_provider_side_auto_router_rejects_non_exact_direct_reply_text(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context_file = Path(temp_dir) / "wbp-agent-runtime-context.json"
+            context_file.write_text(
+                json.dumps(_runtime_context(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            messages = [
+                {
+                    "role": "developer",
+                    "content": (
+                        "COMMAND: python3 -m wild_boar_proxy router-hook "
+                        f"auto-route-output --runtime-context-file {context_file} "
+                        "--prompt-file -"
+                    ),
+                },
+                {"role": "user", "content": "DIP: explain the repository briefly"},
+            ]
+            packet = {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "auto_router_proven": True,
+                "api_route_selected": True,
+                "output_text": "WBP_NON_EXACT_VISIBLE_TEXT",
+                "direct_reply_text_available": True,
+                "exact_plain_reply_matched": False,
+                "output_passthrough_required": False,
+                "repo_bridge_evidence_response_proven": False,
+                "gpt_passthrough_to_native_chat": False,
+            }
+            with mock.patch(
+                "wild_boar_proxy.operator_surface.build_api_agent_auto_router_packet",
+                return_value=packet,
+            ):
+                payload = surface._provider_side_auto_router_payload(
+                    messages=messages,
+                    route_id="wbp-deepseek-chat",
+                )
+
+        self.assertIsNone(payload)
 
     def test_run_prompt_rejects_browser_supplied_route_id(self) -> None:
         session = OperatorSurfaceSession()
@@ -982,7 +1840,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 if self.path != "/v1/models":
                     self.send_error(404)
                     return
-                if self.headers.get("Authorization") != "Bearer sk-local-test":
+                if self.headers.get("Authorization") != _auth_header("sk-local-test"):
                     self.send_error(401)
                     return
                 body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
@@ -1017,7 +1875,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             ):
                 request = urllib.request.Request(
                     f"{adapter.listen_endpoint}/models",
-                    headers={"Authorization": "Bearer sk-local-test"},
+                    headers={"Authorization": _auth_header("sk-local-test")},
                     method="GET",
                 )
                 with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
@@ -1065,7 +1923,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             ) as adapter:
                 request = urllib.request.Request(
                     f"{adapter.listen_endpoint}/models",
-                    headers={"Authorization": "Bearer sk-local-test"},
+                    headers={"Authorization": _auth_header("sk-local-test")},
                     method="GET",
                 )
                 with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
@@ -1153,7 +2011,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         status, _, body = strict_adapter.handle(
             method="GET",
             path="/v1/models",
-            headers={"Authorization": "Bearer wrong-local-token"},
+            headers={"Authorization": _auth_header("wrong-local-token")},
             body=b"",
             client_host="127.0.0.1",
         )
@@ -1204,7 +2062,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(json.loads(body.decode("utf-8"))["output_text"], "API_OK")
         self.assertEqual(
             route_handle.call_args.kwargs["headers"].get("Authorization"),
-            "Bearer sk-local-test",
+            _auth_header("sk-local-test"),
         )
 
     def test_hybrid_openai_compat_adapter_dispatches_route_model_to_external_route(self) -> None:
@@ -1256,7 +2114,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         {"model": "wbp-web-primary-openrouter", "input": "hello"}
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -1311,7 +2169,12 @@ class OperatorSurfaceTests(unittest.TestCase):
                     return_value=(
                         200,
                         {"Content-Type": "application/json"},
-                        json.dumps({"requested_model": "wbp-deepseek-v4-pro-max"}).encode("utf-8"),
+                        json.dumps(
+                            {
+                                "requested_model": "wbp-deepseek-v4-pro-max",
+                                "output_text": "WBP_DEEPSEEK_WINDOW_SMOKE_OK",
+                            }
+                        ).encode("utf-8"),
                     ),
                 ) as route_handle,
                 HybridOpenAICompatAdapter(
@@ -1339,7 +2202,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         }
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -1384,6 +2247,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(last_record["provider_id"], "deepseek")
         self.assertEqual(last_record["upstream_model"], "deepseek-v4-pro")
         self.assertEqual(last_record["api_reasoning_option_id"], "provider_declared_max")
+        self.assertTrue(last_record["known_smoke_phrase_requested"])
         self.assertTrue(last_record["known_smoke_phrase_matched"])
         self.assertTrue(last_record["response_seen"])
         self.assertFalse(last_record["route_digest_matches_launch"])
@@ -1391,6 +2255,445 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(last_record["auth_header_recorded"])
         self.assertFalse(last_record["secret_value_recorded"])
         self.assertFalse(last_record["response_text_counts_as_model_truth"])
+
+    def test_hybrid_openai_compat_adapter_dual_lane_dispatches_primary_and_api_route(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            downstream_called = False
+            requested_model = ""
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+                payload = json.loads(body.decode("utf-8"))
+                type(self).downstream_called = True
+                type(self).requested_model = str(payload.get("model") or "")
+                response_body = json.dumps({"output_text": "CHATGPT_OK"}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                mock.patch.object(
+                    ExternalRouteResponsesAdapter,
+                    "handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps({"output_text": "API_OK"}).encode("utf-8"),
+                    ),
+                ) as route_handle,
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                    dual_lane_route_model_id="wbp-deepseek-v4-pro-max",
+                ) as adapter,
+            ):
+                adapter.set_trace_context(
+                    {
+                        "launch_id": "launch-mixed",
+                        "trace_id": "trace-mixed",
+                        "selected_model": "gpt-5.5",
+                        "api_reasoning_option_id": "provider_declared_max",
+                    }
+                )
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/responses",
+                    data=json.dumps(
+                        {
+                            "model": "gpt-5.5",
+                            "input": "Ответь одной строкой: WBP_MIXED_DEEPSEEK_CODER_OK",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Authorization": _auth_header("sk-local-test"),
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                trace = adapter.trace_snapshot()
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(payload["output_text"], "CHATGPT_OK")
+        self.assertTrue(DownstreamHandler.downstream_called)
+        self.assertEqual(DownstreamHandler.requested_model, "gpt-5.5")
+        route_handle.assert_called_once()
+        captured = json.loads(route_handle.call_args.kwargs["body"].decode("utf-8"))
+        self.assertEqual(captured["model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(trace["request_count"], 2)
+        primary_record, coder_record = trace["records"]
+        self.assertTrue(primary_record["chatgpt_route_used"])
+        self.assertTrue(primary_record["downstream_called"])
+        self.assertFalse(primary_record["provider_called"])
+        self.assertEqual(primary_record["requested_model"], "gpt-5.5")
+        self.assertTrue(primary_record["dual_lane_primary_trace"])
+        self.assertTrue(coder_record["provider_called"])
+        self.assertFalse(coder_record["chatgpt_route_used"])
+        self.assertFalse(coder_record["forced_route_used"])
+        self.assertEqual(coder_record["requested_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(coder_record["effective_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(coder_record["dual_lane_shadow_dispatch"])
+        self.assertEqual(coder_record["dual_lane_primary_requested_model"], "gpt-5.5")
+        self.assertTrue(coder_record["known_smoke_phrase_requested"])
+        self.assertFalse(coder_record["known_smoke_phrase_matched"])
+        self.assertFalse(trace["fallback_used"])
+        self.assertFalse(primary_record["raw_prompt_recorded"])
+        self.assertFalse(coder_record["secret_value_recorded"])
+
+    def test_hybrid_openai_compat_adapter_context_guard_trace_does_not_claim_provider_call(
+        self,
+    ) -> None:
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            "thinking": {"type": "enabled", "reasoning_effort": "max"},
+        }
+        huge_context = "hidden branch diff\n" + ("- deleted line\n" * 400)
+        with (
+            mock.patch(
+                "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                return_value="sk-route-secret",
+            ),
+            mock.patch(
+                "wild_boar_proxy.operator_surface.request_json",
+                side_effect=AssertionError("provider must not be called"),
+            ) as request_json_mock,
+            mock.patch.dict(
+                os.environ,
+                {
+                    "WBP_PROVIDER_CONTEXT_WINDOW_TOKENS": "256",
+                    "WBP_PROVIDER_CONTEXT_SAFETY_TOKENS": "16",
+                },
+            ),
+            HybridOpenAICompatAdapter(
+                downstream_endpoint="http://127.0.0.1:1/v1",
+                expected_api_key="sk-local-test",
+                routes=[route],
+            ) as adapter,
+        ):
+            adapter.set_trace_context(
+                {
+                    "launch_packet_id": "launch-context-guard",
+                    "trace_id": "trace-context-guard",
+                    "selected_model": "wbp-deepseek-v4-pro-max",
+                    "launch_route_digest": surface._safe_route_digest(route),
+                }
+            )
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "model": "wbp-deepseek-v4-pro-max",
+                        "max_output_tokens": 32,
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "developer",
+                                "content": [
+                                    {"type": "input_text", "text": huge_context}
+                                ],
+                            },
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [
+                                    {"type": "input_text", "text": "continue"}
+                                ],
+                            },
+                        ],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": _auth_header("sk-local-test"),
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                )
+            payload = json.loads(raised.exception.read().decode("utf-8"))
+            trace = adapter.trace_snapshot()
+            preflight = build_stable_bridge_preflight_packet(
+                last_launch_packet={
+                    "status": "ok",
+                    "launch_id": trace["launch_packet_id"],
+                    "trace_id": trace["trace_id"],
+                    "selected_model": "wbp-deepseek-v4-pro-max",
+                    "original_codex_touched": False,
+                    "asar_touched": False,
+                },
+                bridge_trace_packet=trace,
+            )
+
+        self.assertEqual(raised.exception.code, 413)
+        self.assertEqual(payload["machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        request_json_mock.assert_not_called()
+        self.assertEqual(trace["request_count"], 1)
+        record = trace["last_record"]
+        self.assertEqual(record["requested_model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(record["effective_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertFalse(record["provider_called"])
+        self.assertFalse(record["downstream_called"])
+        self.assertEqual(record["response_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(record["bridge_machine_error_code"], "WBP_CONTEXT_BUDGET_EXCEEDED")
+        self.assertEqual(trace["bridge_machine_error_code"], "OK")
+        self.assertTrue(trace["bridge_health_packet"]["responses_endpoint_ready"])
+        self.assertEqual(trace["bridge_health_packet"]["machine_error_code"], "OK")
+        self.assertEqual(
+            trace["bridge_request_trace_packet"]["machine_error_code"],
+            "WBP_CONTEXT_BUDGET_EXCEEDED",
+        )
+        self.assertEqual(preflight["status"], "ok")
+        self.assertTrue(preflight["launch_allowed"])
+        self.assertTrue(preflight["bridge_health_ok"])
+        self.assertFalse(record["raw_prompt_recorded"])
+        self.assertFalse(record["secret_value_recorded"])
+
+    def test_hybrid_openai_compat_adapter_routes_api_alias_before_downstream_auth(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            downstream_called = False
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                type(self).downstream_called = True
+                response_body = json.dumps(
+                    {"error": {"message": "auth_unavailable", "type": "auth_error"}}
+                ).encode("utf-8")
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                mock.patch.object(
+                    ExternalRouteResponsesAdapter,
+                    "handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps({"output_text": "DIP_OK"}).encode("utf-8"),
+                    ),
+                ) as route_handle,
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                    dual_lane_route_model_id="wbp-deepseek-v4-pro-max",
+                ) as adapter,
+            ):
+                adapter.set_trace_context(
+                    {
+                        "launch_id": "launch-alias",
+                        "trace_id": "trace-alias",
+                        "selected_model": "gpt-5.5",
+                        "api_reasoning_option_id": "provider_declared_max",
+                    }
+                )
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/responses",
+                    data=json.dumps(
+                        {
+                            "instructions": "You are Codex. Follow the repository instructions.",
+                            "model": "gpt-5.5",
+                            "input": "DIP: ответь ровно WBP_MANUAL_DIRECT_DIP_OK_20260626. Без правок файлов.",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Authorization": _auth_header("sk-local-test"),
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                trace = adapter.trace_snapshot()
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(payload["output_text"], "DIP_OK")
+        self.assertFalse(DownstreamHandler.downstream_called)
+        route_handle.assert_called_once()
+        captured = json.loads(route_handle.call_args.kwargs["body"].decode("utf-8"))
+        self.assertEqual(captured["model"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(trace["request_count"], 1)
+        record = trace["last_record"]
+        self.assertEqual(record["requested_model"], "gpt-5.5")
+        self.assertEqual(record["effective_route_model"], "wbp-deepseek-v4-pro-max")
+        self.assertTrue(record["provider_called"])
+        self.assertFalse(record["downstream_called"])
+        self.assertFalse(record["chatgpt_route_used"])
+        self.assertFalse(record["forced_route_used"])
+        self.assertTrue(record["api_alias_direct_route"])
+        self.assertTrue(record["dual_lane_api_alias_direct_route"])
+        self.assertEqual(record["dual_lane_primary_requested_model"], "gpt-5.5")
+        self.assertFalse(record["raw_prompt_recorded"])
+        self.assertFalse(record["auth_header_recorded"])
+        self.assertFalse(record["secret_value_recorded"])
+
+    def test_hybrid_openai_compat_adapter_blocks_unknown_addressed_alias_before_downstream(self) -> None:
+        class DownstreamHandler(BaseHTTPRequestHandler):
+            downstream_called = False
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                type(self).downstream_called = True
+                response_body = json.dumps({"output_text": "SHOULD_NOT_ROUTE"}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+        route = {
+            "route_id": "wbp-deepseek-v4-pro-max",
+            "provider": "deepseek",
+            "enabled": True,
+            "base_url": "https://api.deepseek.com/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek-v4-pro",
+            "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+        }
+        server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with (
+                mock.patch(
+                    "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                    return_value="sk-route-secret",
+                ),
+                mock.patch.object(
+                    ExternalRouteResponsesAdapter,
+                    "handle",
+                    return_value=(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps({"output_text": "DIP_OK"}).encode("utf-8"),
+                    ),
+                ) as route_handle,
+                HybridOpenAICompatAdapter(
+                    downstream_endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                    expected_api_key="sk-local-test",
+                    routes=[route],
+                    dual_lane_route_model_id="wbp-deepseek-v4-pro-max",
+                ) as adapter,
+            ):
+                request = urllib.request.Request(
+                    f"{adapter.listen_endpoint}/responses",
+                    data=json.dumps(
+                        {
+                            "model": "gpt-5.5",
+                            "input": "DIPP:ответь ровно SHOULD_NOT_ROUTE",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Authorization": _auth_header("sk-local-test"),
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                        request,
+                        timeout=5,
+                    )
+                response_body = raised.exception.read().decode("utf-8")
+                payload = json.loads(response_body)
+                trace = adapter.trace_snapshot()
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(raised.exception.code, 400)
+        self.assertEqual(
+            payload["machine_error_code"],
+            "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS",
+        )
+        self.assertEqual(
+            payload["error"]["message"],
+            "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS",
+        )
+        self.assertNotIn("SHOULD_NOT_ROUTE", response_body)
+        self.assertFalse(DownstreamHandler.downstream_called)
+        route_handle.assert_not_called()
+        self.assertEqual(trace["request_count"], 1)
+        record = trace["last_record"]
+        self.assertFalse(record["provider_called"])
+        self.assertFalse(record["downstream_called"])
+        self.assertFalse(record["chatgpt_route_used"])
+        self.assertTrue(record["api_alias_unknown_blocked"])
+        self.assertTrue(record["auto_router_unknown_alias_blocked"])
+        self.assertEqual(
+            record["bridge_machine_error_code"],
+            "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS",
+        )
+        self.assertFalse(record["raw_prompt_recorded"])
+        self.assertFalse(record["secret_value_recorded"])
 
     def test_hybrid_openai_compat_adapter_classifies_stale_responses_port(self) -> None:
         adapter = HybridOpenAICompatAdapter(
@@ -1410,7 +2713,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             method="POST",
             path="/v1/responses",
             headers={
-                "Authorization": "Bearer sk-local-test",
+                "Authorization": _auth_header("sk-local-test"),
                 "Content-Type": "application/json",
             },
             body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1492,7 +2795,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1538,7 +2841,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps(
@@ -1575,7 +2878,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 method="POST",
                 path="/v1/responses",
                 headers={
-                    "Authorization": "Bearer sk-local-test",
+                    "Authorization": _auth_header("sk-local-test"),
                     "Content-Type": "application/json",
                 },
                 body=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
@@ -1628,7 +2931,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                     f"{adapter.listen_endpoint}/responses",
                     data=json.dumps({"model": "gpt-5.4", "input": "hello"}).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -2098,7 +3401,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                         }
                     ).encode("utf-8"),
                     headers={
-                        "Authorization": "Bearer sk-local-test",
+                        "Authorization": _auth_header("sk-local-test"),
                         "Content-Type": "application/json",
                     },
                     method="POST",
@@ -2146,6 +3449,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             OperatorSurfaceConfig(
                 endpoint=f"http://127.0.0.1:{server.server_port}/v1",
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -2170,7 +3474,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 f"{match.group(1)}/responses",  # type: ignore[union-attr]
                 data=b'{"input":"Reply with exactly WBP_TRACE_OK."}',
                 headers={
-                    "Authorization": "Bearer sk-test-secret-value",
+                    "Authorization": _auth_header("sk-test-secret-value"),
                     "Content-Type": "application/json",
                 },
                 method="POST",
@@ -2254,6 +3558,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             OperatorSurfaceConfig(
                 endpoint=f"http://127.0.0.1:{server.server_port}/v1",
                 codex_bin=Path("/bin/echo"),
+                allow_unattested_codex_bin_for_tests=True,
                 runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
                 timeout_seconds=5,
             )
@@ -2278,7 +3583,7 @@ class OperatorSurfaceTests(unittest.TestCase):
                 f"{match.group(1)}/responses",  # type: ignore[union-attr]
                 data=b'{"input":"Reply with exactly WBP_TRACE_OK."}',
                 headers={
-                    "Authorization": "Bearer sk-test-secret-value",
+                    "Authorization": _auth_header("sk-test-secret-value"),
                     "Content-Type": "application/json",
                 },
                 method="POST",

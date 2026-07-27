@@ -1,9 +1,0 @@
-{
-  "secret_sentinel_absent_from_text_evidence": true,
-  "secret_sentinel_hit_files": [],
-  "missing_secret_value_exposed": false,
-  "retry_secret_value_exposed": false,
-  "missing_browser_api_key_intake": false,
-  "retry_browser_api_key_intake": false,
-  "api_key_inputs_absent_in_browser_proof": true
-}

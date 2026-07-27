@@ -31,7 +31,7 @@ from wild_boar_proxy.codex_model_registry import (  # noqa: E402
 )
 
 
-PRIMARY_MODEL_ID = "gpt-5.3-codex"
+PRIMARY_MODEL_ID = "gpt-5.5"
 
 
 def utc_now() -> str:

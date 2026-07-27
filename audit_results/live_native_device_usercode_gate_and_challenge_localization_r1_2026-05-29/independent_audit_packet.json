@@ -1,8 +1,0 @@
-{
-  "captured_at_utc": "2026-05-29T04:28:55.513532Z",
-  "material_mismatch_detected": false,
-  "recommended_closure": "stable_runtime_reproved_after_reserve_first_gate_repair",
-  "device_usercode_gate_classification": "handoff_recovered_once_without_gate_repair_claim",
-  "native_runtime_reproved": true,
-  "direct_native_probe_http_status": 200
-}

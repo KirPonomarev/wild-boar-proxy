@@ -32,7 +32,7 @@ class PersistentLauncherDryRunConfig:
     tmp_dir: Path
     runtime_tmp_dir: Path
     launcher_path: Path
-    app_path: Path = Path("/Applications/Codex.app")
+    app_path: Path = Path("/Applications/ChatGPT.app")
     browser_client_path_authority: bool = False
     remote_client_path_authority: bool = False
     client_model_provider_authority: bool = False

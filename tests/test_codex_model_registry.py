@@ -10,11 +10,13 @@ from wild_boar_proxy.codex_model_registry import (
     build_api_only_deepseek_live_route_format_packet,
     build_api_only_executor_truth_packet,
     build_chatgpt_plus_api_slot_truth_packet,
+    build_dual_lane_model_selection_ui_packet,
     build_model_catalog_fidelity_packets,
     build_custom_api_compat_packet,
     build_custom_codex_execution_mode_selector_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
+    build_model_reasoning_availability_matrix_truth_packet,
     build_server_model_selection_and_reasoning_truth_packet,
     forbidden_custom_model_fields,
     validate_wbp_model_catalog_contract,
@@ -30,12 +32,12 @@ def operator_status(*, claim_gate: str = "blocked") -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.3-codex",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": claim_gate},
         "models": {
             "ok": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4", "direct-mistral-devstral-2512"],
+            "model_ids": ["gpt-5.5", "gpt-5.4", "direct-mistral-devstral-2512"],
             "server_issued": True,
         },
     }
@@ -44,14 +46,14 @@ def operator_status(*, claim_gate: str = "blocked") -> dict[str, object]:
 def availability_lattice() -> dict[str, object]:
     catalog = {
         "models": [
-            {"model_id": "gpt-5.3-codex", "lane": "codex_native"},
+            {"model_id": "gpt-5.5", "lane": "codex_native"},
             {"model_id": "gpt-5.4", "lane": "codex_native"},
             {"model_id": "direct-mistral-devstral-2512", "lane": "wbp_api"},
         ]
     }
     current_packets = [
         build_model_direct_preflight_packet(
-            model_id="gpt-5.3-codex",
+            model_id="gpt-5.5",
             source="current_thread_anchor",
             listed=True,
             selectable=True,
@@ -102,6 +104,22 @@ def api_snapshot_with_deepseek() -> dict[str, object]:
     }
 
 
+def api_snapshot_with_deepseek_chat_acceptance_route() -> dict[str, object]:
+    return {
+        "routes": [
+            {
+                "route_id": "wbp-deepseek-chat",
+                "provider": "deepseek",
+                "upstream_model": "deepseek-chat",
+                "enabled": True,
+                "secret_ref": "DEEPSEEK_API_KEY",
+                "thinking": {"type": "disabled"},
+                "api_parameter_sent": False,
+            }
+        ]
+    }
+
+
 def api_snapshot_with_deepseek_reasoning_variants() -> dict[str, object]:
     return {
         "routes": [
@@ -136,14 +154,179 @@ def api_snapshot_with_deepseek_reasoning_variants() -> dict[str, object]:
     }
 
 
+def api_only_live_result(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "request_count": 1,
+        "retry_count": 0,
+        "expected_text": "API_ONLY_DEEPSEEK_READY",
+        "expected_text_observed": True,
+        "response_shape": "choices_message",
+        "response_profile": "openai_chat_choices",
+        "request_shape": "messages",
+        "latency_ms": 12,
+        "parallel_fanout_attempted": False,
+        "fallback_used": False,
+        "fallback_chain": [],
+        "response_preview_bounded": "API_ONLY_DEEPSEEK_READY",
+        "response_text_length": 23,
+        "state_written": False,
+        "evidence_written": False,
+        "file_mutation_attempted": False,
+        "commands_started_by_provider": False,
+        "codex_history_sent": False,
+        "repo_context_sent": False,
+        "api_parameter_sent": True,
+        "intelligence_measured": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def reasoning_dispatch_matrix_ok_packet() -> dict[str, object]:
+    specs = {
+        "fast": ("provider_declared_fast", "wbp-deepseek-v4-pro-fast"),
+        "high": ("provider_declared_high", "wbp-deepseek-v4-pro-high"),
+        "max": ("provider_declared_max", "wbp-deepseek-v4-pro-max"),
+    }
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_codex_reasoning_dispatch_matrix",
+        "captured_at_utc": "2026-01-01T00:00:00Z",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "reasoning_dispatch_matrix_proven": True,
+        "api_reasoning_dispatch_proven": True,
+        "api_provider_acknowledged": True,
+        "chatgpt_slot_selection_proven": True,
+        "provider_call_count": 3,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+        "level_results": [
+            {
+                "operator_level": level,
+                "api_reasoning_option_id": option_id,
+                "api_model_id": route_id,
+                "reasoning_level_dispatch_proven": True,
+                "api_reasoning_dispatch_proven": True,
+                "api_provider_acknowledged": True,
+                "provider_called": True,
+                "request_count": 1,
+                "fallback_used": False,
+                "local_imitation_used": False,
+                "secret_value_exposed": False,
+                "intelligence_measured": False,
+                "not_intelligence_proof": True,
+                "blocking_reasons": [],
+            }
+            for level, (option_id, route_id) in specs.items()
+        ],
+    }
+
+
+def command_loop_ok_packet() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_gpt_api_alias_command_loop_proof",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "command_loop_proven": True,
+        "runtime_context_file_proven": True,
+        "primary_alias": "Planner",
+        "coding_alias": "Builder",
+        "primary_alias_resolved_from_context": True,
+        "coding_alias_resolved_from_context": True,
+        "primary_alias_bound_to_chatgpt_lane": True,
+        "coding_alias_bound_to_api_lane": True,
+        "primary_alias_precedes_coding_alias": True,
+        "primary_binding": {
+            "agent_id": "codex",
+            "display_name": "Planner",
+            "role": "orchestrator",
+            "aliases": ["Planner", "Lead", "Agent 1", "1"],
+            "lane": "primary_chatgpt",
+            "model_id": "gpt-5.5",
+        },
+        "coding_binding": {
+            "agent_id": "dip",
+            "display_name": "Builder",
+            "role": "coding_agent",
+            "aliases": ["Builder", "Worker", "Agent 2", "2"],
+            "lane": "api_route",
+            "route_id": "wbp-deepseek-v4-pro-max",
+        },
+        "reasoning_prerequisite_proven": True,
+        "api_lane_exact_token_matched": True,
+        "file_bridge_acceptance_proven": True,
+        "agent_alias_route_acceptance_proven": True,
+        "allowed_api_route_ids_enforced": True,
+        "forbidden_stale_route_ids_enforced": True,
+        "bridge_or_file_bridge_used": True,
+        "command_loop_provider_call_count": 1,
+        "reasoning_provider_call_count": 3,
+        "fallback_used": False,
+        "local_imitation_used": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+    }
+
+
+def native_auth_wall_packet() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_free_text_command_loop_proof",
+        "status": "blocked",
+        "machine_error_code": "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+        "native_auth_wall_observed": True,
+        "native_auth_usability_state_code": "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+        "runtime_context_file_proven": True,
+        "primary_alias": "Planner",
+        "coding_alias": "Builder",
+        "primary_aliases": ["Planner", "Lead", "Agent 1", "1"],
+        "coding_aliases": ["Builder", "Worker", "Agent 2", "2"],
+        "native_free_text_command_loop_proven": False,
+        "native_free_text_tool_bridge_proven": False,
+        "native_free_text_alias_routing_proven": False,
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+    }
+
+
+def native_execution_ok_packet() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "packet_kind": "custom_native_free_text_command_loop_proof",
+        "status": "ok",
+        "machine_error_code": "OK",
+        "native_free_text_command_loop_proven": True,
+        "native_free_text_tool_bridge_proven": True,
+        "native_free_text_alias_routing_proven": True,
+        "runtime_context_file_proven": True,
+        "primary_alias": "Planner",
+        "coding_alias": "Builder",
+        "primary_aliases": ["Planner", "Lead", "Agent 1", "1"],
+        "coding_aliases": ["Builder", "Worker", "Agent 2", "2"],
+        "raw_backend_details_exposed": False,
+        "secret_value_exposed": False,
+        "intelligence_measured": False,
+        "not_intelligence_proof": True,
+    }
+
+
 class CodexModelRegistryTests(unittest.TestCase):
     def test_model_registry_is_degraded_when_claim_gate_blocked_without_false_green(self) -> None:
         packet = build_custom_model_registry_packet(operator_status(claim_gate="blocked"))
 
         self.assertEqual(packet["status"], "degraded")
         self.assertEqual(packet["machine_error_code"], "CLAIM_GATE_BLOCKED")
-        self.assertEqual(packet["reported_configured_model"], "gpt-5.3-codex")
-        self.assertEqual(packet["configured_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["reported_configured_model"], "gpt-5.5")
+        self.assertEqual(packet["configured_model"], "gpt-5.5")
         self.assertTrue(packet["configured_model_visible"])
         self.assertEqual(packet["model_count"], 3)
         self.assertTrue(packet["server_issued"])
@@ -156,7 +339,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["network_calls_made"])
         self.assertEqual(packet["model_provider"], "cliproxy")
         self.assertEqual(packet["wire_api"], "responses")
-        self.assertIn("gpt-5.3-codex", packet["canonical_internal_model_ids_visible"])
+        self.assertIn("gpt-5.5", packet["canonical_internal_model_ids_visible"])
         self.assertFalse(packet["route_or_backend_exposed"])
         self.assertFalse(packet["models_endpoint_called"])
         self.assertFalse(packet["inference_called"])
@@ -203,6 +386,152 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["claim_limits"]["model_listed_means_usable"])
         self.assertFalse(packet["claim_limits"]["registry_proves_live_availability"])
 
+    def test_registry_restores_canonical_configured_native_model_when_catalog_is_api_only(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.5",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["wbp-deepseek-v4-pro-max"],
+            },
+        }
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
+
+        registry = build_custom_model_registry_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot,
+        )
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot,
+        )
+
+        native_row = next(
+            entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.5"
+        )
+        self.assertTrue(registry["configured_model_visible"])
+        self.assertEqual(native_row["lane"], "codex_native")
+        self.assertEqual(native_row["model_lane"], "codex_account_lane")
+        self.assertTrue(native_row["model_lane_classified"])
+        self.assertFalse(native_row["model_lane_fallback_used"])
+        self.assertTrue(native_row["selection_enabled"])
+        self.assertFalse(native_row["live_availability_proven"])
+        self.assertFalse(registry["live_api_checked"])
+        self.assertFalse(registry["network_calls_made"])
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
+        self.assertGreaterEqual(selector["api_lane"]["model_count"], 1)
+
+    def test_registry_does_not_restore_unknown_gpt_configured_model_without_catalog_truth(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-unknown-local",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["wbp-deepseek-v4-pro-max"],
+            },
+        }
+        registry = build_custom_model_registry_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+        model_ids = {entry["model_id"] for entry in registry["available_models"]}
+
+        self.assertNotIn("gpt-unknown-local", model_ids)
+        self.assertFalse(registry["configured_model_visible"])
+
+    def test_selector_prefers_reported_configured_native_model_over_static_default(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.5",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.5", "wbp-deepseek-v4-pro-max"],
+            },
+        }
+
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
+
+    def test_selector_prefers_canonical_chatgpt_default_over_older_configured_model(self) -> None:
+        live_operator_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.3-codex",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "server_issued": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.5", "wbp-deepseek-v4-pro-max"],
+            },
+        }
+
+        selector = build_dual_lane_model_selection_ui_packet(
+            live_operator_status,
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+        )
+
+        self.assertEqual(selector["status"], "ok")
+        self.assertEqual(selector["machine_error_code"], "OK")
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.5")
+        self.assertEqual(
+            selector["chatgpt_lane"]["default_resolution_reason"],
+            "preferred_selectable_default_available",
+        )
+        self.assertTrue(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertFalse(selector["chatgpt_lane"]["default_model_fallback_used"])
+
+    def test_selector_marks_chatgpt_default_degraded_when_preferred_model_absent(self) -> None:
+        stale_only_status = {
+            "status": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "configured_model": "gpt-5.3-codex",
+            },
+            "claim_gate": {"status": "passed"},
+            "models": {
+                "ok": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.4", "direct-mistral-devstral-2512"],
+                "server_issued": True,
+            },
+        }
+        selector = build_dual_lane_model_selection_ui_packet(
+            stale_only_status,
+            api_snapshot=api_snapshot_with_deepseek(),
+        )
+
+        self.assertEqual(selector["status"], "degraded")
+        self.assertEqual(selector["machine_error_code"], "CHATGPT_PREFERRED_DEFAULT_UNAVAILABLE")
+        self.assertEqual(selector["chatgpt_lane"]["default_model_id"], "gpt-5.3-codex")
+        self.assertEqual(selector["chatgpt_lane"]["default_resolution_status"], "blocked")
+        self.assertEqual(
+            selector["chatgpt_lane"]["default_resolution_reason"],
+            "no_selectable_model_available_using_visible_reference",
+        )
+        self.assertFalse(selector["chatgpt_lane"]["preferred_default_available"])
+        self.assertTrue(selector["chatgpt_lane"]["default_model_fallback_used"])
+        self.assertEqual(selector["chatgpt_lane"]["selectable_model_count"], 0)
+
     def test_api_compat_only_declares_openai_shape_without_live_calls(self) -> None:
         packet = build_custom_api_compat_packet(operator_status(claim_gate="passed"))
 
@@ -237,14 +566,14 @@ class CodexModelRegistryTests(unittest.TestCase):
 
     def test_model_dry_run_accepts_only_server_issued_model_without_inference(self) -> None:
         packet = build_custom_model_dry_run_packet(
-            {"model_id": "gpt-5.3-codex"},
+            {"model_id": "gpt-5.5"},
             operator_status(claim_gate="blocked"),
         )
 
         self.assertEqual(packet["status"], "degraded")
         self.assertEqual(packet["machine_error_code"], "CLAIM_GATE_BLOCKED")
         self.assertTrue(packet["dry_run"])
-        self.assertEqual(packet["selected_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_model"], "gpt-5.5")
         self.assertTrue(packet["model_server_issued"])
         self.assertTrue(packet["selected_model_server_issued"])
         self.assertTrue(packet["codex_config_compatible"])
@@ -330,6 +659,69 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(packet["selection_state"], "disabled")
         self.assertEqual(packet["selection_disabled_reason_code"], "ROUTE_DISABLED")
 
+    def test_model_selector_disables_api_route_with_failed_validation(self) -> None:
+        selector = build_dual_lane_model_selection_ui_packet(
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-red-openrouter",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                        "secret_status_label": "available",
+                        "status_code": "validation_failed",
+                        "validation_visual_state": "red",
+                    }
+                ]
+            },
+        )
+        route = {
+            row["model_id"]: row
+            for row in selector["api_lane"]["models"]
+        }["wbp-red-openrouter"]
+
+        self.assertFalse(route["selection_enabled"])
+        self.assertEqual(route["selection_state"], "disabled")
+        self.assertEqual(
+            route["selection_disabled_reason_code"],
+            "ROUTE_VALIDATION_FAILED",
+        )
+        self.assertIn("route_validation_failed", route["selection_disabled_reasons"])
+
+    def test_execution_mode_rejects_api_route_with_failed_validation(self) -> None:
+        packet = build_custom_codex_execution_mode_selector_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-red-openrouter",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-red-openrouter",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                        "secret_status_label": "available",
+                        "status_code": "validation_failed",
+                        "validation_visual_state": "red",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_EXECUTION_MODE_API_MODEL_NOT_SELECTABLE",
+        )
+        self.assertEqual(packet["next_action"], "choose_selectable_api_model")
+        self.assertFalse(packet["coding_agent_model_slot"]["selection_enabled"])
+
     def test_custom_codex_execution_mode_packets_bind_slots_without_live_claims(self) -> None:
         chatgpt_only = build_custom_codex_execution_mode_selector_packet(
             {"execution_mode": "chatgpt_only"},
@@ -339,7 +731,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         chatgpt_api = build_custom_codex_execution_mode_selector_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v3",
             },
             operator_status(claim_gate="passed"),
@@ -348,7 +740,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         api_only = build_custom_codex_execution_mode_selector_packet(
             {
                 "execution_mode": "api_only",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v3",
             },
             operator_status(claim_gate="passed"),
@@ -356,6 +748,15 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
 
         self.assertEqual(chatgpt_only["status"], "ok")
+        self.assertEqual(chatgpt_only["selected_mode"], "chatgpt_only")
+        self.assertEqual(chatgpt_only["orchestrator"], "custom_codex_chatgpt")
+        self.assertEqual(chatgpt_only["executor"], "custom_codex_chatgpt")
+        self.assertTrue(chatgpt_only["dispatch_mode_truth_proven"])
+        self.assertTrue(chatgpt_only["chatgpt_only_mode_proven"])
+        self.assertTrue(chatgpt_only["chatgpt_lane_selected"])
+        self.assertFalse(chatgpt_only["api_route_selected"])
+        self.assertFalse(chatgpt_only["chatgpt_lane_called"])
+        self.assertFalse(chatgpt_only["api_route_called"])
         self.assertEqual(
             chatgpt_only["final_status"],
             "CUSTOM_CODEX_EXECUTION_MODE_SELECTOR_PACKET_PROVEN_NO_LIVE_EXECUTION",
@@ -371,15 +772,33 @@ class CodexModelRegistryTests(unittest.TestCase):
 
         self.assertEqual(chatgpt_api["status"], "ok")
         self.assertEqual(chatgpt_api["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(chatgpt_api["chatgpt_model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_api["selected_mode"], "chatgpt_plus_api")
+        self.assertEqual(chatgpt_api["orchestrator"], "custom_codex_chatgpt")
+        self.assertEqual(chatgpt_api["executor"], "dip_api_route")
+        self.assertTrue(chatgpt_api["dispatch_mode_truth_proven"])
+        self.assertTrue(chatgpt_api["chatgpt_plus_api_mode_proven"])
+        self.assertTrue(chatgpt_api["chatgpt_lane_selected"])
+        self.assertTrue(chatgpt_api["api_route_selected"])
+        self.assertFalse(chatgpt_api["chatgpt_lane_called"])
+        self.assertFalse(chatgpt_api["api_route_called"])
+        self.assertEqual(chatgpt_api["chatgpt_model_id"], "gpt-5.5")
         self.assertTrue(chatgpt_api["chatgpt_model_selected_by_user"])
         self.assertEqual(chatgpt_api["primary_model_slot"]["lane"], "codex_account_lane")
-        self.assertEqual(chatgpt_api["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_api["primary_model_slot"]["model_id"], "gpt-5.5")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["lane"], "api_route_lane")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["model_id"], "wbp-deepseek-v3")
         self.assertTrue(chatgpt_api["dual_lane_slots_preserved"])
 
         self.assertEqual(api_only["status"], "ok")
+        self.assertEqual(api_only["selected_mode"], "api_only")
+        self.assertEqual(api_only["orchestrator"], "api_route")
+        self.assertEqual(api_only["executor"], "api_route")
+        self.assertTrue(api_only["dispatch_mode_truth_proven"])
+        self.assertTrue(api_only["api_only_mode_proven"])
+        self.assertFalse(api_only["chatgpt_lane_selected"])
+        self.assertTrue(api_only["api_route_selected"])
+        self.assertFalse(api_only["chatgpt_lane_called"])
+        self.assertFalse(api_only["api_route_called"])
         self.assertEqual(api_only["primary_model_slot"]["lane"], "api_route_lane")
         self.assertEqual(api_only["primary_model_slot"]["model_id"], "wbp-deepseek-v3")
         self.assertEqual(api_only["chatgpt_model_id"], "")
@@ -525,7 +944,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         chatgpt_api = build_server_model_selection_and_reasoning_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v4-pro-max",
                 "api_reasoning_option_id": "provider_declared_max",
             },
@@ -596,7 +1015,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertEqual(chatgpt_only["coding_agent_model_slot"]["status"], "not_bound_for_mode")
         self.assertFalse(chatgpt_only["chatgpt_only_calls_api"])
 
-        self.assertEqual(chatgpt_api["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(chatgpt_api["selected_chatgpt_model"], "gpt-5.5")
         self.assertEqual(chatgpt_api["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(chatgpt_api["primary_model_slot"]["lane"], "codex_account_lane")
         self.assertEqual(chatgpt_api["coding_agent_model_slot"]["lane"], "api_route_lane")
@@ -704,7 +1123,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         packet = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v4-pro-max",
                 "api_reasoning_option_id": "provider_declared_max",
             },
@@ -719,7 +1138,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
         self.assertTrue(packet["slot_truth_proven"])
         self.assertEqual(packet["execution_mode"], "chatgpt_plus_api")
-        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.3-codex")
+        self.assertEqual(packet["selected_chatgpt_model"], "gpt-5.5")
         self.assertEqual(packet["selected_api_model"], "wbp-deepseek-v4-pro-max")
         self.assertEqual(packet["source"], "server_selection_truth")
         self.assertTrue(packet["server_selection_truth_used"])
@@ -738,7 +1157,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(packet["dry_server_truth_only"])
         self.assertEqual(packet["primary_model_slot"]["slot_id"], "primary_model_slot")
         self.assertEqual(packet["primary_model_slot"]["lane"], "codex_account_lane")
-        self.assertEqual(packet["primary_model_slot"]["model_id"], "gpt-5.3-codex")
+        self.assertEqual(packet["primary_model_slot"]["model_id"], "gpt-5.5")
         self.assertEqual(packet["coding_agent_model_slot"]["slot_id"], "coding_agent_model_slot")
         self.assertEqual(packet["coding_agent_model_slot"]["lane"], "api_route_lane")
         self.assertEqual(
@@ -749,8 +1168,18 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertTrue(packet["api_coding_slot_proven"])
         self.assertTrue(packet["coding_slot_provider_is_deepseek"])
         self.assertTrue(packet["coding_slot_model_is_deepseek_v4_pro_max"])
+        self.assertTrue(packet["coding_slot_model_is_recommended_deepseek_v4_pro_max"])
+        self.assertTrue(packet["coding_slot_upstream_model_is_deepseek_v4_pro"])
+        self.assertTrue(packet["coding_slot_reasoning_operator_level_admitted"])
+        self.assertTrue(packet["coding_slot_model_is_admitted_deepseek_reasoning_variant"])
         self.assertEqual(packet["required_coding_api_provider_id"], "deepseek")
-        self.assertEqual(packet["required_coding_api_model_id"], "wbp-deepseek-v4-pro-max")
+        self.assertEqual(packet["required_coding_api_upstream_model_id"], "deepseek-v4-pro")
+        self.assertEqual(packet["required_coding_api_operator_levels"], ["fast", "high", "max"])
+        self.assertEqual(
+            packet["required_coding_api_route_family"],
+            "server_issued_deepseek_v4_pro_reasoning_variant",
+        )
+        self.assertEqual(packet["recommended_coding_api_model_id"], "wbp-deepseek-v4-pro-max")
         self.assertTrue(packet["api_line_selected_as_coding_agent"])
         self.assertTrue(packet["api_line_used_as_coding_agent"])
         self.assertTrue(packet["chatgpt_line_used_as_executor"])
@@ -777,6 +1206,46 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(packet["full_delegation_claimed"])
         self.assertFalse(packet["simultaneous_execution_proven"])
 
+    def test_chatgpt_plus_api_slot_truth_accepts_all_deepseek_reasoning_levels(self) -> None:
+        api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
+        specs = [
+            ("wbp-deepseek-v4-pro-fast", "provider_declared_fast", "fast"),
+            ("wbp-deepseek-v4-pro-high", "provider_declared_high", "high"),
+            ("wbp-deepseek-v4-pro-max", "provider_declared_max", "max"),
+        ]
+
+        for model_id, option_id, operator_level in specs:
+            packet = build_chatgpt_plus_api_slot_truth_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": model_id,
+                    "api_reasoning_option_id": option_id,
+                },
+                operator_status(claim_gate="passed"),
+                api_snapshot=api_snapshot,
+            )
+
+            self.assertEqual(packet["status"], "ok", model_id)
+            self.assertEqual(packet["machine_error_code"], "OK", model_id)
+            self.assertTrue(packet["slot_truth_proven"], model_id)
+            self.assertEqual(packet["selected_api_model"], model_id)
+            self.assertEqual(packet["api_reasoning_option_id"], option_id)
+            self.assertEqual(packet["api_reasoning_operator_level"], operator_level)
+            self.assertTrue(packet["coding_slot_provider_is_deepseek"], model_id)
+            self.assertTrue(packet["coding_slot_upstream_model_is_deepseek_v4_pro"], model_id)
+            self.assertTrue(packet["coding_slot_reasoning_operator_level_admitted"], model_id)
+            self.assertTrue(
+                packet["coding_slot_model_is_admitted_deepseek_reasoning_variant"],
+                model_id,
+            )
+            self.assertEqual(
+                packet["coding_slot_model_is_deepseek_v4_pro_max"],
+                model_id == "wbp-deepseek-v4-pro-max",
+            )
+            self.assertFalse(packet["api_reasoning_intelligence_measured"])
+            self.assertFalse(packet["runtime_execution_proven"])
+
     def test_chatgpt_plus_api_slot_truth_blocks_wrong_mode_and_bad_inputs(self) -> None:
         api_snapshot = api_snapshot_with_deepseek_reasoning_variants()
         api_only = build_chatgpt_plus_api_slot_truth_packet(
@@ -791,7 +1260,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         missing_api = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
             },
             operator_status(claim_gate="passed"),
             api_snapshot=api_snapshot,
@@ -808,7 +1277,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         unknown_api = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "browser-api-model",
                 "api_reasoning_option_id": "provider_declared_high",
             },
@@ -818,7 +1287,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         raw_backend = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v4-pro-high",
                 "api_reasoning_option_id": "provider_declared_high",
                 "fallback_used": True,
@@ -836,7 +1305,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         reasoning_mismatch = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v4-pro-max",
                 "api_reasoning_option_id": "provider_declared_high",
             },
@@ -846,7 +1315,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         deepseek_not_max = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v3",
             },
             operator_status(claim_gate="passed"),
@@ -855,7 +1324,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         non_deepseek_api = build_chatgpt_plus_api_slot_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-claude-coder",
             },
             operator_status(claim_gate="passed"),
@@ -940,12 +1409,507 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             deepseek_not_max["machine_error_code"],
-            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_MAX",
+            "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK_V4_PRO_REASONING_VARIANT",
         )
         self.assertEqual(
             non_deepseek_api["machine_error_code"],
             "CHATGPT_PLUS_API_CODING_SLOT_NOT_DEEPSEEK",
         )
+
+    def test_model_reasoning_availability_matrix_blocks_combined_on_native_auth_wall(
+        self,
+    ) -> None:
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-auth-wall",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_auth_wall_packet(),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "COMBINED_MODE_BLOCKED_NATIVE_AUTH")
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertTrue(packet["partial_api_lane_proven"])
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertFalse(packet["chatgpt_lane_proven"])
+        self.assertTrue(packet["alias_binding_proven"])
+        self.assertTrue(packet["native_auth_wall_observed"])
+        self.assertFalse(packet["native_execution_proven"])
+        self.assertFalse(packet["combined_status_counts_as_full_success"])
+        self.assertFalse(packet["api_success_counts_as_combined_success"])
+        self.assertTrue(packet["command_loop_route_authority_proven"])
+        self.assertTrue(packet["allowed_api_route_ids_enforced"])
+        self.assertTrue(packet["forbidden_stale_route_ids_enforced"])
+        self.assertTrue(packet["bridge_or_file_bridge_used"])
+        self.assertEqual(packet["command_loop_provider_call_count"], 1)
+        self.assertEqual(packet["reasoning_provider_call_count"], 3)
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_and_live_call")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["benchmark_required_for_provider_level_proof"])
+        self.assertEqual(
+            packet["quality_benchmark_status"],
+            "not_required_for_provider_level_proof",
+        )
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(packet["proof_rank"], "api_reasoning_live_only")
+        self.assertEqual(packet["proof_rank_status"], "partial")
+        self.assertEqual(packet["proof_rank_score"], 70)
+        self.assertFalse(packet["proof_rank_counts_as_full_success"])
+        self.assertEqual(packet["proof_mode_row_count"], 3)
+        self.assertEqual(packet["proof_reasoning_row_count"], 3)
+        self.assertEqual(packet["proof_agent_row_count"], 2)
+        self.assertTrue(
+            all(
+                row["provider_declared_reasoning_level_proven"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["provider_reasoning_proof_level"]
+                == "PROVIDER_DECLARED_REASONING_LEVEL_PROVEN"
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_provider_level_proof"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_independent_quality_benchmark"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(packet["display_aliases_are_runtime_aliases"])
+        self.assertFalse(packet["display_aliases_are_separate_agents"])
+        self.assertEqual(packet["primary_alias"], "Planner")
+        self.assertEqual(packet["coding_alias"], "Builder")
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(agent_rows["primary_model_slot"]["status"], "ok")
+        self.assertEqual(
+            agent_rows["primary_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
+        self.assertFalse(agent_rows["primary_model_slot"]["native_execution_proven"])
+        self.assertIn("Agent 1", agent_rows["primary_model_slot"]["aliases"])
+        self.assertEqual(agent_rows["coding_agent_model_slot"]["status"], "ok")
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "LIVE_API_FORMAT_PROVEN",
+        )
+        self.assertTrue(agent_rows["coding_agent_model_slot"]["api_route_execution_proven"])
+        self.assertIn("Agent 2", agent_rows["coding_agent_model_slot"]["aliases"])
+        rows = {row["execution_mode"]: row for row in packet["matrix_rows"]}
+        self.assertEqual(
+            rows["chatgpt_plus_api"]["machine_error_code"],
+            "COMBINED_MODE_BLOCKED_NATIVE_AUTH",
+        )
+        self.assertEqual(
+            rows["chatgpt_only"]["proof_level"],
+            "CUSTOM_NATIVE_AUTH_WALL_OBSERVED",
+        )
+        self.assertEqual(rows["api_only"]["proof_level"], "LIVE_API_FORMAT_PROVEN")
+
+    def test_model_reasoning_availability_matrix_rejects_command_loop_without_route_authority(
+        self,
+    ) -> None:
+        command_loop = command_loop_ok_packet()
+        command_loop.pop("allowed_api_route_ids_enforced")
+        command_loop["forbidden_stale_route_ids_enforced"] = False
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-missing-route-authority",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+            command_loop_packet=command_loop,
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+        )
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["partial_api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["command_loop_route_authority_proven"])
+        self.assertFalse(packet["allowed_api_route_ids_enforced"])
+        self.assertFalse(packet["forbidden_stale_route_ids_enforced"])
+        self.assertEqual(packet["proof_rank"], "selection_only")
+        self.assertEqual(packet["proof_rank_status"], "blocked")
+        self.assertEqual(packet["proof_rank_score"], 30)
+        self.assertIn("api_route_authority_not_enforced", packet["blocking_reasons"])
+        rows = {row["execution_mode"]: row for row in packet["matrix_rows"]}
+        self.assertEqual(rows["api_only"]["status"], "ok")
+        self.assertEqual(rows["api_only"]["proof_level"], "REASONING_OPTION_SERVER_VALIDATED")
+        self.assertIn(
+            "api_route_authority_not_enforced",
+            rows["api_only"]["blocking_reasons"],
+        )
+
+    def test_model_reasoning_availability_matrix_proves_combined_when_both_lanes_proven(
+        self,
+    ) -> None:
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-ok",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["combined_full_proven"])
+        self.assertTrue(packet["combined_status_counts_as_full_success"])
+        self.assertTrue(packet["chatgpt_lane_proven"])
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertTrue(packet["alias_binding_proven"])
+        self.assertFalse(packet["partial_api_lane_proven"])
+        self.assertFalse(packet["api_success_counts_as_combined_success"])
+        self.assertFalse(packet["native_auth_wall_observed"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_and_live_call")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 3)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["benchmark_required_for_provider_level_proof"])
+        self.assertEqual(
+            packet["quality_benchmark_status"],
+            "not_required_for_provider_level_proof",
+        )
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertTrue(packet["not_intelligence_proof"])
+        self.assertEqual(packet["proof_rank"], "full_native_mixed")
+        self.assertEqual(packet["proof_rank_status"], "ok")
+        self.assertEqual(packet["proof_rank_score"], 100)
+        self.assertTrue(packet["proof_rank_counts_as_full_success"])
+        self.assertEqual(packet["proof_mode_row_count"], 3)
+        self.assertEqual(packet["proof_reasoning_row_count"], 3)
+        self.assertEqual(packet["proof_agent_row_count"], 2)
+        mode_rows = {row["execution_mode"]: row for row in packet["proof_mode_rows"]}
+        self.assertTrue(mode_rows["chatgpt_plus_api"]["counts_as_full_success"])
+        self.assertFalse(mode_rows["api_only"]["counts_as_partial_api_success"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["primary_model_slot"]["proof_level"],
+            "NATIVE_EXECUTION_PROVEN",
+        )
+        self.assertTrue(agent_rows["primary_model_slot"]["native_execution_proven"])
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "LIVE_API_FORMAT_PROVEN",
+        )
+        self.assertEqual(len(packet["reasoning_level_rows"]), 3)
+        self.assertTrue(
+            all(
+                row["provider_declared_reasoning_level_proven"] is True
+                for row in packet["reasoning_level_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_intelligence_proof"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_provider_level_proof"] is True
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["counts_as_independent_quality_benchmark"] is False
+                for row in packet["proof_reasoning_rows"]
+            )
+        )
+        self.assertTrue(
+            all(row["intelligence_measured"] is False for row in packet["matrix_rows"])
+        )
+        self.assertTrue(
+            all(row["not_intelligence_proof"] is True for row in packet["matrix_rows"])
+        )
+
+    def test_model_reasoning_availability_matrix_proves_combined_with_selected_reasoning_levels(
+        self,
+    ) -> None:
+        specs = [
+            ("wbp-deepseek-v4-pro-fast", "provider_declared_fast", "fast"),
+            ("wbp-deepseek-v4-pro-high", "provider_declared_high", "high"),
+        ]
+
+        for model_id, option_id, operator_level in specs:
+            packet = build_model_reasoning_availability_matrix_truth_packet(
+                {
+                    "execution_mode": "chatgpt_plus_api",
+                    "chatgpt_model_id": "gpt-5.5",
+                    "api_model_id": model_id,
+                    "api_reasoning_option_id": option_id,
+                    "request_id": f"matrix-ok-{operator_level}",
+                },
+                operator_status(claim_gate="passed"),
+                api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+                reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+                command_loop_packet=command_loop_ok_packet(),
+                native_execution_packet=native_execution_ok_packet(),
+            )
+
+            self.assertEqual(packet["status"], "ok", model_id)
+            self.assertEqual(packet["machine_error_code"], "OK", model_id)
+            self.assertTrue(packet["combined_full_proven"], model_id)
+            self.assertTrue(packet["combined_status_counts_as_full_success"], model_id)
+            self.assertTrue(packet["provider_declared_reasoning_levels_proven"], model_id)
+            self.assertFalse(packet["intelligence_measured"], model_id)
+            combined_row = [
+                row
+                for row in packet["matrix_rows"]
+                if row["execution_mode"] == "chatgpt_plus_api"
+            ][0]
+            self.assertTrue(combined_row["slot_truth_proven"], model_id)
+            self.assertTrue(combined_row["combined_slot_binding_proven"], model_id)
+            self.assertEqual(combined_row["api_model_id"], model_id)
+            self.assertEqual(combined_row["reasoning_option_id"], option_id)
+            self.assertEqual(combined_row["operator_level"], operator_level)
+
+    def test_model_reasoning_availability_matrix_accepts_server_issued_deepseek_chat_lane(
+        self,
+    ) -> None:
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-chat",
+                "request_id": "matrix-chat-route-ok",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_chat_acceptance_route(),
+            reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["combined_slot_binding_proven"])
+        self.assertTrue(packet["combined_full_proven"])
+        self.assertTrue(packet["combined_status_counts_as_full_success"])
+        self.assertTrue(packet["api_lane_proven"])
+        self.assertTrue(packet["chatgpt_lane_proven"])
+        combined_row = [
+            row
+            for row in packet["matrix_rows"]
+            if row["execution_mode"] == "chatgpt_plus_api"
+        ][0]
+        self.assertFalse(combined_row["slot_truth_proven"])
+        self.assertTrue(combined_row["combined_slot_binding_proven"])
+        self.assertEqual(combined_row["api_model_id"], "wbp-deepseek-chat")
+        self.assertFalse(packet["api_success_counts_as_combined_success"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertTrue(packet["provider_declared_reasoning_levels_proven"])
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertFalse(packet["intelligence_measured"])
+        self.assertEqual(packet["proof_rank"], "full_native_mixed")
+
+    def test_model_reasoning_availability_matrix_rejects_api_lane_without_level_rows(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        reasoning_packet["level_results"] = []
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-empty-reasoning-levels",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "MODEL_REASONING_AVAILABILITY_MATRIX_NOT_PROVEN",
+        )
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 0)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 0)
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+        self.assertIn("api_lane_not_live_proven", packet["blocking_reasons"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
+
+    def test_model_reasoning_availability_matrix_marks_provider_level_mismatch(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        level_results = reasoning_packet["level_results"]
+        assert isinstance(level_results, list)
+        level_results[0]["reasoning_level_dispatch_proven"] = False
+        level_results[0]["api_reasoning_dispatch_proven"] = False
+        level_results[0]["blocking_reasons"] = ["api_reasoning_thinking_mismatch"]
+        reasoning_packet["reasoning_dispatch_matrix_proven"] = False
+        reasoning_packet["status"] = "blocked"
+        reasoning_packet["machine_error_code"] = "REASONING_LEVEL_DISPATCH_FAILED"
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-reasoning-mismatch",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_source"], "provider_spec_mismatch")
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 2)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        rows = {row["operator_level"]: row for row in packet["proof_reasoning_rows"]}
+        self.assertEqual(rows["fast"]["proof_level"], "REASONING_PAYLOAD_MISMATCH")
+        self.assertEqual(
+            rows["fast"]["provider_reasoning_proof_level"],
+            "REASONING_PAYLOAD_MISMATCH",
+        )
+        self.assertFalse(rows["fast"]["counts_as_provider_level_proof"])
+        self.assertFalse(packet["independent_quality_benchmark_proven"])
+
+    def test_model_reasoning_availability_matrix_rejects_provider_level_fallback(
+        self,
+    ) -> None:
+        reasoning_packet = reasoning_dispatch_matrix_ok_packet()
+        reasoning_packet["fallback_used"] = True
+        level_results = reasoning_packet["level_results"]
+        assert isinstance(level_results, list)
+        level_results[0]["fallback_used"] = True
+
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "request_id": "matrix-reasoning-fallback",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_packet,
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertFalse(packet["api_lane_proven"])
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertFalse(packet["provider_declared_reasoning_levels_proven"])
+        self.assertEqual(packet["provider_reasoning_level_proof_count"], 2)
+        self.assertEqual(packet["provider_reasoning_level_expected_count"], 3)
+        self.assertTrue(packet["fallback_used"])
+        rows = {row["operator_level"]: row for row in packet["proof_reasoning_rows"]}
+        self.assertFalse(rows["fast"]["provider_declared_reasoning_level_proven"])
+        self.assertFalse(rows["fast"]["counts_as_provider_level_proof"])
+        self.assertIn("fallback_used", rows["fast"]["blocking_reasons"])
+        agent_rows = {row["agent_slot"]: row for row in packet["proof_agent_rows"]}
+        self.assertEqual(
+            agent_rows["coding_agent_model_slot"]["proof_level"],
+            "ALIAS_BINDING_PROVEN",
+        )
+
+    def test_model_reasoning_availability_matrix_rejects_browser_route_authority(
+        self,
+    ) -> None:
+        packet = build_model_reasoning_availability_matrix_truth_packet(
+            {
+                "execution_mode": "chatgpt_plus_api",
+                "chatgpt_model_id": "gpt-5.5",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+                "base_url": "https://browser.invalid/v1",
+                "secret_ref": "BROWSER_SECRET_REF",
+                "request_id": "matrix-forbidden",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            reasoning_dispatch_packet=reasoning_dispatch_matrix_ok_packet(),
+            command_loop_packet=command_loop_ok_packet(),
+            native_execution_packet=native_execution_ok_packet(),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "BROWSER_ROUTE_AUTHORITY_REJECTED")
+        self.assertFalse(packet["combined_full_proven"])
+        self.assertEqual(packet["forbidden_fields"], [])
+        self.assertTrue(packet["forbidden_fields_redacted"])
+        self.assertEqual(packet["forbidden_field_count"], 2)
+        self.assertFalse(packet["browser_can_supply_route_authority"])
+        self.assertEqual(packet["proof_rank"], "blocked")
+        self.assertEqual(packet["proof_rank_status"], "blocked")
+        self.assertEqual(packet["proof_rank_score"], 0)
+        self.assertFalse(packet["proof_rank_counts_as_full_success"])
+        self.assertFalse(packet["browser_can_supply_reasoning_authority"])
+        self.assertFalse(packet["browser_model_authority"])
+        self.assertFalse(packet["secret_value_exposed"])
+        self.assertFalse(packet["raw_backend_details_exposed"])
+        raw_packet = json.dumps(packet, ensure_ascii=False)
+        self.assertNotIn("https://browser.invalid/v1", raw_packet)
+        self.assertNotIn("BROWSER_SECRET_REF", raw_packet)
+        self.assertNotIn('"base_url"', raw_packet)
+        self.assertNotIn('"secret_ref"', raw_packet)
 
     def test_api_only_executor_truth_proves_primary_api_without_live_claims(self) -> None:
         packet = build_api_only_executor_truth_packet(
@@ -1025,7 +1989,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         chatgpt_api = build_api_only_executor_truth_packet(
             {
                 "execution_mode": "chatgpt_plus_api",
-                "chatgpt_model_id": "gpt-5.3-codex",
+                "chatgpt_model_id": "gpt-5.5",
                 "api_model_id": "wbp-deepseek-v4-pro-max",
                 "api_reasoning_option_id": "provider_declared_max",
             },
@@ -1168,6 +2132,19 @@ class CodexModelRegistryTests(unittest.TestCase):
             proven["final_status"],
             "API_ONLY_DEEPSEEK_LIVE_ROUTE_AND_FORMAT_PROVEN_WITH_LIMITS",
         )
+        self.assertEqual(proven["selected_mode"], "api_only")
+        self.assertEqual(proven["orchestrator"], "api_route")
+        self.assertEqual(proven["executor"], "api_route")
+        self.assertTrue(proven["dispatch_mode_truth_proven"])
+        self.assertTrue(proven["api_only_mode_proven"])
+        self.assertTrue(proven["api_mode_proven"])
+        self.assertFalse(proven["chatgpt_only_mode_proven"])
+        self.assertFalse(proven["gpt_api_mode_proven"])
+        self.assertFalse(proven["chatgpt_lane_selected"])
+        self.assertTrue(proven["api_route_selected"])
+        self.assertFalse(proven["chatgpt_lane_called"])
+        self.assertTrue(proven["api_route_called"])
+        self.assertFalse(proven["wrapper_substitution_used"])
         self.assertTrue(proven["deepseek_selected_from_server_catalog"])
         self.assertTrue(proven["api_line_selected_as_executor"])
         self.assertTrue(proven["api_line_used_as_executor"])
@@ -1185,6 +2162,118 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(proven["original_codex_touched"])
         self.assertFalse(proven["asar_touched"])
         self.assertTrue(proven["codex_compatible_response_shape"])
+
+    def test_api_only_deepseek_live_route_format_proves_fast_disabled_thinking(self) -> None:
+        packet = build_api_only_deepseek_live_route_format_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-fast",
+                "api_reasoning_option_id": "provider_declared_fast",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            owner_authorized=True,
+            live_result=api_only_live_result(
+                fallback_chain=["wbp-deepseek-v4-pro-fast"],
+                thinking={},
+                api_parameter_sent=False,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertEqual(packet["api_reasoning_option_id"], "provider_declared_fast")
+        self.assertEqual(packet["api_reasoning_operator_level"], "fast")
+        self.assertTrue(packet["api_reasoning_live_evidence_required"])
+        self.assertFalse(packet["api_reasoning_option_provider_parameter_sent"])
+        self.assertTrue(packet["api_reasoning_live_evidence_proven"])
+        self.assertEqual(packet["api_reasoning_expected_thinking"], {"type": "disabled"})
+        self.assertEqual(packet["api_reasoning_observed_thinking"], {})
+        self.assertTrue(packet["api_reasoning_thinking_matched"])
+        self.assertFalse(packet["api_reasoning_intelligence_measured"])
+
+    def test_api_only_deepseek_live_route_format_blocks_thinking_false_green(self) -> None:
+        packet = build_api_only_deepseek_live_route_format_packet(
+            {
+                "execution_mode": "api_only",
+                "api_model_id": "wbp-deepseek-v4-pro-max",
+                "api_reasoning_option_id": "provider_declared_max",
+            },
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek_reasoning_variants(),
+            owner_authorized=True,
+            live_result=api_only_live_result(
+                fallback_chain=["wbp-deepseek-v4-pro-max"],
+                thinking={"type": "enabled", "reasoning_effort": "high"},
+                api_parameter_sent=True,
+            ),
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "API_ONLY_DEEPSEEK_REASONING_EVIDENCE_NOT_PROVEN",
+        )
+        self.assertTrue(packet["provider_called"])
+        self.assertTrue(packet["expected_text_observed"])
+        self.assertTrue(packet["api_reasoning_live_evidence_required"])
+        self.assertFalse(packet["api_reasoning_live_evidence_proven"])
+        self.assertEqual(
+            packet["api_reasoning_expected_thinking"],
+            {"type": "enabled", "reasoning_effort": "max"},
+        )
+        self.assertEqual(
+            packet["api_reasoning_observed_thinking"],
+            {"type": "enabled", "reasoning_effort": "high"},
+        )
+        self.assertFalse(packet["api_reasoning_thinking_matched"])
+        self.assertIn(
+            "api_reasoning_thinking_mismatch",
+            packet["api_reasoning_blocking_reasons"],
+        )
+        self.assertFalse(packet["api_line_used_as_executor"])
+
+    def test_api_only_deepseek_live_route_format_blocks_wrong_mode_and_wrong_model(self) -> None:
+        wrong_mode = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "chatgpt_only", "api_model_id": "wbp-deepseek-v3"},
+            operator_status(claim_gate="passed"),
+            api_snapshot=api_snapshot_with_deepseek(),
+            owner_authorized=True,
+        )
+        wrong_model = build_api_only_deepseek_live_route_format_packet(
+            {"execution_mode": "api_only", "api_model_id": "wbp-openrouter-gpt"},
+            operator_status(claim_gate="passed"),
+            api_snapshot={
+                "routes": [
+                    {
+                        "route_id": "wbp-openrouter-gpt",
+                        "provider": "openrouter",
+                        "upstream_model": "openai/gpt-5",
+                        "enabled": True,
+                        "secret_ref": "OPENROUTER_API_KEY",
+                    }
+                ]
+            },
+            owner_authorized=True,
+        )
+
+        self.assertEqual(wrong_mode["status"], "blocked")
+        self.assertEqual(
+            wrong_mode["machine_error_code"],
+            "API_ONLY_DEEPSEEK_REQUIRES_API_ONLY_MODE",
+        )
+        self.assertFalse(wrong_mode["api_line_used_as_executor"])
+        self.assertFalse(wrong_mode["provider_called"])
+        self.assertFalse(wrong_mode["live_call_attempted"])
+        self.assertFalse(wrong_mode["fallback_attempted"])
+
+        self.assertEqual(wrong_model["status"], "blocked")
+        self.assertEqual(wrong_model["machine_error_code"], "API_ONLY_DEEPSEEK_MODEL_REQUIRED")
+        self.assertFalse(wrong_model["deepseek_selected_from_server_catalog"])
+        self.assertFalse(wrong_model["api_line_used_as_executor"])
+        self.assertFalse(wrong_model["provider_called"])
+        self.assertFalse(wrong_model["live_call_attempted"])
+        self.assertFalse(wrong_model["fallback_attempted"])
 
     def test_api_only_deepseek_live_route_format_rejects_browser_backend_fields(self) -> None:
         packet = build_api_only_deepseek_live_route_format_packet(
@@ -1240,7 +2329,7 @@ class CodexModelRegistryTests(unittest.TestCase):
         rows = {entry["model_id"]: entry for entry in registry["available_models"]}
         self.assertIn("wbp-disabled-openrouter", rows)
         self.assertIn("wbp-missing-secret", rows)
-        self.assertEqual(registry["disabled_model_count"], 3)
+        self.assertEqual(registry["disabled_model_count"], 4)
         self.assertFalse(rows["direct-mistral-devstral-2512"]["selection_enabled"])
         self.assertEqual(
             rows["direct-mistral-devstral-2512"]["selection_disabled_reason_code"],
@@ -1332,10 +2421,10 @@ class CodexModelRegistryTests(unittest.TestCase):
         )
 
     def test_current_live_native_failure_disables_selection_without_hiding_row(self) -> None:
-        catalog = {"models": [{"model_id": "gpt-5.3-codex", "lane": "codex_native"}]}
+        catalog = {"models": [{"model_id": "gpt-5.5", "lane": "codex_native"}]}
         current_packets = [
             build_model_direct_preflight_packet(
-                model_id="gpt-5.3-codex",
+                model_id="gpt-5.5",
                 source="current_live_native_probe",
                 listed=True,
                 selectable=True,
@@ -1361,7 +2450,7 @@ class CodexModelRegistryTests(unittest.TestCase):
             availability_lattice_packet=lattice,
         )
 
-        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.3-codex")
+        row = next(entry for entry in registry["available_models"] if entry["model_id"] == "gpt-5.5")
         self.assertFalse(row["selection_enabled"])
         self.assertEqual(row["selection_state"], "disabled")
         self.assertEqual(row["selection_disabled_reason_code"], "ACCOUNT_AUTH_UNAVAILABLE")
@@ -1388,6 +2477,42 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertFalse(row["model_lane_fallback_used"])
         self.assertFalse(row["runtime_lane_proven"])
         self.assertEqual(row["provider_label"], "Codex native")
+        self.assertFalse(row["selection_enabled"])
+        self.assertEqual(row["selection_state"], "disabled")
+        self.assertEqual(row["selection_disabled_reason_code"], "NON_INTERACTIVE_CODEX_ALIAS")
+        self.assertIn(
+            "codex_native_alias_not_interactive_model",
+            row["selection_disabled_reasons"],
+        )
+
+    def test_unproven_native_chatgpt_model_is_not_selectable_until_custom_ui_proven(self) -> None:
+        registry = build_custom_model_registry_packet(
+            {
+                "status": {"configured_model": "gpt-5.5"},
+                "claim_gate": {"status": "passed"},
+                "models": {
+                    "ok": True,
+                    "server_issued": True,
+                    "model_ids": ["gpt-5.4", "gpt-5.5"],
+                },
+            }
+        )
+
+        rows = {row["model_id"]: row for row in registry["available_models"]}
+        self.assertFalse(rows["gpt-5.4"]["selection_enabled"])
+        self.assertEqual(rows["gpt-5.4"]["selection_state"], "disabled")
+        self.assertEqual(
+            rows["gpt-5.4"]["selection_disabled_reason_code"],
+            "CUSTOM_NATIVE_UI_NOT_PROVEN",
+        )
+        self.assertIn(
+            "custom_native_ui_response_not_proven",
+            rows["gpt-5.4"]["selection_disabled_reasons"],
+        )
+        self.assertTrue(rows["gpt-5.5"]["selection_enabled"])
+        self.assertEqual(rows["gpt-5.5"]["selection_state"], "selectable")
+        self.assertEqual(rows["gpt-5.5"]["selection_disabled_reason_code"], "")
+        self.assertEqual(rows["gpt-5.5"]["selection_disabled_reasons"], [])
 
     def test_server_issued_non_gpt_model_can_be_native_lane_from_catalog_metadata(self) -> None:
         registry = build_custom_model_registry_packet(
@@ -1708,10 +2833,10 @@ class CodexModelRegistryTests(unittest.TestCase):
         }
 
         self.assertEqual(
-            native_models["gpt-5.3-codex"]["availability_claim_level"],
+            native_models["gpt-5.5"]["availability_claim_level"],
             "direct_wbp_non_stream_response_accepted",
         )
-        self.assertTrue(native_models["gpt-5.3-codex"]["live_availability_proven"])
+        self.assertTrue(native_models["gpt-5.5"]["live_availability_proven"])
         self.assertEqual(
             wbp_models["direct-mistral-devstral-2512"]["availability_claim_level"],
             "historically_direct_wbp_non_stream_response_accepted",

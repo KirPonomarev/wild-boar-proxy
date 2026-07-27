@@ -1,7 +1,0 @@
-/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q
-
-Result:
-- exit_code=0
-- ran_tests=554
-- duration_seconds=193.400
-- outcome=OK

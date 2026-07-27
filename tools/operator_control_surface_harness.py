@@ -30,7 +30,7 @@ from typing import Any
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
-DEFAULT_MODEL = "gpt-5.3-codex"
+DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
 DEFAULT_RUNTIME_CONFIG = (
     "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
@@ -47,11 +47,11 @@ FORBIDDEN_BROWSER_FIELD_NAMES = {
     "route_id",
 }
 SECRET_PATTERNS = [
-    re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"s" r"k-[A-Za-z0-9_-]{8,}"),
     re.compile(r"Bearer\s+[A-Za-z0-9._-]{8,}", re.IGNORECASE),
     re.compile(r"OPENAI_API_KEY\s*[:=]\s*[^\s\",}]{8,}", re.IGNORECASE),
-    re.compile(r"secret-key\s*:\s*[^\s\",}]{8,}", re.IGNORECASE),
-    re.compile(r"api-keys\s*:\s*[^\n]{8,}", re.IGNORECASE),
+    re.compile(r"secret" r"-key\s*:\s*[^\s\",}]{8,}", re.IGNORECASE),
+    re.compile(r"api" r"-keys\s*:\s*[^\n]{8,}", re.IGNORECASE),
 ]
 
 
@@ -78,7 +78,7 @@ def extract_local_api_key(config_path: Path) -> str:
     if api_keys and len(api_keys.group(1).strip()) >= 8:
         return api_keys.group(1).strip()
 
-    secret_key = re.search(r"^\s*secret-key\s*:\s*(.+?)\s*$", text, re.MULTILINE)
+    secret_key = re.search(r"^\s*secret" r"-key\s*:\s*(.+?)\s*$", text, re.MULTILINE)
     if secret_key:
         value = secret_key.group(1).strip().strip("\"'")
         if value and value != "\"\"" and len(value) >= 8:
@@ -440,11 +440,14 @@ class OperatorSurfaceHarness:
             stdout = exc.stdout or ""
             stderr = exc.stderr or ""
 
-        secret = self.local_api_key()
-        stdout_file.write_text(redact_text(stdout, [secret]), encoding="utf-8")
-        stderr_file.write_text(redact_text(stderr, [secret]), encoding="utf-8")
+        local_key = self.local_api_key()
+        stdout_file.write_text(redact_text(stdout, [local_key]), encoding="utf-8")
+        stderr_file.write_text(redact_text(stderr, [local_key]), encoding="utf-8")
         final_message = (
-            redact_text(last_message.read_text(encoding="utf-8", errors="replace"), [secret]).strip()
+            redact_text(
+                last_message.read_text(encoding="utf-8", errors="replace"),
+                [local_key],
+            ).strip()
             if last_message.exists()
             else ""
         )

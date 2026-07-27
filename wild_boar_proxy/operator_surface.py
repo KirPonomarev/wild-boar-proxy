@@ -27,15 +27,31 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
-from wild_boar_proxy.runtime import RuntimeErrorInfo
+from wild_boar_proxy.api_agent_auto_router import build_api_agent_auto_router_packet
+from wild_boar_proxy.api_agent_direct_reply import resolve_prompt_repo_bridge_mode
+from wild_boar_proxy.router_hook_entry import (
+    HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+    load_runtime_context_packet,
+)
+from wild_boar_proxy.natural_intent_contract import (
+    FAIL_ALIAS_CONTEXT_MISSING,
+    SOURCE_SURFACE_DECLARED_CUSTOM_CODEX_FLOW,
+    build_natural_intent_parser_packet,
+)
+from wild_boar_proxy.runtime import RuntimeErrorInfo, RuntimePaths
+from wild_boar_proxy.official_codex_app import (
+    OfficialCodexAppError,
+    resolve_official_codex_cli,
+)
+from wild_boar_proxy.wbp_dip_tool import (
+    _exact_plain_reply_expected_text,
+    _exact_plain_reply_requested,
+)
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
-DEFAULT_MODEL = "gpt-5.3-codex"
-DEFAULT_CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex"
-DEFAULT_RUNTIME_CONFIG = (
-    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
-)
+DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
 FORBIDDEN_BROWSER_FIELD_NAMES = {
     "api_key",
     "apikey",
@@ -67,6 +83,51 @@ WINDOW_SMOKE_PHRASES = (
     STABLE_BRIDGE_WINDOW_SMOKE_PHRASE,
     MIXED_DEEPSEEK_CODER_SMOKE_PHRASE,
 )
+DEFAULT_API_ROUTE_ADDRESS_ALIASES = ("DIP", "Agent 2", "2")
+DEFAULT_PRIMARY_ROUTE_ADDRESS_ALIASES = ("Codex", "Agent 1", "1")
+API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS = "WBP_API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS"
+WBP_CONTEXT_BUDGET_EXCEEDED = "WBP_CONTEXT_BUDGET_EXCEEDED"
+DEFAULT_PROVIDER_CONTEXT_WINDOW_TOKENS = 1_048_565
+DEFAULT_PROVIDER_CONTEXT_SAFETY_TOKENS = 64_000
+CONTEXT_GUARD_BYTES_PER_TOKEN = 3
+REQUEST_ADMISSION_ERROR_CODES = {
+    API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+    WBP_CONTEXT_BUDGET_EXCEEDED,
+}
+_LEADING_ADDRESS_RE = re.compile(
+    r"^\s*([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 _.-]{0,78})\s*[:：,]\s*",
+    re.UNICODE,
+)
+_CODEX_DESKTOP_REQUEST_MARKER_RE = re.compile(
+    r"(?im)^[ \t]*(?:#+[ \t]*)?My request for Codex\s*[:：][ \t]*$"
+)
+
+
+def default_runtime_config_path() -> Path:
+    return RuntimePaths.from_env().stable_runtime_generated_config_file
+
+
+DEFAULT_RUNTIME_CONFIG = str(default_runtime_config_path())
+
+
+def protected_codex_surface_paths(home: Path | None = None) -> dict[str, Path]:
+    resolved_home = Path.home() if home is None else home.expanduser()
+    return {
+        "codex_config": resolved_home / ".codex" / "config.toml",
+        "codex_auth": resolved_home / ".codex" / "auth.json",
+        "default_app_support_codex": resolved_home
+        / "Library"
+        / "Application Support"
+        / "Codex",
+        "default_cache_codex": resolved_home
+        / "Library"
+        / "Caches"
+        / "com.openai.codex",
+        "default_httpstorage_codex": resolved_home
+        / "Library"
+        / "HTTPStorages"
+        / "com.openai.codex",
+    }
 BRIDGE_RESTART_ERROR_CODES = {
     "LOCAL_BRIDGE_DEAD",
     "LOCAL_BRIDGE_STREAM_DISCONNECTED",
@@ -703,7 +764,7 @@ def _safe_route_digest(route: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bool]:
+def _responses_payload_prompt_text(payload: dict[str, Any]) -> str:
     parts: list[str] = []
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
@@ -712,13 +773,204 @@ def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bo
         content = message.get("content")
         if isinstance(content, str) and content.strip():
             parts.append(content.strip())
-    prompt_text = "\n".join(parts)
+    return "\n".join(parts)
+
+
+def _prompt_trace_hash_and_smoke_match(payload: dict[str, Any]) -> tuple[str, bool]:
+    prompt_text = _responses_payload_prompt_text(payload)
     prompt_hash = (
         hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         if prompt_text
         else ""
     )
     return prompt_hash, any(phrase in prompt_text for phrase in WINDOW_SMOKE_PHRASES)
+
+
+def _responses_payload_user_prompt_texts(payload: dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    for message in _responses_payload_to_messages(payload):
+        role = str(message.get("role") or "").strip().lower()
+        content = message.get("content")
+        if role == "user" and isinstance(content, str) and content.strip():
+            texts.append(_active_prompt_for_alias_routing(content.strip()))
+    return texts
+
+
+def _active_prompt_for_alias_routing(prompt_text: str) -> str:
+    text = str(prompt_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    markers = list(_CODEX_DESKTOP_REQUEST_MARKER_RE.finditer(text))
+    if not markers:
+        return prompt_text
+    return text[markers[-1].end() :].lstrip()
+
+
+def _leading_address_alias(prompt_text: str) -> str:
+    match = _LEADING_ADDRESS_RE.match(prompt_text or "")
+    return str(match.group(1) or "").strip() if match else ""
+
+
+def _agent_like_unknown_address_label(label: str, known_aliases: set[str]) -> bool:
+    normalized = str(label or "").strip().casefold()
+    if not normalized or normalized in known_aliases:
+        return False
+    parts = normalized.split()
+    if len(parts) == 1:
+        if re.fullmatch(r"[a-z][a-z0-9_.-]{0,31}", normalized):
+            return True
+        return normalized in {"агент", "дип"}
+    return parts[0] in {
+        "agent",
+        "агент",
+        "api",
+        "gpt",
+        "codex",
+        "dip",
+        "deepseek",
+        "worker",
+    }
+
+
+def _unknown_addressed_alias_payload() -> dict[str, Any]:
+    return {
+        "error": {
+            "message": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+            "type": "unknown_addressed_alias",
+            "code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+            "bridge_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        },
+        "machine_error_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        "bridge_machine_error_code": API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS,
+        "auto_router_fail_closed": True,
+        "auto_router_unknown_alias_blocked": True,
+        "provider_called": False,
+        "downstream_called": False,
+        "secret_value_recorded": False,
+    }
+
+
+def _response_payload_text_fragments(value: Any) -> list[str]:
+    fragments: list[str] = []
+    if isinstance(value, str):
+        if value.strip():
+            fragments.append(value)
+        return fragments
+    if isinstance(value, list):
+        for item in value:
+            fragments.extend(_response_payload_text_fragments(item))
+        return fragments
+    if not isinstance(value, dict):
+        return fragments
+
+    for key in ("output_text", "text", "content"):
+        item = value.get(key)
+        if isinstance(item, str) and item.strip():
+            fragments.append(item)
+        elif isinstance(item, (dict, list)):
+            fragments.extend(_response_payload_text_fragments(item))
+    for key in ("output", "choices", "message", "delta"):
+        item = value.get(key)
+        if isinstance(item, (dict, list)):
+            fragments.extend(_response_payload_text_fragments(item))
+    return fragments
+
+
+def _response_body_smoke_match(response_body: bytes) -> bool:
+    if not response_body:
+        return False
+    payload = _json_loads_object(response_body)
+    if payload:
+        response_text = "\n".join(_response_payload_text_fragments(payload))
+    else:
+        try:
+            response_text = response_body.decode("utf-8", errors="ignore")
+        except Exception:
+            response_text = ""
+    return any(phrase in response_text for phrase in WINDOW_SMOKE_PHRASES)
+
+
+def _bounded_positive_int(value: object, *, default: int, minimum: int) -> int:
+    try:
+        parsed = int(value) if value is not None and str(value).strip() else default
+    except (TypeError, ValueError):
+        return default
+    if parsed < minimum:
+        return default
+    return parsed
+
+
+def _provider_context_window_tokens(route: dict[str, Any]) -> int:
+    route_value = route.get("context_window_tokens")
+    if isinstance(route_value, int) and not isinstance(route_value, bool) and route_value > 0:
+        return route_value
+    return _bounded_positive_int(
+        os.environ.get("WBP_PROVIDER_CONTEXT_WINDOW_TOKENS"),
+        default=DEFAULT_PROVIDER_CONTEXT_WINDOW_TOKENS,
+        minimum=1,
+    )
+
+
+def _provider_context_safety_tokens() -> int:
+    return _bounded_positive_int(
+        os.environ.get("WBP_PROVIDER_CONTEXT_SAFETY_TOKENS"),
+        default=DEFAULT_PROVIDER_CONTEXT_SAFETY_TOKENS,
+        minimum=0,
+    )
+
+
+def _estimated_payload_tokens(value: object) -> tuple[int, int]:
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    byte_count = len(raw.encode("utf-8"))
+    estimated_tokens = (byte_count + CONTEXT_GUARD_BYTES_PER_TOKEN - 1) // CONTEXT_GUARD_BYTES_PER_TOKEN
+    return estimated_tokens, byte_count
+
+
+def _context_budget_guard_payload(
+    *,
+    route: dict[str, Any],
+    upstream_payload: dict[str, Any],
+    requested_output_tokens: int,
+) -> dict[str, Any] | None:
+    estimated_input_tokens, estimated_input_bytes = _estimated_payload_tokens(upstream_payload)
+    context_window_tokens = _provider_context_window_tokens(route)
+    safety_tokens = _provider_context_safety_tokens()
+    input_budget_tokens = max(0, context_window_tokens - requested_output_tokens - safety_tokens)
+    estimated_total_tokens = estimated_input_tokens + requested_output_tokens
+    if estimated_input_tokens <= input_budget_tokens:
+        return None
+    return {
+        "error": {
+            "message": (
+                f"{WBP_CONTEXT_BUDGET_EXCEEDED}: request is too large for the "
+                "configured provider context window; start a fresh Custom session "
+                "or reduce attached history/diff context."
+            ),
+            "type": "context_length_exceeded",
+            "code": WBP_CONTEXT_BUDGET_EXCEEDED,
+            "bridge_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        },
+        "machine_error_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        "bridge_machine_error_code": WBP_CONTEXT_BUDGET_EXCEEDED,
+        "provider_called": False,
+        "downstream_called": False,
+        "retryable": False,
+        "raw_prompt_recorded": False,
+        "prompt_text_recorded": False,
+        "secret_value_recorded": False,
+        "secret_value_exposed": False,
+        "raw_backend_details_exposed": False,
+        "context_budget_guard_triggered": True,
+        "context_window_tokens": context_window_tokens,
+        "context_safety_tokens": safety_tokens,
+        "input_budget_tokens": input_budget_tokens,
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_total_tokens": estimated_total_tokens,
+        "estimated_input_bytes": estimated_input_bytes,
+        "requested_output_tokens": requested_output_tokens,
+        "message_count": len(upstream_payload.get("messages", []))
+        if isinstance(upstream_payload.get("messages"), list)
+        else 0,
+        "next_action": "start_fresh_custom_session_or_reduce_context",
+    }
 
 
 def _json_loads_object(raw: bytes) -> dict[str, Any]:
@@ -801,6 +1053,234 @@ def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, An
             messages.append({"role": role, "content": "\n".join(parts)})
     flush_pending_tool_calls()
     return messages
+
+
+_RUNTIME_CONTEXT_FILE_ARG_RE = re.compile(
+    r"--runtime-context-file\s+(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"
+)
+
+
+def _message_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
+def _latest_addressed_user_prompt(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if str(message.get("role") or "") != "user":
+            continue
+        text = _active_prompt_for_alias_routing(_message_text(message).strip())
+        if text and _leading_address_alias(text):
+            return text
+    return ""
+
+
+def _runtime_context_file_from_messages(messages: list[dict[str, Any]]) -> Path | None:
+    for message in reversed(messages):
+        if str(message.get("role") or "").strip().casefold() not in {
+            "developer",
+            "system",
+        }:
+            continue
+        text = _message_text(message)
+        if not text:
+            continue
+        match = _RUNTIME_CONTEXT_FILE_ARG_RE.search(text)
+        if match is not None:
+            raw_path = next(
+                (group for group in match.groups() if group and group.strip()),
+                "",
+            )
+            if raw_path:
+                return Path(raw_path).expanduser()
+    for env_name in ("WBP_PROFILE_DIR", "CODEX_HOME"):
+        root = os.environ.get(env_name)
+        if root:
+            candidate = Path(root).expanduser() / "wbp-agent-runtime-context.json"
+            if candidate.is_file():
+                return candidate
+    managed_dir = os.environ.get("WBP_MANAGED_DIR")
+    if managed_dir:
+        candidate = (
+            Path(managed_dir).expanduser().parent / "wbp-agent-runtime-context.json"
+        )
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _provider_side_active_project_root() -> tuple[Path | None, str]:
+    for env_name in ("WBP_ACTIVE_PROJECT_ROOT", "WBP_REPO_ROOT"):
+        value = os.environ.get(env_name)
+        if value:
+            return Path(value).expanduser(), f"{env_name.lower()}_env"
+    try:
+        return Path.cwd(), "process_cwd"
+    except OSError:
+        return None, "missing"
+
+
+def _provider_side_exact_plain_reply_payload(
+    *,
+    prompt: str,
+    route_id: str,
+    runtime_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not _exact_plain_reply_requested(prompt):
+        return None
+    if resolve_prompt_repo_bridge_mode(prompt_text=prompt, repo_bridge_mode="off") != "off":
+        return None
+    parser_packet = build_natural_intent_parser_packet(
+        prompt_text=prompt,
+        runtime_context=runtime_context,
+        source_surface=SOURCE_SURFACE_DECLARED_CUSTOM_CODEX_FLOW,
+        secret_values=[prompt],
+    )
+    if (
+        parser_packet.get("status") != "ok"
+        or parser_packet.get("lane_candidate") != "api_route"
+        or parser_packet.get("route_id_allowed") is not True
+    ):
+        return None
+    expected_text = _exact_plain_reply_expected_text(prompt)
+    if not expected_text:
+        return None
+    payload = _responses_result_payload(expected_text, route_id)
+    payload.update(
+        {
+            "wbp_provider_side_auto_router": True,
+            "wbp_provider_side_exact_plain_reply_passthrough": True,
+            "auto_router_status": "ok",
+            "auto_router_machine_error_code": "OK",
+            "auto_router_decision": "api_direct_exact_passthrough",
+            "auto_router_proven": True,
+            "auto_router_fail_closed": False,
+            "auto_router_unknown_alias_blocked": False,
+            "api_route_selected": True,
+            "gpt_passthrough_to_native_chat": False,
+            "route_bound_dispatch_proven": True,
+            "repo_bridge_used": False,
+            "provider_called": False,
+            "network_dependent": False,
+            "not_intelligence_proof": True,
+            "intelligence_measured": False,
+            "fallback_used": False,
+            "local_imitation_used": False,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "secret_value_exposed": False,
+            "raw_backend_details_exposed": False,
+        }
+    )
+    return payload
+
+
+def _provider_side_auto_router_payload(
+    *,
+    messages: list[dict[str, Any]],
+    route_id: str,
+) -> dict[str, Any] | None:
+    prompt = _latest_addressed_user_prompt(messages)
+    if not prompt:
+        return None
+    context_path = _runtime_context_file_from_messages(messages)
+    if context_path is None:
+        payload = _responses_result_payload(FAIL_ALIAS_CONTEXT_MISSING, route_id)
+        payload.update(
+            {
+                "wbp_provider_side_auto_router": True,
+                "auto_router_proven": False,
+                "auto_router_fail_closed": True,
+                "auto_router_machine_error_code": FAIL_ALIAS_CONTEXT_MISSING,
+                "raw_prompt_recorded": False,
+                "secret_value_exposed": False,
+                "raw_backend_details_exposed": False,
+            }
+        )
+        return payload
+    context, metadata = load_runtime_context_packet(context_path)
+    exact_payload = _provider_side_exact_plain_reply_payload(
+        prompt=prompt,
+        route_id=route_id,
+        runtime_context=context,
+    )
+    if exact_payload is not None:
+        return exact_payload
+    active_root, active_root_source = _provider_side_active_project_root()
+    packet = build_api_agent_auto_router_packet(
+        prompt_text=prompt,
+        runtime_context=context,
+        context_file_metadata=metadata,
+        profile_dir=context_path.parent,
+        active_project_root=active_root,
+        active_project_root_source=active_root_source,
+        hook_surface_kind=HOOK_SURFACE_LOCAL_PROOF_COMMAND,
+        repo_bridge_mode="auto",
+        work_mode="full",
+        timeout_seconds=300.0,
+    )
+    text = ""
+    if packet.get("status") == "ok" and packet.get("auto_router_proven") is True:
+        if (
+            packet.get("api_route_selected") is True
+            and packet.get("output_text")
+            and (
+                packet.get("exact_plain_reply_matched") is True
+                or packet.get("output_passthrough_required") is True
+                or packet.get("repo_bridge_evidence_response_proven") is True
+            )
+        ):
+            text = str(packet.get("output_text") or "")
+        elif packet.get("gpt_passthrough_to_native_chat") is True:
+            return None
+    elif packet.get("auto_router_unknown_alias_blocked") is True:
+        text = API_AGENT_AUTO_ROUTER_UNKNOWN_ALIAS
+    elif packet.get("machine_error_code"):
+        text = str(packet.get("machine_error_code") or "")
+    if not text:
+        return None
+    payload = _responses_result_payload(text, route_id)
+    payload.update(
+        {
+            "wbp_provider_side_auto_router": True,
+            "auto_router_status": str(packet.get("status") or ""),
+            "auto_router_machine_error_code": str(packet.get("machine_error_code") or ""),
+            "auto_router_decision": str(packet.get("auto_router_decision") or ""),
+            "auto_router_proven": packet.get("auto_router_proven") is True,
+            "auto_router_fail_closed": packet.get("auto_router_fail_closed") is True,
+            "auto_router_unknown_alias_blocked": (
+                packet.get("auto_router_unknown_alias_blocked") is True
+            ),
+            "api_route_selected": packet.get("api_route_selected") is True,
+            "gpt_passthrough_to_native_chat": (
+                packet.get("gpt_passthrough_to_native_chat") is True
+            ),
+            "route_bound_dispatch_proven": (
+                packet.get("route_bound_dispatch_proven") is True
+            ),
+            "repo_bridge_used": packet.get("repo_bridge_used") is True,
+            "fallback_used": packet.get("fallback_used") is True,
+            "local_imitation_used": packet.get("local_imitation_used") is True,
+            "raw_prompt_recorded": False,
+            "prompt_text_recorded": False,
+            "secret_value_exposed": packet.get("secret_value_exposed") is True,
+            "raw_backend_details_exposed": (
+                packet.get("raw_backend_details_exposed") is True
+            ),
+        }
+    )
+    return payload
 
 
 def _with_external_route_runtime_truth(
@@ -912,7 +1392,7 @@ def _responses_tools_to_chat_tools(tools: Any) -> tuple[list[dict[str, Any]], li
     chat_tools: list[dict[str, Any]] = []
     dropped_tool_types: list[str] = []
     unsupported_tool_types: list[str] = []
-    text_only_droppable_tool_types = {"namespace", "web_search"}
+    text_only_droppable_tool_types = {"custom", "namespace", "tool_search", "web_search"}
     for tool in tools:
         if not isinstance(tool, dict):
             continue
@@ -954,17 +1434,49 @@ def _responses_tools_to_chat_tools(tools: Any) -> tuple[list[dict[str, Any]], li
     return chat_tools, sorted(set(dropped_tool_types)), sorted(set(unsupported_tool_types))
 
 
-def _chat_completion_message_text_and_tool_calls(payload: Any) -> tuple[str, list[dict[str, str]]]:
+def _assistant_reasoning_cache_keys(message: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    text = _message_text(message).strip()
+    if text:
+        keys.append("content:" + hashlib.sha256(text.encode("utf-8")).hexdigest())
+    raw_tool_calls = message.get("tool_calls")
+    if isinstance(raw_tool_calls, list):
+        for raw_call in raw_tool_calls:
+            if not isinstance(raw_call, dict):
+                continue
+            call_id = str(raw_call.get("id") or raw_call.get("call_id") or "").strip()
+            if call_id:
+                keys.append("tool_call:" + call_id)
+    return keys
+
+
+def _assistant_response_reasoning_cache_keys(
+    text: str,
+    tool_calls: list[dict[str, str]],
+) -> list[str]:
+    keys: list[str] = []
+    stripped_text = str(text or "").strip()
+    if stripped_text:
+        keys.append("content:" + hashlib.sha256(stripped_text.encode("utf-8")).hexdigest())
+    for call in tool_calls:
+        call_id = str(call.get("id") or call.get("call_id") or "").strip()
+        if call_id:
+            keys.append("tool_call:" + call_id)
+    return keys
+
+
+def _chat_completion_message_parts(payload: Any) -> tuple[str, list[dict[str, str]], str]:
     choices = payload.get("choices") if isinstance(payload, dict) else None
     if not isinstance(choices, list) or not choices:
-        return "", []
+        return "", [], ""
     first = choices[0]
     if not isinstance(first, dict):
-        return "", []
+        return "", [], ""
     message = first.get("message")
     if not isinstance(message, dict):
-        return "", []
+        return "", [], ""
     text = str(message.get("content") or "").strip()
+    reasoning_content = str(message.get("reasoning_content") or "").strip()
     raw_tool_calls = message.get("tool_calls")
     tool_calls: list[dict[str, str]] = []
     if isinstance(raw_tool_calls, list):
@@ -985,7 +1497,7 @@ def _chat_completion_message_text_and_tool_calls(payload: Any) -> tuple[str, lis
                     "arguments": str(function.get("arguments") or raw_call.get("arguments") or "{}"),
                 }
             )
-    return text, tool_calls
+    return text, tool_calls, reasoning_content
 
 
 def _responses_stream_body(payload: dict[str, Any]) -> bytes:
@@ -1770,6 +2282,8 @@ class ExternalRouteResponsesAdapter:
         self.timeout_seconds = timeout_seconds
         self._server: _ExternalRouteAdapterServer | None = None
         self._thread: threading.Thread | None = None
+        self._reasoning_content_by_message_key: dict[str, str] = {}
+        self._reasoning_content_lock = threading.Lock()
 
     @property
     def listen_endpoint(self) -> str:
@@ -1798,6 +2312,87 @@ class ExternalRouteResponsesAdapter:
         if self._thread is not None:
             self._thread.join(timeout=2)
             self._thread = None
+
+    def _deepseek_thinking_replay_enabled(self) -> bool:
+        if str(self.route.get("provider") or "").strip().casefold() != "deepseek":
+            return False
+        thinking_metadata = transforms.route_thinking_metadata(self.route)
+        thinking = thinking_metadata.get("thinking") if isinstance(thinking_metadata, dict) else {}
+        return isinstance(thinking, dict) and thinking.get("type") == "enabled"
+
+    def _with_cached_reasoning_content(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        if not self._deepseek_thinking_replay_enabled():
+            return messages, 0, 0
+        with self._reasoning_content_lock:
+            cache = dict(self._reasoning_content_by_message_key)
+        replayed_count = 0
+        dropped_orphan_tool_turns = 0
+        dropped_tool_call_ids: set[str] = set()
+        patched_messages: list[dict[str, Any]] = []
+        for message in messages:
+            role = str(message.get("role") or "").strip()
+            if role == "tool":
+                tool_call_id = str(message.get("tool_call_id") or "").strip()
+                if tool_call_id and tool_call_id in dropped_tool_call_ids:
+                    continue
+            if role != "assistant":
+                patched_messages.append(message)
+                continue
+            if isinstance(message.get("reasoning_content"), str) and str(
+                message.get("reasoning_content") or ""
+            ).strip():
+                patched_messages.append(message)
+                continue
+            reasoning_content = ""
+            for key in _assistant_reasoning_cache_keys(message):
+                reasoning_content = cache.get(key, "")
+                if reasoning_content:
+                    break
+            if not reasoning_content:
+                raw_tool_calls = message.get("tool_calls")
+                if isinstance(raw_tool_calls, list) and raw_tool_calls:
+                    for raw_call in raw_tool_calls:
+                        if not isinstance(raw_call, dict):
+                            continue
+                        call_id = str(raw_call.get("id") or raw_call.get("call_id") or "").strip()
+                        if call_id:
+                            dropped_tool_call_ids.add(call_id)
+                    dropped_orphan_tool_turns += 1
+                    continue
+                patched_messages.append(message)
+                continue
+            patched = dict(message)
+            patched["reasoning_content"] = reasoning_content
+            patched_messages.append(patched)
+            replayed_count += 1
+        return patched_messages, replayed_count, dropped_orphan_tool_turns
+
+    def _remember_reasoning_content(
+        self,
+        *,
+        text: str,
+        tool_calls: list[dict[str, str]],
+        reasoning_content: str,
+    ) -> int:
+        if not self._deepseek_thinking_replay_enabled():
+            return 0
+        reasoning_content = str(reasoning_content or "").strip()
+        if not reasoning_content:
+            return 0
+        keys = _assistant_response_reasoning_cache_keys(text, tool_calls)
+        if not keys:
+            return 0
+        with self._reasoning_content_lock:
+            for key in keys:
+                self._reasoning_content_by_message_key[key] = reasoning_content
+            if len(self._reasoning_content_by_message_key) > 256:
+                self._reasoning_content_by_message_key = dict(
+                    list(self._reasoning_content_by_message_key.items())[-256:]
+                )
+        return len(keys)
 
     def handle(
         self,
@@ -1860,7 +2455,23 @@ class ExternalRouteResponsesAdapter:
             payload = {"error": {"message": "responses input did not contain prompt text", "type": "invalid_request_error"}}
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 400, {"Content-Type": "application/json"}, body_bytes
+        wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(headers.get("Accept") or "")
+        provider_side_auto_router_payload = _provider_side_auto_router_payload(
+            messages=messages,
+            route_id=route_id,
+        )
+        if provider_side_auto_router_payload is not None:
+            if wants_stream:
+                body_bytes = _responses_stream_body(provider_side_auto_router_payload)
+                return 200, {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}, body_bytes
+            body_bytes = json.dumps(provider_side_auto_router_payload, ensure_ascii=True).encode("utf-8")
+            return 200, {"Content-Type": "application/json"}, body_bytes
         messages = _with_external_route_runtime_truth(messages, self.route)
+        (
+            messages,
+            reasoning_content_replayed_count,
+            reasoning_content_orphan_tool_turns_dropped,
+        ) = self._with_cached_reasoning_content(messages)
         requested_max_tokens = int(request_payload.get("max_output_tokens") or 256)
         thinking_metadata = transforms.route_thinking_metadata(self.route)
         thinking = thinking_metadata.get("thinking")
@@ -1893,6 +2504,14 @@ class ExternalRouteResponsesAdapter:
                 transformed["role"] = role
                 transformed_messages.append(transformed)
             upstream_payload["messages"] = transformed_messages
+        context_guard_payload = _context_budget_guard_payload(
+            route=self.route,
+            upstream_payload=upstream_payload,
+            requested_output_tokens=requested_max_tokens,
+        )
+        if context_guard_payload is not None:
+            body_bytes = json.dumps(context_guard_payload, ensure_ascii=True).encode("utf-8")
+            return 413, {"Content-Type": "application/json"}, body_bytes
         try:
             response = request_json(
                 url=_route_completion_url(self.route),
@@ -1928,7 +2547,7 @@ class ExternalRouteResponsesAdapter:
         if response.status_code >= 400:
             body_bytes = json.dumps(response.payload, ensure_ascii=True).encode("utf-8")
             return response.status_code, {"Content-Type": "application/json"}, body_bytes
-        text, tool_calls = _chat_completion_message_text_and_tool_calls(response.payload)
+        text, tool_calls, reasoning_content = _chat_completion_message_parts(response.payload)
         if not text and not tool_calls:
             try:
                 text, _response_meta = transforms.extract_check_response(self.route, response.payload)
@@ -1941,6 +2560,11 @@ class ExternalRouteResponsesAdapter:
                     {"Content-Type": "application/json"},
                     body_bytes,
                 )
+        reasoning_content_cache_keys_written = self._remember_reasoning_content(
+            text=text,
+            tool_calls=tool_calls,
+            reasoning_content=reasoning_content,
+        )
         payload = _responses_result_payload(
             text,
             str(self.route.get("route_id") or ""),
@@ -1952,12 +2576,20 @@ class ExternalRouteResponsesAdapter:
         payload["thinking"] = thinking_metadata.get("thinking")
         payload["api_parameter_sent"] = thinking_metadata.get("api_parameter_sent") is True
         payload["max_tokens_sent"] = requested_max_tokens
+        payload["deepseek_reasoning_content_observed"] = bool(reasoning_content)
+        payload["deepseek_reasoning_content_replayed_count"] = reasoning_content_replayed_count
+        payload["deepseek_reasoning_content_orphan_tool_turns_dropped"] = (
+            reasoning_content_orphan_tool_turns_dropped
+        )
+        payload["deepseek_reasoning_content_cache_keys_written"] = (
+            reasoning_content_cache_keys_written
+        )
+        payload["deepseek_reasoning_content_exposed"] = False
         payload["intelligence_measured"] = False
         payload["label_source"] = str(thinking_metadata.get("label_source") or "unavailable_unknown")
         if dropped_tool_types:
             payload["wbp_route_tool_policy"] = "unsupported_codex_tools_dropped_for_text_only"
             payload["dropped_responses_tool_types"] = dropped_tool_types
-        wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(headers.get("Accept") or "")
         if wants_stream:
             body_bytes = _responses_stream_body(payload)
             return 200, {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}, body_bytes
@@ -2018,6 +2650,8 @@ class HybridOpenAICompatAdapter:
         routes: list[dict[str, Any]],
         hidden_downstream_model_ids: list[str] | None = None,
         forced_route_model_id: str = "",
+        dual_lane_route_model_id: str = "",
+        api_route_aliases: list[str] | tuple[str, ...] | None = None,
         listen_port: int | None = None,
         timeout_seconds: float = 120.0,
         allow_missing_auth_from_loopback: bool = False,
@@ -2041,6 +2675,17 @@ class HybridOpenAICompatAdapter:
             if str(model_id).strip()
         }
         self._forced_route_model_id = str(forced_route_model_id or "").strip()
+        self._dual_lane_route_model_id = str(dual_lane_route_model_id or "").strip()
+        self._api_route_aliases = {
+            str(alias).strip().casefold()
+            for alias in (api_route_aliases or DEFAULT_API_ROUTE_ADDRESS_ALIASES)
+            if str(alias).strip()
+        }
+        self._primary_route_aliases = {
+            str(alias).strip().casefold()
+            for alias in DEFAULT_PRIMARY_ROUTE_ADDRESS_ALIASES
+            if str(alias).strip()
+        }
         for route in routes:
             if not isinstance(route, dict):
                 continue
@@ -2071,6 +2716,25 @@ class HybridOpenAICompatAdapter:
     @property
     def route_model_ids(self) -> list[str]:
         return list(self._route_model_ids)
+
+    @property
+    def forced_route_model_id(self) -> str:
+        return self._forced_route_model_id
+
+    @property
+    def dual_lane_route_model_id(self) -> str:
+        return self._dual_lane_route_model_id
+
+    def _api_alias_direct_route_model_id(self, request_payload: dict[str, Any]) -> str:
+        if not self._dual_lane_route_model_id:
+            return ""
+        if self._dual_lane_route_model_id not in self._route_adapters:
+            return ""
+        for prompt_text in reversed(_responses_payload_user_prompt_texts(request_payload)):
+            alias = _leading_address_alias(prompt_text).casefold()
+            if alias and alias in self._api_route_aliases:
+                return self._dual_lane_route_model_id
+        return ""
 
     def set_trace_context(self, context: dict[str, Any]) -> None:
         safe_context = {
@@ -2106,11 +2770,11 @@ class HybridOpenAICompatAdapter:
         last_error_type = "STALE_LAUNCH_PACKET" if stale_launch_packet else response_error_type
         bridge_started = self._server is not None
         if stale_launch_packet:
-            bridge_machine_error_code = _canonical_bridge_error_code("STALE_LAUNCH_PACKET")
+            request_machine_error_code = _canonical_bridge_error_code("STALE_LAUNCH_PACKET")
         elif not bridge_started and not last_error_type:
-            bridge_machine_error_code = "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
+            request_machine_error_code = "BRIDGE_RESPONSES_ENDPOINT_UNREADY"
         else:
-            bridge_machine_error_code = str(
+            request_machine_error_code = str(
                 last_record.get("bridge_machine_error_code")
                 or _canonical_bridge_error_code(
                     last_error_type,
@@ -2119,6 +2783,14 @@ class HybridOpenAICompatAdapter:
                     ),
                 )
             )
+        bridge_machine_error_code = (
+            "OK"
+            if (
+                bridge_started
+                and request_machine_error_code in REQUEST_ADMISSION_ERROR_CODES
+            )
+            else request_machine_error_code
+        )
         bridge_port = int(self._server.server_port) if self._server is not None else 0
         recoverable = bridge_machine_error_code in BRIDGE_CANONICAL_RECOVERABLE_CODES
         route_unchanged = bool(
@@ -2149,7 +2821,7 @@ class HybridOpenAICompatAdapter:
             "recovery_succeeded": False,
             "retry_attempted": False,
             "retry_allowed": recoverable and bool(last_record),
-            "machine_error_code": bridge_machine_error_code,
+            "machine_error_code": request_machine_error_code,
             "legacy_machine_error_code": last_error_type,
             "raw_prompt_recorded": False,
             "auth_header_recorded": False,
@@ -2286,9 +2958,48 @@ class HybridOpenAICompatAdapter:
                 headers.get("Accept") or ""
             )
             prompt_hash, smoke_match = _prompt_trace_hash_and_smoke_match(request_payload)
+            leading_alias = ""
+            for prompt_text in reversed(_responses_payload_user_prompt_texts(request_payload)):
+                leading_alias = _leading_address_alias(prompt_text)
+                if leading_alias:
+                    break
+            known_address_aliases = self._api_route_aliases | self._primary_route_aliases
+            if _agent_like_unknown_address_label(leading_alias, known_address_aliases):
+                payload = _unknown_addressed_alias_payload()
+                response_body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+                self._record_downstream_trace(
+                    status=400,
+                    path=normalized_path,
+                    requested_model=requested_model,
+                    prompt_hash=prompt_hash,
+                    smoke_match=smoke_match,
+                    stream_requested=wants_stream,
+                    response_body=response_body,
+                    extra_fields={
+                        "downstream_called": False,
+                        "chatgpt_route_used": False,
+                        "api_alias_unknown_blocked": True,
+                        "auto_router_fail_closed": True,
+                        "auto_router_unknown_alias_blocked": True,
+                    },
+                )
+                return 400, {"Content-Type": "application/json"}, response_body
             route_adapter = self._route_adapters.get(requested_model)
             original_requested_model = requested_model
             forced_route_used = False
+            api_alias_direct_route_model_id = (
+                self._api_alias_direct_route_model_id(request_payload)
+                if route_adapter is None
+                else ""
+            )
+            api_alias_direct_route_used = False
+            if api_alias_direct_route_model_id:
+                route_adapter = self._route_adapters.get(api_alias_direct_route_model_id)
+                if route_adapter is not None:
+                    api_alias_direct_route_used = True
+                    request_payload = dict(request_payload)
+                    request_payload["model"] = api_alias_direct_route_model_id
+                    body = json.dumps(request_payload, ensure_ascii=True).encode("utf-8")
             if route_adapter is None and self._forced_route_model_id:
                 route_adapter = self._route_adapters.get(self._forced_route_model_id)
                 if route_adapter is not None:
@@ -2297,7 +3008,11 @@ class HybridOpenAICompatAdapter:
                     request_payload["model"] = self._forced_route_model_id
                     body = json.dumps(request_payload, ensure_ascii=True).encode("utf-8")
             if route_adapter is not None:
-                effective_model = self._forced_route_model_id if forced_route_used else requested_model
+                effective_model = (
+                    api_alias_direct_route_model_id
+                    if api_alias_direct_route_used
+                    else (self._forced_route_model_id if forced_route_used else requested_model)
+                )
                 route_record = self._route_records.get(effective_model, {})
                 status, response_headers, response_body = route_adapter.handle(
                     method=method,
@@ -2316,7 +3031,70 @@ class HybridOpenAICompatAdapter:
                     smoke_match=smoke_match,
                     stream_requested=wants_stream,
                     response_body=response_body,
+                    extra_fields={
+                        "api_alias_direct_route": True,
+                        "dual_lane_api_alias_direct_route": True,
+                        "dual_lane_primary_requested_model": original_requested_model,
+                    }
+                    if api_alias_direct_route_used
+                    else None,
                 )
+                return status, response_headers, response_body
+            dual_lane_route_adapter = (
+                self._route_adapters.get(self._dual_lane_route_model_id)
+                if self._dual_lane_route_model_id
+                else None
+            )
+            if dual_lane_route_adapter is not None and requested_model != self._dual_lane_route_model_id:
+                status, response_headers, response_body = self._forward_downstream(
+                    method=method,
+                    path=path,
+                    headers=headers,
+                    body=body,
+                )
+                self._record_downstream_trace(
+                    status=status,
+                    path=normalized_path,
+                    requested_model=original_requested_model,
+                    prompt_hash=prompt_hash,
+                    smoke_match=smoke_match,
+                    stream_requested=wants_stream,
+                    response_body=response_body,
+                    extra_fields={
+                        "dual_lane_primary_trace": True,
+                        "dual_lane_route_model_id": self._dual_lane_route_model_id,
+                    },
+                )
+                if 200 <= status < 500:
+                    route_payload = dict(request_payload)
+                    route_payload["model"] = self._dual_lane_route_model_id
+                    route_body = json.dumps(route_payload, ensure_ascii=True).encode("utf-8")
+                    route_record = self._route_records.get(self._dual_lane_route_model_id, {})
+                    route_status, _route_response_headers, route_response_body = (
+                        dual_lane_route_adapter.handle(
+                            method=method,
+                            path=normalized_path,
+                            headers=headers,
+                            body=route_body,
+                        )
+                    )
+                    self._record_prompt_trace(
+                        status=route_status,
+                        path=normalized_path,
+                        requested_model=self._dual_lane_route_model_id,
+                        effective_route_model=self._dual_lane_route_model_id,
+                        forced_route_used=False,
+                        route=route_record,
+                        prompt_hash=prompt_hash,
+                        smoke_match=smoke_match,
+                        stream_requested=wants_stream,
+                        response_body=route_response_body,
+                        extra_fields={
+                            "dual_lane_shadow_dispatch": True,
+                            "dual_lane_primary_requested_model": original_requested_model,
+                            "dual_lane_primary_response_returned": True,
+                        },
+                    )
                 return status, response_headers, response_body
             status, response_headers, response_body = self._forward_downstream(
                 method=method,
@@ -2381,10 +3159,19 @@ class HybridOpenAICompatAdapter:
         smoke_match: bool,
         stream_requested: bool,
         response_body: bytes,
+        extra_fields: dict[str, Any] | None = None,
     ) -> None:
         route_digest = _safe_route_digest(route) if route else ""
         response_payload = _json_loads_object(response_body)
+        response_smoke_match = _response_body_smoke_match(response_body)
         response_seen = 200 <= status < 500 and bool(response_body)
+        provider_called = True
+        if (
+            response_payload
+            and response_payload.get("provider_called") is False
+            and response_payload.get("downstream_called") is False
+        ):
+            provider_called = False
         record = {
             **self._trace_context,
             "captured_at_utc": utc_now(),
@@ -2399,7 +3186,8 @@ class HybridOpenAICompatAdapter:
                 route_digest
                 and route_digest == str(self._trace_context.get("launch_route_digest") or "")
             ),
-            "provider_called": True,
+            "provider_called": provider_called,
+            "downstream_called": False,
             "provider_id": str(route.get("provider") or ""),
             "upstream_model": str(route.get("upstream_model") or ""),
             "api_reasoning_option_id": str(
@@ -2409,7 +3197,8 @@ class HybridOpenAICompatAdapter:
             "response_seen": response_seen,
             "response_body_sha256": hashlib.sha256(response_body).hexdigest() if response_body else "",
             "prompt_hash": prompt_hash,
-            "known_smoke_phrase_matched": smoke_match,
+            "known_smoke_phrase_requested": smoke_match,
+            "known_smoke_phrase_matched": response_smoke_match,
             "stream_requested": stream_requested,
             "stream_started": bool(stream_requested and 200 <= status < 300 and response_body),
             "stream_completed": bool(stream_requested and 200 <= status < 300 and response_body),
@@ -2427,6 +3216,8 @@ class HybridOpenAICompatAdapter:
             "response_text_counts_as_model_truth": False,
             "model_self_report_counts_as_runtime_truth": False,
         }
+        if extra_fields:
+            record.update(extra_fields)
         if isinstance(response_payload.get("error"), dict):
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")
@@ -2453,6 +3244,7 @@ class HybridOpenAICompatAdapter:
         smoke_match: bool,
         stream_requested: bool,
         response_body: bytes,
+        extra_fields: dict[str, Any] | None = None,
     ) -> None:
         response_payload = _json_loads_object(response_body)
         response_seen = 200 <= status < 500 and bool(response_body)
@@ -2496,6 +3288,8 @@ class HybridOpenAICompatAdapter:
             "response_text_counts_as_model_truth": False,
             "model_self_report_counts_as_runtime_truth": False,
         }
+        if extra_fields:
+            record.update(extra_fields)
         if isinstance(response_payload.get("error"), dict):
             error = response_payload["error"]
             record["response_error_type"] = str(error.get("type") or "")
@@ -2616,17 +3410,8 @@ def stat_hash(path: str) -> dict[str, Any]:
 
 def protected_snapshot() -> dict[str, dict[str, Any]]:
     return {
-        "codex_config": stat_hash("/Users/kirillponomarev/.codex/config.toml"),
-        "codex_auth": stat_hash("/Users/kirillponomarev/.codex/auth.json"),
-        "default_app_support_codex": stat_hash(
-            "/Users/kirillponomarev/Library/Application Support/Codex"
-        ),
-        "default_cache_codex": stat_hash(
-            "/Users/kirillponomarev/Library/Caches/com.openai.codex"
-        ),
-        "default_httpstorage_codex": stat_hash(
-            "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex"
-        ),
+        name: stat_hash(str(path))
+        for name, path in protected_codex_surface_paths().items()
     }
 
 
@@ -2683,9 +3468,74 @@ class OperatorSurfaceConfig:
     endpoint: str = DEFAULT_ENDPOINT
     default_model: str = DEFAULT_MODEL
     codex_bin: Path = Path(DEFAULT_CODEX_BIN)
-    runtime_config: Path = Path(DEFAULT_RUNTIME_CONFIG)
+    runtime_config: Path = field(default_factory=default_runtime_config_path)
     max_prompt_chars: int = 8000
     timeout_seconds: int = 180
+    allow_unattested_codex_bin_for_tests: bool = False
+
+
+def attest_operator_codex_binary(config: OperatorSurfaceConfig) -> dict[str, Any]:
+    requested = config.codex_bin.expanduser().resolve(strict=False)
+    if config.allow_unattested_codex_bin_for_tests:
+        return {
+            "status": "ok",
+            "machine_error_code": "TEST_ONLY_UNATTESTED_CODEX_BINARY",
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": True,
+        }
+    try:
+        resolved = resolve_official_codex_cli({"WBP_CODEX_BIN": str(requested)})
+    except OfficialCodexAppError as exc:
+        return {
+            "status": "blocked",
+            "machine_error_code": exc.machine_error_code,
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": False,
+        }
+    resolved = resolved.expanduser().resolve(strict=False)
+    if resolved != requested:
+        return {
+            "status": "blocked",
+            "machine_error_code": "OPERATOR_CODEX_BINARY_ATTESTATION_MISMATCH",
+            "codex_bin": requested,
+            "signed_official_app_proven": False,
+            "test_only_override": False,
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "codex_bin": resolved,
+        "signed_official_app_proven": True,
+        "test_only_override": False,
+    }
+
+
+def _status_claim_gate_from_live_health(
+    status_packet: dict[str, Any],
+    health_packet: dict[str, Any],
+) -> dict[str, Any]:
+    status_claim = status_packet.get("claim_gate")
+    fallback = (
+        dict(status_claim)
+        if isinstance(status_claim, dict)
+        else {"status": "not_reported"}
+    )
+    launch_readiness = health_packet.get("launch_readiness")
+    if (
+        health_packet.get("status") == "ok"
+        and health_packet.get("machine_error_code") == "OK"
+        and isinstance(launch_readiness, dict)
+        and launch_readiness.get("status") == "ready"
+    ):
+        health_claim = health_packet.get("claim_gate")
+        claim = dict(health_claim) if isinstance(health_claim, dict) else {"status": "ok"}
+        claim.setdefault("status", "ok")
+        claim.setdefault("truth_source", "healthcheck --json")
+        claim.setdefault("status_source", "live_probe")
+        return claim
+    return fallback
 
 
 @dataclass
@@ -2783,7 +3633,7 @@ class OperatorSurfaceSession:
                 "machine_error_code": health_packet.get("machine_error_code"),
                 "liveness": health_packet.get("liveness"),
             },
-            "claim_gate": status_packet.get("claim_gate", {"status": "not_reported"}),
+            "claim_gate": _status_claim_gate_from_live_health(status_packet, health_packet),
             "models": models,
             "control_surface": {
                 "localhost_only": True,
@@ -2864,6 +3714,17 @@ class OperatorSurfaceSession:
                 "human_message": "Model id was not present in the current server-issued list.",
                 "refresh_packet": self.status_payload(),
             }
+        codex_attestation = attest_operator_codex_binary(self.config)
+        if codex_attestation["status"] != "ok":
+            return {
+                "status": "failed",
+                "machine_error_code": codex_attestation["machine_error_code"],
+                "human_message": "Operator Codex binary is not from the signed official application.",
+                "refresh_packet": self.status_payload(),
+                "signed_official_app_proven": False,
+                "secret_value_recorded": False,
+            }
+        codex_bin = Path(codex_attestation["codex_bin"])
         try:
             local_api_key = self.local_api_key()
         except Exception as exc:
@@ -2881,7 +3742,7 @@ class OperatorSurfaceSession:
         downstream_endpoint = self.config.endpoint
         runtime_model = selected_model
         route_provider_endpoint = ""
-        route_secret = ""
+        route_provider_auth_material = local_api_key
         if route_record is not None:
             compatibility = str(route_record.get("compatibility") or "").strip()
             endpoint_path = str(route_record.get("endpoint_path") or "").strip()
@@ -2895,9 +3756,9 @@ class OperatorSurfaceSession:
                     "human_message": "Selected external route is not compatible with bounded Codex operator wire API.",
                     "refresh_packet": self.status_payload(),
                     "secret_value_recorded": False,
-                }
+            }
             try:
-                secret = _resolve_external_route_secret_value(route_record)
+                route_provider_auth_material = _resolve_external_route_secret_value(route_record)
             except Exception as exc:
                 return {
                     "status": "failed",
@@ -2909,12 +3770,10 @@ class OperatorSurfaceSession:
                 }
             runtime_model = selected_model
             route_provider_endpoint = str(route_record.get("base_url") or "").rstrip("/")
-            route_secret = secret
             configured_provider = "external_route"
             configured_wire_api = "responses"
             configured_label = "Server-owned external route via bounded responses adapter"
-        secret = local_api_key
-        if not self.config.codex_bin.exists():
+        if not codex_bin.exists():
             return {
                 "status": "failed",
                 "machine_error_code": "OPERATOR_CODEX_BINARY_UNAVAILABLE",
@@ -3098,7 +3957,7 @@ class OperatorSurfaceSession:
                 route_adapter = ExternalRouteResponsesAdapter(
                     route=route_record,
                     expected_api_key=local_api_key,
-                    route_secret=route_secret,
+                    route_secret=route_provider_auth_material,
                 )
                 route_adapter.__enter__()
                 downstream_endpoint = route_adapter.listen_endpoint
@@ -3121,14 +3980,14 @@ class OperatorSurfaceSession:
                 {
                     "HOME": str(home),
                     "CODEX_HOME": str(codex_home),
-                    "OPENAI_API_KEY": secret,
+                    "OPENAI_API_KEY": local_api_key,
                 }
             )
             env_codex_home = Path(env["CODEX_HOME"]).resolve()
             env_home = Path(env["HOME"]).resolve()
             config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
             command = [
-                str(self.config.codex_bin),
+                str(codex_bin),
                 "exec",
                 "--skip-git-repo-check",
                 "--ephemeral",
@@ -3181,7 +4040,10 @@ class OperatorSurfaceSession:
             if route_adapter:
                 route_adapter.__exit__(None, None, None)
         final_message = (
-            redact_text(last_message.read_text(encoding="utf-8", errors="replace"), [secret]).strip()
+            redact_text(
+                last_message.read_text(encoding="utf-8", errors="replace"),
+                [local_api_key, route_provider_auth_material],
+            ).strip()
             if last_message.exists()
             else ""
         )

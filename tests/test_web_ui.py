@@ -4,11 +4,18 @@
 from __future__ import annotations
 
 import http.client
+import os
+import re
 import socket
+import tempfile
 import threading
 import unittest
+import urllib.parse
+from http import HTTPStatus
 from pathlib import Path
+from unittest import mock
 
+import wild_boar_proxy.web_ui as web_ui
 from wild_boar_proxy.ui_shell import (
     AccountPoolSnapshot,
     AccountRecord,
@@ -19,6 +26,13 @@ from wild_boar_proxy.ui_shell import (
     ExternalRouteRecord,
     RuntimeSnapshot,
     UiShellError,
+)
+from wild_boar_proxy.web_ingress import MAX_WEB_REQUEST_BODY_BYTES
+from wild_boar_proxy.web_rate_limit import WEB_RATE_LIMIT_MACHINE_ERROR_CODE, WebPostRateLimiter
+from wild_boar_proxy.web_token import (
+    WEB_FORM_CSRF_FIELD,
+    WEB_FORM_TOKEN_FIELD,
+    WEB_TOKEN_FILENAME,
 )
 from wild_boar_proxy.web_ui import (
     DashboardState,
@@ -38,6 +52,46 @@ def free_port() -> int:
     port = sock.getsockname()[1]
     sock.close()
     return port
+
+
+def web_ui_form_body(port: int, fields: dict[str, str]) -> str:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request("GET", "/")
+    response = conn.getresponse()
+    body = response.read().decode("utf-8")
+    conn.close()
+    if response.status != HTTPStatus.OK:
+        raise AssertionError(f"dashboard fetch failed: {response.status}")
+
+    def hidden_value(name: str) -> str:
+        pattern = rf'<input type="hidden" name="{re.escape(name)}" value="([^"]+)">'
+        match = re.search(pattern, body)
+        if match is None:
+            raise AssertionError(f"missing hidden field: {name}")
+        return match.group(1)
+
+    return urllib.parse.urlencode(
+        {
+            WEB_FORM_TOKEN_FIELD: hidden_value(WEB_FORM_TOKEN_FIELD),
+            WEB_FORM_CSRF_FIELD: hidden_value(WEB_FORM_CSRF_FIELD),
+            **fields,
+        }
+    )
+
+
+def post_web_ui_form(port: int, path: str, body: str) -> tuple[int, str]:
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    conn.request(
+        "POST",
+        path,
+        body=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    response = conn.getresponse()
+    response_body = response.read().decode("utf-8")
+    status = int(response.status)
+    conn.close()
+    return status, response_body
 
 
 def runtime_snapshot() -> RuntimeSnapshot:
@@ -227,6 +281,28 @@ class FakeRunner:
         if args == ("mode", "get", "--json"):
             return CommandResult(
                 payload={"desired_mode": "managed", "effective_mode": "managed"},
+                stderr="",
+            )
+        if args == ("healthcheck", "--json"):
+            return CommandResult(
+                payload={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "Runtime healthcheck passed.",
+                    "machine_error_code": "OK",
+                    "next_action": "none",
+                    "liveness": "healthy",
+                    "severity": "info",
+                    "operator_action": "none",
+                    "desired_mode": "managed",
+                    "effective_mode": "managed",
+                    "endpoint": "http://127.0.0.1:8320/v1",
+                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "attestation": {
+                        "attestation_source": "healthcheck --json",
+                        "observed_at_utc": "2026-05-08T00:00:00+00:00",
+                    },
+                },
                 stderr="",
             )
         if args == ("accounts", "list", "--json"):
@@ -688,12 +764,26 @@ class WebUiTests(unittest.TestCase):
             conn.close()
             self.assertEqual(response.status, 200)
             self.assertIn("Wild Boar Proxy", body)
+            self.assertIn(WEB_FORM_TOKEN_FIELD, body)
+            self.assertIn(WEB_FORM_CSRF_FIELD, body)
+            forms = [
+                match.group(0)
+                for match in re.finditer(
+                    r'<form\b[^>]*\bmethod=(["\'])post\1[^>]*>.*?</form>',
+                    body,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+            ]
+            self.assertGreater(len(forms), 0)
+            for form in forms:
+                self.assertIn(WEB_FORM_TOKEN_FIELD, form)
+                self.assertIn(WEB_FORM_CSRF_FIELD, form)
 
             conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
             conn.request(
                 "POST",
                 "/action",
-                body="action=sync",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response = conn.getresponse()
@@ -715,7 +805,7 @@ class WebUiTests(unittest.TestCase):
             conn.request(
                 "POST",
                 "/",
-                body="action=sync",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response = conn.getresponse()
@@ -727,6 +817,295 @@ class WebUiTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
+
+    def test_http_handler_rejects_malformed_ingress_without_action(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body='{"action":"sync"}',
+                headers={"Content-Type": "application/json"},
+            )
+            wrong_type = conn.getresponse()
+            wrong_type_body = wrong_type.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=sync",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": "http://evil.example",
+                },
+            )
+            bad_origin = conn.getresponse()
+            bad_origin_body = bad_origin.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=" + ("a" * MAX_WEB_REQUEST_BODY_BYTES),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            too_large = conn.getresponse()
+            too_large_body = too_large.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.putrequest("GET", "/", skip_host=True)
+            conn.putheader("Host", "evil.example")
+            conn.endheaders()
+            bad_host = conn.getresponse()
+            bad_host_body = bad_host.read().decode("utf-8")
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(wrong_type.status, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+        self.assertIn("WEB_INGRESS_CONTENT_TYPE_REJECTED", wrong_type_body)
+        self.assertEqual(bad_origin.status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_ORIGIN_REJECTED", bad_origin_body)
+        self.assertEqual(too_large.status, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        self.assertIn("WEB_INGRESS_BODY_TOO_LARGE", too_large_body)
+        self.assertEqual(bad_host.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("WEB_INGRESS_HOST_REJECTED", bad_host_body)
+        self.assertEqual(app.actions, [])
+
+    def test_http_handler_rejects_missing_or_invalid_form_tokens_without_action(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(app))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body="action=sync",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            missing = conn.getresponse()
+            missing_body = missing.read().decode("utf-8")
+            conn.close()
+
+            bad_csrf_body = web_ui_form_body(server.server_port, {"action": "sync"})
+            bad_csrf_body = re.sub(
+                rf"({re.escape(WEB_FORM_CSRF_FIELD)}=)[^&]+",
+                r"\1wrong-csrf",
+                bad_csrf_body,
+            )
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body=bad_csrf_body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            bad_csrf = conn.getresponse()
+            bad_csrf_response_body = bad_csrf.read().decode("utf-8")
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request(
+                "POST",
+                "/action",
+                body=web_ui_form_body(server.server_port, {"action": "sync"}),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            valid = conn.getresponse()
+            valid.read()
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(missing.status, HTTPStatus.UNAUTHORIZED)
+        self.assertIn("WEB_INGRESS_WEB_TOKEN_REJECTED", missing_body)
+        self.assertEqual(bad_csrf.status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_CSRF_REJECTED", bad_csrf_response_body)
+        self.assertEqual(valid.status, HTTPStatus.OK)
+        self.assertEqual(app.actions, [{"action": "sync"}])
+
+    def test_http_handler_rate_limits_valid_form_posts_without_action_after_limit(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(app, post_rate_limiter=limiter),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            statuses = [
+                post_web_ui_form(
+                    server.server_port,
+                    "/action",
+                    web_ui_form_body(server.server_port, {"action": "sync"}),
+                )[0]
+                for _ in range(10)
+            ]
+            limited_status, limited_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                web_ui_form_body(server.server_port, {"action": "sync"}),
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertIn(WEB_RATE_LIMIT_MACHINE_ERROR_CODE, limited_body)
+        self.assertEqual(app.actions, [{"action": "sync"}] * 10)
+
+    def test_invalid_form_tokens_do_not_consume_rate_limit_quota(self) -> None:
+        state = DashboardState(
+            runtime=runtime_snapshot(),
+            accounts=account_snapshot(),
+            external_models=external_snapshot(),
+            flash="Ready.",
+            external_action=external_action(),
+        )
+        app = FakeApp(state)
+        limiter = WebPostRateLimiter(clock=lambda: 0.0)
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(app, post_rate_limiter=limiter),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            missing_status, missing_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                "action=sync",
+            )
+            bad_csrf_body = web_ui_form_body(server.server_port, {"action": "sync"})
+            bad_csrf_body = re.sub(
+                rf"({re.escape(WEB_FORM_CSRF_FIELD)}=)[^&]+",
+                r"\1wrong-csrf",
+                bad_csrf_body,
+            )
+            bad_csrf_status, bad_csrf_response_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                bad_csrf_body,
+            )
+            statuses = [
+                post_web_ui_form(
+                    server.server_port,
+                    "/action",
+                    web_ui_form_body(server.server_port, {"action": "sync"}),
+                )[0]
+                for _ in range(10)
+            ]
+            limited_status, limited_body = post_web_ui_form(
+                server.server_port,
+                "/action",
+                web_ui_form_body(server.server_port, {"action": "sync"}),
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(missing_status, HTTPStatus.UNAUTHORIZED)
+        self.assertIn("WEB_INGRESS_WEB_TOKEN_REJECTED", missing_body)
+        self.assertEqual(bad_csrf_status, HTTPStatus.FORBIDDEN)
+        self.assertIn("WEB_INGRESS_CSRF_REJECTED", bad_csrf_response_body)
+        self.assertEqual(statuses, [HTTPStatus.OK] * 10)
+        self.assertEqual(limited_status, HTTPStatus.TOO_MANY_REQUESTS)
+        self.assertIn(WEB_RATE_LIMIT_MACHINE_ERROR_CODE, limited_body)
+        self.assertEqual(app.actions, [{"action": "sync"}] * 10)
+
+    def test_web_ui_rejects_public_bind_without_explicit_unsafe_flag(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            web_ui.main(["--host", "0.0.0.0", "--port", "0"])
+
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_web_ui_main_rotates_runtime_web_token_and_deletes_on_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            managed_dir = root / "managed"
+            observed_tokens: list[str] = []
+            observed_modes: list[int] = []
+            server_closed: list[bool] = []
+
+            class OneShotServer:
+                def __init__(self, address: tuple[str, int], handler: object) -> None:
+                    self.server_address = address
+                    self.RequestHandlerClass = handler
+
+                def serve_forever(self) -> None:
+                    token_path = managed_dir / WEB_TOKEN_FILENAME
+                    observed_tokens.append(token_path.read_text(encoding="utf-8"))
+                    observed_modes.append(token_path.stat().st_mode & 0o777)
+
+                def server_close(self) -> None:
+                    server_closed.append(True)
+
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(managed_dir),
+            }
+            with (
+                mock.patch.dict(os.environ, env_updates, clear=False),
+                mock.patch.object(web_ui, "ThreadingHTTPServer", OneShotServer),
+                mock.patch("builtins.print") as print_call,
+            ):
+                first_result = web_ui.main(["--host", "127.0.0.1", "--port", "0"])
+                second_result = web_ui.main(["--host", "127.0.0.1", "--port", "0"])
+
+            printed_text = "\n".join(str(call) for call in print_call.call_args_list)
+            self.assertEqual(first_result, 0)
+            self.assertEqual(second_result, 0)
+            self.assertEqual(observed_modes, [0o600, 0o600])
+            self.assertEqual(len(observed_tokens), 2)
+            self.assertNotEqual(observed_tokens[0], observed_tokens[1])
+            self.assertEqual(server_closed, [True, True])
+            self.assertFalse((managed_dir / WEB_TOKEN_FILENAME).exists())
+            self.assertNotIn(observed_tokens[0], printed_text)
+            self.assertNotIn(observed_tokens[1], printed_text)
 
     def test_http_handler_recovers_unknown_get_route(self) -> None:
         state = DashboardState(

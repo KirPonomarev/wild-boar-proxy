@@ -72,13 +72,13 @@ def operator_status() -> dict[str, object]:
         "status": {
             "status": "ok",
             "machine_error_code": "OK",
-            "configured_model": "gpt-5.3-codex",
+            "configured_model": "gpt-5.5",
         },
         "claim_gate": {"status": "passed"},
         "models": {
             "ok": True,
             "server_issued": True,
-            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "model_ids": ["gpt-5.5", "gpt-5.4"],
         },
     }
 
@@ -118,8 +118,8 @@ class CustomCodexModelGridBoundAuthorityR1Tests(unittest.TestCase):
         packet = build_custom_model_registry_packet(operator_status(), api_snapshot=api_snapshot())
 
         rows = {entry["model_id"]: entry for entry in packet["available_models"]}
-        self.assertEqual(packet["selectable_model_count"], 3)
-        self.assertEqual(packet["disabled_model_count"], 2)
+        self.assertEqual(packet["selectable_model_count"], 2)
+        self.assertEqual(packet["disabled_model_count"], 3)
         self.assertFalse(rows["wbp-disabled-openrouter"]["selection_enabled"])
         self.assertEqual(rows["wbp-disabled-openrouter"]["selection_state"], "disabled")
         self.assertEqual(
@@ -138,8 +138,8 @@ class CustomCodexModelGridBoundAuthorityR1Tests(unittest.TestCase):
 
         self.assertEqual(packet["allowed_browser_fields"], ["model_id"])
         self.assertTrue(all(value is False for value in packet["browser_authority"].values()))
-        self.assertEqual(packet["selectable_model_count"], 3)
-        self.assertEqual(packet["disabled_model_count"], 2)
+        self.assertEqual(packet["selectable_model_count"], 2)
+        self.assertEqual(packet["disabled_model_count"], 3)
         rows = {entry["model_id"]: entry for entry in packet["models"]}
         self.assertEqual(rows["wbp-disabled-openrouter"]["selection_state"], "disabled")
         self.assertEqual(rows["wbp-missing-secret"]["selection_state"], "disabled")
@@ -165,7 +165,7 @@ class CustomCodexModelGridBoundAuthorityR1Tests(unittest.TestCase):
     def test_browser_cannot_supply_provider_wire_api_base_url_or_auth_path(self) -> None:
         packet = build_custom_model_dry_run_packet(
             {
-                "model_id": "gpt-5.3-codex",
+                "model_id": "gpt-5.5",
                 "provider": "openai",
                 "wire_api": "chat_completions",
                 "model_provider": "browser-owned",

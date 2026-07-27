@@ -1,6 +1,0 @@
-{
-  "note": "Live launch observed a custom process, but idle baseline drift on protected surfaces prevents attributing default-surface changes to the custom launch or proving respect by write location.",
-  "reason_class": "WRITE_ATTRIBUTION_AMBIGUOUS_WITH_ACTIVE_CURRENT_CODEX_BASELINE_DRIFT",
-  "status": "blocked",
-  "user_data_dir_respected": false
-}

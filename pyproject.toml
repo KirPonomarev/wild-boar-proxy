@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wild-boar-proxy"
+version = "0.0.0"
+description = "Experimental companion control app for Codex and CLIProxyAPI"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.scripts]
+wild-boar-proxy = "wild_boar_proxy.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["wild_boar_proxy*"]
+
+[tool.setuptools.package-data]
+wild_boar_proxy = [
+  "web_design_ui/*.html",
+  "web_design_ui/*.md",
+  "web_design_ui/styles/*.css",
+  "web_design_ui/scripts/*.js",
+  "web_design_ui/fixtures/*.json",
+  "web_design_ui/assets/*.png",
+  "web_design_ui/assets/icons/phosphor/*.png",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "contract: command/API contract tests",
+  "smoke: local smoke tests",
+  "integration: external/system integration tests",
+  "requires_codex: requires codex binary",
+  "macos: requires macOS",
+  "slow: slow audit/probe tests",
+]

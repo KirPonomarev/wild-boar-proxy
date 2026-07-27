@@ -16,6 +16,9 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 from . import errors
 
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 5.0
+DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES = 16 * 1024 * 1024
+RESPONSE_READ_CHUNK_BYTES = 65536
+UNKNOWN_LENGTH_READ_CHUNK_BYTES = 1
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,108 @@ def _open_request(request: urllib.request.Request, *, timeout_seconds: float):
     return urllib.request.urlopen(request, timeout=timeout_seconds)
 
 
+def _set_response_socket_timeout(response: Any, timeout_seconds: float) -> None:
+    candidates = [
+        response,
+        getattr(response, "_sock", None),
+        getattr(response, "_fp", None),
+        getattr(getattr(response, "_fp", None), "fp", None),
+        getattr(getattr(getattr(response, "_fp", None), "fp", None), "raw", None),
+        getattr(
+            getattr(getattr(getattr(response, "_fp", None), "fp", None), "raw", None),
+            "_sock",
+            None,
+        ),
+        getattr(response, "fp", None),
+        getattr(getattr(response, "fp", None), "raw", None),
+        getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None),
+    ]
+    for candidate in candidates:
+        setter = getattr(candidate, "settimeout", None)
+        if callable(setter):
+            try:
+                setter(max(timeout_seconds, 0.001))
+            except OSError:
+                return
+            return
+
+
+def _response_content_length(response: Any) -> int | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        info = getattr(response, "info", None)
+        if callable(info):
+            headers = info()
+    value = None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        value = getter("Content-Length")
+    if value is None:
+        return None
+    try:
+        length = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if length < 0:
+        return None
+    return length
+
+
+def _is_complete_json_document(raw: bytes) -> bool:
+    if not raw:
+        return False
+    try:
+        text = raw.decode("utf-8")
+        _, end = json.JSONDecoder().raw_decode(text)
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return not text[end:].strip()
+
+
+def _raise_response_body_too_large() -> None:
+    raise RuntimeErrorInfo(
+        "Provider response body exceeded the configured byte limit.",
+        machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
+        operator_action="retry",
+    )
+
+
+def _read_response_body(
+    response: Any,
+    *,
+    started_at: float,
+    timeout_seconds: float,
+    max_body_bytes: int = DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES,
+) -> bytes:
+    deadline = started_at + max(timeout_seconds, 0.001)
+    body = bytearray()
+    content_length = _response_content_length(response)
+    if max_body_bytes < 1:
+        _raise_response_body_too_large()
+    if content_length is not None and content_length > max_body_bytes:
+        _raise_response_body_too_large()
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Provider response read timed out.")
+        _set_response_socket_timeout(response, remaining)
+        if content_length is not None:
+            unread = content_length - len(body)
+            if unread <= 0:
+                return bytes(body)
+            read_size = min(RESPONSE_READ_CHUNK_BYTES, unread)
+        else:
+            read_size = UNKNOWN_LENGTH_READ_CHUNK_BYTES
+        chunk = response.read(read_size)
+        if not chunk:
+            return bytes(body)
+        if len(body) + len(chunk) > max_body_bytes:
+            _raise_response_body_too_large()
+        body.extend(chunk)
+        if content_length is None and _is_complete_json_document(bytes(body)):
+            return bytes(body)
+
+
 def request_json(
     *,
     url: str,
@@ -40,6 +145,7 @@ def request_json(
     headers: dict[str, str],
     payload: dict[str, Any] | None = None,
     timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+    max_body_bytes: int = DEFAULT_PROVIDER_MAX_RESPONSE_BODY_BYTES,
 ) -> HttpJsonResponse:
     data = None
     if payload is not None:
@@ -50,7 +156,12 @@ def request_json(
     started_at = time.monotonic()
     try:
         with _open_request(request, timeout_seconds=timeout_seconds) as response:
-            raw = response.read()
+            raw = _read_response_body(
+                response,
+                started_at=started_at,
+                timeout_seconds=timeout_seconds,
+                max_body_bytes=max_body_bytes,
+            )
             parsed = json.loads(raw.decode("utf-8"))
             return HttpJsonResponse(
                 status_code=response.status,
@@ -58,7 +169,12 @@ def request_json(
                 latency_ms=int((time.monotonic() - started_at) * 1000),
             )
     except urllib.error.HTTPError as exc:
-        body = exc.read()
+        body = _read_response_body(
+            exc,
+            started_at=started_at,
+            timeout_seconds=timeout_seconds,
+            max_body_bytes=max_body_bytes,
+        )
         try:
             parsed = json.loads(body.decode("utf-8"))
         except Exception:
