@@ -2525,3 +2525,56 @@ Failover invariants:
 `accounts failover-matrix --json` returns one core command packet wrapping the
 deterministic scenario summary. Each scenario receipt is itself a core command
 packet and must pass `inspect_command_packet_semantics` with zero violations.
+
+## Additional DeepSeek route profile and credential lifecycle contract surface
+
+`external-models deepseek-profile --json` is the deterministic synthetic proof
+owner surface for the DeepSeek provider lane (web v0.1.0). It does not perform
+live dispatch and does not require live credentials.
+
+The CLIProxyAPI engine remains the owner of low-level provider dispatch and
+HTTP traffic. WBP owns the control-layer DeepSeek route profile, credential
+provenance contract, validate/stream/tool error taxonomy, and the route
+lifecycle receipt.
+
+Credential contract:
+
+- the credential value never appears in any packet, log, argv, or stored route
+  definition;
+- only an opaque credential reference (`DEEPSEEK_API_KEY`) and a
+  presence/provenance proof are exposed;
+- the credential source must be owner-controlled (owner env or owner CLI); a
+  browser-supplied raw key is never an admitted source;
+- the provenance digest (SHA-256 of the credential value) is recorded only when
+  the source is admitted, and the digest is opaque, not the value.
+
+Capability matrix (declared, deterministic; declared != live-verified):
+
+- text: true
+- stream: true
+- tool: true
+- thinking: true
+- vision: false
+- web_search: false
+
+Dispatch error taxonomy (control-layer normalization):
+
+- `OK`
+- `route_disabled`
+- `missing_credential`
+- `invalid_credential` (401/403)
+- `model_not_available` (404)
+- `quota_exhausted` (429)
+- `network_failed` (5xx, 408, no response)
+- `invalid_upstream_response` (200 but body not observable)
+- `stream_incomplete`
+- `tool_unsupported`
+
+The synthetic proof builds the canonical route definition, classifies credential
+provenance from a synthetic owner-env source, runs a 12-scenario dispatch test
+matrix (non-stream/stream/tool success + every error class), and returns one
+core command packet wrapping the proof summary. Every scenario packet passes
+`inspect_command_packet_semantics` with zero violations, and no raw provider
+key value (`sk-...`) appears in any packet body.
+
+Live exact-response proof is reserved for W13.
