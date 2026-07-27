@@ -55,6 +55,7 @@ from .repeatable_proof_status import run_repeatable_proof_status_command
 from . import web_lifecycle
 from . import account_pool_failover
 from . import deepseek_route_profile
+from . import dual_lane_context
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -1767,6 +1768,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         required=True,
     )
+
+    router_hook_dual_lane_proof = router_hook_subparsers.add_parser(
+        "dual-lane-proof",
+        help="Named dual-lane context continuity + delegation synthetic proof",
+    )
+    router_hook_dual_lane_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3570,6 +3577,11 @@ def main(argv: list[str] | None = None) -> int:
                     probe_codex_app_server=True,
                 )
             )
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "dual-lane-proof"
+        ):
+            return emit_json(dual_lane_context.run_dual_lane_synthetic_proof_summary())
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
