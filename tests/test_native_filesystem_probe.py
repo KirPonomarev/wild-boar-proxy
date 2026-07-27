@@ -3391,6 +3391,20 @@ class NativeFilesystemProbeTests(unittest.TestCase):
     def test_owner_execution_probe_entrypoint_no_evidence_blocks(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         tool = repo_root / "tools" / "native_custom_owner_external_terminal_execution_probe.py"
+        # Derive the canonical quiescent-safety-retry command from repo_root so
+        # the test is path-agnostic and passes in any worktree (primary, plan,
+        # or CI clone), matching the probe's runtime-derived expected command.
+        root_str = str(repo_root)
+        evidence_dir_name = (
+            "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
+        )
+        external_evidence_dir = f"{root_str}/audit_results/{evidence_dir_name}"
+        shell_command = (
+            f"cd {root_str} && python3 "
+            f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py "
+            f"--repo-root {root_str} "
+            f"--evidence-dir {external_evidence_dir}"
+        )
         with tempfile.TemporaryDirectory(
             dir=repo_root / "audit_results",
             prefix="owner_execution_test_",
@@ -3400,32 +3414,22 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             command = {
                 "argv": [
                     "python3",
-                    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py",
+                    f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py",
                     "--repo-root",
-                    "/Volumes/Work/wild-boar-proxy",
+                    root_str,
                     "--evidence-dir",
-                    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+                    external_evidence_dir,
                 ],
                 "command_executed": False,
-                "cwd": "/Volumes/Work/wild-boar-proxy",
-                "evidence_dir": (
-                    "/Volumes/Work/wild-boar-proxy/audit_results/"
-                    "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
-                ),
+                "cwd": root_str,
+                "evidence_dir": external_evidence_dir,
                 "external_result_imported": False,
                 "native_launch_attempted_from_current_thread": False,
                 "packet_kind": "external_detached_command",
-                "shell_command": (
-                "cd /Volumes/Work/wild-boar-proxy && python3 "
-                "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py "
-                "--repo-root /Volumes/Work/wild-boar-proxy "
-                "--evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/"
-                "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
-                ),
+                "shell_command": shell_command,
                 "status": "ok",
                 "target_tool": (
-                    "/Volumes/Work/wild-boar-proxy/tools/"
-                    "native_custom_quiescent_safety_retry_probe.py"
+                    f"{root_str}/tools/native_custom_quiescent_safety_retry_probe.py"
                 ),
             }
             handoff_packet.write_text(json.dumps(command), encoding="utf-8")

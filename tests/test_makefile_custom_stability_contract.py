@@ -130,7 +130,22 @@ class MakefileCustomStabilityContractTests(unittest.TestCase):
                 self.assertIn("must not synthesize", normalized)
                 self.assertIn("visible", normalized)
                 self.assertIn("repo_bridge_evidence_response_proven=true", normalized)
-                self.assertIn("non-exact direct reply text is not", normalized)
+                self.assertIn("direct_reply_visible_output_proven=true", normalized)
+                # The non-exact direct-reply output proof requires a positive
+                # provider response plus route-bound allowlist enforcement and
+                # must reject fallback/imitation/repo-tool/repo-bridge/backend/
+                # secret exposure. The exact wording evolved with the
+                # direct_reply_visible_output_proven contract; the documents
+                # must keep stating that non-exact text alone is insufficient.
+                self.assertTrue(
+                    "non-exact direct reply text is not" in normalized
+                    or "merely available non-exact text is not" in normalized
+                    or "merely available non-exact text remains insufficient"
+                    in normalized
+                    or "Merely available non-exact text remains insufficient"
+                    in normalized,
+                    msg="non-exact direct-reply output must remain insufficient",
+                )
 
 
 if __name__ == "__main__":

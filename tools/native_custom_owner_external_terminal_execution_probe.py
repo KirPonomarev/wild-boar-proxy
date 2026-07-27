@@ -34,13 +34,29 @@ from wild_boar_proxy.native_filesystem_probe import (
 )
 
 
-EXPECTED_SHELL_COMMAND = (
-    "cd /Volumes/Work/wild-boar-proxy && python3 "
-    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py "
-    "--repo-root /Volumes/Work/wild-boar-proxy "
-    "--evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/"
+# The probe verifies that the owner-reported external command matches the
+# canonical quiescent-safety-retry probe invocation bound to the current
+# repository root. The path is derived from repo_root at runtime so the probe
+# remains correct in any checkout (primary worktree, plan-owned worktree, or
+# CI clone) instead of being pinned to a single absolute path.
+EXTERNAL_EVIDENCE_DIR_NAME = (
     "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
 )
+
+
+def expected_shell_command_for(repo_root: Path) -> str:
+    root = str(repo_root)
+    return (
+        f"cd {root} && python3 "
+        f"{root}/tools/native_custom_quiescent_safety_retry_probe.py "
+        f"--repo-root {root} "
+        f"--evidence-dir {root}/audit_results/{EXTERNAL_EVIDENCE_DIR_NAME}"
+    )
+
+
+# Kept for backwards compatibility with callers that import the constant; the
+# runtime path derives from repo_root via expected_shell_command_for().
+EXPECTED_SHELL_COMMAND = expected_shell_command_for(ROOT)
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
@@ -249,7 +265,7 @@ def main() -> int:
     current_thread_boundary = build_current_thread_boundary_packet()
     command_reverification = build_owner_command_reverification_packet(
         handoff_command_packet=handoff_command,
-        expected_shell_command=EXPECTED_SHELL_COMMAND,
+        expected_shell_command=expected_shell_command_for(repo_root),
         external_evidence_dir=external_evidence_dir,
         repo_root=repo_root,
     )
