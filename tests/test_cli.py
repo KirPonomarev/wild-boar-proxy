@@ -24318,6 +24318,24 @@ class CliTests(unittest.TestCase):
             profiles = [root / "profile-a", root / "profile-b"]
             for profile in profiles:
                 profile.mkdir()
+            # Pre-create the shared launch-lock directory with owner-only
+            # permissions before spawning the two competing launcher scripts.
+            # The production launcher creates this directory once during
+            # onboarding; in this concurrency test, leaving its creation to
+            # two parallel `mkdir -p` + `chmod 700` + `stat` checks inside
+            # acquire_launch_env_lock exposes a benign startup race that only
+            # surfaces under full-suite CPU load. Pre-creating it matches the
+            # real launcher steady state and makes the test deterministic.
+            shared_lock_dir = (
+                owner_home
+                / ".codex-custom-cli"
+                / "managed"
+                / "launch-locks"
+                / "launch-env.lock"
+            )
+            shared_lock_dir.parent.mkdir(parents=True, exist_ok=True)
+            shared_lock_dir.parent.chmod(0o700)
+            shared_lock_dir.touch()
             active_file = root / "active"
             overlap_file = root / "overlap"
             script = root / "lock.sh"
