@@ -53,6 +53,7 @@ from .e2e_mode_matrix import run_e2e_mode_matrix_command
 from .fresh_router_ready_proof import run_fresh_router_ready_proof_command
 from .repeatable_proof_status import run_repeatable_proof_status_command
 from . import web_lifecycle
+from . import account_pool_failover
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -217,6 +218,7 @@ from .runtime_repair import run_healthcheck_repair
 from .runtime import (
     RuntimeErrorInfo,
     RuntimePaths,
+    build_command_payload,
     _health_probe_dependencies,
     _healthcheck_repair_dependencies,
     export_diagnostics,
@@ -1812,6 +1814,11 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_login_cancel = accounts_login_subparsers.add_parser("cancel")
     accounts_login_cancel.add_argument("--session", required=True)
     accounts_login_cancel.add_argument("--json", action="store_true", required=True)
+    accounts_failover_matrix = accounts_subparsers.add_parser(
+        "failover-matrix",
+        help="Запустить детерминированную synthetic failover matrix",
+    )
+    accounts_failover_matrix.add_argument("--json", action="store_true", required=True)
 
     diagnostics = subparsers.add_parser("diagnostics", help="Собрать redacted диагностику")
     diagnostics_subparsers = diagnostics.add_subparsers(
@@ -3578,6 +3585,51 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_release(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "retire":
             return emit_json(run_retire(paths, args.id))
+        if args.command == "accounts" and args.accounts_command == "failover-matrix":
+            matrix = account_pool_failover.run_synthetic_failover_matrix()
+            # Emit a single packet wrapping the deterministic matrix summary.
+            from .core import packets as _core_packets
+
+            scenarios = [
+                {
+                    "scenario": s["scenario"],
+                    "status": s["receipt"]["status"],
+                    "machine_error_code": s["receipt"]["machine_error_code"],
+                    "admitted": s["receipt"]["decision"]["admitted"],
+                    "replacement_account_ref": s["receipt"]["decision"][
+                        "replacement_account_ref"
+                    ],
+                }
+                for s in matrix
+            ]
+            violations = []
+            for s in matrix:
+                violations.extend(_core_packets.inspect_command_packet_semantics(s["receipt"]))
+            return emit_json(
+                build_command_payload(
+                    ok=not violations,
+                    human_message=(
+                        "Synthetic failover matrix complete; all scenario receipts "
+                        "conform to the shared core packet contract."
+                        if not violations
+                        else "Synthetic failover matrix had packet-contract violations."
+                    ),
+                    machine_error_code="OK" if not violations else "FAILOVER_MATRIX_PACKET_VIOLATIONS",
+                    operator_action="none" if not violations else "stop",
+                    liveness="healthy" if not violations else "degraded",
+                    severity="recoverable",
+                    changed_files=[],
+                    effect="read",
+                    extra={
+                        "scenario_count": len(scenarios),
+                        "scenarios": scenarios,
+                        "packet_violations": violations,
+                        "max_replacement_dispatches_per_request": (
+                            account_pool_failover.MAX_REPLACEMENT_DISPATCHES_PER_REQUEST
+                        ),
+                    },
+                )
+            )
         if args.command == "accounts" and args.accounts_command == "onboard":
             return emit_json(
                 run_onboard(

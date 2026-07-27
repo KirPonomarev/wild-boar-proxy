@@ -2482,3 +2482,46 @@ Field meaning rules:
 - candidate existence alone must never produce top-level `OK`
 - persisted last-known-good proxy truth must never by itself change top-level
   `status`, `liveness`, `machine_error_code`, `endpoint`, or `current_proxy_url`
+
+## Additional dedicated account pool failover contract surface
+
+`accounts failover-matrix --json` is the deterministic synthetic proof owner
+surface for the WBP control-layer request-bound failover contract. It does not
+require live credentials and does not dispatch provider traffic.
+
+The failover contract is a narrow control-layer boundary. The CLIProxyAPI
+engine remains the owner of low-level provider dispatch, routing, and
+balancing. WBP owns:
+
+- typed outcome normalization (engine dispatch result -> quota / auth /
+  cooldown / network / unknown failure class, or success, or ambiguous);
+- dedicated-account provenance guard (the failing and replacement accounts
+  must be dedicated-provenance-proven; Original/main account is excluded
+  without reading its auth);
+- eligibility and policy decision (manual_hold / cooldown / retired / reserve
+  accounts are excluded; the failed account is not reselected for the same
+  request);
+- exactly-one replacement admission (at most one replacement dispatch per
+  request id after a typed eligible failure);
+- observable serving-account/switch receipt (strict core command packet; the
+  serving opaque account ref is visible; no auth material is ever exposed).
+
+Failover invariants:
+
+- dedicated accounts only;
+- quota / auth / cooldown are the only failure classes eligible for an
+  automatic request-bound replacement;
+- network and unknown failures are NOT eligible (a network failure may be
+  transient client-side; an unknown failure must not trigger a silent switch);
+- ambiguous delivery never replaces (retrying an already-delivered request is
+  unsafe);
+- ambiguous dispatch retries = 0;
+- replacement dispatch maximum = 1 per request;
+- a failed account is not selected again for the same request;
+- manual_hold / cooldown / retired / reserve accounts are excluded;
+- a switch is never silent;
+- the serving opaque account ref is visible in the receipt.
+
+`accounts failover-matrix --json` returns one core command packet wrapping the
+deterministic scenario summary. Each scenario receipt is itself a core command
+packet and must pass `inspect_command_packet_semantics` with zero violations.
