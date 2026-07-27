@@ -57,6 +57,7 @@ from . import account_pool_failover
 from . import deepseek_route_profile
 from . import dual_lane_context
 from . import persistent_profile_compat
+from . import web_core_action_ledger
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -1780,6 +1781,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Persistent Custom profile + Codex update compatibility synthetic proof",
     )
     router_hook_persistent_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_web_core_actions_proof = router_hook_subparsers.add_parser(
+        "web-core-actions-proof",
+        help="Web core action ledger + disabled-reason matrix synthetic proof",
+    )
+    router_hook_web_core_actions_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3593,6 +3599,11 @@ def main(argv: list[str] | None = None) -> int:
             and args.router_hook_command == "persistent-profile-proof"
         ):
             return emit_json(persistent_profile_compat.run_persistent_profile_synthetic_proof_summary())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "web-core-actions-proof"
+        ):
+            return emit_json(web_core_action_ledger.run_web_core_actions_synthetic_proof())
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
