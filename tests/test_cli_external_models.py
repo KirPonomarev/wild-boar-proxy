@@ -771,7 +771,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(credential_result["source"], "owner-env")
         self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
         self.assertFalse(credential_result["credential_present"])
-        self.assertEqual(credential_result["supported_sources"], ["owner-env"])
+        self.assertEqual(credential_result["supported_sources"], ["owner-env", "owner-keychain"])
         self.assertEqual(
             credential_result["expected_refs"],
             [
@@ -807,7 +807,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(credential_result["status"], "missing")
         self.assertFalse(credential_result["credential_present"])
         self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
-        self.assertEqual(credential_result["supported_sources"], ["owner-env"])
+        self.assertEqual(credential_result["supported_sources"], ["owner-env", "owner-keychain"])
         self.assertEqual(
             credential_result["expected_refs"],
             [
