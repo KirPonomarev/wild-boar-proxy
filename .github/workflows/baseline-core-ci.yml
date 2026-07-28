@@ -52,3 +52,5 @@ jobs:
         # Custom-stability exercises a constrained PATH and a runtime python;
         # run it under the same constrained environment as the Makefile target.
         run: make test-custom-stability
+      - name: make test-web-e2e
+        run: make test-web-e2e

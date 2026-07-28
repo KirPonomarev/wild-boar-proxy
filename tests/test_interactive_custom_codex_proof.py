@@ -233,6 +233,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             _write_fresh_custom_ledger(paths)
             packet = interactive.run_interactive_custom_codex_preflight_command(
                 paths=paths,
+                probe_codex_app_server=False,
                 prompt_text=PROMPT,
                 proof_dir=str(root / "proof"),
             )
@@ -257,6 +258,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             self.assertFalse(ledger_path.exists())
             packet = interactive.run_interactive_custom_codex_preflight_command(
                 paths=paths,
+                probe_codex_app_server=False,
                 prompt_text=PROMPT,
                 proof_dir=str(root / "proof"),
             )
@@ -282,6 +284,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             ):
                 packet = interactive.run_interactive_custom_codex_preflight_command(
                     paths=paths,
+                    probe_codex_app_server=False,
                     prompt_text=PROMPT,
                     proof_dir=str(root / "proof"),
                 )
@@ -307,6 +310,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             proof_dir = root / "proof"
             preflight = interactive.run_interactive_custom_codex_preflight_command(
                 paths=paths,
+                probe_codex_app_server=False,
                 prompt_text=PROMPT,
                 proof_dir=str(proof_dir),
             )
@@ -361,6 +365,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             proof_dir = root / "proof"
             interactive.run_interactive_custom_codex_preflight_command(
                 paths=paths,
+                probe_codex_app_server=False,
                 prompt_text=PROMPT,
                 proof_dir=str(proof_dir),
             )
@@ -404,6 +409,7 @@ class InteractiveCustomCodexProofTests(unittest.TestCase):
             proof_dir = root / "proof"
             interactive.run_interactive_custom_codex_preflight_command(
                 paths=paths,
+                probe_codex_app_server=False,
                 prompt_text=PROMPT,
                 proof_dir=str(proof_dir),
             )
