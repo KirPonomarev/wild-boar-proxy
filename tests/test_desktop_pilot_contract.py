@@ -50,27 +50,36 @@ class DesktopPilotReceiptTests(unittest.TestCase):
 
 
 class FinalAssuranceTests(unittest.TestCase):
+    _SHA_WEB = "a" * 40
+    _SHA_PROVIDER = "b" * 40
+    _SHA_DESKTOP = "c" * 40
+
     def test_done_when_all_present(self) -> None:
         r = dpc.run_final_assurance_audit(
-            web_release_sha="a", provider_release_sha="b", desktop_release_sha="c",
+            web_release_sha=self._SHA_WEB,
+            provider_release_sha=self._SHA_PROVIDER,
+            desktop_release_sha=self._SHA_DESKTOP,
             safety_counters_zero=True, user_wip_preserved=True,
             no_plan_owned_processes=True, no_repo_master_plan=True,
         )
         _assert_semantics(self, r)
         self.assertEqual(r["machine_error_code"], "WBP_MASTER_PLAN_V3_6_DONE")
 
-    def test_blocked_when_desktop_missing(self) -> None:
+    def test_invalid_identity_rejected(self) -> None:
         r = dpc.run_final_assurance_audit(
-            web_release_sha="a", provider_release_sha="b", desktop_release_sha="",
+            web_release_sha="fake", provider_release_sha="also_fake",
+            desktop_release_sha="totally_fake",
             safety_counters_zero=True, user_wip_preserved=True,
             no_plan_owned_processes=True, no_repo_master_plan=True,
         )
         _assert_semantics(self, r)
-        self.assertEqual(r["machine_error_code"], "FINAL_ASSURANCE_INCOMPLETE")
+        self.assertEqual(r["machine_error_code"], dpc.FINAL_ASSURANCE_INVALID_IDENTITY)
 
     def test_blocked_when_safety_nonzero(self) -> None:
         r = dpc.run_final_assurance_audit(
-            web_release_sha="a", provider_release_sha="b", desktop_release_sha="c",
+            web_release_sha=self._SHA_WEB,
+            provider_release_sha=self._SHA_PROVIDER,
+            desktop_release_sha=self._SHA_DESKTOP,
             safety_counters_zero=False, user_wip_preserved=True,
             no_plan_owned_processes=True, no_repo_master_plan=True,
         )

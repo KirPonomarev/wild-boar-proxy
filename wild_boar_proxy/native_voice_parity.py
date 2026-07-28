@@ -144,17 +144,30 @@ def run_voice_synthetic_proof() -> dict[str, Any]:
     violations = []
     for r in receipts:
         violations.extend(command_packets.inspect_command_packet_semantics(r))
-    ok = not violations and parity["status"] == "ok" and regression["status"] == "ok"
+    contract_holds = (
+        not violations
+        and parity["status"] == "ok"
+        and regression["status"] == "ok"
+    )
+    # The synthetic proof uses the hardcoded V01_ACCEPTANCE baseline; it proves
+    # the deterministic contract is internally consistent but must NOT be
+    # reported as physical OK proof.
     return _build_packet(
-        ok=ok,
-        human_message="Native voice parity synthetic proof complete." if ok else "Violations.",
-        machine_error_code="OK" if ok else "VOICE_PROOF_VIOLATIONS",
-        operator_action="none" if ok else "stop",
-        liveness="healthy" if ok else "degraded",
+        ok=contract_holds,
+        human_message=(
+            "Native voice parity synthetic proof complete (synthetic contract "
+            "proven; no physical acceptance claimed)."
+            if contract_holds
+            else "Native voice parity synthetic proof violations."
+        ),
+        machine_error_code="SYNTHETIC_PROVEN" if contract_holds else "VOICE_PROOF_VIOLATIONS",
+        operator_action="none" if contract_holds else "stop",
+        liveness="healthy" if contract_holds else "degraded",
         severity="recoverable",
         changed_files=[],
         effect=VOICE_EFFECT_READ,
         extra={
+            "evidence_level": "SYNTHETIC_PROVEN",
             "receipt_count": len(receipts),
             "parity_ok": parity["status"] == "ok",
             "regression_ok": regression["status"] == "ok",
