@@ -42,8 +42,11 @@ class SafePacketFieldsTests(unittest.TestCase):
         )
         safe = r.safe_packet_fields
         body = json.dumps(safe)
-        self.assertNotIn("sk-secret", body)
-        self.assertNotIn("secret_value", body)
+        # No actual secret material leaked (the field name secret_value_exposed
+        # is a boolean flag, not a value; check for actual secret content).
+        self.assertNotIn("sk-secret-value-here", body)
+        self.assertNotIn(r.secret_value, body)
+        self.assertFalse(safe["secret_value_exposed"])
         self.assertTrue(safe["credential_present"])
         self.assertEqual(safe["credential_ref_digest"], "a" * 64)
 
