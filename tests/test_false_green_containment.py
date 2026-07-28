@@ -86,10 +86,13 @@ class FinalAssuranceIdentityContainmentTests(unittest.TestCase):
         )
 
     def test_valid_40hex_shas_still_accepted_as_done(self) -> None:
+        # Real release commit SHAs resolved from the v0.1.0 / v0.2.0 / v0.3.0
+        # tags: only identities that resolve to existing commits are accepted.
+        shas = dpc._resolve_milestone_shas()
         r = dpc.run_final_assurance_audit(
-            web_release_sha="a" * 40,
-            provider_release_sha="b" * 40,
-            desktop_release_sha="c" * 40,
+            web_release_sha=shas["web_v0_1_0"],
+            provider_release_sha=shas["provider_v0_2_0"],
+            desktop_release_sha=shas["desktop_v0_3_0"],
             safety_counters_zero=True,
             user_wip_preserved=True,
             no_plan_owned_processes=True,
@@ -98,14 +101,21 @@ class FinalAssuranceIdentityContainmentTests(unittest.TestCase):
         _assert_semantics(self, r)
         self.assertEqual(r["machine_error_code"], "WBP_MASTER_PLAN_V3_6_DONE")
 
-    def test_validate_git_sha_shape(self) -> None:
-        self.assertTrue(dpc._validate_git_sha("a" * 40))
-        self.assertTrue(dpc._validate_git_sha("0123456789abcdef" * 2 + "0123456789ABCDEF"[:8]))
-        self.assertFalse(dpc._validate_git_sha("fake"))
-        self.assertFalse(dpc._validate_git_sha("a" * 39))
-        self.assertFalse(dpc._validate_git_sha("a" * 41))
-        self.assertFalse(dpc._validate_git_sha("g" * 40))  # non-hex
-        self.assertFalse(dpc._validate_git_sha(""))
+    def test_validate_git_sha_existence(self) -> None:
+        # Shape check helper still classifies well-formed 40-hex strings.
+        self.assertTrue(dpc._git_sha_is_hex("a" * 40))
+        self.assertTrue(dpc._git_sha_is_hex("0123456789abcdef" * 2 + "0123456789ABCDEF"[:8]))
+        self.assertFalse(dpc._git_sha_is_hex("fake"))
+        self.assertFalse(dpc._git_sha_is_hex("a" * 39))
+        self.assertFalse(dpc._git_sha_is_hex("a" * 41))
+        self.assertFalse(dpc._git_sha_is_hex("g" * 40))  # non-hex
+        self.assertFalse(dpc._git_sha_is_hex(""))
+        # The strict validator must reject a well-shaped-but-nonexistent SHA
+        # (it does not exist as a commit in the repo) and accept a real one.
+        self.assertFalse(dpc._validate_git_sha("a" * 40))
+        self.assertFalse(dpc._validate_git_sha("0123456789abcdef" * 2 + "0123456789ABCDEF"[:8]))
+        shas = dpc._resolve_milestone_shas()
+        self.assertTrue(dpc._validate_git_sha(shas["web_v0_1_0"]))
 
 
 class KimiGlmRouteDefinitionContainmentTests(unittest.TestCase):

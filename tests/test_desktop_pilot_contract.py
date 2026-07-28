@@ -50,9 +50,13 @@ class DesktopPilotReceiptTests(unittest.TestCase):
 
 
 class FinalAssuranceTests(unittest.TestCase):
-    _SHA_WEB = "a" * 40
-    _SHA_PROVIDER = "b" * 40
-    _SHA_DESKTOP = "c" * 40
+    # Real release commit SHAs resolved from the v0.1.0 / v0.2.0 / v0.3.0 tags.
+    # The audit now validates that each identity resolves to an existing commit
+    # in the repo, so placeholder SHAs like "a"*40 are rejected.
+    _SHAS = dpc._resolve_milestone_shas()
+    _SHA_WEB = _SHAS["web_v0_1_0"]
+    _SHA_PROVIDER = _SHAS["provider_v0_2_0"]
+    _SHA_DESKTOP = _SHAS["desktop_v0_3_0"]
 
     def test_done_when_all_present(self) -> None:
         r = dpc.run_final_assurance_audit(
@@ -74,6 +78,20 @@ class FinalAssuranceTests(unittest.TestCase):
         )
         _assert_semantics(self, r)
         self.assertEqual(r["machine_error_code"], dpc.FINAL_ASSURANCE_INVALID_IDENTITY)
+
+    def test_well_shaped_but_nonexistent_sha_rejected(self) -> None:
+        # "a"*40 is a valid SHA shape but does not exist as a commit: the audit
+        # must reject it rather than accept it on shape alone.
+        r = dpc.run_final_assurance_audit(
+            web_release_sha="a" * 40,
+            provider_release_sha=self._SHA_PROVIDER,
+            desktop_release_sha=self._SHA_DESKTOP,
+            safety_counters_zero=True, user_wip_preserved=True,
+            no_plan_owned_processes=True, no_repo_master_plan=True,
+        )
+        _assert_semantics(self, r)
+        self.assertEqual(r["machine_error_code"], dpc.FINAL_ASSURANCE_INVALID_IDENTITY)
+        self.assertEqual(r["invalid_identities"], ["web_release_sha"])
 
     def test_blocked_when_safety_nonzero(self) -> None:
         r = dpc.run_final_assurance_audit(
@@ -98,7 +116,7 @@ class SyntheticProofTests(unittest.TestCase):
         _assert_semantics(self, s)
         self.assertEqual(s["status"], "ok")
         self.assertTrue(s["done_when_all_present"])
-        self.assertTrue(s["blocked_when_desktop_missing"])
+        self.assertTrue(s["blocked_when_safety_nonzero"])
 
 
 if __name__ == "__main__":

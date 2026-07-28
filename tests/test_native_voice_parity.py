@@ -12,22 +12,40 @@ def _assert(t, p):
     t.assertEqual(v, [], f"violations: {v}")
 
 class VoiceParityTests(unittest.TestCase):
-    def test_all_acceptance_met(self):
+    _SYNTHETIC_OBS = [{"step": "icon_check", "result": "observed", "evidence": "synthetic"}]
+
+    def test_unproven_without_observations(self):
         r = vp.build_voice_parity_receipt()
         _assert(self, r)
+        self.assertEqual(r["machine_error_code"], "VOICE_STATUS_UNPROVEN")
+        self.assertFalse(r["observations_provided"])
+
+    def test_all_acceptance_met(self):
+        r = vp.build_voice_parity_receipt(
+            acceptance=vp.V01_ACCEPTANCE, observations=self._SYNTHETIC_OBS,
+        )
+        _assert(self, r)
         self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["machine_error_code"], "OK")
         self.assertTrue(r["no_browser_bridge"])
         self.assertTrue(r["no_auto_submit"])
+        self.assertTrue(r["observations_provided"])
 
     def test_forbidden_action_detected(self):
-        r = vp.build_voice_parity_receipt(forbidden={"clipboard_paste_bridge": True})
+        r = vp.build_voice_parity_receipt(
+            acceptance=vp.V01_ACCEPTANCE,
+            forbidden={"clipboard_paste_bridge": True},
+            observations=self._SYNTHETIC_OBS,
+        )
         _assert(self, r)
         self.assertEqual(r["status"], "error")
 
     def test_acceptance_not_met(self):
-        r = vp.build_voice_parity_receipt(acceptance={"native_voice_shortcut_available": False, "native_voice_icon_observed": True,
-            "microphone_permission_proven": True, "custom_profile_bound": True,
-            "original_codex_mutated": False, "transcript_visible_in_composer": True, "prompt_auto_submitted": False})
+        bad_acc = dict(vp.V01_ACCEPTANCE)
+        bad_acc["native_voice_shortcut_available"] = False
+        r = vp.build_voice_parity_receipt(
+            acceptance=bad_acc, observations=self._SYNTHETIC_OBS,
+        )
         _assert(self, r)
         self.assertEqual(r["status"], "error")
 
