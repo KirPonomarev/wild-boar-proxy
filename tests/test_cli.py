@@ -815,6 +815,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(process_result["exit_code"], 0)
         self.assertIn("validate-ok", process_result["stderr"])
 
+    def test_accounts_failover_dispatch_proof_cli_surface(self) -> None:
+        result = self.run_cli("accounts", "failover-dispatch-proof", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = self.parse_strict_json_object(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effect"], "read")
+        self.assertTrue(payload["quota_then_success"])
+        self.assertTrue(payload["ambiguous_no_retry"])
+        self.assertTrue(payload["network_no_replacement"])
+        self.assertTrue(payload["replacement_fails_once"])
+
+    def test_router_hook_voice_synthetic_proof_cli_surface_is_not_physical(self) -> None:
+        result = self.run_cli("router-hook", "voice-synthetic-proof", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = self.parse_strict_json_object(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "SYNTHETIC_PROVEN")
+        self.assertEqual(payload["effect"], "read")
+        self.assertEqual(payload["evidence_level"], "SYNTHETIC_PROVEN")
+        self.assertNotEqual(payload.get("evidence_level"), "PHYSICAL_PROVEN")
+
     def test_accounts_validate_nonzero_reports_bounded_process_result(self) -> None:
         result = self.run_cli_with_env(
             {"WBP_TEST_VALIDATE_FAIL_BACKEND_ID": "backend-a"},

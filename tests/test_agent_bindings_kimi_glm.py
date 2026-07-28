@@ -3,7 +3,9 @@
 from __future__ import annotations
 import unittest
 from wild_boar_proxy.custom_agent_bindings import (
-    default_agent_bindings, kimi_glm_additional_routes,
+    default_agent_bindings,
+    kimi_glm_additional_routes,
+    kimi_glm_additional_routes_from_records,
 )
 
 
@@ -59,6 +61,42 @@ class DefaultBindingsTests(unittest.TestCase):
         """Existing callers without additional_api_routes still work."""
         b = default_agent_bindings(primary_model_id="gpt-5", api_route_id="deepseek")
         self.assertEqual(len(b), 2)
+
+    def test_additional_routes_project_only_enabled_kimi_glm_records(self):
+        extra = kimi_glm_additional_routes_from_records(
+            [
+                {
+                    "route_id": "wbp-deepseek-chat",
+                    "provider": "deepseek",
+                    "display_name": "DIP",
+                    "enabled": True,
+                },
+                {
+                    "route_id": "wbp-kimi-primary",
+                    "provider": "kimi",
+                    "display_name": "Kimi",
+                    "lane_role": "kimi_api_lane",
+                    "enabled": True,
+                },
+                {
+                    "route_id": "wbp-glm-primary",
+                    "provider": "glm",
+                    "display_name": "GLM",
+                    "enabled": False,
+                },
+                {
+                    "route_id": "wbp-web-primary-openrouter",
+                    "provider": "openrouter",
+                    "display_name": "OpenRouter",
+                    "enabled": True,
+                },
+            ],
+            primary_api_route_id="wbp-deepseek-chat",
+        )
+
+        self.assertEqual([route["route_id"] for route in extra], ["wbp-kimi-primary"])
+        self.assertEqual(extra[0]["display_name"], "Kimi")
+        self.assertIn("Kimi", extra[0]["aliases"])
 
 
 if __name__ == "__main__":

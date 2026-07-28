@@ -128,7 +128,7 @@ def build_deepseek_route_definition(
         "enabled": enabled,
         "transform_profile": "deepseek_default",
         "response_profile": "openai_chat_completions",
-        "thinking": {"admitted": True, "default": False},
+        "thinking": {"type": "disabled"},
         "check_max_tokens": 4096,
     }
 

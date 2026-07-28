@@ -616,6 +616,117 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(selected, "wbp-web-primary-openrouter")
 
+    def test_custom_agent_default_bindings_project_kimi_glm_from_enabled_routes(self) -> None:
+        route_records = [
+            {
+                "route_id": "wbp-deepseek-chat",
+                "provider": "deepseek",
+                "display_name": "DeepSeek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+            {
+                "route_id": "wbp-kimi-primary",
+                "provider": "kimi",
+                "display_name": "Kimi",
+                "enabled": True,
+                "auth": {"secret_ref": "MOONSHOT_API_KEY"},
+            },
+            {
+                "route_id": "wbp-glm-primary",
+                "provider": "glm",
+                "display_name": "GLM",
+                "enabled": True,
+                "auth": {"secret_ref": "ZAI_API_KEY"},
+            },
+            {
+                "route_id": "wbp-web-primary-openrouter",
+                "provider": "openrouter",
+                "display_name": "OpenRouter",
+                "enabled": True,
+                "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+            },
+        ]
+
+        bindings = live_server._custom_agent_default_bindings_for_routes(
+            primary_model_id="gpt-5.5",
+            api_route_id="wbp-deepseek-chat",
+            route_records=route_records,
+        )
+
+        names = [binding["display_name"] for binding in bindings]
+        route_ids = [
+            binding.get("route_id")
+            for binding in bindings
+            if binding.get("lane") == live_server.API_ROUTE_LANE
+        ]
+        self.assertEqual(names, ["Codex", "DIP", "Kimi", "GLM"])
+        self.assertEqual(
+            route_ids,
+            ["wbp-deepseek-chat", "wbp-kimi-primary", "wbp-glm-primary"],
+        )
+
+    def test_custom_native_runtime_context_admits_kimi_glm_route_aliases(self) -> None:
+        route_records = [
+            {
+                "route_id": "wbp-deepseek-chat",
+                "provider": "deepseek",
+                "display_name": "DeepSeek",
+                "enabled": True,
+                "auth": {"secret_ref": "DEEPSEEK_API_KEY"},
+            },
+            {
+                "route_id": "wbp-kimi-primary",
+                "provider": "kimi",
+                "display_name": "Kimi",
+                "enabled": True,
+                "auth": {"secret_ref": "MOONSHOT_API_KEY"},
+            },
+            {
+                "route_id": "wbp-glm-primary",
+                "provider": "glm",
+                "display_name": "GLM",
+                "enabled": True,
+                "auth": {"secret_ref": "ZAI_API_KEY"},
+            },
+        ]
+        execution_packet = {
+            "execution_mode": "chatgpt_plus_api",
+            "chatgpt_model_id": "gpt-5.5",
+            "api_model_id": "wbp-deepseek-chat",
+            "coding_agent_model_slot": {
+                "status": "bound",
+                "lane": live_server.API_ROUTE_MODEL_LANE,
+                "model_id": "wbp-deepseek-chat",
+                "provider": "deepseek",
+                "server_issued": True,
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context = live_server._custom_native_agent_runtime_context(
+                execution_packet=execution_packet,
+                launch_model_id="gpt-5.5",
+                route_model_id="wbp-deepseek-chat",
+                bridge_endpoint="http://127.0.0.1:50555/v1",
+                route_records=route_records,
+                managed_dir=Path(temp_dir) / "managed",
+            )
+
+        self.assertEqual(context["agent_bindings_status"], "ok")
+        self.assertEqual(
+            context["allowed_api_route_ids"],
+            ["wbp-deepseek-chat", "wbp-kimi-primary", "wbp-glm-primary"],
+        )
+        self.assertEqual(context["alias_to_agent_id"]["Kimi"], "agent_3")
+        self.assertEqual(context["alias_to_agent_id"]["GLM"], "agent_4")
+        self.assertEqual(context["agent_id_to_route"]["dip"], "wbp-deepseek-chat")
+        self.assertEqual(context["agent_id_to_route"]["agent_3"], "wbp-kimi-primary")
+        self.assertEqual(context["agent_id_to_route"]["agent_4"], "wbp-glm-primary")
+        self.assertEqual(context["route_providers"]["wbp-kimi-primary"], "kimi")
+        self.assertEqual(context["route_providers"]["wbp-glm-primary"], "glm")
+        self.assertFalse(context["secret_value_exposed"])
+
     def _reasoning_matrix_ok_packet(self, *, provider_call_count: int = 3) -> dict[str, object]:
         level_results = [
             {

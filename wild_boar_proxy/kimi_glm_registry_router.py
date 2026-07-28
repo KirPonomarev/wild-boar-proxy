@@ -62,13 +62,15 @@ ALIAS_ROUTES: dict[str, str] = {
     "GLM": "glm",
 }
 
-FAILVOVER_POLICY = {
+FAILOVER_POLICY = {
     "max_replacement_dispatches": 1,
     "eligible_failure_classes": ("quota", "auth", "cooldown"),
     "ambiguous_retry_count": 0,
     "no_fallback_after_tool_side_effect": True,
     "switch_always_visible": True,
 }
+# Backward-compatible alias for the typo shipped in the first synthetic contour.
+FAILVOVER_POLICY = FAILOVER_POLICY
 
 def resolve_alias(label: str) -> tuple[str, str]:
     """Return (lane, machine_error_code). Unknown/ambiguous -> fail closed."""
@@ -101,7 +103,7 @@ def build_alias_routing_matrix_receipt() -> dict[str, Any]:
         liveness="healthy" if all_ok else "degraded",
         severity="recoverable", changed_files=[], effect=REGISTRY_EFFECT_READ,
         extra={"test_cases": results, "no_silent_fallback": no_silent_fallback,
-               "failover_policy": FAILVOVER_POLICY},
+               "failover_policy": FAILOVER_POLICY},
     )
 
 def build_registry_receipt() -> dict[str, Any]:
@@ -147,7 +149,8 @@ def _build_packet(*, ok, human_message, machine_error_code, operator_action,
         changed_files=changed_files, effect=effect, extra=extra)
 
 __all__ = [
-    "ModelRegistryEntry", "REGISTRY", "ALIAS_ROUTES", "FAILVOVER_POLICY",
+    "ModelRegistryEntry", "REGISTRY", "ALIAS_ROUTES", "FAILOVER_POLICY",
+    "FAILVOVER_POLICY",
     "resolve_alias", "build_alias_routing_matrix_receipt", "build_registry_receipt",
     "run_registry_router_synthetic_proof",
 ]

@@ -307,5 +307,97 @@ class SyntheticMatrixContractTests(unittest.TestCase):
                 self.assertNotIn(forbidden, body, f"{forbidden} in {s['scenario']}")
 
 
+class RequestBoundDispatchAdapterTests(unittest.TestCase):
+    def test_quota_failure_dispatches_one_visible_replacement(self) -> None:
+        a = _dedicated("acct-a")
+        b = _dedicated("acct-b")
+        calls: list[str] = []
+
+        def dispatch(account: f.AccountRef) -> dict[str, object]:
+            calls.append(account.backend_id)
+            if account.backend_id == "acct-a":
+                return {"success": False, "http_status": 429, "response_observed": True}
+            return {"success": True, "http_status": 200, "response_observed": True}
+
+        packet = f.run_request_bound_failover_dispatch(
+            request_id="r1",
+            initial_account=a,
+            candidate_pool=[b],
+            dispatch=dispatch,
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+
+        _assert_packet_semantics(self, packet)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(calls, ["acct-a", "acct-b"])
+        self.assertEqual(packet["dispatch_attempt_count"], 2)
+        self.assertEqual(packet["replacement_dispatch_count"], 1)
+        self.assertTrue(packet["serving_account_switched"])
+        self.assertTrue(packet["switch_visible"])
+        self.assertEqual(packet["serving_account_ref"]["backend_id"], "acct-b")
+
+    def test_ambiguous_delivery_never_calls_replacement(self) -> None:
+        a = _dedicated("acct-a")
+        b = _dedicated("acct-b")
+        calls: list[str] = []
+
+        def dispatch(account: f.AccountRef) -> dict[str, object]:
+            calls.append(account.backend_id)
+            return {
+                "success": False,
+                "http_status": 429,
+                "ambiguous_delivery": True,
+            }
+
+        packet = f.run_request_bound_failover_dispatch(
+            request_id="r1",
+            initial_account=a,
+            candidate_pool=[b],
+            dispatch=dispatch,
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+
+        _assert_packet_semantics(self, packet)
+        self.assertEqual(packet["machine_error_code"], "FAILOVER_AMBIGUOUS_DELIVERY")
+        self.assertEqual(calls, ["acct-a"])
+        self.assertEqual(packet["dispatch_attempt_count"], 1)
+        self.assertEqual(packet["ambiguous_retry_count"], 0)
+
+    def test_replacement_failure_does_not_retry_third_account(self) -> None:
+        a = _dedicated("acct-a")
+        b = _dedicated("acct-b")
+        c = _dedicated("acct-c")
+        calls: list[str] = []
+
+        def dispatch(account: f.AccountRef) -> dict[str, object]:
+            calls.append(account.backend_id)
+            if account.backend_id == "acct-a":
+                return {"success": False, "http_status": 429, "response_observed": True}
+            return {"success": False, "http_status": 401, "response_observed": True}
+
+        packet = f.run_request_bound_failover_dispatch(
+            request_id="r1",
+            initial_account=a,
+            candidate_pool=[b, c],
+            dispatch=dispatch,
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+
+        _assert_packet_semantics(self, packet)
+        self.assertEqual(packet["machine_error_code"], "FAILOVER_REPLACEMENT_DISPATCH_FAILED")
+        self.assertEqual(calls, ["acct-a", "acct-b"])
+        self.assertEqual(packet["replacement_dispatch_count"], 1)
+        self.assertTrue(packet["no_retry_storm_proven"])
+
+    def test_synthetic_dispatch_proof_packet_is_ok(self) -> None:
+        packet = f.run_request_bound_failover_dispatch_synthetic_proof()
+        _assert_packet_semantics(self, packet)
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["quota_then_success"])
+        self.assertTrue(packet["ambiguous_no_retry"])
+        self.assertTrue(packet["network_no_replacement"])
+        self.assertTrue(packet["replacement_fails_once"])
+
+
 if __name__ == "__main__":
     unittest.main()

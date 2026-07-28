@@ -17,6 +17,8 @@ import unittest
 
 from wild_boar_proxy import deepseek_route_profile as d
 from wild_boar_proxy.core import packets
+from wild_boar_proxy.external_models.routes import validate_route_schema
+from wild_boar_proxy.external_models.transforms import build_check_request, extract_check_response
 
 
 def _assert_packet_semantics(testcase: unittest.TestCase, packet: dict) -> None:
@@ -50,6 +52,32 @@ class RouteDefinitionTests(unittest.TestCase):
         route = d.build_deepseek_route_definition()
         body = json.dumps(route)
         self.assertNotIn("sk-", body)
+
+    def test_default_route_passes_external_models_schema_validation(self) -> None:
+        route = d.build_deepseek_route_definition(route_id="wbp-deepseek-chat")
+        self.assertIs(validate_route_schema(route), route)
+
+    def test_default_route_transform_builds_and_extracts_chat_completion(self) -> None:
+        route = d.build_deepseek_route_definition(route_id="wbp-deepseek-chat")
+        request_payload, request_metadata = build_check_request(
+            route,
+            user_prompt="ping",
+        )
+        self.assertEqual(request_payload["model"], d.DEEPSEEK_DEFAULT_UPSTREAM_MODEL)
+        self.assertEqual(request_metadata["transform_profile"], "deepseek_default")
+        text, response_metadata = extract_check_response(
+            route,
+            {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "pong"}}
+                ]
+            },
+        )
+        self.assertEqual(text, "pong")
+        self.assertEqual(
+            response_metadata["response_profile"],
+            "openai_chat_completions",
+        )
 
 
 class CredentialProvenanceTests(unittest.TestCase):

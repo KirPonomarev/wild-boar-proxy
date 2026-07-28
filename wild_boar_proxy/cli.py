@@ -1819,6 +1819,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Kimi + GLM vertical slices synthetic proof",
     )
     router_hook_kimi_glm_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_voice_synthetic_proof = router_hook_subparsers.add_parser(
+        "voice-synthetic-proof",
+        help="Native Codex voice parity synthetic proof (never physical evidence)",
+    )
+    router_hook_voice_synthetic_proof.add_argument("--json", action="store_true", required=True)
     router_hook_registry_router_proof = router_hook_subparsers.add_parser(
         "registry-router-proof",
         help="Model registry + alias router synthetic proof",
@@ -1882,6 +1887,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Запустить детерминированную synthetic failover matrix",
     )
     accounts_failover_matrix.add_argument("--json", action="store_true", required=True)
+    accounts_failover_dispatch_proof = accounts_subparsers.add_parser(
+        "failover-dispatch-proof",
+        help="Проверить request-bound failover dispatch adapter synthetic proof",
+    )
+    accounts_failover_dispatch_proof.add_argument(
+        "--json", action="store_true", required=True
+    )
 
     diagnostics = subparsers.add_parser("diagnostics", help="Собрать redacted диагностику")
     diagnostics_subparsers = diagnostics.add_subparsers(
@@ -2436,6 +2448,8 @@ def command_effect_from_args(args: argparse.Namespace) -> str | None:
             return EFFECT_READ
         if accounts_command == "validate":
             return EFFECT_PROBE
+        if accounts_command in {"failover-matrix", "failover-dispatch-proof"}:
+            return EFFECT_READ
         if accounts_command in {
             "demote",
             "hold",
@@ -3674,6 +3688,11 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(kimi_glm_provider_slices.run_kimi_glm_synthetic_proof())
         if (
             args.command == "router-hook"
+            and args.router_hook_command == "voice-synthetic-proof"
+        ):
+            return emit_json(native_voice_parity.run_voice_synthetic_proof())
+        if (
+            args.command == "router-hook"
             and args.router_hook_command == "registry-router-proof"
         ):
             return emit_json(kimi_glm_registry_router.run_registry_router_synthetic_proof())
@@ -3747,6 +3766,13 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                     },
                 )
+            )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "failover-dispatch-proof"
+        ):
+            return emit_json(
+                account_pool_failover.run_request_bound_failover_dispatch_synthetic_proof()
             )
         if args.command == "accounts" and args.accounts_command == "onboard":
             return emit_json(
