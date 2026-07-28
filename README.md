@@ -27,7 +27,17 @@ The project does not replace the proxy engine. It owns the control layer:
 
 ## Current status
 
-This repository is the bootstrap for the public experimental project.
+**Version 0.1.0** — first useful release: local loopback web control surface.
+
+This release provides:
+
+- local loopback WBP web server with start/status/stop/open operator flow
+- dedicated account pool with typed request-bound failover
+- DeepSeek API lane with credential provenance
+- named dual-lane (GPT/Codex + Deep/DIP) thread context with delegation
+- persistent Custom profile with Codex update compatibility
+- baseline core CI (check + test-core + test-custom-stability + test-web-e2e)
+- release CI (web E2E + package smoke + artifact privacy verification)
 
 The repository does not store master plans, roadmaps, or next-contour queues.
 Active planning lives outside the repo in the current task thread, handoff, or
