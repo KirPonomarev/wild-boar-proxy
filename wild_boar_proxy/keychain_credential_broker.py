@@ -31,6 +31,10 @@ KEYCHAIN_EFFECT_READ = "read"
 # Exact Keychain service/account candidates per provider. These are the ONLY
 # items the broker will look up. No global enumeration.
 _PROVIDER_KEYCHAIN_CANDIDATES: dict[str, list[tuple[str, str]]] = {
+    "deepseek": [
+        ("DeepSeek", "DEEPSEEK_API_KEY"),
+        ("DeepSeek", "api_key"),
+    ],
     "kimi": [
         ("Moonshot", "MOONSHOT_API_KEY"),
         ("Moonshot", "api_key"),

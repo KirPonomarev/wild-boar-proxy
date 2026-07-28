@@ -27,18 +27,39 @@ The project does not replace the proxy engine. It owns the control layer:
 
 ## Current status
 
-**Version 0.2.1** — Kimi + GLM provider expansion with native voice parity.
+**Version 0.2.1** — provider expansion with Kimi/GLM contracts.
 
-This release builds on the v0.1.0 web control surface and adds:
-- Kimi (Moonshot) and GLM (Z.AI) provider profiles
-- Keychain credential broker
-- Model registry with intelligence levels
-- Alias router for Kimi:/GLM:/DIP:/Codex:
-- Native voice parity contract
+This is an experimental project in active development. The codebase includes:
 
-**Evidence levels:** Most provider capabilities are SYNTHETIC_PROVEN (contract
-validated, not live-verified). Live physical proof requires dedicated
-API credentials and is deferred to the operator.
+**Working (INTEGRATION_PROVEN):**
+- Web lifecycle: local loopback start/status/stop/open
+- Baseline CI: make check + test-core + test-custom-stability + test-web-e2e
+- Flaky test root-caused (probe_codex_app_server parameterized)
+- Credential resolver: owner-env and owner-keychain sources
+- Kimi/GLM route templates pass production validate_route_schema()
+- Alias bindings: Codex/DIP/Kimi/GLM in default_agent_bindings
+- Provider transforms: Kimi reasoning dialects, GLM thinking, streaming accumulator
+
+**Contract-validated (SYNTHETIC_PROVEN):**
+- Account pool failover (typed failure → exactly-one replacement)
+- DeepSeek route profile and error taxonomy
+- Dual-lane context envelope with delegation
+- Capability registry with intelligence-level mapping
+- Design gate accessibility contract
+- Release E2E contract (requires LiveReceipts for acceptance)
+- Desktop pilot contract (requires clean machine)
+- Native voice parity (requires physical observation)
+
+**Not yet live-verified (DECLARED):**
+- Kimi model IDs (kimi-k2.5, k2.6) — need live discovery
+- GLM model ID (glm-4.6) — need live discovery confirmation of 5.2/4.7
+- Cross-provider failover is OFF by default
+
+**Waiting for operator:**
+- Live provider smokes (DeepSeek/Kimi/GLM API keys in Keychain)
+- Physical E2E (dedicated accounts)
+- Native voice physical observation
+- Clean-machine desktop install
 
 This release provides:
 
