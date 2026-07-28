@@ -27,7 +27,18 @@ The project does not replace the proxy engine. It owns the control layer:
 
 ## Current status
 
-**Version 0.1.0** — first useful release: local loopback web control surface.
+**Version 0.2.1** — Kimi + GLM provider expansion with native voice parity.
+
+This release builds on the v0.1.0 web control surface and adds:
+- Kimi (Moonshot) and GLM (Z.AI) provider profiles
+- Keychain credential broker
+- Model registry with intelligence levels
+- Alias router for Kimi:/GLM:/DIP:/Codex:
+- Native voice parity contract
+
+**Evidence levels:** Most provider capabilities are SYNTHETIC_PROVEN (contract
+validated, not live-verified). Live physical proof requires dedicated
+API credentials and is deferred to the operator.
 
 This release provides:
 

@@ -1809,6 +1809,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Final assurance audit synthetic proof",
     )
     router_hook_final_assurance.add_argument("--json", action="store_true", required=True)
+    router_hook_kimi_glm_proof = router_hook_subparsers.add_parser(
+        "kimi-glm-slices-proof",
+        help="Kimi + GLM vertical slices synthetic proof",
+    )
+    router_hook_kimi_glm_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_registry_router_proof = router_hook_subparsers.add_parser(
+        "registry-router-proof",
+        help="Model registry + alias router synthetic proof",
+    )
+    router_hook_registry_router_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_keychain_proof = router_hook_subparsers.add_parser(
+        "keychain-broker-proof",
+        help="Keychain credential broker synthetic proof",
+    )
+    router_hook_keychain_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3647,6 +3662,21 @@ def main(argv: list[str] | None = None) -> int:
             and args.router_hook_command == "final-assurance-proof"
         ):
             return emit_json(desktop_pilot_contract.run_final_assurance_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "kimi-glm-slices-proof"
+        ):
+            return emit_json(kimi_glm_provider_slices.run_kimi_glm_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "registry-router-proof"
+        ):
+            return emit_json(kimi_glm_registry_router.run_registry_router_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "keychain-broker-proof"
+        ):
+            return emit_json(keychain_credential_broker.run_keychain_broker_synthetic_proof())
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
