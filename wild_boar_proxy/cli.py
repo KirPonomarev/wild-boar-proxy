@@ -58,6 +58,7 @@ from . import deepseek_route_profile
 from . import dual_lane_context
 from . import persistent_profile_compat
 from . import web_core_action_ledger
+from . import design_gate_accessibility
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -1786,6 +1787,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Web core action ledger + disabled-reason matrix synthetic proof",
     )
     router_hook_web_core_actions_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_design_gate_proof = router_hook_subparsers.add_parser(
+        "design-gate-proof",
+        help="Design gate accessibility/responsive synthetic proof",
+    )
+    router_hook_design_gate_proof.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3604,6 +3610,11 @@ def main(argv: list[str] | None = None) -> int:
             and args.router_hook_command == "web-core-actions-proof"
         ):
             return emit_json(web_core_action_ledger.run_web_core_actions_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "design-gate-proof"
+        ):
+            return emit_json(design_gate_accessibility.run_design_gate_synthetic_proof())
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
