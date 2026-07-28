@@ -168,6 +168,52 @@ def default_routes_payload() -> dict[str, Any]:
     return {"schema_version": ROUTE_SCHEMA_VERSION, "routes": []}
 
 
+# Provider default route templates for Kimi and GLM.
+# These are DECLARED routes (not live-verified). Model IDs must be confirmed
+# by live discovery before production use.
+KIMI_DEFAULT_ROUTE = {
+    "schema_version": ROUTE_SCHEMA_VERSION,
+    "route_id": "wbp-kimi-primary",
+    "display_name": "Kimi",
+    "provider": "kimi",
+    "base_url": "https://api.moonshot.cn/v1",
+    "endpoint_path": "/chat/completions",
+    "upstream_model": "kimi-k2.5",
+    "compatibility": "openai_chat_completions",
+    "auth": {"type": "bearer", "secret_ref": "MOONSHOT_API_KEY"},
+    "cost_class": "paid_direct",
+    "lane_role": "kimi_api_lane",
+    "fallback_eligible": False,
+    "enabled": False,
+    "transform_profile": "openai_chat_passthrough",
+    "response_profile": "openai_chat_choices_message",
+    "thinking": {"type": "disabled"},
+    "check_max_tokens": 4096,
+}
+
+GLM_DEFAULT_ROUTE = {
+    "schema_version": ROUTE_SCHEMA_VERSION,
+    "route_id": "wbp-glm-primary",
+    "display_name": "GLM",
+    "provider": "glm",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "endpoint_path": "/chat/completions",
+    "upstream_model": "glm-4.6",
+    "compatibility": "openai_chat_completions",
+    "auth": {"type": "bearer", "secret_ref": "ZAI_API_KEY"},
+    "cost_class": "paid_direct",
+    "lane_role": "glm_api_lane",
+    "fallback_eligible": False,
+    "enabled": False,
+    "transform_profile": "openai_chat_passthrough",
+    "response_profile": "openai_chat_choices_message",
+    "thinking": {"type": "disabled"},
+    "check_max_tokens": 4096,
+}
+
+PROVIDER_DEFAULT_ROUTES: list[dict[str, Any]] = [KIMI_DEFAULT_ROUTE, GLM_DEFAULT_ROUTE]
+
+
 def operator_action_for_next_action(*, ok: bool, next_action: str) -> str:
     if next_action in command_packets.COMMAND_OPERATOR_ACTION_VALUES:
         return next_action
