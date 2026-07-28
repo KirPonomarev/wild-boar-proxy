@@ -60,6 +60,7 @@ from . import persistent_profile_compat
 from . import web_core_action_ledger
 from . import design_gate_accessibility
 from . import provider_capability_schema_v2
+from . import desktop_pilot_contract
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
@@ -1798,6 +1799,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Provider capability schema v2 (DeepSeek+GLM+Kimi) synthetic proof",
     )
     router_hook_provider_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_desktop_proof = router_hook_subparsers.add_parser(
+        "desktop-pilot-proof",
+        help="Desktop pilot v0.3.0 + final assurance synthetic proof",
+    )
+    router_hook_desktop_proof.add_argument("--json", action="store_true", required=True)
+    router_hook_final_assurance = router_hook_subparsers.add_parser(
+        "final-assurance-proof",
+        help="Final assurance audit synthetic proof",
+    )
+    router_hook_final_assurance.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts", help="Управлять локальными аккаунтами и пулами")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3626,6 +3637,16 @@ def main(argv: list[str] | None = None) -> int:
             and args.router_hook_command == "provider-v02-proof"
         ):
             return emit_json(provider_capability_schema_v2.run_provider_v02_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "desktop-pilot-proof"
+        ):
+            return emit_json(desktop_pilot_contract.run_desktop_pilot_synthetic_proof())
+        if (
+            args.command == "router-hook"
+            and args.router_hook_command == "final-assurance-proof"
+        ):
+            return emit_json(desktop_pilot_contract.run_final_assurance_synthetic_proof())
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
