@@ -61,6 +61,11 @@ from . import web_core_action_ledger
 from . import design_gate_accessibility
 from . import provider_capability_schema_v2
 from . import desktop_pilot_contract
+from . import native_voice_parity
+from . import kimi_glm_provider_slices
+from . import kimi_glm_registry_router
+from . import keychain_credential_broker
+from . import release_e2e_contract
 from .custom_codex_native_ui_observer_proof import (
     run_native_ui_observer_proof_command,
 )
