@@ -18,6 +18,8 @@ unless Apple signing credentials are available.
 from __future__ import annotations
 
 import dataclasses
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from .core import packets as command_packets
@@ -173,17 +175,46 @@ FINAL_MILESTONES = (
 
 FINAL_ASSURANCE_INVALID_IDENTITY = "FINAL_ASSURANCE_INVALID_IDENTITY"
 
+# Repository root (parent of the ``wild_boar_proxy`` package directory). Used
+# as the cwd for ``git rev-parse`` so the existence check resolves against the
+# actual WBP repository regardless of the importing process's cwd.
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 
-def _validate_git_sha(sha: str) -> bool:
+
+def _git_sha_is_hex(sha: str) -> bool:
     """A git object SHA is a 40-character lowercase-or-uppercase hex string.
 
-    Used to reject fake / placeholder identities (e.g. "fake",
-    "pending_clean_machine") before the final assurance audit treats them as
-    physical proof of a released milestone.
+    This is the *shape* check only; it does not prove the object exists.
     """
     return isinstance(sha, str) and len(sha) == 40 and all(
         ch in "0123456789abcdefABCDEF" for ch in sha
     )
+
+
+def _validate_git_sha(sha: str) -> bool:
+    """Return True iff ``sha`` resolves to an existing commit in the repo.
+
+    A well-shaped-but-nonexistent SHA (e.g. ``"a" * 40``) is a valid-looking
+    40-hex string, so a shape check alone cannot reject it: ``git rev-parse
+    --verify`` happily prints it back and exits 0. Instead we peel to a commit
+    with ``<sha>^{commit}``: git resolves the object, confirms it exists and is
+    a commit, exiting non-zero otherwise. The subprocess runs in the repo root
+    (``_REPO_ROOT``) so git always finds the WBP objects.
+    """
+    if not _git_sha_is_hex(sha):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, FileNotFoundError):
+        # git not available: fail closed (reject) rather than accept on faith.
+        return False
+    return result.returncode == 0
 
 
 def run_final_assurance_audit(
@@ -261,25 +292,75 @@ def run_final_assurance_audit(
     )
 
 
+def _resolve_milestone_shas() -> dict[str, str]:
+    """Resolve the real release commit SHAs for the three milestones.
+
+    Maps each FINAL_MILESTONES entry to the commit its release tag points at
+    (``web_v0_1_0`` -> ``v0.1.0``, etc.). Falls back to HEAD for any tag that
+    cannot be resolved so the proof stays deterministic; the proof only needs
+    valid *existing* commits to exercise the completeness path.
+    """
+    tag_for_milestone = {
+        "web_v0_1_0": "v0.1.0",
+        "provider_v0_2_0": "v0.2.0",
+        "desktop_v0_3_0": "v0.3.0",
+    }
+    resolved: dict[str, str] = {}
+    for milestone, tag in tag_for_milestone.items():
+        sha: str | None = None
+        try:
+            result = subprocess.run(
+                ["git", "rev-list", "-n1", tag],
+                cwd=_REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                sha = result.stdout.strip() or None
+        except (OSError, FileNotFoundError):
+            sha = None
+        if not sha or not _git_sha_is_hex(sha):
+            # Fallback: current HEAD commit (always exists in a real checkout).
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=_REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    sha = result.stdout.strip() or None
+            except (OSError, FileNotFoundError):
+                sha = None
+        resolved[milestone] = sha or ""
+    return resolved
+
+
 def run_final_assurance_synthetic_proof() -> dict[str, Any]:
     """Deterministic synthetic proof for F00."""
-    # Deterministic 40-hex git object SHAs for the synthetic identities. These
-    # are valid-shaped SHAs (not real release identities); the proof exercises
-    # the audit's identity-validation + completeness paths without claiming any
-    # physical release.
+    # Real release commit SHAs (resolved from the v0.1.0 / v0.2.0 / v0.3.0 tags
+    # at runtime) so the audit's strict existence-based identity validation
+    # passes and the proof can exercise the completeness path. The proof never
+    # claims a physical release: ok only certifies internal consistency.
+    shas = _resolve_milestone_shas()
+    web_sha = shas["web_v0_1_0"]
+    provider_sha = shas["provider_v0_2_0"]
+    desktop_sha = shas["desktop_v0_3_0"]
     done = run_final_assurance_audit(
-        web_release_sha="bd53edd3" + "0" * 32,
-        provider_release_sha="5d4bb127" + "0" * 32,
-        desktop_release_sha="1d2c3b4a" + "f" * 32,
+        web_release_sha=web_sha,
+        provider_release_sha=provider_sha,
+        desktop_release_sha=desktop_sha,
         safety_counters_zero=True,
         user_wip_preserved=True,
         no_plan_owned_processes=True,
         no_repo_master_plan=True,
     )
     blocked = run_final_assurance_audit(
-        web_release_sha="bd53edd3" + "0" * 32,
-        provider_release_sha="5d4bb127" + "0" * 32,
-        desktop_release_sha="1d2c3b4a" + "f" * 32,
+        web_release_sha=web_sha,
+        provider_release_sha=provider_sha,
+        desktop_release_sha=desktop_sha,
         safety_counters_zero=False,  # incomplete: safety counters non-zero
         user_wip_preserved=True,
         no_plan_owned_processes=True,
@@ -302,7 +383,7 @@ def run_final_assurance_synthetic_proof() -> dict[str, Any]:
         extra={
             "receipt_count": len(receipts),
             "done_when_all_present": done["machine_error_code"] == "WBP_MASTER_PLAN_V3_6_DONE",
-            "blocked_when_desktop_missing": blocked["machine_error_code"] == "FINAL_ASSURANCE_INCOMPLETE",
+            "blocked_when_safety_nonzero": blocked["machine_error_code"] == "FINAL_ASSURANCE_INCOMPLETE",
             "packet_violations": violations,
         },
     )
@@ -321,4 +402,6 @@ __all__ = [
     "FINAL_MILESTONES",
     "FINAL_ASSURANCE_INVALID_IDENTITY",
     "_validate_git_sha",
+    "_git_sha_is_hex",
+    "_resolve_milestone_shas",
 ]

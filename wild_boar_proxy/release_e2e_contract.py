@@ -39,6 +39,26 @@ class PhysicalMatrixStep:
     synthetic_pass: bool
 
 
+@dataclasses.dataclass(frozen=True)
+class LiveReceipt:
+    """A real live proof receipt for one physical step. NOT synthetic.
+
+    Each live step must carry provider/model/route/request identity,
+    timestamp, result and evidence level. A boolean credentials_admitted
+    flag is NOT sufficient — this receipt proves the step was actually
+    executed against a live provider.
+    """
+    step_id: str
+    provider: str
+    model: str
+    route_id: str
+    request_id: str
+    result: str  # "ok" | "error"
+    evidence_level: str  # "PHYSICAL_PROVEN"
+    observed_at_utc: str
+    response_observed: bool
+
+
 def _build_packet(*, ok, human_message, machine_error_code, operator_action,
                   liveness, severity, changed_files, effect, extra=None):
     return build_command_payload(
@@ -52,17 +72,30 @@ def build_release_e2e_receipt(
     *,
     candidate: ReleaseCandidateIdentity,
     steps: list[PhysicalMatrixStep],
-    dedicated_credentials_admitted: bool,
+    live_receipts: list[LiveReceipt] | None = None,
 ) -> dict[str, Any]:
     """Build the W13 release candidate E2E receipt.
 
-    If dedicated credentials are not admitted, the receipt honestly reports
-    WAIT_EXTERNAL_PREREQUISITE for the live-credential steps while the
-    synthetic contract remains proven.
+    A live step (``requires_live_credentials=True``) is only satisfied by a
+    matching ``LiveReceipt`` whose ``evidence_level == "PHYSICAL_PROVEN"`` and
+    ``response_observed`` is True and whose ``step_id`` equals the step's id.
+    A bare ``dedicated_credentials_admitted`` boolean is NOT accepted: that is
+    exactly the false-green the old API permitted.
+
+    If any live step lacks such a receipt, the receipt honestly reports
+    WAIT_EXTERNAL_PREREQUISITE for the live steps while the synthetic contract
+    remains proven.
     """
     synthetic_all_pass = all(s.synthetic_pass for s in steps)
     live_steps = [s for s in steps if s.requires_live_credentials]
-    live_blocked = live_steps and not dedicated_credentials_admitted
+
+    valid_receipts = [
+        r for r in (live_receipts or [])
+        if r.evidence_level == "PHYSICAL_PROVEN" and r.response_observed
+    ]
+    proven_step_ids = {r.step_id for r in valid_receipts}
+    missing_live = [s for s in live_steps if s.step_id not in proven_step_ids]
+    live_blocked = bool(missing_live)
 
     extra: dict[str, Any] = {
         "version": candidate.version,
@@ -71,7 +104,9 @@ def build_release_e2e_receipt(
         "total_steps": len(steps),
         "synthetic_all_pass": synthetic_all_pass,
         "live_credential_steps": len(live_steps),
-        "dedicated_credentials_admitted": dedicated_credentials_admitted,
+        "live_receipts_provided": len(valid_receipts),
+        "live_receipt_step_ids": sorted(proven_step_ids),
+        "missing_live_step_ids": sorted(s.step_id for s in missing_live),
         "live_proof_deferred": bool(live_blocked),
     }
 
@@ -80,7 +115,7 @@ def build_release_e2e_receipt(
             ok=False,
             human_message=(
                 "Release candidate synthetic contract proven, but live physical "
-                "steps require dedicated credentials that are not admitted."
+                "steps require PHYSICAL_PROVEN receipts that are not provided."
             ),
             machine_error_code="WAIT_EXTERNAL_PREREQUISITE",
             operator_action="user_action",
@@ -133,22 +168,35 @@ def run_release_e2e_synthetic_proof() -> dict[str, Any]:
         PhysicalMatrixStep("recovery_drill", "Recovery drill", False, True),
         PhysicalMatrixStep("cleanup", "Exact cleanup, zero safety counters", False, True),
     ]
-    # Without credentials: WAIT_EXTERNAL_PREREQUISITE
-    no_cred = build_release_e2e_receipt(
-        candidate=candidate, steps=steps, dedicated_credentials_admitted=False
+    # No live receipts at all: the synthetic proof NEVER fabricates live proof,
+    # so every live step is unsatisfied -> WAIT_EXTERNAL_PREREQUISITE.
+    no_receipts = build_release_e2e_receipt(
+        candidate=candidate, steps=steps, live_receipts=None
     )
-    # With credentials: ACCEPTED
-    with_cred = build_release_e2e_receipt(
-        candidate=candidate, steps=steps, dedicated_credentials_admitted=True
+    # Partial receipts (one of four live steps) still must not be enough: the
+    # remaining three live steps are unsatisfied -> still WAIT. This locks the
+    # false-green containment: a single declared live step cannot greenlight the
+    # whole release.
+    partial_receipts = build_release_e2e_receipt(
+        candidate=candidate, steps=steps,
+        live_receipts=[
+            LiveReceipt(
+                step_id="web_start", provider="wbp", model="n/a",
+                route_id="loopback", request_id="req-1",
+                result="ok", evidence_level="PHYSICAL_PROVEN",
+                observed_at_utc="2026-01-01T00:00:00Z", response_observed=True,
+            ),
+        ],
     )
 
-    receipts = [no_cred, with_cred]
+    receipts = [no_receipts, partial_receipts]
     violations: list[str] = []
     for r in receipts:
         violations.extend(command_packets.inspect_command_packet_semantics(r))
     contract_holds = (
         not violations
-        and with_cred["machine_error_code"] == "WEB_RELEASE_V0_1_0_ACCEPTED"
+        and no_receipts["machine_error_code"] == "WAIT_EXTERNAL_PREREQUISITE"
+        and partial_receipts["machine_error_code"] != "WEB_RELEASE_V0_1_0_ACCEPTED"
     )
     # The synthetic proof demonstrates that the deterministic contract holds; it
     # must NEVER claim physical acceptance. ok=True only certifies that the
@@ -171,8 +219,8 @@ def run_release_e2e_synthetic_proof() -> dict[str, Any]:
         extra={
             "evidence_level": "SYNTHETIC_PROVEN",
             "receipt_count": len(receipts),
-            "live_proof_deferred_without_credentials": no_cred["machine_error_code"] == "WAIT_EXTERNAL_PREREQUISITE",
-            "accepted_with_credentials": with_cred["machine_error_code"] == "WEB_RELEASE_V0_1_0_ACCEPTED",
+            "live_proof_deferred_without_credentials": no_receipts["machine_error_code"] == "WAIT_EXTERNAL_PREREQUISITE",
+            "partial_receipts_not_enough": partial_receipts["machine_error_code"] != "WEB_RELEASE_V0_1_0_ACCEPTED",
             "step_count": len(steps),
             "packet_violations": violations,
         },
@@ -182,6 +230,7 @@ def run_release_e2e_synthetic_proof() -> dict[str, Any]:
 __all__ = [
     "ReleaseCandidateIdentity",
     "PhysicalMatrixStep",
+    "LiveReceipt",
     "build_release_e2e_receipt",
     "run_release_e2e_synthetic_proof",
     "WEB_RELEASE_VERSION",

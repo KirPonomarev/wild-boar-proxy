@@ -74,14 +74,41 @@ def build_voice_parity_receipt(
     *,
     acceptance: dict[str, bool] | None = None,
     forbidden: dict[str, bool] | None = None,
+    observations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build the native voice parity receipt (V01)."""
+    """Build the native voice parity receipt (V01).
+
+    Without explicit observation receipts, returns VOICE_STATUS_UNPROVEN.
+    A positive receipt requires real observations, not hardcoded defaults.
+    """
+    has_observations = observations is not None and len(observations) > 0
+    if not has_observations:
+        return _build_packet(
+            ok=False,
+            human_message="Voice parity UNPROVEN: no observation receipts provided.",
+            machine_error_code="VOICE_STATUS_UNPROVEN",
+            operator_action="user_action",
+            liveness="unknown",
+            severity="recoverable",
+            changed_files=[],
+            effect=VOICE_EFFECT_READ,
+            extra={
+                "production_path": "native_codex_dictation",
+                "observations_provided": False,
+                "evidence_level": "DECLARED",
+                "no_browser_bridge": True,
+                "no_cdp_injection": True,
+                "no_clipboard_paste": True,
+                "no_auto_submit": True,
+            },
+        )
     acc = acceptance or V01_ACCEPTANCE
     forb = forbidden or V01_FORBIDDEN
-    all_acc_ok = all(acc.values())
-    # Acceptance criteria: some are True-desired (icon observed, shortcut available)
-    # and some are False-desired (prompt_auto_submitted=False, original_codex_mutated=False).
-    # Compare against the expected baseline, not just all-True.
+    # Acceptance criteria are a mix of True-desired (icon observed, shortcut
+    # available) and False-desired (prompt_auto_submitted=False,
+    # original_codex_mutated=False). Comparing observed ``acc`` against the
+    # V01_ACCEPTANCE baseline is the only correct pass/fail test: a naive
+    # all(acc.values()) would treat the False-desired criteria as failures.
     all_acc_ok = all(acc.get(k) == v for k, v in V01_ACCEPTANCE.items())
     all_forb_ok = all(v is False for v in forb.values())
     ok = all_acc_ok and all_forb_ok
@@ -99,6 +126,8 @@ def build_voice_parity_receipt(
             "shortcut": "Ctrl+Shift+D",
             "acceptance": acc,
             "forbidden_actions": forb,
+            "observations_provided": True,
+            "observation_count": len(observations),
             "no_browser_bridge": True,
             "no_cdp_injection": True,
             "no_clipboard_paste": True,
@@ -137,8 +166,16 @@ def build_voice_regression_matrix_receipt() -> dict[str, Any]:
 
 
 def run_voice_synthetic_proof() -> dict[str, Any]:
-    """V00-V04 combined synthetic proof."""
-    parity = build_voice_parity_receipt()
+    """V00-V04 combined synthetic proof. Uses SYNTHETIC observations, not physical."""
+    synthetic_observations = [
+        {"step": "icon_check", "result": "observed", "evidence": "synthetic"},
+        {"step": "shortcut_check", "result": "available", "evidence": "synthetic"},
+        {"step": "transcript_check", "result": "visible", "evidence": "synthetic"},
+    ]
+    parity = build_voice_parity_receipt(
+        acceptance=V01_ACCEPTANCE,
+        observations=synthetic_observations,
+    )
     regression = build_voice_regression_matrix_receipt()
     receipts = [parity, regression]
     violations = []
