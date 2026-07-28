@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wild-boar-proxy"
-version = "0.2.0"
+version = "0.2.1"
 description = "Experimental companion control app for Codex and CLIProxyAPI"
 readme = "README.md"
 requires-python = ">=3.11"
