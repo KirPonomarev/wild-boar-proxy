@@ -392,6 +392,7 @@ def run_interactive_custom_codex_preflight_command(
     paths: RuntimePaths,
     prompt_text: str,
     proof_dir: str | None = None,
+    probe_codex_app_server: bool = True,
 ) -> dict[str, Any]:
     proof_root = _proof_dir(paths, proof_dir)
     proof_root.mkdir(parents=True, exist_ok=True)
@@ -400,7 +401,7 @@ def run_interactive_custom_codex_preflight_command(
     runtime_context, context_metadata = load_runtime_context_packet(context_file)
     readiness_packet = build_user_prompt_submit_readiness_packet(
         paths=paths,
-        probe_codex_app_server=True,
+        probe_codex_app_server=probe_codex_app_server,
     )
     ledger_path = hook_ledger_path(paths)
     ledger_before_present = ledger_path.exists()
