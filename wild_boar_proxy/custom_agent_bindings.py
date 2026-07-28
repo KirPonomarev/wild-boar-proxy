@@ -89,7 +89,13 @@ def default_agent_bindings(
     *,
     primary_model_id: str,
     api_route_id: str,
+    additional_api_routes: list[dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Build default agent bindings.
+
+    additional_api_routes: list of {route_id, display_name, aliases, role}
+    for Kimi, GLM, or other API providers beyond the default DIP route.
+    """
     primary_model_id = str(primary_model_id or "").strip()
     api_route_id = str(api_route_id or "").strip()
     bindings: list[dict[str, Any]] = [
@@ -121,7 +127,58 @@ def default_agent_bindings(
                 ],
             }
         )
+    # Additional API providers (Kimi, GLM, etc.)
+    if additional_api_routes:
+        for idx, route_info in enumerate(additional_api_routes, start=3):
+            route_id = str(route_info.get("route_id") or "").strip()
+            if not route_id:
+                continue
+            display_name = str(route_info.get("display_name") or f"Agent {idx}").strip()
+            aliases_raw = route_info.get("aliases") or [display_name, f"Agent {idx}", str(idx)]
+            if isinstance(aliases_raw, str):
+                aliases_raw = [aliases_raw]
+            role = str(route_info.get("role") or "coding_agent").strip()
+            bindings.append(
+                {
+                    "agent_id": f"agent_{idx}",
+                    "display_name": display_name,
+                    "role": role,
+                    "aliases": list(aliases_raw),
+                    "lane": API_ROUTE_LANE,
+                    "route_id": route_id,
+                    "enabled": True,
+                    "allowed_actions": [
+                        "code_review",
+                        "implementation_help",
+                        "format_check",
+                    ],
+                }
+            )
     return bindings
+
+# Convenience: default additional routes for Kimi and GLM
+def kimi_glm_additional_routes(
+    *,
+    kimi_route_id: str = "wbp-kimi-primary",
+    glm_route_id: str = "wbp-glm-primary",
+) -> list[dict[str, str]]:
+    """Build additional_api_routes for Kimi and GLM providers."""
+    routes: list[dict[str, str]] = []
+    if kimi_route_id:
+        routes.append({
+            "route_id": kimi_route_id,
+            "display_name": "Kimi",
+            "aliases": ["Kimi"],
+            "role": "coding_agent",
+        })
+    if glm_route_id:
+        routes.append({
+            "route_id": glm_route_id,
+            "display_name": "GLM",
+            "aliases": ["GLM"],
+            "role": "coding_agent",
+        })
+    return routes
 
 
 def _safe_text(value: object, *, max_length: int = 96) -> str:
