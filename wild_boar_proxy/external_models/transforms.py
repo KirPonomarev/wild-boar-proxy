@@ -69,9 +69,14 @@ def validate_route_transform_profiles(route: dict[str, Any]) -> None:
     thinking = route.get("thinking")
     if thinking is None:
         return
-    if str(route.get("provider") or "") != "deepseek":
+    # Generic thinking policy: admitted for providers with reasoning support
+    # (deepseek, kimi, glm). Each provider has its own reasoning dialect.
+    provider = str(route.get("provider") or "").strip()
+    _THINKING_CAPABLE_PROVIDERS = frozenset({"deepseek", "kimi", "glm"})
+    if provider not in _THINKING_CAPABLE_PROVIDERS:
         raise RuntimeErrorInfo(
-            "thinking policy is admitted only for DeepSeek routes.",
+            f"thinking policy is admitted only for reasoning-capable providers "
+            f"({sorted(_THINKING_CAPABLE_PROVIDERS)}), not '{provider}'.",
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )

@@ -101,6 +101,32 @@ _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
         provider_family="direct_provider",
         seed_source="historical_seed_plus_current_schema",
     ),
+    "kimi": CredentialProviderSpec(
+        provider="kimi",
+        credential_ref="MOONSHOT_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "MOONSHOT_API_KEY",
+            "KIMI_API_KEY",
+            "WBP_KIMI_API_KEY",
+            "WBP_PROVIDER_KIMI_API_KEY",
+        ),
+        provider_dashboard_url="https://platform.moonshot.cn/console/api-keys",
+        provider_family="direct_provider",
+        seed_source="current_schema_official_docs",
+    ),
+    "glm": CredentialProviderSpec(
+        provider="glm",
+        credential_ref="ZAI_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "ZAI_API_KEY",
+            "GLM_API_KEY",
+            "WBP_GLM_API_KEY",
+            "WBP_PROVIDER_GLM_API_KEY",
+        ),
+        provider_dashboard_url="https://docs.z.ai",
+        provider_family="direct_provider",
+        seed_source="current_schema_official_docs",
+    ),
 }
 
 
