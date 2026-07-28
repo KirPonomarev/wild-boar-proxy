@@ -171,6 +171,20 @@ FINAL_MILESTONES = (
     "desktop_v0_3_0",
 )
 
+FINAL_ASSURANCE_INVALID_IDENTITY = "FINAL_ASSURANCE_INVALID_IDENTITY"
+
+
+def _validate_git_sha(sha: str) -> bool:
+    """A git object SHA is a 40-character lowercase-or-uppercase hex string.
+
+    Used to reject fake / placeholder identities (e.g. "fake",
+    "pending_clean_machine") before the final assurance audit treats them as
+    physical proof of a released milestone.
+    """
+    return isinstance(sha, str) and len(sha) == 40 and all(
+        ch in "0123456789abcdefABCDEF" for ch in sha
+    )
+
 
 def run_final_assurance_audit(
     *,
@@ -193,6 +207,30 @@ def run_final_assurance_audit(
         "no_repo_master_plan": no_repo_master_plan,
         "milestones": list(FINAL_MILESTONES),
     }
+    # Reject non-SHA identities up front so placeholder strings can never be
+    # accepted as physical proof of a released milestone.
+    sha_identities = {
+        "web_release_sha": web_release_sha,
+        "provider_release_sha": provider_release_sha,
+        "desktop_release_sha": desktop_release_sha,
+    }
+    invalid_shas = sorted(name for name, sha in sha_identities.items() if not _validate_git_sha(sha))
+    if invalid_shas:
+        extra["invalid_identities"] = invalid_shas
+        return _build_packet(
+            ok=False,
+            human_message=(
+                "Final assurance audit rejected: milestone identities are not "
+                "valid git object SHAs."
+            ),
+            machine_error_code=FINAL_ASSURANCE_INVALID_IDENTITY,
+            operator_action="user_action",
+            liveness="down",
+            severity="high",
+            changed_files=[],
+            effect=DESKTOP_EFFECT_READ,
+            extra=extra,
+        )
     all_ok = all([
         web_release_sha, provider_release_sha, desktop_release_sha,
         safety_counters_zero, user_wip_preserved,
@@ -225,20 +263,24 @@ def run_final_assurance_audit(
 
 def run_final_assurance_synthetic_proof() -> dict[str, Any]:
     """Deterministic synthetic proof for F00."""
+    # Deterministic 40-hex git object SHAs for the synthetic identities. These
+    # are valid-shaped SHAs (not real release identities); the proof exercises
+    # the audit's identity-validation + completeness paths without claiming any
+    # physical release.
     done = run_final_assurance_audit(
-        web_release_sha="bd53edd3",
-        provider_release_sha="5d4bb127",
-        desktop_release_sha="pending_clean_machine",
+        web_release_sha="bd53edd3" + "0" * 32,
+        provider_release_sha="5d4bb127" + "0" * 32,
+        desktop_release_sha="1d2c3b4a" + "f" * 32,
         safety_counters_zero=True,
         user_wip_preserved=True,
         no_plan_owned_processes=True,
         no_repo_master_plan=True,
     )
     blocked = run_final_assurance_audit(
-        web_release_sha="bd53edd3",
-        provider_release_sha="5d4bb127",
-        desktop_release_sha="",  # missing
-        safety_counters_zero=True,
+        web_release_sha="bd53edd3" + "0" * 32,
+        provider_release_sha="5d4bb127" + "0" * 32,
+        desktop_release_sha="1d2c3b4a" + "f" * 32,
+        safety_counters_zero=False,  # incomplete: safety counters non-zero
         user_wip_preserved=True,
         no_plan_owned_processes=True,
         no_repo_master_plan=True,
@@ -277,4 +319,6 @@ __all__ = [
     "SIGNING_SIGNED",
     "SIGNING_UNSIGNED",
     "FINAL_MILESTONES",
+    "FINAL_ASSURANCE_INVALID_IDENTITY",
+    "_validate_git_sha",
 ]

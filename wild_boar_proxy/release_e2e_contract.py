@@ -146,17 +146,30 @@ def run_release_e2e_synthetic_proof() -> dict[str, Any]:
     violations: list[str] = []
     for r in receipts:
         violations.extend(command_packets.inspect_command_packet_semantics(r))
-    ok = not violations and with_cred["machine_error_code"] == "WEB_RELEASE_V0_1_0_ACCEPTED"
+    contract_holds = (
+        not violations
+        and with_cred["machine_error_code"] == "WEB_RELEASE_V0_1_0_ACCEPTED"
+    )
+    # The synthetic proof demonstrates that the deterministic contract holds; it
+    # must NEVER claim physical acceptance. ok=True only certifies that the
+    # synthetic contract is internally consistent, while machine_error_code is
+    # SYNTHETIC_PROVEN (not OK / not ACCEPTED) to keep physical proof honest.
     return _build_packet(
-        ok=ok,
-        human_message="Release E2E synthetic proof complete." if ok else "Violations.",
-        machine_error_code="OK" if ok else "RELEASE_E2E_PROOF_VIOLATIONS",
-        operator_action="none" if ok else "stop",
-        liveness="healthy" if ok else "degraded",
+        ok=contract_holds,
+        human_message=(
+            "Release E2E synthetic proof complete (synthetic contract proven; "
+            "no physical acceptance claimed)."
+            if contract_holds
+            else "Release E2E synthetic proof violations."
+        ),
+        machine_error_code="SYNTHETIC_PROVEN" if contract_holds else "RELEASE_E2E_PROOF_VIOLATIONS",
+        operator_action="none" if contract_holds else "stop",
+        liveness="healthy" if contract_holds else "degraded",
         severity="recoverable",
         changed_files=[],
         effect=E2E_EFFECT_READ,
         extra={
+            "evidence_level": "SYNTHETIC_PROVEN",
             "receipt_count": len(receipts),
             "live_proof_deferred_without_credentials": no_cred["machine_error_code"] == "WAIT_EXTERNAL_PREREQUISITE",
             "accepted_with_credentials": with_cred["machine_error_code"] == "WEB_RELEASE_V0_1_0_ACCEPTED",

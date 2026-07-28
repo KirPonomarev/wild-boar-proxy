@@ -148,7 +148,12 @@ def build_kimi_route_definition(
     secret_ref: str = KIMI_CREDENTIAL_REF,
     enabled: bool = False,
 ) -> dict[str, Any]:
-    """Build a canonical Kimi route definition."""
+    """Build a canonical Kimi route definition.
+
+    transform_profile / response_profile / thinking use only values registered
+    in the production route validator (see external_models.transforms), so the
+    route passes validate_route_schema().
+    """
     from .external_models.contracts import ROUTE_SCHEMA_VERSION
     return {
         "schema_version": ROUTE_SCHEMA_VERSION,
@@ -164,9 +169,9 @@ def build_kimi_route_definition(
         "lane_role": KIMI_LANE_ROLE,
         "fallback_eligible": False,
         "enabled": enabled,
-        "transform_profile": "kimi_default",
-        "response_profile": "openai_chat_completions",
-        "thinking": {"admitted": True, "default": False},
+        "transform_profile": "openai_chat_passthrough",
+        "response_profile": "openai_chat_choices_message",
+        "thinking": {"type": "disabled"},
         "check_max_tokens": 4096,
     }
 
@@ -178,7 +183,12 @@ def build_glm_route_definition(
     secret_ref: str = GLM_CREDENTIAL_REF,
     enabled: bool = False,
 ) -> dict[str, Any]:
-    """Build a canonical GLM route definition."""
+    """Build a canonical GLM route definition.
+
+    transform_profile / response_profile / thinking use only values registered
+    in the production route validator (see external_models.transforms), so the
+    route passes validate_route_schema().
+    """
     from .external_models.contracts import ROUTE_SCHEMA_VERSION
     return {
         "schema_version": ROUTE_SCHEMA_VERSION,
@@ -194,9 +204,9 @@ def build_glm_route_definition(
         "lane_role": GLM_LANE_ROLE,
         "fallback_eligible": False,
         "enabled": enabled,
-        "transform_profile": "glm_default",
-        "response_profile": "openai_chat_completions",
-        "thinking": {"admitted": True, "default": False},
+        "transform_profile": "openai_chat_passthrough",
+        "response_profile": "openai_chat_choices_message",
+        "thinking": {"type": "disabled"},
         "check_max_tokens": 4096,
     }
 
