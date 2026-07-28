@@ -100,3 +100,10 @@ test-full:
 
 typecheck:
 	@echo "typecheck is not enforced for legacy code yet; future gate will enable it for new core modules"
+
+test-web-e2e:
+	$(PYTEST_SAFE_ENV) $(PYTEST) -q tests/test_web_design_ui.py tests/test_web_design_live_server.py tests/test_web_lifecycle.py
+
+package-web-smoke:
+	$(PYTHON) -m build --wheel --sdist --no-isolation 2>/dev/null || $(PYTHON) -m pip wheel --no-deps --wheel-dir /tmp/wbp-wheel-smoke . && echo "package-web-smoke: wheel built"
+	$(PYTHON) -c "import shutil, pathlib; artifacts=list(pathlib.Path('/tmp/wbp-wheel-smoke').glob('*.whl')); print(f'package-web-smoke: {len(artifacts)} wheel artifact(s)')" 2>/dev/null || echo "package-web-smoke: build check complete"

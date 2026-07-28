@@ -1,0 +1,53 @@
+name: Release CI
+
+# Release-relevant CI gates: core + custom-stability + web E2E + package smoke.
+# Added in W12; replaces the narrower baseline-core-ci for release branches/tags.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release-core:
+    name: make check + test-core + test-custom-stability + test-web-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
+          python3 -m pip install --upgrade pytest build
+      - run: make check
+      - run: make test-core
+      - run: make test-custom-stability
+      - run: make test-web-e2e
+
+  package-smoke:
+    name: wheel + sdist build smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python3 -m pip install --upgrade pip build
+          python3 -m build --wheel --sdist
+      - name: Verify artifact does not contain runtime data
+        run: |
+          set -euo pipefail
+          for artifact in dist/*; do
+            echo "checking $artifact"
+            if unzip -l "$artifact" 2>/dev/null | grep -qiE "(backend-registry|supervisor-state|auth-source|\.env|secret)"; then
+              echo "ERROR: artifact $artifact contains runtime/private data"
+              exit 1
+            fi
+          done
+          echo "package-smoke: artifacts clean"
