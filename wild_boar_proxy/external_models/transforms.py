@@ -19,6 +19,7 @@ MAX_CHECK_REQUEST_COMPLETION_BUDGET = 32768
 REQUEST_TRANSFORM_PROFILES = frozenset(
     {
         DEFAULT_REQUEST_TRANSFORM,
+        "deepseek_default",
         "openai_chat_developer_to_system",
         "openai_chat_system_to_developer",
         "openai_chat_input_text",
@@ -27,6 +28,7 @@ REQUEST_TRANSFORM_PROFILES = frozenset(
 RESPONSE_PROFILES = frozenset(
     {
         DEFAULT_RESPONSE_PROFILE,
+        "openai_chat_completions",
         "top_level_output_text",
         "content_blocks_text",
     }
@@ -199,7 +201,7 @@ def build_check_request(route: dict[str, Any], *, user_prompt: str) -> tuple[dic
             THINKING_CHECK_REQUEST_COMPLETION_BUDGET,
         )
     transform_profile = metadata["transform_profile"]
-    if transform_profile == DEFAULT_REQUEST_TRANSFORM:
+    if transform_profile in {DEFAULT_REQUEST_TRANSFORM, "deepseek_default"}:
         return base_payload, metadata | {"request_shape": "openai_chat_messages"}
     if transform_profile == "openai_chat_system_to_developer":
         transformed_messages: list[dict[str, Any]] = []
@@ -250,7 +252,7 @@ def extract_check_response(
 ) -> tuple[str, dict[str, Any]]:
     metadata = route_transform_metadata(route)
     response_profile = metadata["response_profile"]
-    if response_profile == DEFAULT_RESPONSE_PROFILE:
+    if response_profile in {DEFAULT_RESPONSE_PROFILE, "openai_chat_completions"}:
         choices = payload.get("choices") if isinstance(payload, dict) else None
         if not isinstance(choices, list) or not choices:
             raise RuntimeErrorInfo(

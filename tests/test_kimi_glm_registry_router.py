@@ -52,6 +52,10 @@ class AliasRouterTests(unittest.TestCase):
         self.assertTrue(r["no_silent_fallback"])
 
 class SyntheticProofTests(unittest.TestCase):
+    def test_failover_policy_has_correct_public_name(self):
+        self.assertIs(rr.FAILVOVER_POLICY, rr.FAILOVER_POLICY)
+        self.assertEqual(rr.FAILOVER_POLICY["max_replacement_dispatches"], 1)
+
     def test_summary_ok(self):
         s = rr.run_registry_router_synthetic_proof()
         _assert(self, s)

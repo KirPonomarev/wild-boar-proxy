@@ -73,6 +73,7 @@ from wild_boar_proxy.custom_agent_bindings import (
     agent_bindings_state_path,
     default_agent_bindings,
     dry_run_agent_bindings_packet,
+    kimi_glm_additional_routes_from_records,
     project_agent_bindings_for_runtime_context,
     read_agent_bindings_packet,
     resolve_alias_binding,
@@ -2549,6 +2550,23 @@ def _custom_agent_default_api_route_id(
         if preferred_route_id in route_ids:
             return preferred_route_id
     return route_ids[0] if route_ids else CUSTOM_GPT_PLUS_API_DEFAULT_ROUTE_ID
+
+
+def _custom_agent_default_bindings_for_routes(
+    *,
+    primary_model_id: str,
+    api_route_id: str,
+    route_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build server-owned Custom Codex bindings from enabled route records."""
+    return default_agent_bindings(
+        primary_model_id=primary_model_id,
+        api_route_id=api_route_id,
+        additional_api_routes=kimi_glm_additional_routes_from_records(
+            route_records,
+            primary_api_route_id=api_route_id,
+        ),
+    )
 
 
 def _custom_gpt_plus_api_provider_id(value: Any) -> str:
@@ -11756,9 +11774,10 @@ def _custom_native_api_route_aliases_for_bridge(
     try:
         bindings_packet = read_agent_bindings_packet(
             agent_bindings_state_path(RuntimePaths.from_env().managed_dir),
-            default_bindings=default_agent_bindings(
+            default_bindings=_custom_agent_default_bindings_for_routes(
                 primary_model_id=str(primary_model_id or "gpt-5.5").strip(),
                 api_route_id=api_route_id,
+                route_records=route_records,
             ),
             primary_model_ids=[str(primary_model_id or "").strip()]
             if str(primary_model_id or "").strip()
@@ -12073,9 +12092,10 @@ def _custom_native_agent_runtime_context(
     if api_only_primary_executor:
         bindings_packet = read_agent_bindings_packet(
             bindings_state_path,
-            default_bindings=default_agent_bindings(
+            default_bindings=_custom_agent_default_bindings_for_routes(
                 primary_model_id=chatgpt_model_id,
                 api_route_id=api_model_id,
+                route_records=effective_route_records,
             ),
             primary_model_ids=[],
             route_records=effective_route_records,
@@ -12126,9 +12146,10 @@ def _custom_native_agent_runtime_context(
     else:
         bindings_packet = read_agent_bindings_packet(
             bindings_state_path,
-            default_bindings=default_agent_bindings(
+            default_bindings=_custom_agent_default_bindings_for_routes(
                 primary_model_id=chatgpt_model_id,
                 api_route_id=api_model_id,
+                route_records=effective_route_records,
             ),
             primary_model_ids=[],
             route_records=effective_route_records,
@@ -17296,9 +17317,10 @@ def build_handler(
         )
         return {
             "state_path": agent_bindings_state_path(owner_paths.managed_dir),
-            "default_bindings": default_agent_bindings(
+            "default_bindings": _custom_agent_default_bindings_for_routes(
                 primary_model_id=primary_model_id,
                 api_route_id=api_route_id,
+                route_records=route_records,
             ),
             "primary_model_ids": primary_model_ids,
             "route_records": route_records,
@@ -17505,9 +17527,10 @@ def build_handler(
         api_route_id = _custom_agent_default_api_route_id(route_records)
         return read_agent_bindings_packet(
             agent_bindings_state_path(owner_paths.managed_dir),
-            default_bindings=default_agent_bindings(
+            default_bindings=_custom_agent_default_bindings_for_routes(
                 primary_model_id="gpt-5.5",
                 api_route_id=api_route_id,
+                route_records=route_records,
             ),
             primary_model_ids=[],
             route_records=route_records,

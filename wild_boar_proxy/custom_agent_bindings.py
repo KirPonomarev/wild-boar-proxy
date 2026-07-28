@@ -89,7 +89,7 @@ def default_agent_bindings(
     *,
     primary_model_id: str,
     api_route_id: str,
-    additional_api_routes: list[dict[str, str]] | None = None,
+    additional_api_routes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build default agent bindings.
 
@@ -161,9 +161,9 @@ def kimi_glm_additional_routes(
     *,
     kimi_route_id: str = "wbp-kimi-primary",
     glm_route_id: str = "wbp-glm-primary",
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Build additional_api_routes for Kimi and GLM providers."""
-    routes: list[dict[str, str]] = []
+    routes: list[dict[str, Any]] = []
     if kimi_route_id:
         routes.append({
             "route_id": kimi_route_id,
@@ -179,6 +179,54 @@ def kimi_glm_additional_routes(
             "role": "coding_agent",
         })
     return routes
+
+
+def kimi_glm_additional_routes_from_records(
+    route_records: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    *,
+    primary_api_route_id: str = "",
+) -> list[dict[str, Any]]:
+    """Project enabled Kimi/GLM route records into extra alias bindings.
+
+    The first/primary API route remains the canonical DIP binding. This helper
+    only admits additional Kimi/GLM routes that are already present in the
+    server-owned route registry, so default bindings cannot invent a live lane.
+    """
+    primary_api_route_id = str(primary_api_route_id or "").strip()
+    additional: list[dict[str, Any]] = []
+    seen_route_ids: set[str] = set()
+    for route in route_records:
+        if not isinstance(route, dict):
+            continue
+        route_id = str(route.get("route_id") or "").strip()
+        if not route_id or route_id == primary_api_route_id or route_id in seen_route_ids:
+            continue
+        if route.get("enabled") is not True:
+            continue
+        provider = str(route.get("provider") or "").strip().lower()
+        if provider in {"kimi", "moonshot"}:
+            display_name = str(route.get("display_name") or "Kimi").strip() or "Kimi"
+            aliases = [display_name]
+            if display_name.casefold() != "kimi":
+                aliases.append("Kimi")
+        elif provider in {"glm", "zai", "zhipu"}:
+            display_name = str(route.get("display_name") or "GLM").strip() or "GLM"
+            aliases = [display_name]
+            if display_name.casefold() != "glm":
+                aliases.append("GLM")
+        else:
+            continue
+        additional.append(
+            {
+                "route_id": route_id,
+                "display_name": display_name,
+                "aliases": aliases,
+                "role": str(route.get("lane_role") or "coding_agent").strip()
+                or "coding_agent",
+            }
+        )
+        seen_route_ids.add(route_id)
+    return additional
 
 
 def _safe_text(value: object, *, max_length: int = 96) -> str:

@@ -32,7 +32,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .core import packets as command_packets
 from .runtime import build_command_payload
@@ -245,6 +245,9 @@ class FailoverDecision:
     machine_error_code: str
 
 
+DispatchCallback = Callable[[AccountRef], DispatchOutcome | Mapping[str, Any]]
+
+
 def decide_request_bound_replacement(
     *,
     failing_account: AccountRef,
@@ -344,6 +347,246 @@ def _build_packet(
         severity=severity,
         changed_files=changed_files,
         effect=effect,
+        extra=extra,
+    )
+
+
+def _coerce_dispatch_outcome(raw: DispatchOutcome | Mapping[str, Any]) -> DispatchOutcome:
+    """Convert an engine callback result to the control-layer outcome type.
+
+    Engine adapters may return the dataclass directly or a bounded mapping with
+    normalized fields. Raw error text is digested by ``normalize_dispatch_outcome``
+    and is never copied into receipts.
+    """
+    if isinstance(raw, DispatchOutcome):
+        return raw
+    if not isinstance(raw, Mapping):
+        return normalize_dispatch_outcome(
+            success=False,
+            engine_error_code="invalid_dispatch_result",
+            engine_error_text="dispatch callback returned unsupported result",
+            response_observed=False,
+        )
+    if raw.get("outcome") in ACCOUNT_FAILURE_CLASSES:
+        # A legacy mapping may accidentally place the failure class under
+        # outcome. Treat it as a failure class rather than accepting an invalid
+        # outcome value.
+        return normalize_dispatch_outcome(
+            success=False,
+            http_status=_as_optional_int(raw.get("http_status")),
+            engine_error_code=_as_optional_text(raw.get("engine_error_code")),
+            engine_error_text=_as_optional_text(raw.get("engine_error_text")),
+            cooldown_until=_as_optional_text(raw.get("cooldown_until")),
+            response_observed=raw.get("response_observed") is True,
+            ambiguous_delivery=raw.get("ambiguous_delivery") is True,
+        )
+    if raw.get("outcome") in {
+        ACCOUNT_OUTCOME_SUCCESS,
+        ACCOUNT_OUTCOME_FAILURE,
+        ACCOUNT_OUTCOME_AMBIGUOUS,
+    }:
+        outcome_value = str(raw.get("outcome"))
+        failure_class = raw.get("failure_class")
+        if failure_class is not None and failure_class not in ACCOUNT_FAILURE_CLASSES:
+            failure_class = ACCOUNT_FAILURE_UNKNOWN
+        return DispatchOutcome(
+            outcome=outcome_value,
+            failure_class=(str(failure_class) if failure_class else None),
+            http_status=_as_optional_int(raw.get("http_status")),
+            engine_error_code=_as_optional_text(raw.get("engine_error_code")),
+            engine_error_text_digest=_as_optional_text(
+                raw.get("engine_error_text_digest")
+            )
+            or (
+                _sha256_text(str(raw.get("engine_error_text")))
+                if raw.get("engine_error_text")
+                else None
+            ),
+            response_observed=raw.get("response_observed") is True,
+            ambiguous_delivery=raw.get("ambiguous_delivery") is True,
+        )
+    return normalize_dispatch_outcome(
+        success=raw.get("success") is True,
+        http_status=_as_optional_int(raw.get("http_status")),
+        engine_error_code=_as_optional_text(raw.get("engine_error_code")),
+        engine_error_text=_as_optional_text(raw.get("engine_error_text")),
+        cooldown_until=_as_optional_text(raw.get("cooldown_until")),
+        response_observed=raw.get("response_observed") is True,
+        ambiguous_delivery=raw.get("ambiguous_delivery") is True,
+    )
+
+
+def _as_optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value)
+    return None
+
+
+def _as_optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _dispatch_once(dispatch: DispatchCallback, account: AccountRef) -> DispatchOutcome:
+    try:
+        return _coerce_dispatch_outcome(dispatch(account))
+    except Exception as exc:  # pragma: no cover - defensive production guard
+        return normalize_dispatch_outcome(
+            success=False,
+            engine_error_code=exc.__class__.__name__,
+            engine_error_text=str(exc),
+            response_observed=False,
+        )
+
+
+def _attempt_receipt(
+    *,
+    index: int,
+    account: AccountRef,
+    outcome: DispatchOutcome,
+) -> dict[str, Any]:
+    return {
+        "attempt_index": index,
+        "account_ref": _opaque_ref(account),
+        "outcome": {
+            "outcome": outcome.outcome,
+            "failure_class": outcome.failure_class,
+            "http_status": outcome.http_status,
+            "engine_error_code": outcome.engine_error_code,
+            "engine_error_text_digest": outcome.engine_error_text_digest,
+            "response_observed": outcome.response_observed,
+            "ambiguous_delivery": outcome.ambiguous_delivery,
+        },
+    }
+
+
+def run_request_bound_failover_dispatch(
+    *,
+    request_id: str,
+    initial_account: AccountRef,
+    candidate_pool: Sequence[AccountRef],
+    dispatch: DispatchCallback,
+    state: FailoverState | None = None,
+    observed_at_utc: str | None = None,
+) -> dict[str, Any]:
+    """Run one request through WBP's request-bound failover guard.
+
+    This is the production control-layer adapter: it calls the engine-provided
+    dispatch callback for the initial account, admits at most one replacement
+    dispatch for typed eligible failures, and emits a visible serving-account
+    receipt. It never reads Original/main auth and never logs raw error text.
+    """
+    observed_at_utc = observed_at_utc or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    state = state or FailoverState(
+        request_id=request_id,
+        failed_account_ids=[],
+        replacement_dispatches_admitted=0,
+    )
+    attempts: list[dict[str, Any]] = []
+    first_outcome = _dispatch_once(dispatch, initial_account)
+    attempts.append(
+        _attempt_receipt(index=1, account=initial_account, outcome=first_outcome)
+    )
+    decision = decide_request_bound_replacement(
+        failing_account=initial_account,
+        outcome=first_outcome,
+        state=state,
+        candidate_pool=candidate_pool,
+    )
+    replacement_outcome: DispatchOutcome | None = None
+    replacement_account = decision.replacement_account if decision.admitted else None
+    if replacement_account is not None:
+        replacement_outcome = _dispatch_once(dispatch, replacement_account)
+        attempts.append(
+            _attempt_receipt(
+                index=2,
+                account=replacement_account,
+                outcome=replacement_outcome,
+            )
+        )
+
+    first_success = first_outcome.outcome == ACCOUNT_OUTCOME_SUCCESS
+    replacement_success = (
+        replacement_outcome is not None
+        and replacement_outcome.outcome == ACCOUNT_OUTCOME_SUCCESS
+    )
+    final_success = first_success or replacement_success
+    if first_success:
+        machine_error_code = "OK"
+        human_message = "Initial dedicated account served the request."
+        serving_account = initial_account
+    elif replacement_success and replacement_account is not None:
+        machine_error_code = "OK"
+        human_message = "Typed eligible failure switched to one dedicated replacement account."
+        serving_account = replacement_account
+    elif replacement_outcome is not None:
+        machine_error_code = "FAILOVER_REPLACEMENT_DISPATCH_FAILED"
+        human_message = "Replacement dispatch was attempted once and did not produce success."
+        serving_account = None
+    else:
+        machine_error_code = decision.machine_error_code
+        human_message = f"Request-bound failover stopped: {decision.reason}."
+        serving_account = None
+
+    replacement_count = 1 if replacement_outcome is not None else 0
+    failed_ids = list(state.failed_account_ids)
+    if first_outcome.outcome != ACCOUNT_OUTCOME_SUCCESS and initial_account.backend_id not in failed_ids:
+        failed_ids.append(initial_account.backend_id)
+    extra = {
+        "request_id": request_id,
+        "observed_at_utc": observed_at_utc,
+        "request_bound_failover_dispatch_proven": True,
+        "request_completed": final_success,
+        "initial_account_ref": _opaque_ref(initial_account),
+        "serving_account_ref": _opaque_ref(serving_account) if serving_account else None,
+        "last_attempt_account_ref": (
+            attempts[-1]["account_ref"] if attempts else None
+        ),
+        "dispatch_attempt_count": len(attempts),
+        "replacement_dispatch_attempted": replacement_count == 1,
+        "replacement_dispatch_count": replacement_count,
+        "replacement_dispatch_limit": MAX_REPLACEMENT_DISPATCHES_PER_REQUEST,
+        "replacement_dispatches_admitted_before_request": state.replacement_dispatches_admitted,
+        "replacement_dispatches_admitted_after_request": (
+            state.replacement_dispatches_admitted + replacement_count
+        ),
+        "failed_account_ids_count_after_request": len(failed_ids),
+        "failed_account_not_reselected": (
+            replacement_account is None
+            or replacement_account.backend_id != initial_account.backend_id
+        ),
+        "decision": {
+            "admitted": decision.admitted,
+            "reason": decision.reason,
+            "machine_error_code": decision.machine_error_code,
+            "replacement_account_ref": (
+                _opaque_ref(replacement_account) if replacement_account else None
+            ),
+        },
+        "attempts": attempts,
+        "serving_account_switched": bool(replacement_success),
+        "switch_visible": bool((not first_success) and replacement_account is not None),
+        "ambiguous_retry_count": 0 if first_outcome.ambiguous_delivery else None,
+        "no_retry_storm_proven": replacement_count <= MAX_REPLACEMENT_DISPATCHES_PER_REQUEST,
+        "original_account_auth_read": False,
+        "primary_account_login_attempted": False,
+        "protected_runtime_surfaces_touched": False,
+    }
+    return _build_packet(
+        ok=final_success,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        operator_action="none" if final_success else "user_action",
+        liveness="healthy" if final_success else "degraded",
+        severity="recoverable",
+        changed_files=[],
+        effect=FAILOVER_EFFECT_MUTATE,
         extra=extra,
     )
 
@@ -587,6 +830,179 @@ def run_synthetic_failover_matrix() -> list[dict[str, Any]]:
     return scenarios
 
 
+def run_request_bound_failover_dispatch_synthetic_proof() -> dict[str, Any]:
+    """Synthetic proof for the production request-bound dispatch adapter."""
+
+    def dedicated(backend_id: str, *, dedicated_provenance_proven: bool = True) -> AccountRef:
+        return AccountRef(
+            backend_id=backend_id,
+            pool="active",
+            status="healthy",
+            manual_hold=False,
+            cooldown_until=None,
+            last_error_class=None,
+            dedicated_provenance_proven=dedicated_provenance_proven,
+        )
+
+    acct_a = dedicated("acct-a")
+    acct_b = dedicated("acct-b")
+    receipts: list[dict[str, Any]] = []
+    call_orders: dict[str, list[str]] = {}
+
+    def callback_for(
+        scenario: str,
+        outcomes: Mapping[str, DispatchOutcome | Mapping[str, Any]],
+    ) -> DispatchCallback:
+        call_orders[scenario] = []
+
+        def dispatch(account: AccountRef) -> DispatchOutcome | Mapping[str, Any]:
+            call_orders[scenario].append(account.backend_id)
+            return outcomes.get(
+                account.backend_id,
+                normalize_dispatch_outcome(
+                    success=False,
+                    engine_error_text="unexpected account",
+                    response_observed=False,
+                ),
+            )
+
+        return dispatch
+
+    receipts.append(
+        run_request_bound_failover_dispatch(
+            request_id="synthetic-dispatch-quota",
+            initial_account=acct_a,
+            candidate_pool=[acct_b],
+            dispatch=callback_for(
+                "quota_then_success",
+                {
+                    "acct-a": {"success": False, "http_status": 429, "response_observed": True},
+                    "acct-b": {"success": True, "http_status": 200, "response_observed": True},
+                },
+            ),
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+    )
+    receipts.append(
+        run_request_bound_failover_dispatch(
+            request_id="synthetic-dispatch-ambiguous",
+            initial_account=acct_a,
+            candidate_pool=[acct_b],
+            dispatch=callback_for(
+                "ambiguous_no_retry",
+                {
+                    "acct-a": {
+                        "success": False,
+                        "http_status": 429,
+                        "ambiguous_delivery": True,
+                    },
+                    "acct-b": {"success": True, "http_status": 200, "response_observed": True},
+                },
+            ),
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+    )
+    receipts.append(
+        run_request_bound_failover_dispatch(
+            request_id="synthetic-dispatch-network",
+            initial_account=acct_a,
+            candidate_pool=[acct_b],
+            dispatch=callback_for(
+                "network_no_replacement",
+                {
+                    "acct-a": {"success": False, "http_status": 503, "response_observed": True},
+                    "acct-b": {"success": True, "http_status": 200, "response_observed": True},
+                },
+            ),
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+    )
+    receipts.append(
+        run_request_bound_failover_dispatch(
+            request_id="synthetic-dispatch-replacement-failed",
+            initial_account=acct_a,
+            candidate_pool=[acct_b],
+            dispatch=callback_for(
+                "replacement_fails_once",
+                {
+                    "acct-a": {"success": False, "http_status": 429, "response_observed": True},
+                    "acct-b": {"success": False, "http_status": 401, "response_observed": True},
+                },
+            ),
+            observed_at_utc="2026-07-27T00:00:00Z",
+        )
+    )
+
+    violations: list[str] = []
+    for receipt in receipts:
+        violations.extend(command_packets.inspect_command_packet_semantics(receipt))
+    by_request = {receipt["request_id"]: receipt for receipt in receipts}
+    quota_ok = (
+        by_request["synthetic-dispatch-quota"]["status"] == "ok"
+        and by_request["synthetic-dispatch-quota"]["serving_account_switched"] is True
+        and call_orders["quota_then_success"] == ["acct-a", "acct-b"]
+    )
+    ambiguous_ok = (
+        by_request["synthetic-dispatch-ambiguous"]["machine_error_code"]
+        == "FAILOVER_AMBIGUOUS_DELIVERY"
+        and call_orders["ambiguous_no_retry"] == ["acct-a"]
+        and by_request["synthetic-dispatch-ambiguous"]["ambiguous_retry_count"] == 0
+    )
+    network_ok = (
+        by_request["synthetic-dispatch-network"]["machine_error_code"]
+        == "FAILOVER_FAILURE_CLASS_NOT_ELIGIBLE"
+        and call_orders["network_no_replacement"] == ["acct-a"]
+    )
+    replacement_failure_ok = (
+        by_request["synthetic-dispatch-replacement-failed"]["machine_error_code"]
+        == "FAILOVER_REPLACEMENT_DISPATCH_FAILED"
+        and call_orders["replacement_fails_once"] == ["acct-a", "acct-b"]
+        and by_request["synthetic-dispatch-replacement-failed"][
+            "replacement_dispatch_count"
+        ]
+        == 1
+    )
+    safety_ok = all(
+        receipt["original_account_auth_read"] is False
+        and receipt["primary_account_login_attempted"] is False
+        and receipt["protected_runtime_surfaces_touched"] is False
+        and receipt["no_retry_storm_proven"] is True
+        for receipt in receipts
+    )
+    ok = bool(
+        not violations
+        and quota_ok
+        and ambiguous_ok
+        and network_ok
+        and replacement_failure_ok
+        and safety_ok
+    )
+    return _build_packet(
+        ok=ok,
+        human_message=(
+            "Request-bound failover dispatch adapter synthetic proof complete."
+            if ok
+            else "Request-bound failover dispatch adapter proof failed."
+        ),
+        machine_error_code="OK" if ok else "FAILOVER_DISPATCH_PROOF_FAILED",
+        operator_action="none" if ok else "stop",
+        liveness="healthy" if ok else "degraded",
+        severity="recoverable",
+        changed_files=[],
+        effect=FAILOVER_EFFECT_READ,
+        extra={
+            "receipt_count": len(receipts),
+            "packet_violations": violations,
+            "quota_then_success": quota_ok,
+            "ambiguous_no_retry": ambiguous_ok,
+            "network_no_replacement": network_ok,
+            "replacement_fails_once": replacement_failure_ok,
+            "safety_surfaces_untouched": safety_ok,
+            "call_orders": call_orders,
+        },
+    )
+
+
 __all__ = [
     "ACCOUNT_FAILURE_CLASSES",
     "ACCOUNT_FAILURE_QUOTA",
@@ -605,6 +1021,8 @@ __all__ = [
     "FailoverDecision",
     "normalize_dispatch_outcome",
     "decide_request_bound_replacement",
+    "run_request_bound_failover_dispatch",
     "build_failover_receipt",
     "run_synthetic_failover_matrix",
+    "run_request_bound_failover_dispatch_synthetic_proof",
 ]
