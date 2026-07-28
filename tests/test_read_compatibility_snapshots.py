@@ -190,7 +190,7 @@ EXPECTED_COMPATIBILITY_SNAPSHOTS: dict[str, dict[str, Any]] = {
                     "WBP_OPENROUTER_API_KEY",
                     "WBP_PROVIDER_OPENROUTER_API_KEY",
                 ],
-                "supported_sources": ["owner-env"],
+                "supported_sources": ["owner-env", "owner-keychain"],
                 "provider_dashboard_url": "https://openrouter.ai/settings/keys",
                 "provider_family": "provider_router",
                 "auth_type": "bearer",

@@ -131,10 +131,11 @@ _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
 
 
 def admit_owner_credential(
-    paths: ExternalModelsPaths, *, provider: str, source: str
+    paths: ExternalModelsPaths, *, provider: str, source: str,
+    keychain_service: str | None = None, keychain_account: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     normalized_source = str(source).strip()
-    if normalized_source != "owner-env":
+    if normalized_source not in ("owner-env", "owner-keychain"):
         raise RuntimeErrorInfo(
             "Unsupported credential source for external-models admission.",
             machine_error_code=errors.EXTERNAL_MODELS_CREDENTIAL_SOURCE_UNSUPPORTED,
@@ -142,7 +143,13 @@ def admit_owner_credential(
         )
     spec = _provider_spec(provider)
     _ensure_sandbox_admission_target(paths)
-    secret_value = _resolve_owner_env_secret(spec)
+    if normalized_source == "owner-env":
+        secret_value = _resolve_owner_env_secret(spec)
+    else:
+        # owner-keychain: resolve via exact-item Keychain lookup
+        secret_value = _resolve_owner_keychain_secret(
+            spec, keychain_service=keychain_service, keychain_account=keychain_account,
+        )
     if not secret_value:
         raise RuntimeErrorInfo(
             f"Owner credential source is missing for provider: {spec.provider}",
@@ -210,7 +217,7 @@ def _credential_result(
         "credential_ref": credential_ref,
         "credential_present": credential_present,
         "schema_admitted": True,
-        "supported_sources": ["owner-env"],
+        "supported_sources": ["owner-env", "owner-keychain"],
         "expected_refs": list(spec.owner_env_candidates),
         "provider_dashboard_url": spec.provider_dashboard_url,
         "secret_value_exposed": False,
@@ -238,7 +245,7 @@ def provider_specs_inventory() -> list[dict[str, Any]]:
                 "owner_env_candidates": list(spec.owner_env_candidates),
                 "provider_dashboard_url": spec.provider_dashboard_url,
                 "auth_type": spec.auth_type,
-                "supported_sources": ["owner-env"],
+                "supported_sources": ["owner-env", "owner-keychain"],
                 "schema_admitted": True,
                 "seed_source": spec.seed_source,
                 "classification_scope": "credential_admission_only",
@@ -269,6 +276,26 @@ def _resolve_owner_env_secret(spec: CredentialProviderSpec) -> str:
         if value:
             return value
     return ""
+
+
+def _resolve_owner_keychain_secret(
+    spec: CredentialProviderSpec,
+    *,
+    keychain_service: str | None = None,
+    keychain_account: str | None = None,
+) -> str:
+    """Resolve a credential from macOS Keychain via exact-item lookup.
+
+    Uses the keychain_credential_broker for safe, denylisted access.
+    Never reads Codex/OpenAI/ChatGPT items. Never does dump-keychain.
+    """
+    from ..keychain_credential_broker import lookup_keychain_credential
+    result = lookup_keychain_credential(
+        provider=spec.provider,
+        custom_service=keychain_service,
+        custom_account=keychain_account,
+    )
+    return result.secret_value or ""
 
 
 def _parse_secrets_file(path: Path) -> dict[str, str]:
