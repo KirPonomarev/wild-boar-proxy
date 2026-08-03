@@ -205,3 +205,43 @@ Primary truth surface for runtime attestation:
   evidence, but cached attestation must not override live command truth
 
 If any required attestation field is missing, the attestation is invalid.
+
+## Evidence levels
+
+Evidence claims use the canonical normalized taxonomy (B03):
+
+```text
+DECLARED < SYNTHETIC_PROVEN < INTEGRATION_PROVEN < LIVE_PROVEN
+< PHYSICAL_VISIBLE_PROVEN
+```
+
+- lower levels never substitute for higher levels
+- an empty required-step collection is never accepted as evidence
+  (`all([])` is not proof)
+- one SHA cannot stand for multiple independent milestones
+- credential presence is never a live response
+- bridge success is never direct-provider auth proof
+- stale evidence (after code, config, binding, binary, hook, or Codex-version
+  changes) is invalid
+- every evidence record binds plan, stage, project identity, candidate SHA,
+  artifact digest, actor/binding/assignment revisions, adapter, context
+  digest, environment/policy identity, evidence level, timestamp, TTL, and
+  invalidation keys
+
+## Normalized transport
+
+External adapters normalize one shared surface (B03):
+
+- request envelope
+- stream events
+- final response
+- tool-call events
+- typed errors
+- ambiguity and cancellation
+- capability negotiation
+- dispatch receipts
+
+`native_primary` is a special host boundary, not an ordinary callable
+`transport.send()` adapter. Ambiguous-delivery results are never retried and
+never replaced by another actor's response under the original identity.
+Cross-provider fallback is off by default.
