@@ -20,6 +20,7 @@ All operator commands must support `--json`.
 - `actors list --json`
 - `actors migrate --dry-run --json`
 - `actors migrate --apply --json`
+- `dispatch resolve <alias> --json`
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
@@ -1249,6 +1250,39 @@ command must not write runtime truth state.
 
 Both surfaces must remain strict JSON, use the command payload envelope, and
 never expose secret values, raw backend details, or registry paths.
+
+## Additional dispatch resolution owner surface
+
+`dispatch resolve <alias> --json` is the read-only owner surface for
+alias -> slot binding -> actor -> role assignment -> context resolution
+diagnostics (B05).
+
+It must remain strict JSON and use the command payload envelope.
+
+Readiness results:
+
+- `DISPATCH_PLAN_READY` with the resolved plan: `slot_id`, `binding_id`,
+  `binding_revision`, `assignment_id`, `assignment_revision`, `actor_id`,
+  `transport_adapter_id`, `provider_id`, `route_id`, `model_policy`,
+  `assignment_context_policy`, `effective_permission`, the four permission
+  surfaces, `context_digest`, `no_fallback=true`,
+  `cross_provider_fallback=false`, and `legacy_projection_used` when the
+  legacy v1 bindings projection was used
+- `ALIAS_UNKNOWN` when the alias is not bound (fail closed)
+- `ACTOR_REGISTRY_INVALID` / `ACTOR_REGISTRY_UNAVAILABLE` when the canonical
+  registry cannot be used
+- `BINDING_UNRESOLVED` / `ACTOR_UNRESOLVED` / `ASSIGNMENT_UNRESOLVED` on
+  structural gaps
+- `PERMISSION_DENIED` when the requested permission exceeds the effective
+  intersection
+- `STALE_ROUTE_REJECTED` for forbidden stale routes (for example
+  `wbp-deepseek-v3`)
+- `FORK_CONTEXT_DIGEST_MISSING` when a `fork` context policy is used without
+  an exact context digest
+
+`dispatch resolve` is a `read` surface: `changed_files` must be `[]` and the
+command must not write runtime truth state. It never dispatches a provider
+call, never retries, and never falls back to another actor's response.
 
 ## Additional web control-surface lifecycle owner surface
 
