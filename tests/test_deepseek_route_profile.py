@@ -54,7 +54,10 @@ class RouteDefinitionTests(unittest.TestCase):
         self.assertNotIn("sk-", body)
 
     def test_default_route_passes_external_models_schema_validation(self) -> None:
-        route = d.build_deepseek_route_definition(route_id="wbp-deepseek-chat")
+        # B07: the DEFAULT deepseek route id must be schema-valid
+        # (wbp- prefix required by the route schema).
+        route = d.build_deepseek_route_definition()
+        self.assertEqual(route["route_id"], d.DEEPSEEK_DEFAULT_ROUTE_ID)
         self.assertIs(validate_route_schema(route), route)
 
     def test_default_route_transform_builds_and_extracts_chat_completion(self) -> None:
