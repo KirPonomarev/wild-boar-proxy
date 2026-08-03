@@ -46,19 +46,19 @@ dispatch diagnostics, no fallback/imitation) and update the command contract.
   - `make test-core` -> green
   - `make test-custom-stability` -> green
   - `make test-web-e2e` -> green
-  - `make test-full` -> two local full-suite runs each failed exactly one
-    timing/subprocess-sensitive test, a DIFFERENT test in each run:
-    (1) `test_official_mcp_transcript_tool_result_observation.py::test_cli_emits_observation_packet`
+  - `make test-full` -> solo run after reboot -> `4769 passed, 978 subtests
+    passed` (clean). Two earlier full-suite runs on the pre-reboot machine each
+    failed exactly one timing/subprocess-sensitive test, a DIFFERENT test in
+    each run: (1)
+    `test_official_mcp_transcript_tool_result_observation.py::test_cli_emits_observation_packet`
     (ledger-bound dispatch proof subprocess reported
     `codex_hook_trusted_by_profile_state=false`; the hook app-server probe
     has a 10s bounded timeout); (2)
     `test_cli.py::test_package_launchable_relocated_launcher_smoke_web_shell_json_works_without_repo_pythonpath`
     (`BrokenPipeError` in the relocated launcher smoke web shell). Both tests
-    pass in isolation and in file groups on both this branch and main; the
-    first full-suite run on main (B04 head) control result is recorded
-    separately. Neither failing test exercises any B05 code path. GitHub CI
-    full-suite results on the contour branch are recorded below as the
-    authoritative machine evidence.
+    pass in isolation and in file groups; neither exercises any B05 code
+    path; the clean solo run after reboot and GitHub CI (6/6) are the
+    authoritative evidence.
 - build:
   - `make check` (compileall + collect) green
 - manual:
