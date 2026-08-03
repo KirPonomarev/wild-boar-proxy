@@ -27,6 +27,7 @@ DEEPSEEK_PROVIDER_ID = "deepseek"
 DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_ENDPOINT_PATH = "/v1/chat/completions"
 DEEPSEEK_DEFAULT_UPSTREAM_MODEL = "deepseek-chat"
+DEEPSEEK_DEFAULT_ROUTE_ID = "wbp-deepseek-chat"
 DEEPSEEK_CREDENTIAL_REF = "DEEPSEEK_API_KEY"
 DEEPSEEK_PROVIDER_DASHBOARD_URL = "https://platform.deepseek.com/api_keys"
 DEEPSEEK_COST_CLASS = "paid_direct"
@@ -95,7 +96,7 @@ DEEPSEEK_CAPABILITIES = DeepSeekCapabilityMatrix(
 
 def build_deepseek_route_definition(
     *,
-    route_id: str = DEEPSEEK_DEFAULT_UPSTREAM_MODEL,
+    route_id: str = DEEPSEEK_DEFAULT_ROUTE_ID,
     display_name: str = "DeepSeek Chat",
     upstream_model: str = DEEPSEEK_DEFAULT_UPSTREAM_MODEL,
     base_url: str = DEEPSEEK_DEFAULT_BASE_URL,
@@ -461,6 +462,7 @@ __all__ = [
     "DEEPSEEK_PROVIDER_ID",
     "DEEPSEEK_DEFAULT_BASE_URL",
     "DEEPSEEK_DEFAULT_UPSTREAM_MODEL",
+    "DEEPSEEK_DEFAULT_ROUTE_ID",
     "DEEPSEEK_CREDENTIAL_REF",
     "DEEPSEEK_LANE_ROLE",
     "DEEPSEEK_CAPABILITIES",
