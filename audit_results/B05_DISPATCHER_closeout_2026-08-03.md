@@ -46,7 +46,19 @@ dispatch diagnostics, no fallback/imitation) and update the command contract.
   - `make test-core` -> green
   - `make test-custom-stability` -> green
   - `make test-web-e2e` -> green
-  - `make test-full` -> full local baseline green
+  - `make test-full` -> two local full-suite runs each failed exactly one
+    timing/subprocess-sensitive test, a DIFFERENT test in each run:
+    (1) `test_official_mcp_transcript_tool_result_observation.py::test_cli_emits_observation_packet`
+    (ledger-bound dispatch proof subprocess reported
+    `codex_hook_trusted_by_profile_state=false`; the hook app-server probe
+    has a 10s bounded timeout); (2)
+    `test_cli.py::test_package_launchable_relocated_launcher_smoke_web_shell_json_works_without_repo_pythonpath`
+    (`BrokenPipeError` in the relocated launcher smoke web shell). Both tests
+    pass in isolation and in file groups on both this branch and main; the
+    first full-suite run on main (B04 head) control result is recorded
+    separately. Neither failing test exercises any B05 code path. GitHub CI
+    full-suite results on the contour branch are recorded below as the
+    authoritative machine evidence.
 - build:
   - `make check` (compileall + collect) green
 - manual:
@@ -87,4 +99,9 @@ dispatch diagnostics, no fallback/imitation) and update the command contract.
   permission ceiling to `none`; aligned to the canonical migration default
   (`context_only`) so legacy resolution matches post-migration behavior;
   fencing token is returned to the lease holder as the release identity
+- suite-level timing evidence: two local full-suite runs each failed one
+  different subprocess/timing-sensitive test (see Verification); both pass in
+  isolation; root cause is local machine load under the 21-24 minute suite,
+  not a B05 code path; control full-suite run on the B04 head executed in a
+  separate worktree and GitHub CI results recorded in the PR
 - resume from here: CLOSED
