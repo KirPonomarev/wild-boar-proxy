@@ -110,6 +110,22 @@ def build_release_e2e_receipt(
         "live_proof_deferred": bool(live_blocked),
     }
 
+    # B00 F1: an empty required-step collection must never be accepted as a
+    # proven release. `all([])` is True, so without this guard an empty step
+    # set would fall through to WEB_RELEASE_V0_1_0_ACCEPTED.
+    if not steps:
+        return _build_packet(
+            ok=False,
+            human_message="Release candidate E2E contract requires a non-empty step set.",
+            machine_error_code="RELEASE_E2E_EMPTY_STEP_SET",
+            operator_action="stop",
+            liveness="down",
+            severity="high",
+            changed_files=[],
+            effect=E2E_EFFECT_READ,
+            extra=extra,
+        )
+
     if live_blocked:
         return _build_packet(
             ok=False,

@@ -81,6 +81,21 @@ def build_desktop_pilot_receipt(
         "original_codex_app_mutations": 0,
         "codex_updater_restricted": True,
     }
+    # B00 F1: an empty required-step collection must never be accepted as a
+    # released pilot. `all([])` is True, so without this guard an empty step
+    # set would fall through to WBP_DESKTOP_PILOT_V0_3_0_RELEASED.
+    if not steps:
+        return _build_packet(
+            ok=False,
+            human_message="Desktop pilot contract requires a non-empty step set.",
+            machine_error_code="DESKTOP_PILOT_EMPTY_STEP_SET",
+            operator_action="stop",
+            liveness="down",
+            severity="high",
+            changed_files=[],
+            effect=DESKTOP_EFFECT_READ,
+            extra=extra,
+        )
     if physical_blocked:
         return _build_packet(
             ok=False,
@@ -174,6 +189,7 @@ FINAL_MILESTONES = (
 )
 
 FINAL_ASSURANCE_INVALID_IDENTITY = "FINAL_ASSURANCE_INVALID_IDENTITY"
+FINAL_ASSURANCE_SHA_COLLISION = "FINAL_ASSURANCE_SHA_COLLISION"
 
 # Repository root (parent of the ``wild_boar_proxy`` package directory). Used
 # as the cwd for ``git rev-parse`` so the existence check resolves against the
@@ -255,6 +271,25 @@ def run_final_assurance_audit(
                 "valid git object SHAs."
             ),
             machine_error_code=FINAL_ASSURANCE_INVALID_IDENTITY,
+            operator_action="user_action",
+            liveness="down",
+            severity="high",
+            changed_files=[],
+            effect=DESKTOP_EFFECT_READ,
+            extra=extra,
+        )
+    # B00 F2: one SHA must not stand for multiple independent milestones. The
+    # three release identities must be distinct existing commits.
+    if len({web_release_sha, provider_release_sha, desktop_release_sha}) != 3:
+        extra["milestone_sha_collision"] = True
+        return _build_packet(
+            ok=False,
+            human_message=(
+                "Final assurance audit rejected: milestone identities must be "
+                "distinct commits; one SHA cannot stand for multiple independent "
+                "milestones."
+            ),
+            machine_error_code=FINAL_ASSURANCE_SHA_COLLISION,
             operator_action="user_action",
             liveness="down",
             severity="high",
@@ -401,6 +436,7 @@ __all__ = [
     "SIGNING_UNSIGNED",
     "FINAL_MILESTONES",
     "FINAL_ASSURANCE_INVALID_IDENTITY",
+    "FINAL_ASSURANCE_SHA_COLLISION",
     "_validate_git_sha",
     "_git_sha_is_hex",
     "_resolve_milestone_shas",

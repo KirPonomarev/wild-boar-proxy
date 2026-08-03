@@ -237,7 +237,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         state = self.read_state()
         state["effective_mode"] = "managed"
         state["managed_port"] = 9999
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         state.pop(runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD, None)
         state.pop(runtime_mod.LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD, None)
         self.write_state(state)
@@ -765,7 +765,7 @@ class HealthcheckProbeRepairContractTests(unittest.TestCase):
         state = self.read_state()
         self.assertEqual(
             state[runtime_mod.LAST_KNOWN_GOOD_PROXY_URL_FIELD],
-            "http://127.0.0.1:10808",
+            "http://127.0.0.1:10899",
         )
 
         rollback = runtime_mod.state_transaction.rollback_latest_state_transaction(

@@ -342,7 +342,7 @@ class RuntimeAtomicWriteTests(unittest.TestCase):
                 "last_sync_at": "2026-06-27T00:00:00+00:00",
                 "selected_backend_ids": ["legacy-backend"],
                 "managed_port": 9999,
-                "current_proxy_url": "http://127.0.0.1:10808",
+                "current_proxy_url": "http://127.0.0.1:10899",
                 "stable_default_backend_id": "legacy-backend",
                 "active_count": 1,
                 "healthy_count": 1,

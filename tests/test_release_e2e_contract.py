@@ -96,6 +96,18 @@ class ReleaseE2EReceiptTests(unittest.TestCase):
         _assert_semantics(self, r)
         self.assertEqual(r["machine_error_code"], "RELEASE_E2E_SYNTHETIC_FAILURE")
 
+    def test_empty_step_set_rejected(self) -> None:
+        # B00 F1: an empty required-step collection must never be accepted as a
+        # proven release (`all([])` is True for an empty list).
+        r = re2e.build_release_e2e_receipt(
+            candidate=self._candidate(), steps=[],
+            live_receipts=None,
+        )
+        _assert_semantics(self, r)
+        self.assertNotEqual(r["machine_error_code"], "WEB_RELEASE_V0_1_0_ACCEPTED")
+        self.assertEqual(r["machine_error_code"], "RELEASE_E2E_EMPTY_STEP_SET")
+        self.assertEqual(r["status"], "error")
+
 
 class SyntheticProofTests(unittest.TestCase):
     def test_summary_ok(self) -> None:

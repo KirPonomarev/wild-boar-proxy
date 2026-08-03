@@ -147,7 +147,7 @@ class InvariantFalseGreenTests(unittest.TestCase):
                     "last_error": "",
                     "selected_backend_ids": ["backend-a"],
                     "managed_port": port,
-                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "current_proxy_url": "http://127.0.0.1:10899",
                     "stable_default_backend_id": "default-backend",
                     "active_count": 1,
                     "reserve_count": 0,
