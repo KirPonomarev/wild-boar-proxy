@@ -102,4 +102,12 @@ contract contour with a canon-diff report.
   packet to satisfy `inspect_command_packet_semantics`; migration is
   explicitly separate from the agent-bindings write path (write produces v2
   canonical documents; migrate converts legacy v1 state files)
+- CI flake evidence: Baseline Core CI `test-web-e2e`
+  (`test_get_dispatch_table_preserves_representative_outputs`) failed once on
+  the contour branch with `custom_status.status=integration_failure`; the
+  endpoint runs real WBP CLI subprocesses inside a timeout-bounded snapshot
+  worker (the suite already tolerates the related
+  `CUSTOM_CODEX_OPERATOR_STATUS_TIMEOUT_API_CATALOG_ONLY` timing fallback);
+  the same test passed 4/4 locally and one same-signature CI rerun passed,
+  all six required checks green on the final commit
 - resume from here: CLOSED
