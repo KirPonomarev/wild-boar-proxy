@@ -13,7 +13,7 @@ import unicodedata
 from .runtime import write_text_atomic
 
 
-AGENT_BINDINGS_SCHEMA_VERSION = 1
+AGENT_BINDINGS_SCHEMA_VERSION = 2
 AGENT_BINDINGS_FILENAME = "custom-agent-bindings.json"
 AGENT_BINDINGS_PACKET_KIND = "codex_custom_agent_bindings"
 RUNTIME_CONTEXT_BINDINGS_SOURCE = "server_owned_agent_bindings"
@@ -633,6 +633,15 @@ def read_agent_bindings_packet(
         if not isinstance(document_payload, dict):
             return _state_invalid_packet("state_document_not_object")
         document = document_payload
+        if document.get("schema_version") == 2:
+            # Canonical actor registry (B02): validate the canonical sections
+            # and feed the persisted legacy projection through the same wire
+            # validation as v1 so runtime-context consumers are unaffected.
+            from .actor_registry import validate_actor_registry_document
+
+            canonical_validation = validate_actor_registry_document(document)
+            if not canonical_validation["valid"]:
+                return _state_invalid_packet(";".join(canonical_validation["reasons"]))
         raw_bindings = document.get("agent_bindings")
         source = "persisted_state"
     else:
@@ -705,11 +714,18 @@ def write_agent_bindings_packet(
     )
     if packet.get("status") != "ok":
         return packet | {"dry_run": False, "changed_files": []}
+    # B02: persist the canonical actor registry document (schema v2) with the
+    # legacy v1-shaped projection for wire compatibility.
+    from .actor_registry import build_actor_registry_document
+
+    canonical_document = build_actor_registry_document(
+        packet["agent_bindings"],
+        route_records=route_records,
+    )
     document = {
-        "schema_version": AGENT_BINDINGS_SCHEMA_VERSION,
+        **canonical_document,
         "packet_kind": "codex_custom_agent_bindings_state",
         "updated_at_utc": utc_now(),
-        "agent_bindings": packet["agent_bindings"],
         "raw_backend_details_exposed": False,
         "secret_value_exposed": False,
     }

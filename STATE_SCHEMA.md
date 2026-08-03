@@ -338,6 +338,98 @@ That handoff must not become a generic config-routing surface.
 Deterministic stable recovery must regenerate this artifact per approved-target
 attempt rather than treating a stale artifact as authoritative truth.
 
+## Actor registry
+
+`custom-agent-bindings.json` is the canonical multi-actor registry truth
+(schema v2, `AGENT_BINDINGS_SCHEMA_VERSION = 2`).
+
+The canonical entity separation is non-negotiable:
+
+- actor definition != slot binding != role assignment != permission grant
+  != transport session
+
+Required top-level fields:
+
+- `schema_version` (`2`)
+- `packet_kind` (`codex_custom_actor_registry_state`)
+- `updated_at_utc`
+- `registry_revision` (monotonic int, starts at `1`)
+- `actors`
+- `slot_bindings`
+- `role_assignments`
+- `agent_bindings` (legacy v1-shaped wire projection)
+- `raw_backend_details_exposed` (`false`)
+- `secret_value_exposed` (`false`)
+
+Required actor fields:
+
+- `actor_id`
+- `display_name`
+- `transport_adapter_id` (`native_primary` | `api` | `cli_one_shot` | `cli_acp`)
+- `provider_id`
+- `model_policy`
+- `credential_ref` (broker-owned reference; actors never store secrets)
+- `capability_profile_id`
+- `permission_ceiling` (`none` | `context_only` | `repo_read` | `repo_write`
+  | `browser_read` | `network_read`)
+- `enabled`
+- `revision` (monotonic int)
+
+Required slot-binding fields:
+
+- `slot_id` (`primary`, `agent_1`, `agent_2`, ...; V1 UI exposes at most two
+  external slots)
+- `binding_id`
+- `binding_revision`
+- `actor_id`
+- `aliases`
+- `enabled`
+- `created_at`
+- `updated_at`
+
+Required role-assignment fields:
+
+- `assignment_id`
+- `assignment_revision`
+- `slot_id`
+- `role_label`
+- `role_instruction`
+- `assignment_context_policy` (`continue` | `fresh` | `fork`)
+- `scope`
+- `expires_at`
+
+Roles are free-form user instructions, never an authority source. Assignment
+and role can only request or reduce permission; they never grant it.
+
+Additive legacy carrier fields (documented v1 compatibility, not canonical
+identity):
+
+- actor `model_id` — primary-lane model carrier for the runtime-context wire
+  projection
+- slot binding `route_id` — API-lane route pinning preserved from v1
+- slot binding `allowed_actions` — v1 action list preserved in the projection
+
+Credential-shaped fields (`secret`, `token`, `auth`, `credential_value`,
+`backend`, `endpoint`, ...) are structurally rejected in every registry
+record. Forbidden stale routes (for example `wbp-deepseek-v3`) are rejected
+in validation.
+
+Migration rule:
+
+- schema v1 (legacy `agent_bindings` document) migrates to v2 through the
+  explicit `actors migrate --json` owner surface using the snapshot/stage/
+  verify/switch/rollback transaction model
+- backups are written to `<managed_dir>/actor-registry-backups/` before the
+  switch; rollback restores the backup file
+- migration never touches credentials or auth material
+- the persisted legacy projection must equal the canonical projection
+  (round-trip check); mismatch blocks validation
+
+`codex_custom_sessions` (v3) sessions may carry an optional
+`actor_registry_reference` (slot/binding/assignment revisions) recorded at
+create time so session state binds to canonical registry revisions instead of
+hardcoded agent ids.
+
 ## Write-surface ownership
 
 - `backend-registry.json` may be mutated only by the serialized account-state
@@ -355,6 +447,9 @@ attempt rather than treating a stale artifact as authoritative truth.
   target-switch transaction path
 - `stable-runtime-config.generated.yaml` may be mutated only by the serialized
   stable-runtime consumer activation path
+- `custom-agent-bindings.json` (actor registry, schema v2) may be mutated only
+  by the serialized agent-bindings write path or the explicit
+  `actors migrate --json` owner surface
 
 Every mutating path must declare which of these surfaces it writes before the
 write begins.
