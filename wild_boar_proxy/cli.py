@@ -300,6 +300,14 @@ def build_parser() -> argparse.ArgumentParser:
     actors_migrate_mode.add_argument("--dry-run", action="store_true")
     actors_migrate_mode.add_argument("--apply", action="store_true")
 
+    dispatch = subparsers.add_parser("dispatch", help="Actor dispatch resolution diagnostics")
+    dispatch_subparsers = dispatch.add_subparsers(dest="dispatch_command", required=True)
+    dispatch_resolve = dispatch_subparsers.add_parser(
+        "resolve", help="Read-only alias -> binding -> assignment resolution"
+    )
+    dispatch_resolve.add_argument("alias", help="addressed alias to resolve")
+    dispatch_resolve.add_argument("--json", action="store_true", required=True)
+
     token = subparsers.add_parser("token", help="Проверить или получить локальный web token")
     token.add_argument("--json", action="store_true")
 
@@ -2581,6 +2589,43 @@ def main(argv: list[str] | None = None) -> int:
                     dry_run=args.dry_run,
                 )
             )
+        if args.command == "dispatch" and args.dispatch_command == "resolve":
+            from .actor_dispatcher import DispatchResolutionError, resolve_alias_dispatch
+
+            registry_path = paths.managed_dir / "custom-agent-bindings.json"
+            registry_document = None
+            legacy_bindings = None
+            if registry_path.is_file():
+                try:
+                    candidate = json.loads(registry_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    candidate = None
+                if isinstance(candidate, dict):
+                    if candidate.get("schema_version") == 2:
+                        registry_document = candidate
+                    elif isinstance(candidate.get("agent_bindings"), list):
+                        legacy_bindings = candidate["agent_bindings"]
+            try:
+                plan = resolve_alias_dispatch(
+                    alias=args.alias,
+                    registry_document=registry_document,
+                    legacy_bindings=legacy_bindings,
+                )
+                return emit_json(plan)
+            except DispatchResolutionError as exc:
+                return emit_json(
+                    {
+                        "status": "error",
+                        "exit_code": 1,
+                        "human_message": str(exc),
+                        "machine_error_code": exc.machine_error_code,
+                        "changed_files": [],
+                        "next_action": "user_action",
+                        "liveness": "degraded",
+                        "severity": "recoverable",
+                        "operator_action": "user_action",
+                    }
+                )
         if args.command == "token":
             if args.json:
                 return emit_json(token_status_payload(paths))
