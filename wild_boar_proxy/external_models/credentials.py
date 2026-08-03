@@ -101,6 +101,19 @@ _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
         provider_family="direct_provider",
         seed_source="historical_seed_plus_current_schema",
     ),
+    "qwen": CredentialProviderSpec(
+        provider="qwen",
+        credential_ref="DASHSCOPE_API_KEY",
+        owner_env_candidates=_owner_env_candidates(
+            "DASHSCOPE_API_KEY",
+            "QWEN_API_KEY",
+            "WBP_QWEN_API_KEY",
+            "WBP_PROVIDER_QWEN_API_KEY",
+        ),
+        provider_dashboard_url="https://bailian.console.aliyun.com/?apiKey=1",
+        provider_family="direct_provider",
+        seed_source="current_schema_official_docs",
+    ),
     "kimi": CredentialProviderSpec(
         provider="kimi",
         credential_ref="MOONSHOT_API_KEY",

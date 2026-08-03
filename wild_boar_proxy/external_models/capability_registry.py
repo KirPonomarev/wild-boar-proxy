@@ -25,6 +25,8 @@ from .provider_transforms import (
     DIALECT_GLM_THINKING,
 )
 
+PROVIDER_QWEN = "qwen"
+
 
 @dataclasses.dataclass(frozen=True)
 class CapabilityEntry:
@@ -87,6 +89,33 @@ CATALOG: list[CapabilityEntry] = [
         proof_level="DECLARED",
         docs_source="https://docs.z.ai/api-reference/llm/chat-completion",
     ),
+    CapabilityEntry(
+        provider=PROVIDER_QWEN, upstream_model="qwen-plus",
+        wbp_alias="Qwen", modalities=("text",),
+        tool_capable=True, streaming=True,
+        thinking_dialect="qwen_thinking", web_search=False,
+        context_window=131072, intelligence_levels=("default", "fast", "high"),
+        proof_level="DECLARED",
+        docs_source="https://help.aliyun.com/zh/model-studio",
+    ),
+    CapabilityEntry(
+        provider=PROVIDER_QWEN, upstream_model="qwen-max",
+        wbp_alias="Qwen-Max", modalities=("text",),
+        tool_capable=True, streaming=True,
+        thinking_dialect="qwen_thinking", web_search=False,
+        context_window=131072, intelligence_levels=("default", "fast", "high"),
+        proof_level="DECLARED",
+        docs_source="https://help.aliyun.com/zh/model-studio",
+    ),
+    CapabilityEntry(
+        provider=PROVIDER_QWEN, upstream_model="qwen3-max",
+        wbp_alias="Qwen3", modalities=("text",),
+        tool_capable=True, streaming=True,
+        thinking_dialect="qwen_thinking", web_search=False,
+        context_window=131072, intelligence_levels=("default", "fast", "high"),
+        proof_level="DECLARED",
+        docs_source="https://help.aliyun.com/zh/model-studio",
+    ),
 ]
 
 # Intelligence-level → provider parameter mapping
@@ -95,6 +124,7 @@ INTELLIGENCE_MAPPINGS: dict[str, dict[str, str | None]] = {
     f"kimi-k2.6": {"default": None, "fast": "disabled", "high": "enabled"},
     f"glm-4.6": {"default": None, "fast": "disabled", "high": "enabled", "max": "enabled"},
     "deepseek-chat": {"default": None, "fast": "disabled", "high": "high", "max": "max"},
+    "qwen3-max": {"default": None, "fast": "disabled", "high": "enabled"},
 }
 
 

@@ -209,6 +209,14 @@ class ApiTransportAdapter:
                 thinking_enabled=thinking.get("type") == "enabled",
                 clear_thinking=False,
             )
+        elif provider_id == "qwen" and model_id:
+            from .qwen_provider_slice import apply_qwen_thinking
+
+            payload = apply_qwen_thinking(
+                payload,
+                model=model_id,
+                thinking_enabled=thinking.get("type") == "enabled",
+            )
         if stream:
             payload["stream"] = True
         return payload, metadata
