@@ -48,6 +48,17 @@ class DesktopPilotReceiptTests(unittest.TestCase):
         r = dpc.build_desktop_pilot_receipt(candidate=self._candidate(), steps=self._steps(), clean_machine_available=True)
         self.assertEqual(r["original_codex_app_mutations"], 0)
 
+    def test_empty_step_set_rejected(self) -> None:
+        # B00 F1: an empty required-step collection must never be accepted as a
+        # released pilot (`all([])` is True for an empty list).
+        r = dpc.build_desktop_pilot_receipt(
+            candidate=self._candidate(), steps=[], clean_machine_available=True
+        )
+        _assert_semantics(self, r)
+        self.assertNotEqual(r["machine_error_code"], "WBP_DESKTOP_PILOT_V0_3_0_RELEASED")
+        self.assertEqual(r["machine_error_code"], "DESKTOP_PILOT_EMPTY_STEP_SET")
+        self.assertEqual(r["status"], "error")
+
 
 class FinalAssuranceTests(unittest.TestCase):
     # Real release commit SHAs resolved from the v0.1.0 / v0.2.0 / v0.3.0 tags.
@@ -103,6 +114,21 @@ class FinalAssuranceTests(unittest.TestCase):
         )
         _assert_semantics(self, r)
         self.assertEqual(r["machine_error_code"], "FINAL_ASSURANCE_INCOMPLETE")
+
+    def test_same_sha_for_all_milestones_rejected(self) -> None:
+        # B00 F2: one SHA must not stand for multiple independent release
+        # milestones (web_v0_1_0 / provider_v0_2_0 / desktop_v0_3_0).
+        r = dpc.run_final_assurance_audit(
+            web_release_sha=self._SHA_WEB,
+            provider_release_sha=self._SHA_WEB,
+            desktop_release_sha=self._SHA_WEB,
+            safety_counters_zero=True, user_wip_preserved=True,
+            no_plan_owned_processes=True, no_repo_master_plan=True,
+        )
+        _assert_semantics(self, r)
+        self.assertNotEqual(r["machine_error_code"], "WBP_MASTER_PLAN_V3_6_DONE")
+        self.assertEqual(r["machine_error_code"], dpc.FINAL_ASSURANCE_SHA_COLLISION)
+        self.assertEqual(r["status"], "error")
 
 
 class SyntheticProofTests(unittest.TestCase):

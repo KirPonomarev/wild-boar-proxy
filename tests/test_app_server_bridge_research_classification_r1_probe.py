@@ -194,7 +194,7 @@ UI_ACTION_ALLOWLIST = {
         harness.write_text(
             '''
 from http.server import ThreadingHTTPServer
-server = ThreadingHTTPServer(("127.0.0.1", 9999), None)
+server = ThreadingHTTPServer(("127.0.0.1", 0), None)
 ''',
             encoding="utf-8",
         )

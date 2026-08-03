@@ -386,6 +386,29 @@ class GptApiDipAcceptanceGateTests(unittest.TestCase):
         self.assertFalse(packet["product_ready"])
         self.assertEqual(packet["effect"], EFFECT_READ)
 
+    def test_blocks_missing_required_packet_file(self) -> None:
+        # B00 F6: a fully missing required packet must fail closed. The gate
+        # must never treat an absent input as an empty-but-passing collection.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            feature_file = _write_packet(root, "feature.json", _dip_feature_packet())
+            action_file = _write_packet(root, "action.json", _dip_action_packet())
+            missing = root / "missing-fresh.json"
+            self.assertFalse(missing.exists())
+            packet = run_gpt_api_dip_acceptance_gate_command(
+                paths=_paths(root),
+                fresh_sealed_proof_file=str(missing),
+                dip_feature_proof_file=str(feature_file),
+                dip_action_proof_file=str(action_file),
+                proof_dir=None,
+            )
+
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], GPT_API_DIP_ACCEPTANCE_BLOCKED)
+        self.assertFalse(packet["feature_ready"])
+        self.assertIn("fresh_sealed_packet_missing", packet["blocking_reasons"])
+        self.assertFalse(packet["product_ready"])
+
     def test_blocks_api_key_only_packet_claiming_ui_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             packet = self._run(

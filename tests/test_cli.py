@@ -262,7 +262,7 @@ class CliTests(unittest.TestCase):
                     "last_error": "",
                     "selected_backend_ids": ["backend-a"],
                     "managed_port": 9999,
-                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "current_proxy_url": "http://127.0.0.1:10899",
                     "stable_default_backend_id": "default-backend",
                     "active_count": 1,
                     "reserve_count": 0,
@@ -1091,7 +1091,7 @@ class CliTests(unittest.TestCase):
             "host: 127.0.0.1\n"
             "port: 8318\n"
             "auth-dir: \"~/.cli-proxy-api\"\n"
-            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            "proxy-url: \"http://127.0.0.1:10899\"\n",
             encoding="utf-8",
         )
         self.profile_dir.joinpath("runtime-effective-mode.txt").write_text(
@@ -1141,7 +1141,7 @@ class CliTests(unittest.TestCase):
             result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
                 paths,
                 model="gpt-5.5",
-                configured_proxy_url="http://127.0.0.1:10808",
+                configured_proxy_url="http://127.0.0.1:10899",
             )
 
         self.assertIs(reproof, reproof_payload)
@@ -1179,7 +1179,7 @@ class CliTests(unittest.TestCase):
             "host: 127.0.0.1\n"
             "port: 8318\n"
             "auth-dir: \"~/.cli-proxy-api\"\n"
-            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            "proxy-url: \"http://127.0.0.1:10899\"\n",
             encoding="utf-8",
         )
         before_state = self.managed_dir.joinpath("supervisor-state.json").read_text(
@@ -1263,7 +1263,7 @@ class CliTests(unittest.TestCase):
             result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
                 paths,
                 model="gpt-5.5",
-                configured_proxy_url="http://127.0.0.1:10808",
+                configured_proxy_url="http://127.0.0.1:10899",
             )
 
         self.assertIsNone(reproof)
@@ -1296,7 +1296,7 @@ class CliTests(unittest.TestCase):
             "host: 127.0.0.1\n"
             "port: 8318\n"
             "auth-dir: \"~/.cli-proxy-api\"\n"
-            "proxy-url: \"http://127.0.0.1:10808\"\n",
+            "proxy-url: \"http://127.0.0.1:10899\"\n",
             encoding="utf-8",
         )
         before_stable_config = stable_config.read_text(encoding="utf-8")
@@ -1342,7 +1342,7 @@ class CliTests(unittest.TestCase):
             result, reproof = runtime_mod.attempt_stable_proxyless_recovery_under_lock(
                 paths,
                 model="gpt-5.5",
-                configured_proxy_url="http://127.0.0.1:10808",
+                configured_proxy_url="http://127.0.0.1:10899",
             )
 
         self.assertIsNone(reproof)
@@ -5237,7 +5237,7 @@ class CliTests(unittest.TestCase):
             "STABLE_SERVICE_DISABLED",
         )
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
         self.assertEqual(
             current_proxy_adoption_contract["owner_command_surface"],
@@ -5723,7 +5723,7 @@ class CliTests(unittest.TestCase):
     def test_healthcheck_reports_proxy_truth_drift_without_greenwash(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"
-        expected_proxy_url = "http://127.0.0.1:12334"
+        expected_proxy_url = "http://127.0.0.1:10899"
         (self.managed_dir / "managed-config.yaml").write_text(
             f'host: 127.0.0.1\nport: {port}\nproxy-url: "{expected_proxy_url}"\n',
             encoding="utf-8",
@@ -5735,7 +5735,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10999"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -5753,7 +5753,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertFalse(payload["attestation"]["proxy_url_match"])
         self.assertEqual(payload["attestation"]["configured_proxy_url"], expected_proxy_url)
-        self.assertEqual(payload["attestation"]["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["attestation"]["current_proxy_url"], "http://127.0.0.1:10999")
         self.assertIn("proxy drift", payload["last_error"])
 
     def test_healthcheck_reports_reprobe_failure_for_proxy_path_failure(self) -> None:
@@ -5923,7 +5923,7 @@ class CliTests(unittest.TestCase):
             "error": {
                 "message": (
                     'Post "https://chatgpt.com/backend-api/codex/responses": '
-                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10899: connect: connection refused"
                 )
             }
         }
@@ -5958,7 +5958,7 @@ class CliTests(unittest.TestCase):
             custom_sync_script.chmod(0o755)
             env["WBP_SYNC_SCRIPT"] = str(custom_sync_script)
             env["WBP_PROXY_REPROBE_CANDIDATES"] = (
-                f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
+                f"http://127.0.0.1:{candidate_port},http://127.0.0.1:{free_port()}"
             )
             result = subprocess.run(
                 [
@@ -6035,7 +6035,7 @@ class CliTests(unittest.TestCase):
             "sync_owner_path_live_reproof_failed",
         )
         self.assertFalse(recovery_hint["live_runtime_observation_confirmed"])
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertIn(
             str(self.managed_dir / "managed-config.yaml"), payload["changed_files"]
         )
@@ -6070,7 +6070,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6083,7 +6083,7 @@ class CliTests(unittest.TestCase):
             result = self.run_cli_with_env(
                 {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     )
                 },
                 "healthcheck",
@@ -6137,7 +6137,7 @@ class CliTests(unittest.TestCase):
         expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
         self.configure_dynamic_proxy_gate(expected_proxy_url=expected_proxy_url)
         (self.managed_dir / "managed-config.yaml").write_text(
-            f'host: 127.0.0.1\nport: {port}\nproxy-url: "http://127.0.0.1:10808"\n',
+            f'host: 127.0.0.1\nport: {port}\nproxy-url: "http://127.0.0.1:10899"\n',
             encoding="utf-8",
         )
         (self.profile_dir / "config.toml").write_text(
@@ -6147,7 +6147,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6201,7 +6201,7 @@ class CliTests(unittest.TestCase):
                 {
                     "WBP_SYNC_SCRIPT": str(custom_sync_script),
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     ),
                 },
                 "healthcheck",
@@ -6251,7 +6251,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6268,7 +6268,7 @@ class CliTests(unittest.TestCase):
                 self.env(include_launcher_override=False)
                 | {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     )
                 },
                 clear=False,
@@ -6410,7 +6410,7 @@ class CliTests(unittest.TestCase):
             result = self.run_cli_with_env(
                 {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     )
                 },
                 "healthcheck",
@@ -6433,7 +6433,7 @@ class CliTests(unittest.TestCase):
             "default_path_present_repo_marker_invalid",
         )
         self.assertEqual(adoption_result["adoption_outcome"], "launcher_lane_ineligible")
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertEqual(payload["changed_files"], [])
 
     def test_healthcheck_keeps_unrecognized_marked_default_launcher_lane_ineligible(
@@ -6475,7 +6475,7 @@ class CliTests(unittest.TestCase):
             result = self.run_cli_with_env(
                 {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     )
                 },
                 "healthcheck",
@@ -6498,7 +6498,7 @@ class CliTests(unittest.TestCase):
             "default_path_present_repo_marker_unrecognized",
         )
         self.assertEqual(adoption_result["adoption_outcome"], "launcher_lane_ineligible")
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertEqual(payload["changed_files"], [])
 
     def test_healthcheck_refreshes_stable_current_proxy_url_from_live_stable_config(
@@ -6523,7 +6523,7 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["effective_mode"] = "stable"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6541,7 +6541,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["current_proxy_url"], stable_proxy_url)
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        self.assertEqual(state["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(state["current_proxy_url"], "http://127.0.0.1:10899")
 
     def test_healthcheck_restores_prior_current_proxy_when_live_reproof_fails(self) -> None:
         port = free_port()
@@ -6566,7 +6566,7 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6579,7 +6579,7 @@ class CliTests(unittest.TestCase):
             result = self.run_cli_with_env(
                 {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
+                        f"http://127.0.0.1:{candidate_port},http://127.0.0.1:{free_port()}"
                     )
                 },
                 "healthcheck",
@@ -6607,7 +6607,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(adoption_result["current_proxy_url_rewritten"])
         self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        self.assertEqual(state["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(state["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertEqual(
             (self.profile_dir / "config.toml").read_text(encoding="utf-8"),
             original_config_toml,
@@ -7267,7 +7267,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "materialized")
         self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
@@ -7293,7 +7293,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10899"
         state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
@@ -7351,7 +7351,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10899"
         state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
@@ -7491,7 +7491,7 @@ class CliTests(unittest.TestCase):
             "error": {
                 "message": (
                     'Post "https://chatgpt.com/backend-api/codex/responses": '
-                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10899: connect: connection refused"
                 )
             }
         }
@@ -7554,7 +7554,7 @@ class CliTests(unittest.TestCase):
                     "webui 1 user 10u IPv4 0t0 TCP 127.0.0.1:8788 (LISTEN)",
                     "bridge 1 user 10u IPv4 0t0 TCP 127.0.0.1:50555 (LISTEN)",
                     "remote 2 user 10u IPv4 0t0 TCP 192.168.1.10:18082 (LISTEN)",
-                    "vpn 2 user 11u IPv4 0t0 TCP localhost:10808 (LISTEN)",
+                    "vpn 2 user 11u IPv4 0t0 TCP localhost:10899 (LISTEN)",
                     "random 3 user 12u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
                     "random 4 user 13u IPv4 0t0 TCP localhost:18081 (LISTEN)",
                     "random 4 user 13u IPv6 0t0 TCP ::1:18083 (LISTEN)",
@@ -7567,13 +7567,13 @@ class CliTests(unittest.TestCase):
             [
                 "http://127.0.0.1:65165",
                 "http://[::1]:65166",
-                "http://127.0.0.1:10808",
+                "http://127.0.0.1:10899",
                 "http://127.0.0.1:18080",
                 "http://127.0.0.1:18081",
                 "http://[::1]:18083",
                 "socks5h://127.0.0.1:65165",
                 "socks5h://[::1]:65166",
-                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:10899",
                 "socks5h://127.0.0.1:18080",
                 "socks5h://127.0.0.1:18081",
                 "socks5h://[::1]:18083",
@@ -7612,6 +7612,9 @@ class CliTests(unittest.TestCase):
             candidates,
             [
                 "http://127.0.0.1:18080",
+                # Legacy default candidates are production truth
+                # (LEGACY_PROXY_REPROBE_DEFAULT_CANDIDATES); asserted as product
+                # data, never probed or bound by tests.
                 "http://127.0.0.1:10808",
                 "http://127.0.0.1:10809",
                 "socks5h://127.0.0.1:10808",
@@ -7672,7 +7675,7 @@ class CliTests(unittest.TestCase):
             "error": {
                 "message": (
                     'Post "https://chatgpt.com/backend-api/codex/responses": '
-                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: "
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10899: connect: "
                     "connection refused"
                 )
             }
@@ -7686,7 +7689,7 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -9429,7 +9432,7 @@ class CliTests(unittest.TestCase):
             "LISTENER_DOWN",
         )
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         last_known_good_contract = payload["last_known_good_proxy_contract"]
         self.assertEqual(last_known_good_contract["status"], "contract_ready")
         self.assertEqual(
@@ -9871,7 +9874,7 @@ class CliTests(unittest.TestCase):
                 "top_level_truth_boundaries"
             ]["launch_smoke_owner_lane_fields_forbidden"]
         )
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertNotIn("last_known_good_proxy", payload)
         self.assertNotIn("last_known_good_proxy_contract", payload)
         self.assertNotIn("current_proxy_adoption_contract", payload)
@@ -10114,7 +10117,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
         self.assertEqual(
             current_proxy_adoption_contract["owner_command_surface"],
@@ -10163,7 +10166,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        state["current_proxy_url"] = "http://127.0.0.1:10899"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -10176,7 +10179,7 @@ class CliTests(unittest.TestCase):
             result = self.run_cli_with_env(
                 {
                     "WBP_PROXY_REPROBE_CANDIDATES": (
-                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                        f"{expected_proxy_url},http://127.0.0.1:{free_port()}"
                     )
                 },
                 "status",
@@ -10194,7 +10197,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
         self.assertEqual(
             payload["current_proxy_adoption_contract"]["owner_command_surface"],
@@ -16162,7 +16165,7 @@ class CliTests(unittest.TestCase):
         self.configure_scale_evidence_fixture()
         state_path = self.managed_dir / "supervisor-state.json"
         state = json.loads(state_path.read_text())
-        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10808"
+        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10899"
         state["last_error"] = (
             "Authorization: Bearer sk-testsecret "
             "password=swordfish cookie=sessionid"
@@ -21711,7 +21714,7 @@ class CliTests(unittest.TestCase):
 
         state_path = self.managed_dir / "supervisor-state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10808"
+        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10899"
         state["last_error"] = (
             "Authorization: Bearer sk-testsecret "
             "password=swordfish cookie=sessionid"
@@ -21728,7 +21731,7 @@ class CliTests(unittest.TestCase):
         bundle_text = registry_text + "\n" + state_text
 
         self.assertIn('"notes": "[redacted]"', registry_text)
-        self.assertIn("http://[redacted]@127.0.0.1:10808", state_text)
+        self.assertIn("http://[redacted]@127.0.0.1:10899", state_text)
         self.assertIn("[redacted-token]", state_text)
         self.assertIn("password=[redacted]", state_text)
         self.assertIn("cookie=[redacted]", state_text)
@@ -21839,7 +21842,7 @@ class CliTests(unittest.TestCase):
             "last_error": "",
             "selected_backend_ids": ["legacy-backend"],
             "managed_port": 9999,
-            "current_proxy_url": "http://127.0.0.1:10808",
+            "current_proxy_url": "http://127.0.0.1:10899",
             "stable_default_backend_id": "legacy-backend",
             "active_count": 1,
             "reserve_count": 0,
@@ -23071,7 +23074,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertTrue(attempt.activation_attempted)
         self.assertEqual(attempt.activation_exit_code, 0)
-        self.assertEqual(attempt.prior_current_proxy_url, "http://127.0.0.1:10808")
+        self.assertEqual(attempt.prior_current_proxy_url, "http://127.0.0.1:10899")
         self.assertEqual(attempt.working_candidate, working_candidate)
         self.assertEqual(
             set(attempt.rollback_surface_snapshots),
@@ -23801,7 +23804,7 @@ class CliTests(unittest.TestCase):
                 "repo_managed_marker_recognized"
             ]
         )
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertEqual(payload["effect"], "read")
         self.assertEqual(payload["changed_files"], [])
 
@@ -24055,7 +24058,7 @@ class CliTests(unittest.TestCase):
             'kill -0 "$(cat "$APP_PID_FILE")" 2>/dev/null || exit 9',
             launcher_text,
         )
-        self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertEqual(status_payload["changed_files"], [])
 
     def test_repo_owned_default_launcher_payload_includes_isolated_desktop_lane(
@@ -24720,7 +24723,7 @@ class CliTests(unittest.TestCase):
                 "repo_managed_marker_recognized"
             ]
         )
-        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertNotIn(str(self.default_launcher_script), payload["changed_files"])
 
     def test_default_launcher_consumer_repairs_invalid_marked_repo_owned_file(
@@ -24802,7 +24805,7 @@ class CliTests(unittest.TestCase):
             "default_path_present_repo_marker_unrecognized",
         )
         self.assertFalse(contract["repo_owned_default_consumer_provisioned"])
-        self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10899")
         self.assertNotIn(str(self.default_launcher_script), status_payload["changed_files"])
 
     def test_launch_smoke_repairs_signed_legacy_repo_owned_default_launcher_file(

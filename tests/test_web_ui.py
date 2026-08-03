@@ -104,7 +104,7 @@ def runtime_snapshot() -> RuntimeSnapshot:
         desired_mode="managed",
         effective_mode="managed",
         endpoint="http://127.0.0.1:8320/v1",
-        current_proxy_url="http://127.0.0.1:10808",
+        current_proxy_url="http://127.0.0.1:10899",
         liveness="healthy",
         severity="info",
         operator_action="none",
@@ -260,7 +260,7 @@ class FakeRunner:
                     "desired_mode": "managed",
                     "effective_mode": "managed",
                     "endpoint": "http://127.0.0.1:8320/v1",
-                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "current_proxy_url": "http://127.0.0.1:10899",
                     "pool_summary": {
                         "active": 2,
                         "reserve": 1,
@@ -297,7 +297,7 @@ class FakeRunner:
                     "desired_mode": "managed",
                     "effective_mode": "managed",
                     "endpoint": "http://127.0.0.1:8320/v1",
-                    "current_proxy_url": "http://127.0.0.1:10808",
+                    "current_proxy_url": "http://127.0.0.1:10899",
                     "attestation": {
                         "attestation_source": "healthcheck --json",
                         "observed_at_utc": "2026-05-08T00:00:00+00:00",

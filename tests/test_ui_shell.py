@@ -94,7 +94,7 @@ def status_payload(**overrides: object) -> dict[str, object]:
         desired_mode="managed",
         effective_mode="managed",
         endpoint="127.0.0.1:9999",
-        current_proxy_url="http://127.0.0.1:10808",
+        current_proxy_url="http://127.0.0.1:10899",
         pool_summary={
             "active": 1,
             "reserve": 1,
@@ -158,7 +158,7 @@ def smoke_payload(**overrides: object) -> dict[str, object]:
         desired_mode="managed",
         effective_mode="managed",
         endpoint="127.0.0.1:9999",
-        current_proxy_url="http://127.0.0.1:10808",
+        current_proxy_url="http://127.0.0.1:10899",
         launcher_exit_code=0,
         stabilization_seconds=0.2,
         stable_runtime_consumer={"status": "observed_source_selected"},
@@ -466,7 +466,7 @@ class RuntimeSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.overall_state, "ok")
         self.assertEqual(snapshot.exit_code, 0)
         self.assertEqual(snapshot.desired_mode, "managed")
-        self.assertEqual(snapshot.current_proxy_url, "http://127.0.0.1:10808")
+        self.assertEqual(snapshot.current_proxy_url, "http://127.0.0.1:10899")
         self.assertEqual(snapshot.attestation_source, "healthcheck --json")
         self.assertEqual(snapshot.degraded_count, 0)
 
