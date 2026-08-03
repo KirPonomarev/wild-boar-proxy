@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Kirill Ponomarev
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Provider capability schema v2 and GLM/Kimi adapters (P00–P04).
+"""Provider capability schema v2 and GLM/Kimi/Qwen adapters (P00–P04 + B08).
 
 Generalizes the route schema to a capability-aware provider contract and adds
-GLM (Z.AI) and Kimi (Moonshot) as first-class API actors with deterministic
-capability proof. DeepSeek is included for the three-provider release matrix.
-Qwen is excluded by design.
+GLM (Z.AI), Kimi (Moonshot), and Qwen (DashScope) as first-class API actors
+with deterministic capability proof. DeepSeek is included for the four-
+provider release matrix (B08 admits Qwen).
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ CAPABILITY_EFFECT_READ = "read"
 PROVIDER_DEEPSEEK = "deepseek"
 PROVIDER_GLM = "glm"
 PROVIDER_KIMI = "kimi"
-PROVIDER_QWEN = "qwen"  # excluded
-RELEASE_PROVIDERS = (PROVIDER_DEEPSEEK, PROVIDER_GLM, PROVIDER_KIMI)
-EXCLUDED_PROVIDERS = (PROVIDER_QWEN,)
+PROVIDER_QWEN = "qwen"
+RELEASE_PROVIDERS = (PROVIDER_DEEPSEEK, PROVIDER_GLM, PROVIDER_KIMI, PROVIDER_QWEN)
+EXCLUDED_PROVIDERS = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,13 +83,13 @@ PROVIDER_PROFILES: dict[str, ProviderCapabilityProfile] = {
     ),
     PROVIDER_QWEN: ProviderCapabilityProfile(
         provider_id=PROVIDER_QWEN,
-        display_name="Qwen (excluded)",
-        default_base_url="",
-        credential_ref="",
-        provider_dashboard_url="",
-        capability_text=False, capability_stream=False, capability_tool=False,
-        capability_thinking=False, capability_vision=False, capability_web_search=False,
-        excluded=True,
+        display_name="Qwen",
+        default_base_url="https://dashscope.aliyuncs.com",
+        credential_ref="DASHSCOPE_API_KEY",
+        provider_dashboard_url="https://bailian.console.aliyun.com/?apiKey=1",
+        capability_text=True, capability_stream=True, capability_tool=True,
+        capability_thinking=True, capability_vision=False, capability_web_search=False,
+        excluded=False,
     ),
 }
 
@@ -113,6 +113,7 @@ def build_provider_capability_matrix_receipt() -> dict[str, Any]:
         "excluded_providers": excluded,
         "release_provider_count": len(RELEASE_PROVIDERS),
         "qwen_excluded": PROVIDER_QWEN in EXCLUDED_PROVIDERS,
+        "qwen_admitted": PROVIDER_QWEN in RELEASE_PROVIDERS,
     }
     return _build_packet(
         ok=True,
@@ -150,10 +151,10 @@ def run_provider_v02_synthetic_proof() -> dict[str, Any]:
     for r in all_receipts:
         violations.extend(command_packets.inspect_command_packet_semantics(r))
     no_qwen = all(PROVIDER_PROFILES[pid].excluded for pid in EXCLUDED_PROVIDERS)
-    ok = not violations and no_qwen and len(RELEASE_PROVIDERS) == 3
+    ok = not violations and no_qwen and len(RELEASE_PROVIDERS) == 4
     return _build_packet(
         ok=ok,
-        human_message="Provider v0.2.0 synthetic proof complete; DeepSeek+GLM+Kimi declared." if ok else "Violations.",
+        human_message="Provider v0.2.0 synthetic proof complete; DeepSeek+GLM+Kimi+Qwen declared (B08)." if ok else "Violations.",
         machine_error_code="OK" if ok else "PROVIDER_PROOF_VIOLATIONS",
         operator_action="none" if ok else "stop",
         liveness="healthy" if ok else "degraded",
@@ -163,7 +164,8 @@ def run_provider_v02_synthetic_proof() -> dict[str, Any]:
         extra={
             "receipt_count": len(all_receipts),
             "release_providers": list(RELEASE_PROVIDERS),
-            "qwen_excluded": no_qwen,
+            "qwen_excluded": False,
+            "qwen_admitted": True,
             "packet_violations": violations,
         },
     )

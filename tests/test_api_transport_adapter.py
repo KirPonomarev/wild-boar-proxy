@@ -131,7 +131,7 @@ class BindTests(unittest.TestCase):
 
     def test_bind_rejects_not_admitted_provider(self) -> None:
         plan = self._plan("DIP")
-        plan["provider_id"] = "qwen"
+        plan["provider_id"] = "carrier_pigeon"
         admission = self.adapter.bind(plan)
         self.assertEqual(admission["machine_error_code"], "PROVIDER_NOT_ADMITTED")
 
