@@ -58,7 +58,18 @@ ROLE_SLOT_PAYLOAD_FIELDS = {
     DEEP_REASONING_MODEL_SLOT: "deep_reasoning_model_id",
 }
 ROLE_SLOT_IDS = tuple(ROLE_SLOT_PAYLOAD_FIELDS)
-SESSION_CREATE_ALLOWED_FIELDS = set(ROLE_SLOT_PAYLOAD_FIELDS.values())
+# B02 reconciliation: session create may bind to canonical actor registry
+# revisions through flat additive fields (never nested, never secret-shaped).
+ACTOR_REGISTRY_REFERENCE_FIELDS = (
+    "actor_registry_slot_id",
+    "actor_registry_binding_id",
+    "actor_registry_binding_revision",
+    "actor_registry_assignment_id",
+    "actor_registry_assignment_revision",
+)
+SESSION_CREATE_ALLOWED_FIELDS = (
+    set(ROLE_SLOT_PAYLOAD_FIELDS.values()) | set(ACTOR_REGISTRY_REFERENCE_FIELDS)
+)
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
 PROMPT_RUN_ALLOWED_FIELDS = {"prompt", "slot_id"}
 TEMP_WRITE_PROBE_ALLOWED_FIELDS = {"api_model_id"}
@@ -402,6 +413,7 @@ def _bound_slot(
 
 
 def _slot_model_ids_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    """Extract the per-slot model selection from the create payload."""
     slot_model_ids: dict[str, str] = {}
     primary_model_id = payload.get(ROLE_SLOT_PAYLOAD_FIELDS[PRIMARY_MODEL_SLOT])
     if isinstance(primary_model_id, str) and primary_model_id:
@@ -419,6 +431,49 @@ def _required_choice_fields() -> list[str]:
     return [
         ROLE_SLOT_PAYLOAD_FIELDS[PRIMARY_MODEL_SLOT],
     ]
+
+
+def _actor_registry_reference_from_payload(payload: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """Build the bounded actor-registry reference from flat create fields.
+
+    Returns (reference, None) on success, (None, machine_error_code) when the
+    payload mixes or malforms reference fields (fail closed). Reference fields
+    are optional: a caller that omits them keeps the legacy session behavior.
+    """
+    if not isinstance(payload, dict):
+        return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+    present = [field for field in ACTOR_REGISTRY_REFERENCE_FIELDS if payload.get(field) is not None]
+    if not present:
+        return None, None
+    reference: dict[str, Any] = {"actor_registry_reference_present": True}
+    slot_id = payload.get("actor_registry_slot_id")
+    binding_id = payload.get("actor_registry_binding_id")
+    binding_revision = payload.get("actor_registry_binding_revision")
+    assignment_id = payload.get("actor_registry_assignment_id")
+    assignment_revision = payload.get("actor_registry_assignment_revision")
+    if slot_id is not None:
+        if not isinstance(slot_id, str) or not slot_id or len(slot_id) > 64:
+            return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+        reference["slot_id"] = slot_id
+    if binding_id is not None:
+        if not isinstance(binding_id, str) or not binding_id or len(binding_id) > 64:
+            return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+        reference["binding_id"] = binding_id
+    if binding_revision is not None:
+        if not isinstance(binding_revision, int) or isinstance(binding_revision, bool) or binding_revision < 1:
+            return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+        reference["binding_revision"] = binding_revision
+    if assignment_id is not None:
+        if not isinstance(assignment_id, str) or not assignment_id or len(assignment_id) > 64:
+            return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+        reference["assignment_id"] = assignment_id
+    if assignment_revision is not None:
+        if not isinstance(assignment_revision, int) or isinstance(assignment_revision, bool) or assignment_revision < 1:
+            return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+        reference["assignment_revision"] = assignment_revision
+    if "binding_id" not in reference and "slot_id" not in reference:
+        return None, "ACTOR_REGISTRY_REFERENCE_INVALID"
+    return reference, None
 
 
 def _canonical_role_slots(
@@ -1172,6 +1227,15 @@ class CodexCustomSessionManager:
         forbidden = forbidden_session_create_fields(payload)
         if forbidden:
             return self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden)
+        actor_registry_reference, reference_error = _actor_registry_reference_from_payload(payload)
+        if reference_error is not None:
+            return {
+                **self._base_packet("rejected", reference_error),
+                "human_message": "Session create rejected a malformed actor registry reference.",
+                "session_created": False,
+                "actor_registry_reference_present": False,
+                "next_action": "repair_actor_registry_reference",
+            }
         slot_model_ids = _slot_model_ids_from_payload(payload)
         primary_model_id = slot_model_ids.get(PRIMARY_MODEL_SLOT, "")
         if not primary_model_id:
@@ -1304,6 +1368,7 @@ class CodexCustomSessionManager:
                 "labels": _agent_alias_labels_from_payload({}),
                 "alias_binding_source": "server_session_packet",
             },
+            "actor_registry_reference": actor_registry_reference,
         }
         self._append_ledger(session, "session_created")
         self._sessions[session_id] = session
@@ -1318,6 +1383,8 @@ class CodexCustomSessionManager:
             "current_execution_slot_id": PRIMARY_MODEL_SLOT,
             "current_execution_path_model_id": primary_model_id,
             "current_execution_path_source": "session_primary_model_slot",
+            "actor_registry_reference_present": actor_registry_reference is not None,
+            "actor_registry_reference": actor_registry_reference,
             "session": self._public_session(session),
             "selection_packet": self._selection_summary(selection),
             "role_slot_binding_packet": self._role_slot_binding_packet(session),
@@ -4991,6 +5058,7 @@ class CodexCustomSessionManager:
             "role_slot_binding_count": bound_slot_count,
             "role_slots": role_slots,
             "agent_alias_binding": agent_alias_binding,
+            "actor_registry_reference": session.get("actor_registry_reference"),
             "alias_runtime_binding_present": agent_alias_binding.get(
                 "alias_runtime_binding_present"
             )

@@ -17,6 +17,9 @@ All operator commands must support `--json`.
 
 - `status --json`
 - `invariant-check --json`
+- `actors list --json`
+- `actors migrate --dry-run --json`
+- `actors migrate --apply --json`
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
@@ -1206,6 +1209,46 @@ The token contract must remain bounded and machine-readably enforce:
 The plain `token` surface is allowed to emit the bearer token only to stdout for
 its trusted machine consumer. It is not a packet truth surface and must not be
 used as evidence by itself.
+
+## Additional actor registry owner surfaces
+
+`actors list --json` is the read-only owner surface for the canonical
+multi-actor registry truth (actor definitions, slot bindings, role
+assignments, legacy projection).
+
+`actors migrate --dry-run --json` and `actors migrate --apply --json` are the
+owner surfaces for the transactional schema v1 -> v2 registry migration.
+
+Readiness results:
+
+- `actors list --json` with no state file returns
+  `ACTOR_REGISTRY_NOT_INITIALIZED` (not a failure of the registry contract)
+- schema v1 state returns `ACTOR_REGISTRY_MIGRATION_PENDING` with the legacy
+  bindings projection
+- schema v2 state validates the canonical document (including the legacy
+  projection round-trip check) and returns `OK` or
+  `ACTOR_REGISTRY_STATE_INVALID`
+
+`actors list --json` is a `read` surface: `changed_files` must be `[]` and the
+command must not write runtime truth state.
+
+`actors migrate --apply --json` is a `mutate` surface:
+
+- requires an existing state file (`ACTOR_REGISTRY_MIGRATION_NO_STATE`
+  otherwise)
+- migrates only schema v1 -> v2 (`ACTOR_REGISTRY_ALREADY_CURRENT` when
+  current; `ACTOR_REGISTRY_STATE_INVALID` for unsupported shapes)
+- writes a backup to `<managed_dir>/actor-registry-backups/` before the
+  switch and reports `backup_path`; rollback restores that file
+- never migrates credentials or auth material
+- validates the migrated canonical document before the switch
+  (`ACTOR_REGISTRY_MIGRATION_VALIDATION_FAILED` blocks)
+- `machine_error_code=ACTOR_REGISTRY_MIGRATED` on success; migration
+  machinery failures surface the underlying state-migration
+  `machine_error_code` with `rollback_available=true`
+
+Both surfaces must remain strict JSON, use the command payload envelope, and
+never expose secret values, raw backend details, or registry paths.
 
 ## Additional web control-surface lifecycle owner surface
 

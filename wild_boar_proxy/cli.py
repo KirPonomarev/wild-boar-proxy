@@ -290,6 +290,16 @@ def build_parser() -> argparse.ArgumentParser:
     invariant_check = subparsers.add_parser("invariant-check", help="Проверить false-green инварианты")
     invariant_check.add_argument("--json", action="store_true", required=True)
 
+    actors = subparsers.add_parser("actors", help="Канонический multi-actor registry (schema v2)")
+    actors_subparsers = actors.add_subparsers(dest="actors_command", required=True)
+    actors_list = actors_subparsers.add_parser("list", help="Read-only список actors/bindings/assignments")
+    actors_list.add_argument("--json", action="store_true", required=True)
+    actors_migrate = actors_subparsers.add_parser("migrate", help="Транзакционная миграция v1 -> v2")
+    actors_migrate.add_argument("--json", action="store_true", required=True)
+    actors_migrate_mode = actors_migrate.add_mutually_exclusive_group(required=True)
+    actors_migrate_mode.add_argument("--dry-run", action="store_true")
+    actors_migrate_mode.add_argument("--apply", action="store_true")
+
     token = subparsers.add_parser("token", help="Проверить или получить локальный web token")
     token.add_argument("--json", action="store_true")
 
@@ -2558,6 +2568,19 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(summarize_status(paths))
         if args.command == "invariant-check":
             return emit_json(run_invariant_check(paths))
+        if args.command == "actors" and args.actors_command == "list":
+            from .actor_registry import read_actor_registry_packet
+
+            return emit_json(read_actor_registry_packet(paths.managed_dir / "custom-agent-bindings.json"))
+        if args.command == "actors" and args.actors_command == "migrate":
+            from .actor_registry import run_actor_registry_migrate
+
+            return emit_json(
+                run_actor_registry_migrate(
+                    paths.managed_dir / "custom-agent-bindings.json",
+                    dry_run=args.dry_run,
+                )
+            )
         if args.command == "token":
             if args.json:
                 return emit_json(token_status_payload(paths))
