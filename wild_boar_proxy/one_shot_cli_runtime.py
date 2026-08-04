@@ -796,7 +796,10 @@ def one_shot_cli_handle(
     use_sandbox_exec = False
     if sandbox.repo_write == "denied":
         sandbox_cwd = Path(tempfile.mkdtemp(prefix="wbp-sandbox-ro-"))
-        sandbox_exec = shutil.which("sandbox-exec")
+        # Use macOS sandbox-exec only for server-owned entries (production).
+        # Fake-adapter entries (tests) use read-only cwd only, since
+        # sandbox-exec profiles are expensive and can hang test binaries.
+        sandbox_exec = shutil.which("sandbox-exec") if entry.server_owned else None
         if sandbox_exec:
             # macOS sandbox profile: deny all file-write* except under the
             # provider home and the sandbox cwd temp (for shell internals).
