@@ -92,5 +92,12 @@ phase runs without admission. The main Codex surface stays forbidden
 
 ## Notes
 
-- blockers encountered: none
+- blockers encountered: one GitHub CI job
+  (`make check + test-core + test-custom-stability + test-web-e2e`) failed
+  once on `test_get_dispatch_table_preserves_representative_outputs`
+  (`custom_status` was `integration_failure` — Custom Codex readonly
+  snapshot timeout on the CI runner); the test passes locally 3/3 and on
+  the rerun the same job passed (proven CI-environmental timing flake,
+  one same-signature rerun per flake protocol); unrelated to this contour's
+  code (no web/live-surface changes)
 - resume from here: CLOSED
