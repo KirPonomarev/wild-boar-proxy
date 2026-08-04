@@ -221,6 +221,16 @@ def resolve_alias_dispatch(
 
     if not binding:
         raise DispatchResolutionError("BINDING_UNRESOLVED", f"no binding for alias: {alias_text}")
+    # Disabled actor must never dispatch.
+    if actor and actor.get("enabled") is False:
+        raise DispatchResolutionError(
+            "ACTOR_DISABLED", f"actor '{actor.get('actor_id')}' is disabled"
+        )
+    # Disabled binding must never dispatch.
+    if binding.get("enabled") is False:
+        raise DispatchResolutionError(
+            "BINDING_DISABLED", f"binding '{binding.get('binding_id')}' is disabled"
+        )
     if not actor and not legacy_used:
         raise DispatchResolutionError("ACTOR_UNRESOLVED", "actor definition missing for binding")
     if not legacy_used and not assignment:
@@ -243,6 +253,17 @@ def resolve_alias_dispatch(
         raise DispatchResolutionError(
             "PERMISSION_DENIED",
             f"requested {requested_permission} exceeds effective {permission}",
+        )
+    # Capability-set check: requested capabilities must be a subset of
+    # effective capabilities. Cross-axis requests (e.g. browser_read when
+    # effective is network_read) must fail even if linear rank allows it.
+    requested_caps = CAPABILITY_SETS.get(requested_permission, frozenset())
+    effective_caps = CAPABILITY_SETS.get(permission, frozenset())
+    if not requested_caps.issubset(effective_caps):
+        raise DispatchResolutionError(
+            "PERMISSION_DENIED",
+            f"requested capability {requested_permission} ({requested_caps}) "
+            f"is not a subset of effective {permission} ({effective_caps})",
         )
     context_policy = (
         str(assignment.get("assignment_context_policy") or CONTEXT_POLICY_FRESH)
