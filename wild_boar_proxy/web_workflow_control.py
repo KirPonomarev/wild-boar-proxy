@@ -133,7 +133,7 @@ class WorkflowControlState:
     def __init__(
         self,
         *,
-        gate_facts: Mapping[str, Any],
+        gate_facts: Mapping[str, Any] | None = None,
         capability_badges: Sequence[Mapping[str, Any]] | None = None,
         alias_bindings: Sequence[Mapping[str, Any]] | None = None,
         credential_presence: Mapping[str, Any] | None = None,
@@ -141,7 +141,7 @@ class WorkflowControlState:
         context_policies: Sequence[Mapping[str, Any]] | None = None,
         selection_facts: Mapping[str, Any] | None = None,
     ) -> None:
-        self.gate_facts = dict(gate_facts)
+        self.gate_facts = dict(gate_facts) if gate_facts else {}
         self.capability_badges = list(capability_badges or [])
         self.alias_bindings = list(alias_bindings or [])
         self.credential_presence = dict(credential_presence or {})
@@ -220,7 +220,7 @@ def handle_workflow_control_request(
 
 def _handle_get(state: WorkflowControlState, path: str) -> dict[str, Any]:
     if path == "/api/workflow/gate":
-        gate = ecg.run_execution_core_design_gate(**state.gate_facts)
+        gate = ecg.run_execution_core_design_gate()
         return build_command_payload(
             ok=gate["status"] == "ok",
             human_message=(

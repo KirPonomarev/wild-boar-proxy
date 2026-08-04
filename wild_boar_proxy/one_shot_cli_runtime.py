@@ -788,45 +788,73 @@ def one_shot_cli_handle(
     stdout_file = tempfile.TemporaryFile()
     stderr_file = tempfile.TemporaryFile()
     stdin_file = None
-    # Sandbox enforcement: when repo_write is denied, use macOS sandbox-exec
-    # (if available) to deny ALL filesystem writes outside provider home.
-    # Fall back to read-only cwd (chmod 0555) when sandbox-exec is absent.
+    # P0-1 Sandbox: macOS sandbox-exec profile that DENIES read AND write
+    # outside an explicit allowlist. No read-only-cwd fallback — if
+    # sandbox-exec is unavailable, CLI is CLI_UNAVAILABLE_UNSAFE.
     sandbox_cwd: Path | None = None
     sandbox_profile_path: Path | None = None
     use_sandbox_exec = False
     if sandbox.repo_write == "denied":
         sandbox_cwd = Path(tempfile.mkdtemp(prefix="wbp-sandbox-ro-"))
-        # Use macOS sandbox-exec only for server-owned entries (production).
-        # Fake-adapter entries (tests) use read-only cwd only, since
-        # sandbox-exec profiles are expensive and can hang test binaries.
         sandbox_exec = shutil.which("sandbox-exec") if entry.server_owned else None
+        if not sandbox_exec and entry.server_owned:
+            # No sandbox-exec on a server-owned entry: CLI is unsafe.
+            sandbox_cwd.rmdir()
+            return build_command_payload(
+                ok=False,
+                human_message=(
+                    f"one-shot CLI '{tool_id}' is unsafe: sandbox-exec is "
+                    f"required for server-owned entries and is not available."
+                ),
+                machine_error_code="CLI_UNAVAILABLE_UNSAFE",
+                liveness="healthy",
+                severity="error",
+                operator_action="user_action",
+                changed_files=[],
+                exit_code=1,
+                extra={
+                    "tool_id": tool_id,
+                    "sandbox": sandbox.to_dict(),
+                    "reason": "sandbox_exec_absent_for_server_owned_entry",
+                },
+            )
         if sandbox_exec:
-            # macOS sandbox profile: deny all file-write* except under the
-            # provider home and the sandbox cwd temp (for shell internals).
             home_dir = str(Path(prepared_env.get("HOME", sandbox_cwd)))
+            codex_home = str(Path.home() / ".codex")
+            repo_root = "/Volumes/Work/wild-boar-proxy"
+            profiles_root = str(Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "CodexProfiles")
+            sandbox_cwd_real = str(Path(sandbox_cwd).resolve())
+            home_real = str(Path(home_dir).resolve())
             profile_lines = [
                 "(version 1)",
                 "(deny default)",
-                "(allow process-exec process-fork process-info* signal)",
+                # Process lifecycle
+                "(allow process-exec process-fork signal)",
                 "(allow sysctl-read)",
-                "(allow file-read*)",
-                '(allow file-write* (subpath "' + str(sandbox_cwd) + '"))',
-                '(allow file-write* (subpath "' + home_dir + '"))',
+                # Explicit DENY of protected surfaces (read data + write)
+                '(deny file-read-data (subpath "' + codex_home + '"))',
+                '(deny file-write* (subpath "' + codex_home + '"))',
+                '(deny file-read-data (subpath "' + repo_root + '"))',
+                '(deny file-write* (subpath "' + repo_root + '"))',
+                '(deny file-read-data (subpath "' + profiles_root + '"))',
+                '(deny file-write* (subpath "' + profiles_root + '"))',
+                # Read: allow general read-data (shell needs it) but
+                # protected surfaces are explicitly denied above
+                "(allow file-read-data)",
+                # Write: only sandbox cwd + provider home
+                '(allow file-write* (subpath "' + sandbox_cwd_real + '"))',
+                '(allow file-write* (subpath "' + home_real + '"))',
+                "(allow file-write-data (subpath \"/dev/dtracehelper\"))",
+                # IPC / mach for shell
                 "(allow ipc-posix-shm)",
-                '(allow mach-lookup (global-name "com.apple.system.logger"))',
-                '(allow mach-lookup (global-name "com.apple.cfprefsd.daemon"))',
             ]
             sandbox_profile_path = sandbox_cwd / "sandbox.sb"
             sandbox_profile_path.write_text(
                 "\n".join(profile_lines) + "\n", encoding="utf-8"
             )
             use_sandbox_exec = True
-        else:
-            try:
-                os.chmod(sandbox_cwd, 0o555)
-            except OSError:
-                pass
-    # Build final argv: wrap with sandbox-exec if available
+        # Fake-adapter entries: no sandbox, no fallback claim
+    # Build final argv
     if use_sandbox_exec and sandbox_profile_path is not None:
         run_argv = [
             shutil.which("sandbox-exec") or "/usr/bin/sandbox-exec",

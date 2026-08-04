@@ -149,9 +149,6 @@ class AuditP1DesignGateHonestChecks(unittest.TestCase):
 
     def test_fake_stages_and_bad_sha_rejected(self) -> None:
         packet = ecg.run_execution_core_design_gate(
-            completed_stages=[f"fake{i}" for i in range(1, 11)],
-            evidence_index_references=1,
-            full_suite_passed=1,
             main_head="not-a-git-sha",
         )
         self.assertFalse(packet["design_gate_earned"])
@@ -159,20 +156,6 @@ class AuditP1DesignGateHonestChecks(unittest.TestCase):
 
     def test_bad_sha_rejected_even_with_real_stages(self) -> None:
         packet = ecg.run_execution_core_design_gate(
-            completed_stages=[
-                "B00_BASELINE_ADMISSION_REPAIR",
-                "B01_ACTOR_ADR_AND_SPIKES",
-                "B02_ACTOR_SCHEMA_V2_AND_MIGRATION",
-                "B03_TRANSPORT_AND_EVIDENCE_STATE_MACHINE",
-                "B04_THREAD_CONTEXT_LEDGER_V2",
-                "B05_DISPATCHER_ASSIGNMENTS_PERMISSIONS_DIAGNOSTICS",
-                "B06_LEGACY_SURFACE_AND_EVIDENCE_MATRIX_REGRESSION",
-                "B07_CODE_MULTI_API_CORE",
-                "B08_CODE_QWEN_API",
-                "B09_ONE_SHOT_CLI_RUNTIME",
-            ],
-            evidence_index_references=10,
-            full_suite_passed=4000,
             main_head="abc",
         )
         self.assertFalse(packet["design_gate_earned"])
