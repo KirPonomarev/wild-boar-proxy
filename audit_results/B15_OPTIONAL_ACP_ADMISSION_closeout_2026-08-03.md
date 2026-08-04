@@ -85,5 +85,11 @@ unstable, close as `OPTIONAL_DEFERRED_ACP` with evidence.
 
 ## Notes
 
-- blockers encountered: none
+- blockers encountered: one GitHub CI job
+  (`make check + test-core + test-custom-stability`) failed once on the
+  known timing-sensitive web-e2e test
+  `test_http_sandbox_readonly_endpoints_follow_sandbox_target`
+  (HTTP TimeoutError on the CI runner; passes locally 3/3 and passed on
+  the rerun — same proven CI-runner timing flake pattern documented in
+  B13); unrelated to this contour (no web-surface changes)
 - resume from here: CLOSED
