@@ -404,7 +404,7 @@ class ApiTransportAdapter:
 
     def _external_models_paths(self) -> ExternalModelsPaths:
         """Return the ExternalModelsPaths for this adapter's dir."""
-        return ExternalModelsPaths(external_models_dir=self.external_models_dir)
+        return ExternalModelsPaths.from_root(self.external_models_dir)
 
     @staticmethod
     def _classify_live_error(exc: Exception) -> str:
