@@ -79,7 +79,7 @@ def build_desktop_pilot_receipt(
         "clean_machine_available": clean_machine_available,
         "physical_proof_deferred": physical_blocked,
         "original_codex_app_mutations": 0,
-        "codex_updater_restricted": True,
+        "codex_updater_restricted": False,
     }
     # B00 F1: an empty required-step collection must never be accepted as a
     # released pilot. `all([])` is True, so without this guard an empty step
