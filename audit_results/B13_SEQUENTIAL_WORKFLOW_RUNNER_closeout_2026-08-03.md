@@ -94,6 +94,13 @@ Workflow V1 has no parallel repo steps.
 
 ## Notes
 
-- blockers encountered: none beyond routine test iterations (packet `extra`
-  flattening and blocked-lease packet fields)
+- blockers encountered: routine test iterations (packet `extra` flattening
+  and blocked-lease packet fields); two GitHub CI jobs failed once each on
+  timing-sensitive web-e2e tests unrelated to this contour
+  (`test_custom_native_launch_blocks_api_modes_when_stable_bridge_preflight_blocks`
+  — sleep call-count assertion, and
+  `test_http_sandbox_readonly_endpoints_follow_sandbox_target` —
+  HTTP TimeoutError); both pass locally 3/3 and passed on rerun
+  (proven CI-runner timing flakes, per flake protocol); no web/live
+  surface changes exist in this contour
 - resume from here: CLOSED
