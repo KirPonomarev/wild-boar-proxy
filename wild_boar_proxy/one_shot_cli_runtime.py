@@ -173,9 +173,32 @@ class OneShotCliRunResult:
 SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = ()
 
 
+# Environment keys that must NEVER cross into a one-shot child. These are
+# host/Codex/proxy surfaces unrelated to the sterile probe.
+FORBIDDEN_ENV_KEYS = frozenset({
+    "CODEX_HOME",
+    "WBP_PROFILE_DIR",
+    "SSH_AUTH_SOCK",
+    "SSH_AGENT_PID",
+    "ALL_PROXY", "all_proxy",
+    "HTTP_PROXY", "http_proxy",
+    "HTTPS_PROXY", "https_proxy",
+    "NO_PROXY", "no_proxy",
+    "GNOME_KEYRING_CONTROL",
+    "KEYCHAIN",
+    "BROWSER",
+    "VISUAL", "EDITOR",
+})
+
+
 def is_sensitive_env_key(name: str) -> bool:
     upper = name.upper()
     return any(upper.endswith(suffix) for suffix in SECRET_ENV_SUFFIXES)
+
+
+def is_forbidden_env_key(name: str) -> bool:
+    """Host/Codex/proxy keys that must be scrubbed even if not secret-pattern."""
+    return name in FORBIDDEN_ENV_KEYS or name.upper() in FORBIDDEN_ENV_KEYS
 
 
 def provider_homes_root(*, override: str | None = None) -> Path:
@@ -240,6 +263,8 @@ def build_sterile_environment(
     """Scrubbed environment for one-shot children.
 
     - secret-pattern variables are dropped
+    - host/Codex/proxy variables are dropped (CODEX_HOME, WBP_PROFILE_DIR,
+      SSH_AUTH_SOCK, proxy vars)
     - PATH is replaced with system bins only
     - HOME is redirected to the isolated provider home when given
     - extra `keep` names survive (server-decided allowlist)
@@ -247,7 +272,7 @@ def build_sterile_environment(
     keep_set = frozenset(keep)
     env: dict[str, str] = {}
     for key, value in os.environ.items():
-        if is_sensitive_env_key(key):
+        if is_sensitive_env_key(key) or is_forbidden_env_key(key):
             continue
         if key.upper() in keep_set:
             env[key] = value
@@ -491,6 +516,7 @@ def _run_bounded(
     stdin_text: str | None,
     timeout_seconds: float,
     output_cap_bytes: int,
+    cwd: Path | str | None = None,
 ) -> OneShotCliRunResult:
     """Bounded process-group run (timeout + cap; group kill on timeout)."""
     started = time.monotonic()
@@ -509,6 +535,7 @@ def _run_bounded(
                 stdout=stdout_file,
                 stderr=stderr_file,
                 env=dict(env),
+                cwd=str(cwd) if cwd is not None else None,
                 start_new_session=True,
                 text=False,
                 shell=False,
@@ -605,8 +632,10 @@ class OneShotCliRunHandle:
         output_cap_bytes: int,
         env_digest_value: str,
         tool_id: str,
+        sandbox_cwd: Path | None = None,
     ) -> None:
         self._process = process
+        self._sandbox_cwd = sandbox_cwd
         self._stdout_file = stdout_file
         self._stderr_file = stderr_file
         self._started = started
@@ -685,6 +714,12 @@ class OneShotCliRunHandle:
             self._result = result
             self._stdout_file.close()
             self._stderr_file.close()
+            if self._sandbox_cwd is not None:
+                try:
+                    os.chmod(self._sandbox_cwd, 0o755)
+                    shutil.rmtree(self._sandbox_cwd, ignore_errors=True)
+                except OSError:
+                    pass
         return result
 
 
@@ -743,6 +778,16 @@ def one_shot_cli_handle(
     stdout_file = tempfile.TemporaryFile()
     stderr_file = tempfile.TemporaryFile()
     stdin_file = None
+    # Sandbox enforcement: when repo_write is denied, the child runs in a
+    # read-only temp cwd so OS EACCES blocks any write attempt (not just a
+    # policy claim recorded in the receipt).
+    sandbox_cwd: Path | None = None
+    if sandbox.repo_write == "denied":
+        sandbox_cwd = Path(tempfile.mkdtemp(prefix="wbp-sandbox-ro-"))
+        try:
+            os.chmod(sandbox_cwd, 0o555)  # read+execute only, no write
+        except OSError:
+            pass
     try:
         stdin = subprocess.DEVNULL
         if stdin_text is not None:
@@ -756,6 +801,7 @@ def one_shot_cli_handle(
             stdout=stdout_file,
             stderr=stderr_file,
             env=dict(prepared_env),
+            cwd=str(sandbox_cwd) if sandbox_cwd is not None else None,
             start_new_session=True,
             text=False,
             shell=False,
@@ -787,6 +833,7 @@ def one_shot_cli_handle(
         output_cap_bytes=output_cap_bytes,
         env_digest_value=env_digest(prepared_env),
         tool_id=tool_id,
+        sandbox_cwd=sandbox_cwd,
     )
 
 

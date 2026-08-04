@@ -39,11 +39,38 @@ _V1_BINDINGS = [
 
 class PermissionIntersectionTests(unittest.TestCase):
     def test_intersection_is_conservative(self) -> None:
+        # repo_read and network_read are independent capability axes; their
+        # intersection is context_only, not the lower-ranked one.
         self.assertEqual(
             ad.effective_permission(
                 binding_permission_ceiling="repo_write",
                 explicit_operator_grant="repo_read",
                 adapter_capability="network_read",
+                runtime_policy="repo_read",
+            ),
+            "context_only",
+        )
+
+    def test_network_read_grant_never_yields_repo_write(self) -> None:
+        # Regression: the auditor reproduced network_read -> repo_write under
+        # the old linear-rank model. Capability-set intersection must return
+        # context_only, never a different capability axis.
+        self.assertEqual(
+            ad.effective_permission(
+                binding_permission_ceiling="repo_write",
+                explicit_operator_grant="network_read",
+                adapter_capability="repo_write",
+                runtime_policy="repo_write",
+            ),
+            "context_only",
+        )
+
+    def test_same_axis_intersection_preserves_axis(self) -> None:
+        self.assertEqual(
+            ad.effective_permission(
+                binding_permission_ceiling="repo_write",
+                explicit_operator_grant="repo_read",
+                adapter_capability="repo_write",
                 runtime_policy="repo_read",
             ),
             "repo_read",

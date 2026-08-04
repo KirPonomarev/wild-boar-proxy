@@ -24,11 +24,12 @@ from .actor_registry import (
     CONTEXT_POLICY_FORK,
     CONTEXT_POLICY_FRESH,
     FORBIDDEN_STALE_ROUTE_IDS,
-    PERMISSION_NONE,
     PRIMARY_SLOT_ID,
     resolve_binding_reference,
     validate_actor_registry_document,
 )
+
+PERMISSION_NONE = "none"
 from .transport_normalization import (
     ERR_CAPABILITY_NOT_ADMITTED,
     NormalizedRequest,
@@ -36,6 +37,33 @@ from .transport_normalization import (
     normalize_request,
 )
 
+PERMISSION_NONE = "none"
+
+# Capability-set model: permissions form two capability trees rooted at
+# context_only (repo axis and external axis). Linear ranking collapses
+# incompatible capabilities (network_read vs repo_write) — we must use
+# set intersection instead.
+CAPABILITY_SETS = {
+    PERMISSION_NONE: frozenset(),
+    "context_only": frozenset({"context_only"}),
+    "repo_read": frozenset({"context_only", "repo_read"}),
+    "repo_write": frozenset({"context_only", "repo_read", "repo_write"}),
+    "browser_read": frozenset({"context_only", "browser_read"}),
+    "network_read": frozenset({"context_only", "network_read"}),
+}
+
+# Ordered from most-specific to least: the first permission whose capability
+# set is a subset of the effective set is the most-specific granted capability.
+_PERMISSION_SPECIFICITY = (
+    "repo_write",
+    "repo_read",
+    "network_read",
+    "browser_read",
+    "context_only",
+    PERMISSION_NONE,
+)
+
+# Legacy compatibility rank for callers that still expect ordering.
 PERMISSION_ORDER = {
     PERMISSION_NONE: 0,
     "context_only": 1,
@@ -47,11 +75,21 @@ PERMISSION_ORDER = {
 
 
 def _intersect_permissions(*permissions: str) -> str:
-    ranked = [PERMISSION_ORDER.get(permission, 0) for permission in permissions]
-    return min(
-        (permission for permission, rank in zip(permissions, ranked) if rank == min(ranked)),
-        default=PERMISSION_NONE,
-    )
+    """Intersect permission surfaces as capability sets, not a linear rank.
+
+    network_read and repo_write are independent axes: their intersection is
+    context_only, never repo_write.
+    """
+    sets = [CAPABILITY_SETS.get(p, frozenset()) for p in permissions]
+    if not sets or not all(sets):
+        return PERMISSION_NONE
+    effective = sets[0]
+    for s in sets[1:]:
+        effective = effective & s
+    for perm in _PERMISSION_SPECIFICITY:
+        if CAPABILITY_SETS[perm].issubset(effective):
+            return perm
+    return PERMISSION_NONE
 
 
 def effective_permission(
