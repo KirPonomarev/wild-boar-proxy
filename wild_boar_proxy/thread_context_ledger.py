@@ -100,14 +100,16 @@ def canonical_bytes(obj: Any) -> bytes:
 
 
 def context_digest(entries: Iterable["LedgerEntry"]) -> str:
-    """Digest of the canonical visible CONTENT of the entries.
+    """Order-sensitive digest of the canonical visible content of entries.
 
-    Timestamps, revisions, and generation identifiers are excluded so the
-    digest is reproducible across replicas with identical content: a ``fork``
-    context transition binds to one exact digest, not to wall-clock metadata.
+    R03: the digest now includes the entry sequence (revision) and preserves
+    insertion order — reversing the message order produces a different digest.
+    Timestamps and generation are excluded for cross-replica reproducibility,
+    but the relative order (revision) is part of the content identity.
     """
     payload = [
         {
+            "seq": entry.revision,
             "kind": entry.kind,
             "content": entry.content,
             "actor_id": entry.actor_id,
@@ -116,9 +118,8 @@ def context_digest(entries: Iterable["LedgerEntry"]) -> str:
             "context_digest": entry.context_digest,
             "source": entry.source,
         }
-        for entry in entries
+        for entry in entries  # preserve caller's list order; do NOT sort
     ]
-    payload.sort(key=lambda item: (item["kind"], item["content"], item["actor_id"]))
     return hashlib.sha256(canonical_bytes(payload)).hexdigest()
 
 
@@ -337,6 +338,9 @@ class ThreadContextLedger:
             return self._packet(STATUS_DEGRADED, "ledger_entry_too_large")
         fd = self._acquire_lock()
         try:
+            # R03: reread disk state under lock to prevent lost updates
+            # when two instances share the same root.
+            self._load()
             if any(entry.entry_id == entry_id for entry in self._entries):
                 return self._packet(STATUS_OK, "ledger_entry_duplicate_rejected", duplicate=True)
             entry = LedgerEntry(
