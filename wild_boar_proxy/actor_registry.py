@@ -474,6 +474,7 @@ def validate_actor_registry_document(document: object) -> dict[str, Any]:
 
     if isinstance(role_assignments, list):
         seen_assignments: set[str] = set()
+        seen_assignment_slots: dict[str, str] = {}
         for index, assignment in enumerate(role_assignments):
             if not _is_mapping(assignment):
                 reasons.append(f"assignment_{index}_not_object")
@@ -493,6 +494,12 @@ def validate_actor_registry_document(document: object) -> dict[str, Any]:
             slot_id = str(assignment.get("slot_id") or "")
             if slot_id and slot_id not in bound_slots:
                 reasons.append(f"assignment_{index}_slot_id_unbound")
+            # Two active assignments on the same slot is ambiguous: reject.
+            if slot_id and assignment.get("enabled") is not False:
+                if slot_id in seen_assignment_slots:
+                    reasons.append(f"assignment_{index}_slot_id_multiple_active")
+                else:
+                    seen_assignment_slots[slot_id] = assignment_id
             if assignment.get("assignment_context_policy") not in ALLOWED_CONTEXT_POLICIES:
                 reasons.append(f"assignment_{index}_context_policy_unknown")
             revision = assignment.get("assignment_revision")

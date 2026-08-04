@@ -100,14 +100,16 @@ def canonical_bytes(obj: Any) -> bytes:
 
 
 def context_digest(entries: Iterable["LedgerEntry"]) -> str:
-    """Digest of the canonical visible CONTENT of the entries.
+    """Order-sensitive digest of the canonical visible content of entries.
 
-    Timestamps, revisions, and generation identifiers are excluded so the
-    digest is reproducible across replicas with identical content: a ``fork``
-    context transition binds to one exact digest, not to wall-clock metadata.
+    R03: the digest now includes the entry sequence (revision) and preserves
+    insertion order — reversing the message order produces a different digest.
+    Timestamps and generation are excluded for cross-replica reproducibility,
+    but the relative order (revision) is part of the content identity.
     """
     payload = [
         {
+            "seq": entry.revision,
             "kind": entry.kind,
             "content": entry.content,
             "actor_id": entry.actor_id,
@@ -116,9 +118,8 @@ def context_digest(entries: Iterable["LedgerEntry"]) -> str:
             "context_digest": entry.context_digest,
             "source": entry.source,
         }
-        for entry in entries
+        for entry in entries  # preserve caller's list order; do NOT sort
     ]
-    payload.sort(key=lambda item: (item["kind"], item["content"], item["actor_id"]))
     return hashlib.sha256(canonical_bytes(payload)).hexdigest()
 
 
@@ -189,6 +190,41 @@ class ThreadContextLedger:
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
         fcntl.flock(fd, fcntl.LOCK_EX)
         return fd
+
+    def _reconcile_from_disk_locked(self) -> None:
+        """Re-read the ledger from disk without resetting generation.
+
+        Unlike ``_load``, this preserves the document's generation and
+        absolute revisions, so concurrent instances sharing a root can
+        append without losing state.
+        """
+        if not self.ledger_path.is_file():
+            return
+        try:
+            raw = self.ledger_path.read_text(encoding="utf-8")
+            document = json.loads(raw)
+        except (OSError, json.JSONDecodeError):
+            self._status = STATUS_FAILED
+            self._last_error = "ledger_file_unreadable"
+            return
+        if not isinstance(document, dict):
+            return
+        self.generation = max(self.generation, int(document.get("generation") or 1))
+        self._revision = max(self._revision, int(document.get("revision") or 0))
+        entries_raw = document.get("entries")
+        if not isinstance(entries_raw, list):
+            return
+        loaded: list[LedgerEntry] = []
+        for raw_entry in entries_raw:
+            if not isinstance(raw_entry, dict):
+                continue
+            try:
+                loaded.append(LedgerEntry(**raw_entry))
+            except TypeError:
+                continue
+        self._entries = loaded
+        if loaded:
+            self._revision = max(self._revision, max(e.revision for e in loaded))
 
     def _load(self) -> None:
         if not self.ledger_path.is_file():
@@ -337,6 +373,10 @@ class ThreadContextLedger:
             return self._packet(STATUS_DEGRADED, "ledger_entry_too_large")
         fd = self._acquire_lock()
         try:
+            # R03: reread disk state under lock to prevent lost updates.
+            # Read the file directly (not _load which would reset
+            # generation and re-enforce revision monotonicity from 1).
+            self._reconcile_from_disk_locked()
             if any(entry.entry_id == entry_id for entry in self._entries):
                 return self._packet(STATUS_OK, "ledger_entry_duplicate_rejected", duplicate=True)
             entry = LedgerEntry(

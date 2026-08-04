@@ -15,6 +15,7 @@ invents any.
 from __future__ import annotations
 
 import re
+import subprocess
 from typing import Any, Sequence
 
 from . import design_gate_accessibility as dga
@@ -52,8 +53,18 @@ _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _validate_main_head(main_head: str) -> bool:
-    """Reject anything that is not a 40-hex-char git SHA."""
-    return bool(_GIT_SHA_RE.match(main_head))
+    """Reject anything that is not a real git SHA existing in the repo."""
+    if not _GIT_SHA_RE.match(main_head):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "cat-file", "-t", main_head],
+            capture_output=True, text=True, timeout=5,
+            cwd="/Volumes/Work/wild-boar-proxy",
+        )
+        return result.returncode == 0 and result.stdout.strip() == "commit"
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def _validate_completed_stages(stages: Sequence[str]) -> bool:

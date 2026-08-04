@@ -255,29 +255,39 @@ def resolve_manifest_entry(tool_id: str) -> OneShotToolManifestEntry | None:
     return None
 
 
+# Strict allowlist: only these env vars cross into a one-shot child.
+# Everything else from the ambient environment is dropped.
+STERILE_ENV_ALLOWLIST = frozenset({
+    "PATH", "HOME", "TMPDIR", "TMP", "TEMP",
+    "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES",
+    "TERM", "SHELL",
+    "SystemRoot", "WINDIR",  # Windows compat (harmless on macOS)
+})
+
+# Provider-specific home/runtime variables that are explicitly injected
+# by the runtime (not inherited from ambient).
+_PROVIDER_HOME_VARS = frozenset({
+    "QWEN_HOME", "QWEN_RUNTIME_DIR",
+    "KIMI_CODE_HOME",
+    "QWEN_PROJECT_ROOT", "KIMI_SNAPSHOT_ROOT",
+})
+
+
 def build_sterile_environment(
     *,
     provider_home: Path | str | None = None,
     keep: Sequence[str] = (),
 ) -> dict[str, str]:
-    """Scrubbed environment for one-shot children.
+    """Strict allowlist environment for one-shot children.
 
-    - secret-pattern variables are dropped
-    - host/Codex/proxy variables are dropped (CODEX_HOME, WBP_PROFILE_DIR,
-      SSH_AUTH_SOCK, proxy vars)
-    - PATH is replaced with system bins only
-    - HOME is redirected to the isolated provider home when given
-    - extra `keep` names survive (server-decided allowlist)
+    Only explicitly-allowed variables cross the boundary. All ambient
+    host/Codex/proxy/cloud variables are dropped by default.
     """
-    keep_set = frozenset(keep)
+    allow = STERILE_ENV_ALLOWLIST | _PROVIDER_HOME_VARS | frozenset(keep)
     env: dict[str, str] = {}
     for key, value in os.environ.items():
-        if is_sensitive_env_key(key) or is_forbidden_env_key(key):
-            continue
-        if key.upper() in keep_set:
+        if key in allow:
             env[key] = value
-            continue
-        env[key] = value
     env["PATH"] = os.pathsep.join(STERILE_PATH_ENTRIES)
     if provider_home is not None:
         env["HOME"] = str(Path(provider_home))
@@ -778,16 +788,53 @@ def one_shot_cli_handle(
     stdout_file = tempfile.TemporaryFile()
     stderr_file = tempfile.TemporaryFile()
     stdin_file = None
-    # Sandbox enforcement: when repo_write is denied, the child runs in a
-    # read-only temp cwd so OS EACCES blocks any write attempt (not just a
-    # policy claim recorded in the receipt).
+    # Sandbox enforcement: when repo_write is denied, use macOS sandbox-exec
+    # (if available) to deny ALL filesystem writes outside provider home.
+    # Fall back to read-only cwd (chmod 0555) when sandbox-exec is absent.
     sandbox_cwd: Path | None = None
+    sandbox_profile_path: Path | None = None
+    use_sandbox_exec = False
     if sandbox.repo_write == "denied":
         sandbox_cwd = Path(tempfile.mkdtemp(prefix="wbp-sandbox-ro-"))
-        try:
-            os.chmod(sandbox_cwd, 0o555)  # read+execute only, no write
-        except OSError:
-            pass
+        # Use macOS sandbox-exec only for server-owned entries (production).
+        # Fake-adapter entries (tests) use read-only cwd only, since
+        # sandbox-exec profiles are expensive and can hang test binaries.
+        sandbox_exec = shutil.which("sandbox-exec") if entry.server_owned else None
+        if sandbox_exec:
+            # macOS sandbox profile: deny all file-write* except under the
+            # provider home and the sandbox cwd temp (for shell internals).
+            home_dir = str(Path(prepared_env.get("HOME", sandbox_cwd)))
+            profile_lines = [
+                "(version 1)",
+                "(deny default)",
+                "(allow process-exec process-fork process-info* signal)",
+                "(allow sysctl-read)",
+                "(allow file-read*)",
+                '(allow file-write* (subpath "' + str(sandbox_cwd) + '"))',
+                '(allow file-write* (subpath "' + home_dir + '"))',
+                "(allow ipc-posix-shm)",
+                '(allow mach-lookup (global-name "com.apple.system.logger"))',
+                '(allow mach-lookup (global-name "com.apple.cfprefsd.daemon"))',
+            ]
+            sandbox_profile_path = sandbox_cwd / "sandbox.sb"
+            sandbox_profile_path.write_text(
+                "\n".join(profile_lines) + "\n", encoding="utf-8"
+            )
+            use_sandbox_exec = True
+        else:
+            try:
+                os.chmod(sandbox_cwd, 0o555)
+            except OSError:
+                pass
+    # Build final argv: wrap with sandbox-exec if available
+    if use_sandbox_exec and sandbox_profile_path is not None:
+        run_argv = [
+            shutil.which("sandbox-exec") or "/usr/bin/sandbox-exec",
+            "-f", str(sandbox_profile_path),
+            *argv,
+        ]
+    else:
+        run_argv = argv
     try:
         stdin = subprocess.DEVNULL
         if stdin_text is not None:
@@ -796,7 +843,7 @@ def one_shot_cli_handle(
             stdin_file.seek(0)
             stdin = stdin_file
         process = subprocess.Popen(
-            argv,
+            run_argv,
             stdin=stdin,
             stdout=stdout_file,
             stderr=stderr_file,
