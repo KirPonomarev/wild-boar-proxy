@@ -14,6 +14,7 @@ invents any.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Sequence
 
 from . import design_gate_accessibility as dga
@@ -21,6 +22,43 @@ from .runtime import build_command_payload
 
 DESIGN_GATE_TOKEN = dga.DESIGN_GATE_TOKEN
 GATE_SCHEMA_VERSION = 1
+
+# Known completed stage IDs from the plan scheduler. The gate rejects
+# fabricated stage names.
+_KNOWN_COMPLETED_STAGES = frozenset({
+    "B00_BASELINE_ADMISSION_REPAIR",
+    "B01_ACTOR_ADR_AND_SPIKES",
+    "B02_ACTOR_SCHEMA_V2_AND_MIGRATION",
+    "B03_TRANSPORT_AND_EVIDENCE_STATE_MACHINE",
+    "B04_THREAD_CONTEXT_LEDGER_V2",
+    "B05_DISPATCHER_ASSIGNMENTS_PERMISSIONS_DIAGNOSTICS",
+    "B06_LEGACY_SURFACE_AND_EVIDENCE_MATRIX_REGRESSION",
+    "B07_CODE_MULTI_API_CORE",
+    "B08_CODE_QWEN_API",
+    "B09_ONE_SHOT_CLI_RUNTIME",
+    "B10_CODE_QWEN_ONE_SHOT_CLI",
+    "B11_CODE_KIMI_ONE_SHOT_CLI",
+    "B12_ADMISSION_GLM_CLI_API_ONLY",
+    "B13_SEQUENTIAL_WORKFLOW_RUNNER",
+    "B13G_EXECUTION_CORE_DESIGN_GATE",
+    "B14_WEB_WORKFLOW_CONTROL",
+    "B15_OPTIONAL_ACP_DEFERRED",
+    "B16_OPTIONAL_CODEX_CLI_DEFERRED",
+    "B17_SECURITY_RELIABILITY_MATRIX",
+    "B18_FINAL_CANDIDATE_ASSURANCE",
+})
+
+_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _validate_main_head(main_head: str) -> bool:
+    """Reject anything that is not a 40-hex-char git SHA."""
+    return bool(_GIT_SHA_RE.match(main_head))
+
+
+def _validate_completed_stages(stages: Sequence[str]) -> bool:
+    """Reject fabricated or unknown stage names."""
+    return all(stage in _KNOWN_COMPLETED_STAGES for stage in stages)
 
 
 def execution_core_repair_closed_evidence(
@@ -74,9 +112,13 @@ def run_execution_core_design_gate(
             dga.AccessibilityCheck("responsive_layout", "responsive", True, "no horizontal scroll at 320px"),
         ]
     )
-    execution_core_closed = bool(evidence["evidence_index_references"]) and bool(
-        evidence["full_suite_passed"]
-    ) and len(evidence["completed_stages"]) >= 10
+    execution_core_closed = (
+        bool(evidence["evidence_index_references"])
+        and bool(evidence["full_suite_passed"])
+        and len(evidence["completed_stages"]) >= 10
+        and _validate_main_head(str(main_head))
+        and _validate_completed_stages(evidence["completed_stages"])
+    )
     gate = dga.build_design_gate_receipt(
         execution_core_closed=execution_core_closed,
         checks=gate_checks,

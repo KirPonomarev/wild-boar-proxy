@@ -363,9 +363,12 @@ class ApiTransportAdapter:
             )
         try:
             from .external_models.http_client import request_json
-            from .external_models.validate import _provider_headers
+            from .external_models.validate import _provider_headers, _completion_url
 
-            headers = _provider_headers(kwargs["route"])
+            # _provider_headers requires paths — use the external models dir
+            # from the adapter instance.
+            paths = self._external_models_paths()
+            headers = _provider_headers(kwargs["route"], paths)
             response = request_json(
                 url=_completion_url(kwargs["route"]),
                 method="POST",
@@ -383,8 +386,25 @@ class ApiTransportAdapter:
                 error_message=str(exc),
             )
         return self._dispatch_success_packet(
-            **{**kwargs, "response_text": response_text, "controlled": False, "live_provider_called": True}
+            dispatch_plan=kwargs["dispatch_plan"],
+            dispatch_id=kwargs["dispatch_id"],
+            turn_id=kwargs.get("turn_id", ""),
+            workflow_run_id=kwargs.get("workflow_run_id", ""),
+            step_request_id=kwargs.get("step_request_id", ""),
+            slot_id=kwargs.get("slot_id", ""),
+            binding_id=kwargs.get("binding_id", ""),
+            assignment_id=kwargs.get("assignment_id", ""),
+            transport_session_id=kwargs.get("transport_session_id", ""),
+            route=kwargs["route"],
+            request_digest=kwargs.get("request_digest", ""),
+            response_text=response_text,
+            controlled=False,
+            live_provider_called=True,
         )
+
+    def _external_models_paths(self) -> ExternalModelsPaths:
+        """Return the ExternalModelsPaths for this adapter's dir."""
+        return ExternalModelsPaths(external_models_dir=self.external_models_dir)
 
     @staticmethod
     def _classify_live_error(exc: Exception) -> str:

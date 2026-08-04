@@ -172,8 +172,12 @@ class ThreadContextLedger:
 
     def _ensure_owned_root(self) -> None:
         # Per-thread isolation: the thread root must stay under the approved
-        # ledger root.
-        if not str(self.ledger_root).startswith(str(Path(self.root).resolve())):
+        # ledger root. Use Path.resolve().relative_to() — not str.startswith()
+        # — because "../approved-escape" defeats startswith.
+        resolved_root = Path(self.root).resolve()
+        try:
+            self.ledger_root.relative_to(resolved_root)
+        except ValueError:
             raise ValueError("ledger thread root escapes approved root")
         self.ledger_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.ledger_root, 0o700)

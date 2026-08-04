@@ -423,6 +423,7 @@ def validate_actor_registry_document(document: object) -> dict[str, Any]:
 
     bound_slots: set[str] = set()
     seen_aliases: dict[str, str] = {}
+    seen_binding_ids: dict[str, str] = {}
     if isinstance(slot_bindings, list):
         for index, binding in enumerate(slot_bindings):
             if not _is_mapping(binding):
@@ -440,6 +441,13 @@ def validate_actor_registry_document(document: object) -> dict[str, Any]:
             elif slot_id in bound_slots:
                 reasons.append(f"binding_{index}_slot_id_duplicate")
             bound_slots.add(slot_id)
+            binding_id = str(binding.get("binding_id") or "")
+            if not binding_id:
+                reasons.append(f"binding_{index}_binding_id_missing")
+            elif binding_id in seen_binding_ids:
+                reasons.append(f"binding_{index}_binding_id_duplicate")
+            else:
+                seen_binding_ids[binding_id] = slot_id
             actor_id = str(binding.get("actor_id") or "")
             if actor_id and actor_id not in actor_ids:
                 reasons.append(f"binding_{index}_actor_id_unknown")
