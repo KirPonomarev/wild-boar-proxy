@@ -63,6 +63,15 @@ CATALOG: list[CapabilityEntry] = [
         docs_source="https://api-docs.deepseek.com",
     ),
     CapabilityEntry(
+        provider=PROVIDER_KIMI, upstream_model="kimi-k2.5",
+        wbp_alias="Kimi-Legacy", modalities=("text", "image"),
+        tool_capable=True, streaming=True,
+        thinking_dialect=DIALECT_KIMI_REASONING_EFFORT, web_search=True,
+        context_window=131072, intelligence_levels=("default", "fast", "high", "max"),
+        proof_level="DECLARED",
+        docs_source="https://platform.kimi.ai/docs/api/chat",
+    ),
+    CapabilityEntry(
         provider=PROVIDER_KIMI, upstream_model="kimi-k3",
         wbp_alias="Kimi", modalities=("text", "image"),
         tool_capable=True, streaming=True,
@@ -129,6 +138,7 @@ CATALOG: list[CapabilityEntry] = [
 
 # Intelligence-level → provider parameter mapping
 INTELLIGENCE_MAPPINGS: dict[str, dict[str, str | None]] = {
+    f"kimi-k2.5": {"default": None, "fast": "low", "high": "high", "max": "max"},
     f"kimi-k3": {"default": None, "fast": "low", "high": "high", "max": "max"},
     f"kimi-k2.7-code-highspeed": {"default": None, "fast": "disabled", "high": "enabled"},
     f"kimi-k2.6": {"default": None, "fast": "disabled", "high": "enabled"},
