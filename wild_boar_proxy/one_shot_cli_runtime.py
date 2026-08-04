@@ -823,39 +823,30 @@ def one_shot_cli_handle(
             codex_home = str(Path.home() / ".codex")
             repo_root = "/Volumes/Work/wild-boar-proxy"
             profiles_root = str(Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "CodexProfiles")
+            sandbox_cwd_real = str(Path(sandbox_cwd).resolve())
+            home_real = str(Path(home_dir).resolve())
             profile_lines = [
                 "(version 1)",
                 "(deny default)",
                 # Process lifecycle
-                "(allow process-exec process-fork process-info* signal)",
+                "(allow process-exec process-fork signal)",
                 "(allow sysctl-read)",
-                # Explicit DENY of protected surfaces (read + write)
-                '(deny file-read* (subpath "' + codex_home + '"))',
+                # Explicit DENY of protected surfaces (read data + write)
+                '(deny file-read-data (subpath "' + codex_home + '"))',
                 '(deny file-write* (subpath "' + codex_home + '"))',
-                '(deny file-read* (subpath "' + repo_root + '"))',
+                '(deny file-read-data (subpath "' + repo_root + '"))',
                 '(deny file-write* (subpath "' + repo_root + '"))',
-                '(deny file-read* (subpath "' + profiles_root + '"))',
+                '(deny file-read-data (subpath "' + profiles_root + '"))',
                 '(deny file-write* (subpath "' + profiles_root + '"))',
-                # Allowlist: system runtime files needed by /bin/sh
-                '(allow file-read* (subpath "/usr/lib"))',
-                '(allow file-read* (subpath "/usr/share"))',
-                '(allow file-read* (subpath "/lib"))',
-                '(allow file-read* (subpath "/bin"))',
-                '(allow file-read* (subpath "/sbin"))',
-                '(allow file-read* (subpath "/usr/bin"))',
-                '(allow file-read* (subpath "/usr/sbin"))',
-                '(allow file-read* (subpath "/etc"))',
-                '(allow file-read* (subpath "/private/etc"))',
-                '(allow file-read* (subpath "/dev"))',
-                '(allow file-read* (subpath "' + str(sandbox_cwd) + '"))',
-                '(allow file-read* (subpath "' + home_dir + '"))',
+                # Read: allow general read-data (shell needs it) but
+                # protected surfaces are explicitly denied above
+                "(allow file-read-data)",
                 # Write: only sandbox cwd + provider home
-                '(allow file-write* (subpath "' + str(sandbox_cwd) + '"))',
-                '(allow file-write* (subpath "' + home_dir + '"))',
+                '(allow file-write* (subpath "' + sandbox_cwd_real + '"))',
+                '(allow file-write* (subpath "' + home_real + '"))',
+                "(allow file-write-data (subpath \"/dev/dtracehelper\"))",
                 # IPC / mach for shell
                 "(allow ipc-posix-shm)",
-                '(allow mach-lookup (global-name "com.apple.system.logger"))',
-                '(allow mach-lookup (global-name "com.apple.cfprefsd.daemon"))',
             ]
             sandbox_profile_path = sandbox_cwd / "sandbox.sb"
             sandbox_profile_path.write_text(
