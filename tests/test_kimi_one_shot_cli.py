@@ -121,6 +121,7 @@ class KimiOneShotCliTests(unittest.TestCase):
             args=("--env-report",),
             provider_home=self.session["kimi_code_home"],
             env=env,
+            _test_internal=True,
         )
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]

@@ -187,6 +187,7 @@ class FakeAdapterTests(unittest.TestCase):
                 provider_home=self.homes_root / "run-home",
                 keep=("KEPT_VAR",),
             ),
+            _test_internal=True,
         )
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]

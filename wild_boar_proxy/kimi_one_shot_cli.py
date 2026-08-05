@@ -297,6 +297,7 @@ def kimi_one_shot_run(
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
         env=env,
+        _test_internal=True,
     )
     parsed = None
     if run["status"] == "ok":
@@ -452,6 +453,7 @@ def kimi_repo_read_proof(
         args=("--read-file", str(target)),
         provider_home=Path(session["kimi_code_home"]),
         env=env,
+        _test_internal=True,
     )
     stdout = (run.get("run") or {}).get("stdout", "")
     expected = target.read_text(encoding="utf-8")
@@ -558,6 +560,7 @@ def kimi_timeout_cancel_proof(
         timeout_seconds=timeout_seconds if timeout_seconds is not None else 30.0,
         cancel_after_seconds=cancel_after_seconds,
         env=_kimi_environment(session),
+        _test_internal=True,
     )
     run_payload = run.get("run") or {}
     ok = run["status"] == "error" and (

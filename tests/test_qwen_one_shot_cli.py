@@ -117,6 +117,7 @@ class QwenOneShotCliTests(unittest.TestCase):
             args=("--env-report",),
             provider_home=self.session["qwen_home"],
             env=env,
+            _test_internal=True,
         )
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]

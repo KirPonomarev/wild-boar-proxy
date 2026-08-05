@@ -733,6 +733,21 @@ class OneShotCliRunHandle:
         return result
 
 
+CLI_DISABLED_PENDING_SECURITY_ADMISSION = "CLI_DISABLED_PENDING_SECURITY_ADMISSION"
+
+# R40.5-6: all production one-shot CLI dispatch is disabled until
+# independent security admission (R41/R47). Server-owned entries return
+# this code. Fake-adapter entries (server_owned=False) are for tests only
+# and use internal dependency injection, not production entrypoints.
+_CLI_SECURITY_ADMISSION_GRANTED = False
+
+
+def grant_cli_security_admission() -> None:
+    """R47 grants this after the independent audit passes."""
+    global _CLI_SECURITY_ADMISSION_GRANTED
+    _CLI_SECURITY_ADMISSION_GRANTED = True
+
+
 def default_sandbox_profile() -> SandboxProfile:
     """The runtime default: denied repo write, probed OS enforcement."""
     return SandboxProfile(os_enforcement=probe_os_sandbox()["os_enforcement"])
@@ -750,8 +765,8 @@ def one_shot_cli_handle(
 ) -> OneShotCliRunHandle | dict[str, Any]:
     """Spawn a declared tool as a one-shot process group.
 
-    Returns an `OneShotCliRunHandle` on success or an error packet on
-    resolution failures (unknown tool / missing binary).
+    Production (server-owned) entries are disabled until security
+    admission. Fake-adapter entries are for tests only.
     """
     sandbox = sandbox or default_sandbox_profile()
     entry = resolve_manifest_entry(tool_id)
@@ -760,6 +775,22 @@ def one_shot_cli_handle(
             ok=False,
             human_message=f"unknown one-shot tool id '{tool_id}'.",
             machine_error_code=ONE_SHOT_TOOL_UNKNOWN,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"tool_id": tool_id, "server_owned": True},
+        )
+    # R40.5-6: server-owned CLI disabled until security admission
+    if entry.server_owned and not _CLI_SECURITY_ADMISSION_GRANTED:
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                f"one-shot CLI '{tool_id}' is disabled pending security "
+                f"admission (R41/R47)."
+            ),
+            machine_error_code=CLI_DISABLED_PENDING_SECURITY_ADMISSION,
             liveness="healthy",
             severity="error",
             operator_action="user_action",
@@ -923,8 +954,28 @@ def one_shot_cli_run(
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
     cancel_after_seconds: float | None = None,
     env: Mapping[str, str] | None = None,
+    _test_internal: bool = False,
 ) -> dict[str, Any]:
-    """Bounded one-shot run with optional deterministic cancellation."""
+    """Bounded one-shot run.
+
+    Production callers must NOT pass env= or sandbox=. These are accepted
+    only when _test_internal=True (test adapter injection). Production
+    builds its own sterile env and sandbox from server-owned config.
+    """
+    if env is not None and not _test_internal:
+        return build_command_payload(
+            ok=False,
+            human_message="caller-provided env is not permitted in production.",
+            machine_error_code=ONE_SHOT_ENV_VIOLATION,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"tool_id": tool_id},
+        )
+    if sandbox is not None and not _test_internal:
+        sandbox = None  # silently ignore; production uses server-owned profile
     handle = one_shot_cli_handle(
         tool_id,
         args=args,
