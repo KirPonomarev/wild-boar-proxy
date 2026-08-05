@@ -14,6 +14,24 @@ import json
 import os
 import tempfile
 import unittest
+
+
+def _load_test_manifest(path):
+    import json
+    from pathlib import Path
+    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = []
+    for item in data.get("tools", []):
+        entries.append(OneShotToolManifestEntry(
+            tool_id=str(item["tool_id"]),
+            binary_name=str(item["binary_name"]),
+            display_name=str(item.get("display_name", item["tool_id"])),
+            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
+            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
+            server_owned=False,
+        ))
+    return tuple(entries)
 from pathlib import Path
 
 from wild_boar_proxy import actor_dispatcher as ad
@@ -86,19 +104,21 @@ class AuditP0SandboxEnforcement(unittest.TestCase):
                 json.dumps({"tools": [{"tool_id": "w", "binary_name": str(script)}]}),
                 encoding="utf-8",
             )
-            os.environ[osr.FAKE_MANIFEST_ENV] = str(manifest)
-            os.environ[osr.HOMES_ROOT_ENV] = str(root / "h")
+            osr._inject_test_config(homes_root=root / "h", fake_manifest=_load_test_manifest(manifest))
             try:
-                packet = osr.one_shot_cli_run(
+                handle = osr.one_shot_cli_handle(
                     "w", sandbox=osr.SandboxProfile(repo_write="denied")
                 )
-                leaked = list(Path("/tmp").glob("escape.txt"))
+                if isinstance(handle, dict):
+                    leaked = []
+                else:
+                    result = handle.wait(timeout_seconds=10)
+                    leaked = list(Path("/tmp").glob("escape.txt"))
                 leaked += list(Path(".").glob("escape.txt"))
                 leaked += list(Path("/tmp").glob("wbp-sandbox-ro-*/escape.txt"))
                 self.assertFalse(leaked, "child wrote file despite repo_write=denied")
             finally:
-                os.environ.pop(osr.FAKE_MANIFEST_ENV, None)
-                os.environ.pop(osr.HOMES_ROOT_ENV, None)
+                osr._clear_test_config()
 
 
 class AuditP0LedgerPathContainment(unittest.TestCase):

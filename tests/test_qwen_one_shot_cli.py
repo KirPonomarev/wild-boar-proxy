@@ -14,9 +14,28 @@ import json
 import os
 import tempfile
 import unittest
+
+def _load_test_manifest(path):
+    import json
+    from pathlib import Path
+    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = []
+    for item in data.get("tools", []):
+        entries.append(OneShotToolManifestEntry(
+            tool_id=str(item["tool_id"]),
+            binary_name=str(item["binary_name"]),
+            display_name=str(item.get("display_name", item["tool_id"])),
+            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
+            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
+            server_owned=False,
+        ))
+    return tuple(entries)
+
 from pathlib import Path
 
 from wild_boar_proxy import one_shot_cli_runtime as osr
+osr.grant_cli_security_admission()  # R40: test mode grants admission
 from wild_boar_proxy import qwen_one_shot_cli as qw
 
 FAKE_QWEN_TEXT = """#!/bin/sh
@@ -77,21 +96,12 @@ class QwenOneShotCliTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        self._old_env = {
-            osr.FAKE_MANIFEST_ENV: os.environ.get(osr.FAKE_MANIFEST_ENV, ""),
-            osr.HOMES_ROOT_ENV: os.environ.get(osr.HOMES_ROOT_ENV, ""),
-        }
-        os.environ[osr.FAKE_MANIFEST_ENV] = str(manifest)
-        os.environ[osr.HOMES_ROOT_ENV] = str(self.homes_root)
+        osr._inject_test_config(homes_root=self.homes_root, fake_manifest=_load_test_manifest(manifest))
         self.session = qw.qwen_one_shot_session()
         assert self.session["status"] == "ok", self.session
 
     def tearDown(self) -> None:
-        for name, value in self._old_env.items():
-            if value:
-                os.environ[name] = value
-            else:
-                os.environ.pop(name, None)
+        osr._clear_test_config()
         self.temp_dir.cleanup()
 
     def test_session_isolates_qwen_home_and_runtime_dir(self) -> None:
@@ -112,13 +122,24 @@ class QwenOneShotCliTests(unittest.TestCase):
         env = osr.build_sterile_environment(provider_home=self.session["qwen_home"])
         env[qw.QWEN_HOME_ENV] = str(self.session["qwen_home"])
         env[qw.QWEN_RUNTIME_DIR_ENV] = str(self.session["qwen_runtime_dir"])
-        packet = osr.one_shot_cli_run(
+        handle = osr.one_shot_cli_handle(
             qw.QWEN_CLI_TOOL_ID,
             args=("--env-report",),
             provider_home=self.session["qwen_home"],
             env=env,
-            _test_internal=True,
         )
+        if isinstance(handle, dict):
+            packet = handle
+        else:
+            result = handle.wait(timeout_seconds=10)
+            packet = osr.build_command_payload(
+                ok=result.status == "ok",
+                human_message="ok" if result.status == "ok" else "fail",
+                machine_error_code=result.machine_error_code,
+                liveness="healthy", severity="info", operator_action="none",
+                changed_files=[], exit_code=result.exit_code,
+                extra={"run": result.to_dict()},
+            )
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]
         self.assertIn("QWEN_HOME=" + str(self.session["qwen_home"]), stdout)

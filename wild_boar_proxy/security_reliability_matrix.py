@@ -31,6 +31,25 @@ from .core import packets as command_packets
 from .external_models.provider_transforms import StreamingDeltaAccumulator, classify_provider_error
 from .repo_lease import RepoLease
 from .runtime import build_command_payload
+
+
+def _load_test_entries(manifest_path):
+    """Load test fake-manifest entries from JSON file."""
+    import json
+    from pathlib import Path as _Path
+    from .one_shot_cli_runtime import OneShotToolManifestEntry
+    data = json.loads(_Path(manifest_path).read_text(encoding="utf-8"))
+    entries = []
+    for item in data.get("tools", []):
+        entries.append(OneShotToolManifestEntry(
+            tool_id=str(item["tool_id"]),
+            binary_name=str(item["binary_name"]),
+            display_name=str(item.get("display_name", item["tool_id"])),
+            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
+            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
+            server_owned=False,
+        ))
+    return tuple(entries)
 from .thread_context_ledger import ThreadContextLedger
 
 SECURITY_MATRIX_SCHEMA_VERSION = 1
@@ -149,10 +168,11 @@ def _check_cancellation() -> MatrixCheck:
             ),
             encoding="utf-8",
         )
-        old_manifest = os.environ.get(osr.FAKE_MANIFEST_ENV)
-        old_homes = os.environ.get(osr.HOMES_ROOT_ENV)
-        os.environ[osr.FAKE_MANIFEST_ENV] = str(manifest)
-        os.environ[osr.HOMES_ROOT_ENV] = str(root / "homes")
+        # R40: use _inject_test_config instead of env vars
+        osr._inject_test_config(
+            fake_manifest=_load_test_entries(manifest),
+            homes_root=root / "homes",
+        )
         try:
             packet = osr.one_shot_cli_run(
                 "matrix-sleep", cancel_after_seconds=0.4, timeout_seconds=10.0
@@ -161,14 +181,7 @@ def _check_cancellation() -> MatrixCheck:
             cancelled = bool(run.get("cancelled"))
             machine_error_code = packet.get("machine_error_code", "")
         finally:
-            if old_manifest:
-                os.environ[osr.FAKE_MANIFEST_ENV] = old_manifest
-            else:
-                os.environ.pop(osr.FAKE_MANIFEST_ENV, None)
-            if old_homes:
-                os.environ[osr.HOMES_ROOT_ENV] = old_homes
-            else:
-                os.environ.pop(osr.HOMES_ROOT_ENV, None)
+            osr._clear_test_config()
     return MatrixCheck(
         check_id="cancellation",
         category="cancellation",
