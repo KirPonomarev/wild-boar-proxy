@@ -254,31 +254,25 @@ def project_config_policy(
 
 def qwen_one_shot_session(
     *,
-    homes_root: Path | str | None = None,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Create the isolated Qwen one-shot session.
 
-    R40: checks CLI security admission BEFORE creating any files.
+    R5: without an explicit engine instance the production facade is used,
+    which is fail-closed (`CLI_DISABLED_PENDING_SECURITY_ADMISSION`)
+    before any filesystem or process side effect. Tests pass their own
+    `OneShotRuntime` built from `tests/fakes.py`. There is no
+    caller-selectable homes root anywhere in production.
     """
-    if not osr._CLI_SECURITY_ADMISSION_GRANTED:
-        return build_command_payload(
-            ok=False,
-            human_message="Qwen CLI is disabled pending security admission (R41/R47).",
-            machine_error_code=osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
-            liveness="healthy",
-            severity="error",
-            operator_action="user_action",
-            changed_files=[],
-            exit_code=1,
-            extra={"provider_id": QWEN_PROVIDER_ID},
-        )
-    home_result = osr.create_provider_home(QWEN_PROVIDER_ID, homes_root=homes_root)
+    if runtime is None:
+        return osr.default_production_facade().session(QWEN_PROVIDER_ID)
+    home_result = runtime.create_provider_home(QWEN_PROVIDER_ID)
     if home_result["status"] != "ok":
         return home_result
     home = Path(home_result["home_path"])
     runtime_dir = Path(home_result["runtime_dir"])
-    osr.one_shot_auth_session(QWEN_PROVIDER_ID, home)
-    auth_status = osr.one_shot_auth_status(home)
+    runtime.one_shot_auth_session(QWEN_PROVIDER_ID, home)
+    auth_status = runtime.one_shot_auth_status(home)
     return build_command_payload(
         ok=True,
         human_message="Qwen one-shot session ready (isolated home).",
@@ -303,19 +297,24 @@ def qwen_one_shot_session(
     )
 
 
-def _qwen_environment(
+def _qwen_provider_env(
     session: dict[str, Any],
     *,
     project_root: Path | str | None = None,
 ) -> dict[str, str]:
-    """Sterile environment with QWEN_HOME / QWEN_RUNTIME_DIR inside the
-    isolated provider home; the project root is never added to PATH or HOME.
+    """Provider env mapping for the Qwen child.
+
+    R5/F08 fix: this mapping is passed to the engine as `provider_env`
+    and actually reaches the child process; it is never just built and
+    discarded. The engine validates keys against the provider allowlist
+    and the sandbox profile enforces real access.
     """
     home = Path(session["qwen_home"])
     runtime_dir = Path(session["qwen_runtime_dir"])
-    env = osr.build_sterile_environment(provider_home=home)
-    env[QWEN_HOME_ENV] = str(home)
-    env[QWEN_RUNTIME_DIR_ENV] = str(runtime_dir)
+    env: dict[str, str] = {
+        QWEN_HOME_ENV: str(home),
+        QWEN_RUNTIME_DIR_ENV: str(runtime_dir),
+    }
     if project_root is not None:
         env["QWEN_PROJECT_ROOT"] = str(Path(project_root))
     return env
@@ -325,15 +324,18 @@ def qwen_one_shot_run(
     text: str,
     *,
     session: dict[str, Any],
+    runtime: osr.OneShotRuntime | None = None,
     project_root: Path | str | None = None,
     args: Sequence[str] = (),
     timeout_seconds: float = osr.DEFAULT_RUN_TIMEOUT_SECONDS,
     output_cap_bytes: int = osr.DEFAULT_OUTPUT_CAP_BYTES,
     cancel_after_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Run the Qwen one-shot CLI with the qwen environment.
+    """Run the Qwen one-shot CLI with the qwen provider environment.
 
-    Output is normalized through the generic parser (`auto` profile).
+    Without an explicit engine instance the production facade answers
+    fail-closed. Output is normalized through the generic parser
+    (`auto` profile).
     """
     if session.get("qwen_home") is None:
         return build_command_payload(
@@ -347,12 +349,15 @@ def qwen_one_shot_run(
             exit_code=1,
             extra={"tool_id": QWEN_CLI_TOOL_ID},
         )
-    env = _qwen_environment(session, project_root=project_root)
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(QWEN_CLI_TOOL_ID)
+    provider_env = _qwen_provider_env(session, project_root=project_root)
+    run = runtime.one_shot_cli_run(
         QWEN_CLI_TOOL_ID,
         args=("--respond", text, *args),
         stdin_text=None,
         provider_home=Path(session["qwen_home"]),
+        provider_env=provider_env,
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
@@ -389,10 +394,11 @@ def qwen_text_proof(
     *,
     session: dict[str, Any],
     expected_prefix: str = "",
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Text response proof: the fake adapter echoes the prompt; the packet
     proves a positive text response without any live claim."""
-    run = qwen_one_shot_run(text, session=session)
+    run = qwen_one_shot_run(text, session=session, runtime=runtime)
     stdout = (run.get("run") or {}).get("stdout", "")
     ok = run["status"] == "ok" and bool(stdout.strip())
     if expected_prefix:
@@ -423,6 +429,7 @@ def qwen_repo_read_proof(
     session: dict[str, Any],
     project_root: Path | str,
     config_path: Path | str,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Repo-read proof for an admitted project config.
 
@@ -432,11 +439,37 @@ def qwen_repo_read_proof(
     this proof exercises the explicit per-path admission only.
     """
     home = Path(session["qwen_home"])
+    # Canonicalize the read target: seatbelt matches the kernel-resolved
+    # path, and the child must request the resolved path. The target must
+    # stay inside the declared project root (containment), not merely carry
+    # an admission digest recorded for some other location.
+    root_resolved = Path(project_root).resolve()
+    target = Path(config_path).resolve()
+    try:
+        target.relative_to(root_resolved)
+    except ValueError:
+        return build_command_payload(
+            ok=False,
+            human_message="read path is outside the project root; denied.",
+            machine_error_code=QWEN_CONFIG_ADMISSION_MISSING,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={
+                "config_path": str(config_path),
+                "decision": "outside_project_root",
+                "repo_read_policy": QWEN_READ_MODE_DEFAULT,
+                "resume_supported": False,
+                "resume_reason": osr.ONE_SHOT_NO_RESUME_REASON,
+            },
+        )
     policy = project_config_policy(home, project_root)
     admission = next(
         (
             d for d in policy.get("decisions", [])
-            if d.get("config_path") == str(Path(config_path))
+            if Path(d.get("config_path", "")).resolve() == target
         ),
         None,
     )
@@ -458,14 +491,17 @@ def qwen_repo_read_proof(
                 "resume_reason": osr.ONE_SHOT_NO_RESUME_REASON,
             },
         )
-    env = _qwen_environment(session, project_root=project_root)
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(QWEN_CLI_TOOL_ID)
+    provider_env = _qwen_provider_env(session, project_root=project_root)
+    run = runtime.one_shot_cli_run(
         QWEN_CLI_TOOL_ID,
-        args=("--read-file", str(config_path)),
+        args=("--read-file", str(target)),
         provider_home=home,
+        provider_env=provider_env,
     )
     stdout = (run.get("run") or {}).get("stdout", "")
-    expected = Path(config_path).read_text(encoding="utf-8")
+    expected = target.read_text(encoding="utf-8")
     ok = run["status"] == "ok" and stdout.strip() == expected.strip()
     return build_command_payload(
         ok=ok,
@@ -527,15 +563,19 @@ def qwen_timeout_cancel_proof(
     session: dict[str, Any],
     cancel_after_seconds: float | None = None,
     timeout_seconds: float | None = None,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Timeout / cancel proof: the fake adapter sleeps; the bounded runtime
     must terminate the whole process group."""
     if cancel_after_seconds is None and timeout_seconds is None:
         raise ValueError("one of cancel_after_seconds or timeout_seconds is required")
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(QWEN_CLI_TOOL_ID)
+    run = runtime.one_shot_cli_run(
         QWEN_CLI_TOOL_ID,
         args=("--sleep", "30"),
         provider_home=Path(session["qwen_home"]),
+        provider_env=_qwen_provider_env(session),
         timeout_seconds=timeout_seconds if timeout_seconds is not None else 30.0,
         cancel_after_seconds=cancel_after_seconds,
     )

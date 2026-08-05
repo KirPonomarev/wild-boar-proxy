@@ -3,39 +3,22 @@
 
 """B11_CODE: Kimi one-shot CLI tests (fake-adapter evidence).
 
-All proofs are controlled and declared-not-live; the real Kimi CLI binary
-probe is B11_LIVE scope.
+R5: no module-level state mutations. Each test class builds its own
+isolated engine instance from tests/fakes.py; the production facade is
+never granted anything and stays fail-closed. All proofs are controlled
+and declared-not-live; the real Kimi CLI binary probe is B11_LIVE scope.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import tempfile
 import unittest
-
-def _load_test_manifest(path):
-    import json
-    from pathlib import Path
-    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    entries = []
-    for item in data.get("tools", []):
-        entries.append(OneShotToolManifestEntry(
-            tool_id=str(item["tool_id"]),
-            binary_name=str(item["binary_name"]),
-            display_name=str(item.get("display_name", item["tool_id"])),
-            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
-            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
-            server_owned=False,
-        ))
-    return tuple(entries)
-
 from pathlib import Path
 
 from wild_boar_proxy import kimi_one_shot_cli as km
 from wild_boar_proxy import one_shot_cli_runtime as osr
-osr.grant_cli_security_admission()  # R40: test mode grants admission
+
+import fakes
 
 FAKE_KIMI_TEXT = """#!/bin/sh
 # fake kimi one-shot CLI for B11_CODE tests
@@ -74,32 +57,26 @@ class KimiOneShotCliTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
         self.homes_root = self.root / "homes"
-        script = self.root / "fake-kimi-cli.sh"
-        script.write_text(FAKE_KIMI_TEXT, encoding="utf-8")
-        script.chmod(0o755)
-        manifest = self.root / "fake-manifest.json"
-        manifest.write_text(
-            json.dumps(
+        script = fakes.write_fake_cli(self.root, "fake-kimi-cli.sh", FAKE_KIMI_TEXT)
+        manifest = fakes.write_manifest(
+            self.root,
+            [
                 {
-                    "tools": [
-                        {
-                            "tool_id": km.KIMI_CLI_TOOL_ID,
-                            "binary_name": str(script),
-                            "display_name": "Fake Kimi CLI",
-                            "version_args": ["--version"],
-                            "output_profiles": ["text", "key_value", "json_lines"],
-                        }
-                    ]
+                    "tool_id": km.KIMI_CLI_TOOL_ID,
+                    "binary_name": str(script),
+                    "display_name": "Fake Kimi CLI",
+                    "version_args": ["--version"],
+                    "output_profiles": ["text", "key_value", "json_lines"],
                 }
-            ),
-            encoding="utf-8",
+            ],
         )
-        osr._inject_test_config(homes_root=self.homes_root, fake_manifest=_load_test_manifest(manifest))
-        self.session = km.kimi_one_shot_session()
+        self.runtime = fakes.make_test_runtime(
+            self.homes_root, fakes.load_manifest_entries(manifest)
+        )
+        self.session = km.kimi_one_shot_session(runtime=self.runtime)
         assert self.session["status"] == "ok", self.session
 
     def tearDown(self) -> None:
-        osr._clear_test_config()
         self.temp_dir.cleanup()
 
     def _project(self, files: dict[str, str]) -> Path:
@@ -124,30 +101,19 @@ class KimiOneShotCliTests(unittest.TestCase):
         self.assertFalse(self.session["resume_supported"])
 
     def test_kimi_env_points_inside_provider_home(self) -> None:
-        env = osr.build_sterile_environment(provider_home=self.session["kimi_code_home"])
-        env[km.KIMI_CODE_HOME_ENV] = str(self.session["kimi_code_home"])
-        handle = osr.one_shot_cli_handle(
+        """F08 regression: KIMI_CODE_HOME must actually reach the child
+        process, not just be built in a local variable."""
+        home = Path(self.session["kimi_code_home"])
+        run = self.runtime.one_shot_cli_run(
             km.KIMI_CLI_TOOL_ID,
             args=("--env-report",),
-            provider_home=self.session["kimi_code_home"],
-            env=env,
+            provider_home=home,
+            provider_env=km._kimi_provider_env(self.session),
         )
-        if isinstance(handle, dict):
-            packet = handle
-        else:
-            result = handle.wait(timeout_seconds=10)
-            packet = osr.build_command_payload(
-                ok=result.status == "ok",
-                human_message="ok" if result.status == "ok" else "fail",
-                machine_error_code=result.machine_error_code,
-                liveness="healthy", severity="info", operator_action="none",
-                changed_files=[], exit_code=result.exit_code,
-                extra={"run": result.to_dict()},
-            )
-        self.assertEqual(packet["status"], "ok")
-        stdout = packet["run"]["stdout"]
-        self.assertIn("KIMI_CODE_HOME=" + str(self.session["kimi_code_home"]), stdout)
-        self.assertIn("HOME=" + str(self.session["kimi_code_home"]), stdout)
+        self.assertEqual(run["status"], "ok")
+        stdout = run["run"]["stdout"]
+        self.assertIn("KIMI_CODE_HOME=" + str(home.resolve()), stdout)
+        self.assertIn("HOME=" + str(home.resolve()), stdout)
 
     def test_snapshot_is_immutable_and_bounded(self) -> None:
         project = self._project(
@@ -176,6 +142,24 @@ class KimiOneShotCliTests(unittest.TestCase):
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], km.KIMI_SNAPSHOT_FAILED)
 
+    def test_snapshot_without_root_uses_runtime_homes(self) -> None:
+        project = self._project({"notes.txt": "alpha\n"})
+        packet = km.create_kimi_snapshot(project, runtime=self.runtime)
+        self.assertEqual(packet["status"], "ok")
+        snap_root = Path(packet["snapshot"]["root"])
+        self.assertTrue(str(snap_root).startswith(str(self.homes_root)))
+
+    def test_snapshot_without_root_or_runtime_is_fail_closed(self) -> None:
+        project = self._project({"notes.txt": "alpha\n"})
+        before = set(self.root.rglob("*"))
+        packet = km.create_kimi_snapshot(project)
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
+        after = set(self.root.rglob("*"))
+        self.assertEqual(before, after)
+
     def test_repo_read_policy_requires_snapshot(self) -> None:
         denied = km.kimi_repo_read_policy(session=self.session)
         self.assertEqual(denied["status"], "error")
@@ -194,7 +178,10 @@ class KimiOneShotCliTests(unittest.TestCase):
         outside = self.root / "outside.txt"
         outside.write_text("x", encoding="utf-8")
         denied = km.kimi_repo_read_proof(
-            session=self.session, snapshot=snap, snapshot_path=outside
+            session=self.session,
+            snapshot=snap,
+            snapshot_path=outside,
+            runtime=self.runtime,
         )
         self.assertEqual(denied["status"], "error")
         self.assertEqual(denied["machine_error_code"], km.KIMI_READ_DENIED)
@@ -204,7 +191,10 @@ class KimiOneShotCliTests(unittest.TestCase):
         snap = km.create_kimi_snapshot(project, snapshot_root=self.root / "snap5")
         snap_file = Path(snap["snapshot"]["root"]) / "notes.txt"
         proof = km.kimi_repo_read_proof(
-            session=self.session, snapshot=snap, snapshot_path=snap_file
+            session=self.session,
+            snapshot=snap,
+            snapshot_path=snap_file,
+            runtime=self.runtime,
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["content_matches_snapshot_file"])
@@ -222,7 +212,10 @@ class KimiOneShotCliTests(unittest.TestCase):
 
     def test_text_proof_via_fake_adapter(self) -> None:
         proof = km.kimi_text_proof(
-            "hello", session=self.session, expected_prefix="Kimi: "
+            "hello",
+            session=self.session,
+            expected_prefix="Kimi: ",
+            runtime=self.runtime,
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["text_received"])
@@ -231,26 +224,30 @@ class KimiOneShotCliTests(unittest.TestCase):
         self.assertEqual(proof["proof_level"], "SYNTHETIC_PROVEN")
 
     def test_run_parses_output(self) -> None:
-        packet = km.kimi_one_shot_run("hello", session=self.session)
+        packet = km.kimi_one_shot_run("hello", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["parsed_output"]["detected_format"], "text")
         self.assertIn("Kimi: hello", packet["run"]["stdout"])
         self.assertFalse(packet["resume_supported"])
 
     def test_timeout_proof(self) -> None:
-        proof = km.kimi_timeout_cancel_proof(session=self.session, timeout_seconds=0.6)
+        proof = km.kimi_timeout_cancel_proof(
+            session=self.session, timeout_seconds=0.6, runtime=self.runtime
+        )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["timed_out"])
         self.assertEqual(proof["machine_error_code"], osr.ONE_SHOT_RUN_TIMEOUT)
 
     def test_cancel_proof(self) -> None:
-        proof = km.kimi_timeout_cancel_proof(session=self.session, cancel_after_seconds=0.6)
+        proof = km.kimi_timeout_cancel_proof(
+            session=self.session, cancel_after_seconds=0.6, runtime=self.runtime
+        )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["cancelled"])
         self.assertEqual(proof["machine_error_code"], osr.ONE_SHOT_CANCELLED)
 
     def test_run_fails_closed_without_session(self) -> None:
-        packet = km.kimi_one_shot_run("hi", session={})
+        packet = km.kimi_one_shot_run("hi", session={}, runtime=self.runtime)
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], km.KIMI_SESSION_INVALID)
 
@@ -264,6 +261,43 @@ class KimiOneShotCliTests(unittest.TestCase):
             receipt["repo_read_requires"], "os_read_only_sandbox_or_immutable_snapshot"
         )
         self.assertFalse(receipt["resume_supported"])
+
+
+class KimiProductionFacadeTests(unittest.TestCase):
+    """Without an explicit test engine the production facade answers
+    fail-closed before any filesystem or process side effect."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_session_disabled_on_production_facade(self) -> None:
+        facade = osr.ProductionOneShotFacade(homes_root=self.root / "homes")
+        packet = facade.session("kimi")
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
+        self.assertEqual(packet["changed_files"], [])
+        self.assertFalse((self.root / "homes").exists())
+
+    def test_default_session_function_uses_fail_closed_facade(self) -> None:
+        packet = km.kimi_one_shot_session()
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
+        self.assertEqual(packet["changed_files"], [])
+
+    def test_default_run_function_uses_fail_closed_facade(self) -> None:
+        packet = km.kimi_one_shot_run("hi", session={"kimi_code_home": "/nonexistent"})
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
 
 
 if __name__ == "__main__":
