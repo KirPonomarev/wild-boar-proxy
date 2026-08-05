@@ -307,8 +307,7 @@ def _check_web() -> FinalCheck:
 def _check_account_isolation() -> FinalCheck:
     with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
         root = Path(tmp)
-        old_homes = os.environ.get(osr.HOMES_ROOT_ENV)
-        os.environ[osr.HOMES_ROOT_ENV] = str(root / "homes")
+        osr._inject_test_config(homes_root=root / "homes")
         try:
             qwen = qoc.qwen_one_shot_session()
             kimi = km.kimi_one_shot_session()
@@ -322,10 +321,7 @@ def _check_account_isolation() -> FinalCheck:
             )
             distinct = qwen["qwen_home"] != kimi["kimi_code_home"]
         finally:
-            if old_homes:
-                os.environ[osr.HOMES_ROOT_ENV] = old_homes
-            else:
-                os.environ.pop(osr.HOMES_ROOT_ENV, None)
+            osr._clear_test_config()
     passed = qwen_ok and kimi_ok and distinct
     return FinalCheck(
         check_id="account_isolation",
