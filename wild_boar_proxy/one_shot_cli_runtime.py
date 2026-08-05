@@ -875,27 +875,27 @@ def one_shot_cli_handle(
             profiles_root = str(Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "CodexProfiles")
             sandbox_cwd_real = str(Path(sandbox_cwd).resolve())
             home_real = str(Path(home_dir).resolve())
+            # R42: macOS sandbox-exec on this OS version SIGABRTs on
+            # '(deny default)'. Working pattern: '(allow default)' for
+            # process/file-read (shell needs broad read), explicit DENY
+            # for protected surfaces, and '(deny file-write*)' globally
+            # with explicit allow only for home/cwd.
             profile_lines = [
                 "(version 1)",
-                "(deny default)",
-                # Process lifecycle
-                "(allow process-exec process-fork signal)",
-                "(allow sysctl-read)",
-                # Explicit DENY of protected surfaces (read data + write)
+                "(allow default)",
+                # Explicit DENY of protected surfaces (read + write)
                 '(deny file-read-data (subpath "' + codex_home + '"))',
                 '(deny file-write* (subpath "' + codex_home + '"))',
                 '(deny file-read-data (subpath "' + repo_root + '"))',
                 '(deny file-write* (subpath "' + repo_root + '"))',
                 '(deny file-read-data (subpath "' + profiles_root + '"))',
                 '(deny file-write* (subpath "' + profiles_root + '"))',
-                # Read: allow general read-data (shell needs it) but
-                # protected surfaces are explicitly denied above
-                "(allow file-read-data)",
-                # Write: only sandbox cwd + provider home
+                # Global write deny — only explicit allow below
+                "(deny file-write*)",
                 '(allow file-write* (subpath "' + sandbox_cwd_real + '"))',
                 '(allow file-write* (subpath "' + home_real + '"))',
-                "(allow file-write-data (subpath \"/dev/dtracehelper\"))",
-                # IPC / mach for shell
+                '(allow file-write-data (subpath "/dev/dtracehelper"))',
+                '(allow file-write-data (subpath "/dev/null"))',
                 "(allow ipc-posix-shm)",
             ]
             sandbox_profile_path = sandbox_cwd / "sandbox.sb"
