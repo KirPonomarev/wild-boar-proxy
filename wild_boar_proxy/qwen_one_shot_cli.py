@@ -258,10 +258,20 @@ def qwen_one_shot_session(
 ) -> dict[str, Any]:
     """Create the isolated Qwen one-shot session.
 
-    Provider home (0700) with `QWEN_HOME` and `QWEN_RUNTIME_DIR` pointing
-    inside it, plus a presence-only auth session. Never touches the real
-    user home.
+    R40: checks CLI security admission BEFORE creating any files.
     """
+    if not osr._CLI_SECURITY_ADMISSION_GRANTED:
+        return build_command_payload(
+            ok=False,
+            human_message="Qwen CLI is disabled pending security admission (R41/R47).",
+            machine_error_code=osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"provider_id": QWEN_PROVIDER_ID},
+        )
     home_result = osr.create_provider_home(QWEN_PROVIDER_ID, homes_root=homes_root)
     if home_result["status"] != "ok":
         return home_result
@@ -346,7 +356,6 @@ def qwen_one_shot_run(
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
-        env=env,
     )
     parsed = None
     if run["status"] == "ok":
@@ -454,7 +463,6 @@ def qwen_repo_read_proof(
         QWEN_CLI_TOOL_ID,
         args=("--read-file", str(config_path)),
         provider_home=home,
-        env=env,
     )
     stdout = (run.get("run") or {}).get("stdout", "")
     expected = Path(config_path).read_text(encoding="utf-8")
@@ -530,7 +538,6 @@ def qwen_timeout_cancel_proof(
         provider_home=Path(session["qwen_home"]),
         timeout_seconds=timeout_seconds if timeout_seconds is not None else 30.0,
         cancel_after_seconds=cancel_after_seconds,
-        env=_qwen_environment(session),
     )
     run_payload = run.get("run") or {}
     ok = run["status"] == "error" and (

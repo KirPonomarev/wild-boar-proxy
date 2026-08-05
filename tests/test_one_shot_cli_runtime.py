@@ -21,6 +21,23 @@ from pathlib import Path
 
 from wild_boar_proxy import one_shot_cli_runtime as osr
 
+def _load_test_manifest(path):
+    """Load fake manifest entries from JSON for _inject_test_config."""
+    import json
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
+    entries = []
+    for item in data.get("tools", []):
+        entries.append(OneShotToolManifestEntry(
+            tool_id=str(item["tool_id"]),
+            binary_name=str(item["binary_name"]),
+            display_name=str(item.get("display_name", item["tool_id"])),
+            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
+            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
+            server_owned=False,
+        ))
+    return tuple(entries)
+
 FAKE_CLI_TEXT = """#!/bin/sh
 # fake one-shot CLI for B09 tests (pure sh, no interpreter lookup)
 case "$1" in
@@ -116,19 +133,14 @@ class FakeAdapterTests(unittest.TestCase):
             "KEPT_VAR",
         ):
             self._old_env[name] = os.environ.get(name, "")
-        os.environ[osr.FAKE_MANIFEST_ENV] = str(self.manifest)
-        os.environ[osr.HOMES_ROOT_ENV] = str(self.homes_root)
+        osr._inject_test_config(homes_root=self.homes_root, fake_manifest=_load_test_manifest(self.manifest))
         os.environ["LEAK_TEST_SECRET"] = "must-not-leak-1"
         os.environ["LEAK_TEST_TOKEN"] = "must-not-leak-2"
         os.environ["LEAK_TEST_PASSWORD"] = "must-not-leak-3"
         os.environ["KEPT_VAR"] = "kept-value"
 
     def tearDown(self) -> None:
-        for name, value in self._old_env.items():
-            if value:
-                os.environ[name] = value
-            else:
-                os.environ.pop(name, None)
+        osr._clear_test_config()
         self.temp_dir.cleanup()
 
     def test_unknown_tool_fails_closed(self) -> None:
@@ -166,9 +178,10 @@ class FakeAdapterTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        os.environ[osr.FAKE_MANIFEST_ENV] = str(manifest)
+        osr._inject_test_config(fake_manifest=_load_test_manifest(manifest))
         packet = osr.run_sterile_probe("ghost")
         self.assertEqual(packet["status"], "error")
+        # ghost is in the manifest but binary doesn't exist -> TOOL_BINARY_NOT_FOUND
         self.assertEqual(packet["machine_error_code"], osr.TOOL_BINARY_NOT_FOUND)
 
     def test_scrubbed_environment_never_leaks_secrets(self) -> None:
@@ -179,15 +192,28 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertNotIn("/opt/homebrew", env["PATH"])
         self.assertEqual(env["HOME"], str(self.homes_root / "probe-home"))
 
-        packet = osr.one_shot_cli_run(
+        env = osr.build_sterile_environment(
+            provider_home=self.homes_root / "run-home",
+            keep=("KEPT_VAR",),
+        )
+        handle = osr.one_shot_cli_handle(
             "fake-cli",
             args=("--env-report",),
             provider_home=self.homes_root / "run-home",
-            env=osr.build_sterile_environment(
-                provider_home=self.homes_root / "run-home",
-                keep=("KEPT_VAR",),
-            ),
+            env=env,
         )
+        if isinstance(handle, dict):
+            packet = handle
+        else:
+            result = handle.wait(timeout_seconds=10)
+            packet = osr.build_command_payload(
+                ok=result.status == "ok",
+                human_message="ok" if result.status == "ok" else "fail",
+                machine_error_code=result.machine_error_code,
+                liveness="healthy", severity="info", operator_action="none",
+                changed_files=[], exit_code=result.exit_code,
+                extra={"run": result.to_dict()},
+            )
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]
         self.assertNotIn("must-not-leak-1", stdout)
@@ -338,11 +364,23 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertIn(probe["os_enforcement"], {"os_sandbox_available", "declared_not_available"})
         # A caller-supplied profile is reported as given (no simulation).
         supplied = osr.SandboxProfile(os_enforcement=probe["os_enforcement"])
-        packet = osr.one_shot_cli_run(
+        handle = osr.one_shot_cli_handle(
             "fake-cli",
             args=("--version",),
             sandbox=supplied,
         )
+        if isinstance(handle, dict):
+            packet = handle
+        else:
+            result = handle.wait(timeout_seconds=10)
+            packet = osr.build_command_payload(
+                ok=result.status == "ok",
+                human_message="ok" if result.status == "ok" else "fail",
+                machine_error_code=result.machine_error_code,
+                liveness="healthy", severity="info", operator_action="none",
+                changed_files=[], exit_code=result.exit_code,
+                extra={"run": result.to_dict(), "sandbox": supplied.to_dict()},
+            )
         self.assertEqual(packet["sandbox"]["repo_write"], "denied")
         self.assertEqual(
             packet["sandbox"]["os_enforcement"], probe["os_enforcement"]

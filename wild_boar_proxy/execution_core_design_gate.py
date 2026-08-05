@@ -33,6 +33,8 @@ _CONTROL_ROOT = os.environ.get(
         / "agent-control" / "WBP_MULTI_ACTOR_API_CLI_V1_1"),
 )
 
+# R43: B13G checks only B00–B13 (execution-core repair).
+# It must NOT require B14–B18 (those come after the gate).
 _KNOWN_COMPLETED_STAGES = frozenset({
     "B00_BASELINE_ADMISSION_REPAIR",
     "B01_ACTOR_ADR_AND_SPIKES",
@@ -48,12 +50,6 @@ _KNOWN_COMPLETED_STAGES = frozenset({
     "B11_CODE_KIMI_ONE_SHOT_CLI",
     "B12_ADMISSION_GLM_CLI_API_ONLY",
     "B13_SEQUENTIAL_WORKFLOW_RUNNER",
-    "B13G_EXECUTION_CORE_DESIGN_GATE",
-    "B14_WEB_WORKFLOW_CONTROL",
-    "B15_OPTIONAL_ACP_DEFERRED",
-    "B16_OPTIONAL_CODEX_CLI_DEFERRED",
-    "B17_SECURITY_RELIABILITY_MATRIX",
-    "B18_FINAL_CANDIDATE_ASSURANCE",
 })
 
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -174,7 +170,7 @@ def run_execution_core_design_gate(
         except (OSError, ValueError):
             pass
     # verify known stages present
-    required = {s for s in _KNOWN_COMPLETED_STAGES if s != "B13G_EXECUTION_CORE_DESIGN_GATE"}
+    required = set(_KNOWN_COMPLETED_STAGES)  # B00–B13 only
     missing_stages = required - indexed_stages
     findings["indexed_stages"] = sorted(indexed_stages)
     findings["missing_required_stages"] = sorted(missing_stages)

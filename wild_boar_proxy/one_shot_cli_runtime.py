@@ -39,15 +39,51 @@ from .runtime_errors import RuntimeErrorInfo
 
 ONE_SHOT_RUNTIME_SCHEMA_VERSION = 1
 
-# Server-owned one-shot homes root (override only for tests).
-HOMES_ROOT_ENV = "WBP_ONE_SHOT_HOMES_ROOT"
+# R40/R41: Production server-owned homes root. This is a FIXED constant,
+# not overridable by environment. The previous HOMES_ROOT_ENV and
+# FAKE_MANIFEST_ENV are REMOVED from production code — test injection
+# uses a separate internal API (_inject_test_config), never reachable
+# from CLI/router/environment/config/prompt.
 DEFAULT_HOMES_ROOT = (
     Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "one-shot-homes"
 )
 
-# Test-only fake-adapter manifest hook. Never read in production paths
-# unless explicitly set; resolves to a JSON file describing fake tools.
-FAKE_MANIFEST_ENV = "WBP_ONE_SHOT_FAKE_MANIFEST"
+# Retained for backward-compat in test imports only — production code
+# never reads these environment variables.
+HOMES_ROOT_ENV = "_WBP_TEST_ONLY_HOMES_ROOT_DISABLED_IN_PRODUCTION"
+FAKE_MANIFEST_ENV = "_WBP_TEST_ONLY_FAKE_MANIFEST_DISABLED_IN_PRODUCTION"
+
+# R40/R41: Internal test injection (not accessible from production paths)
+_TEST_HOMES_ROOT: Path | None = None
+_TEST_FAKE_MANIFEST: tuple[OneShotToolManifestEntry, ...] | None = None
+_TEST_ENV_OVERRIDE: dict[str, str] | None = None
+
+
+def _inject_test_config(
+    *,
+    homes_root: Path | None = None,
+    fake_manifest: tuple[OneShotToolManifestEntry, ...] | None = None,
+    env_override: dict[str, str] | None = None,
+) -> None:
+    """Internal test-only injection. NOT callable from production paths.
+
+    This function exists so tests can configure the runtime without
+    exposing environment-variable hooks (WBP_ONE_SHOT_*) that could
+    be abused in production. It is intentionally prefixed with _ and
+    undocumented in the public API.
+    """
+    global _TEST_HOMES_ROOT, _TEST_FAKE_MANIFEST, _TEST_ENV_OVERRIDE
+    _TEST_HOMES_ROOT = homes_root
+    _TEST_FAKE_MANIFEST = fake_manifest
+    _TEST_ENV_OVERRIDE = env_override
+
+
+def _clear_test_config() -> None:
+    """Clear test injection (called in test tearDown)."""
+    global _TEST_HOMES_ROOT, _TEST_FAKE_MANIFEST, _TEST_ENV_OVERRIDE
+    _TEST_HOMES_ROOT = None
+    _TEST_FAKE_MANIFEST = None
+    _TEST_ENV_OVERRIDE = None
 
 DEFAULT_PROBE_TIMEOUT_SECONDS = 20.0
 DEFAULT_RUN_TIMEOUT_SECONDS = 300.0
@@ -202,42 +238,25 @@ def is_forbidden_env_key(name: str) -> bool:
 
 
 def provider_homes_root(*, override: str | None = None) -> Path:
-    if override is not None:
-        return Path(override).expanduser()
-    env_value = os.environ.get(HOMES_ROOT_ENV)
-    if env_value:
-        return Path(env_value).expanduser()
+    """Production homes root. Uses the fixed DEFAULT_HOMES_ROOT.
+
+    The override parameter is for internal callers only (tests use
+    _inject_test_config). Environment variables are NOT read.
+    """
+    if _TEST_HOMES_ROOT is not None:
+        return _TEST_HOMES_ROOT
     return DEFAULT_HOMES_ROOT
 
 
 def _load_fake_manifest() -> tuple[OneShotToolManifestEntry, ...]:
-    """Load the test-only fake-adapter manifest (absent -> empty)."""
-    raw_path = os.environ.get(FAKE_MANIFEST_ENV)
-    if not raw_path:
-        return ()
-    path = Path(raw_path).expanduser()
-    if not path.is_file():
-        return ()
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ()
-    entries = []
-    for item in payload.get("tools", []):
-        try:
-            entries.append(
-                OneShotToolManifestEntry(
-                    tool_id=str(item["tool_id"]),
-                    binary_name=str(item["binary_name"]),
-                    display_name=str(item.get("display_name", item["tool_id"])),
-                    version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
-                    output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
-                    server_owned=False,
-                )
-            )
-        except (KeyError, TypeError):
-            continue
-    return tuple(entries)
+    """Load the test-only fake manifest from internal injection.
+
+    Production code never calls this with data — _TEST_FAKE_MANIFEST
+    is None in production. Environment variables are NOT read.
+    """
+    if _TEST_FAKE_MANIFEST is not None:
+        return _TEST_FAKE_MANIFEST
+    return ()
 
 
 def resolve_manifest_entry(tool_id: str) -> OneShotToolManifestEntry | None:
@@ -733,6 +752,21 @@ class OneShotCliRunHandle:
         return result
 
 
+CLI_DISABLED_PENDING_SECURITY_ADMISSION = "CLI_DISABLED_PENDING_SECURITY_ADMISSION"
+
+# R40.5-6: all production one-shot CLI dispatch is disabled until
+# independent security admission (R41/R47). Server-owned entries return
+# this code. Fake-adapter entries (server_owned=False) are for tests only
+# and use internal dependency injection, not production entrypoints.
+_CLI_SECURITY_ADMISSION_GRANTED = False
+
+
+def grant_cli_security_admission() -> None:
+    """R47 grants this after the independent audit passes."""
+    global _CLI_SECURITY_ADMISSION_GRANTED
+    _CLI_SECURITY_ADMISSION_GRANTED = True
+
+
 def default_sandbox_profile() -> SandboxProfile:
     """The runtime default: denied repo write, probed OS enforcement."""
     return SandboxProfile(os_enforcement=probe_os_sandbox()["os_enforcement"])
@@ -750,8 +784,8 @@ def one_shot_cli_handle(
 ) -> OneShotCliRunHandle | dict[str, Any]:
     """Spawn a declared tool as a one-shot process group.
 
-    Returns an `OneShotCliRunHandle` on success or an error packet on
-    resolution failures (unknown tool / missing binary).
+    Production (server-owned) entries are disabled until security
+    admission. Fake-adapter entries are for tests only.
     """
     sandbox = sandbox or default_sandbox_profile()
     entry = resolve_manifest_entry(tool_id)
@@ -760,6 +794,22 @@ def one_shot_cli_handle(
             ok=False,
             human_message=f"unknown one-shot tool id '{tool_id}'.",
             machine_error_code=ONE_SHOT_TOOL_UNKNOWN,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"tool_id": tool_id, "server_owned": True},
+        )
+    # R40.5-6: server-owned CLI disabled until security admission
+    if entry.server_owned and not _CLI_SECURITY_ADMISSION_GRANTED:
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                f"one-shot CLI '{tool_id}' is disabled pending security "
+                f"admission (R41/R47)."
+            ),
+            machine_error_code=CLI_DISABLED_PENDING_SECURITY_ADMISSION,
             liveness="healthy",
             severity="error",
             operator_action="user_action",
@@ -825,27 +875,27 @@ def one_shot_cli_handle(
             profiles_root = str(Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "CodexProfiles")
             sandbox_cwd_real = str(Path(sandbox_cwd).resolve())
             home_real = str(Path(home_dir).resolve())
+            # R42: macOS sandbox-exec on this OS version SIGABRTs on
+            # '(deny default)'. Working pattern: '(allow default)' for
+            # process/file-read (shell needs broad read), explicit DENY
+            # for protected surfaces, and '(deny file-write*)' globally
+            # with explicit allow only for home/cwd.
             profile_lines = [
                 "(version 1)",
-                "(deny default)",
-                # Process lifecycle
-                "(allow process-exec process-fork signal)",
-                "(allow sysctl-read)",
-                # Explicit DENY of protected surfaces (read data + write)
+                "(allow default)",
+                # Explicit DENY of protected surfaces (read + write)
                 '(deny file-read-data (subpath "' + codex_home + '"))',
                 '(deny file-write* (subpath "' + codex_home + '"))',
                 '(deny file-read-data (subpath "' + repo_root + '"))',
                 '(deny file-write* (subpath "' + repo_root + '"))',
                 '(deny file-read-data (subpath "' + profiles_root + '"))',
                 '(deny file-write* (subpath "' + profiles_root + '"))',
-                # Read: allow general read-data (shell needs it) but
-                # protected surfaces are explicitly denied above
-                "(allow file-read-data)",
-                # Write: only sandbox cwd + provider home
+                # Global write deny — only explicit allow below
+                "(deny file-write*)",
                 '(allow file-write* (subpath "' + sandbox_cwd_real + '"))',
                 '(allow file-write* (subpath "' + home_real + '"))',
-                "(allow file-write-data (subpath \"/dev/dtracehelper\"))",
-                # IPC / mach for shell
+                '(allow file-write-data (subpath "/dev/dtracehelper"))',
+                '(allow file-write-data (subpath "/dev/null"))',
                 "(allow ipc-posix-shm)",
             ]
             sandbox_profile_path = sandbox_cwd / "sandbox.sb"
@@ -918,20 +968,23 @@ def one_shot_cli_run(
     args: Sequence[str] = (),
     stdin_text: str | None = None,
     provider_home: Path | str | None = None,
-    sandbox: SandboxProfile | None = None,
     timeout_seconds: float = DEFAULT_RUN_TIMEOUT_SECONDS,
     output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
     cancel_after_seconds: float | None = None,
-    env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Bounded one-shot run with optional deterministic cancellation."""
+    """Production one-shot CLI run. No caller-provided env or sandbox.
+
+    Production builds its own sterile env and sandbox from server-owned
+    config. Caller-provided env= or sandbox= are NOT accepted — they
+    are silently absent from this signature.
+    """
     handle = one_shot_cli_handle(
         tool_id,
         args=args,
         stdin_text=stdin_text,
         provider_home=provider_home,
-        sandbox=sandbox,
-        env=env,
+        sandbox=None,
+        env=None,
         output_cap_bytes=output_cap_bytes,
     )
     if isinstance(handle, dict):
@@ -945,7 +998,7 @@ def one_shot_cli_run(
         if handle._process.poll() is None:
             handle.cancel()
     result = handle.wait(timeout_seconds=timeout_seconds)
-    profile = (sandbox or default_sandbox_profile()).to_dict()
+    profile = default_sandbox_profile().to_dict()
     return build_command_payload(
         ok=result.status == "ok",
         human_message=(

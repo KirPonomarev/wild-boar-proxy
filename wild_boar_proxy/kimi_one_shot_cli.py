@@ -219,7 +219,22 @@ def kimi_one_shot_session(
     *,
     homes_root: Path | str | None = None,
 ) -> dict[str, Any]:
-    """Create the isolated Kimi one-shot session with auth isolation."""
+    """Create the isolated Kimi one-shot session with auth isolation.
+
+    R40: checks CLI security admission BEFORE creating any files.
+    """
+    if not osr._CLI_SECURITY_ADMISSION_GRANTED:
+        return build_command_payload(
+            ok=False,
+            human_message="Kimi CLI is disabled pending security admission (R41/R47).",
+            machine_error_code=osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"provider_id": KIMI_PROVIDER_ID},
+        )
     home_result = osr.create_provider_home(KIMI_PROVIDER_ID, homes_root=homes_root)
     if home_result["status"] != "ok":
         return home_result
@@ -296,7 +311,6 @@ def kimi_one_shot_run(
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
-        env=env,
     )
     parsed = None
     if run["status"] == "ok":
@@ -451,7 +465,6 @@ def kimi_repo_read_proof(
         KIMI_CLI_TOOL_ID,
         args=("--read-file", str(target)),
         provider_home=Path(session["kimi_code_home"]),
-        env=env,
     )
     stdout = (run.get("run") or {}).get("stdout", "")
     expected = target.read_text(encoding="utf-8")
@@ -557,7 +570,6 @@ def kimi_timeout_cancel_proof(
         provider_home=Path(session["kimi_code_home"]),
         timeout_seconds=timeout_seconds if timeout_seconds is not None else 30.0,
         cancel_after_seconds=cancel_after_seconds,
-        env=_kimi_environment(session),
     )
     run_payload = run.get("run") or {}
     ok = run["status"] == "error" and (
