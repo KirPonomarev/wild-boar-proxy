@@ -3,40 +3,22 @@
 
 """B10_CODE: Qwen one-shot CLI tests (fake-adapter evidence).
 
-The fake qwen CLI is registered through the B09 test-only manifest hook.
-All proofs here are controlled and declared-not-live; the real qwen binary
-probe is B10_LIVE scope.
+R5: no module-level state mutations. Each test class builds its own
+isolated engine instance from tests/fakes.py; the production facade is
+never granted anything and stays fail-closed. All proofs are controlled
+and declared-not-live; the real qwen binary probe is B10_LIVE scope.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import tempfile
 import unittest
-
-def _load_test_manifest(path):
-    import json
-    from pathlib import Path
-    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    entries = []
-    for item in data.get("tools", []):
-        entries.append(OneShotToolManifestEntry(
-            tool_id=str(item["tool_id"]),
-            binary_name=str(item["binary_name"]),
-            display_name=str(item.get("display_name", item["tool_id"])),
-            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
-            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
-            server_owned=False,
-        ))
-    return tuple(entries)
-
 from pathlib import Path
 
 from wild_boar_proxy import one_shot_cli_runtime as osr
-osr.grant_cli_security_admission()  # R40: test mode grants admission
 from wild_boar_proxy import qwen_one_shot_cli as qw
+
+import fakes
 
 FAKE_QWEN_TEXT = """#!/bin/sh
 # fake qwen one-shot CLI for B10_CODE tests
@@ -46,6 +28,9 @@ case "$1" in
     ;;
   --respond)
     echo "Qwen: $2"
+    echo "ENV[QWEN_HOME]=$QWEN_HOME"
+    echo "ENV[QWEN_RUNTIME_DIR]=$QWEN_RUNTIME_DIR"
+    echo "ENV[HOME]=$HOME"
     ;;
   --read-file)
     if [ -f "$2" ]; then
@@ -57,11 +42,6 @@ case "$1" in
     ;;
   --sleep)
     sleep "${2:-5}"
-    ;;
-  --env-report)
-    echo "QWEN_HOME=$QWEN_HOME"
-    echo "QWEN_RUNTIME_DIR=$QWEN_RUNTIME_DIR"
-    echo "HOME=$HOME"
     ;;
   *)
     echo "usage: fake-qwen-cli <cmd>" >&2
@@ -76,32 +56,26 @@ class QwenOneShotCliTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
         self.homes_root = self.root / "homes"
-        script = self.root / "fake-qwen-cli.sh"
-        script.write_text(FAKE_QWEN_TEXT, encoding="utf-8")
-        script.chmod(0o755)
-        manifest = self.root / "fake-manifest.json"
-        manifest.write_text(
-            json.dumps(
+        script = fakes.write_fake_cli(self.root, "fake-qwen-cli.sh", FAKE_QWEN_TEXT)
+        manifest = fakes.write_manifest(
+            self.root,
+            [
                 {
-                    "tools": [
-                        {
-                            "tool_id": qw.QWEN_CLI_TOOL_ID,
-                            "binary_name": str(script),
-                            "display_name": "Fake Qwen CLI",
-                            "version_args": ["--version"],
-                            "output_profiles": ["text", "key_value", "json_lines"],
-                        }
-                    ]
+                    "tool_id": qw.QWEN_CLI_TOOL_ID,
+                    "binary_name": str(script),
+                    "display_name": "Fake Qwen CLI",
+                    "version_args": ["--version"],
+                    "output_profiles": ["text", "key_value", "json_lines"],
                 }
-            ),
-            encoding="utf-8",
+            ],
         )
-        osr._inject_test_config(homes_root=self.homes_root, fake_manifest=_load_test_manifest(manifest))
-        self.session = qw.qwen_one_shot_session()
+        self.runtime = fakes.make_test_runtime(
+            self.homes_root, fakes.load_manifest_entries(manifest)
+        )
+        self.session = qw.qwen_one_shot_session(runtime=self.runtime)
         assert self.session["status"] == "ok", self.session
 
     def tearDown(self) -> None:
-        osr._clear_test_config()
         self.temp_dir.cleanup()
 
     def test_session_isolates_qwen_home_and_runtime_dir(self) -> None:
@@ -118,33 +92,20 @@ class QwenOneShotCliTests(unittest.TestCase):
         self.assertFalse(self.session["resume_supported"])
         self.assertEqual(self.session["repo_write_policy"], "denied")
 
-    def test_qwen_env_points_inside_provider_home(self) -> None:
-        env = osr.build_sterile_environment(provider_home=self.session["qwen_home"])
-        env[qw.QWEN_HOME_ENV] = str(self.session["qwen_home"])
-        env[qw.QWEN_RUNTIME_DIR_ENV] = str(self.session["qwen_runtime_dir"])
-        handle = osr.one_shot_cli_handle(
-            qw.QWEN_CLI_TOOL_ID,
-            args=("--env-report",),
-            provider_home=self.session["qwen_home"],
-            env=env,
-        )
-        if isinstance(handle, dict):
-            packet = handle
-        else:
-            result = handle.wait(timeout_seconds=10)
-            packet = osr.build_command_payload(
-                ok=result.status == "ok",
-                human_message="ok" if result.status == "ok" else "fail",
-                machine_error_code=result.machine_error_code,
-                liveness="healthy", severity="info", operator_action="none",
-                changed_files=[], exit_code=result.exit_code,
-                extra={"run": result.to_dict()},
-            )
+    def test_qwen_env_reaches_child_process(self) -> None:
+        """F08 regression: QWEN_HOME/QWEN_RUNTIME_DIR must actually reach
+        the child, not just be built in a local variable."""
+        packet = qw.qwen_one_shot_run("ping", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
         stdout = packet["run"]["stdout"]
-        self.assertIn("QWEN_HOME=" + str(self.session["qwen_home"]), stdout)
-        self.assertIn("QWEN_RUNTIME_DIR=" + str(self.session["qwen_runtime_dir"]), stdout)
-        self.assertIn("HOME=" + str(self.session["qwen_home"]), stdout)
+        self.assertIn(
+            "ENV[QWEN_HOME]=" + str(Path(self.session["qwen_home"]).resolve()), stdout
+        )
+        self.assertIn(
+            "ENV[QWEN_RUNTIME_DIR]=" + str(Path(self.session["qwen_runtime_dir"]).resolve()),
+            stdout,
+        )
+        self.assertIn("ENV[HOME]=" + str(Path(self.session["qwen_home"]).resolve()), stdout)
 
     def test_project_config_default_denied_and_admission(self) -> None:
         project = self.root / "project"
@@ -199,7 +160,10 @@ class QwenOneShotCliTests(unittest.TestCase):
 
     def test_text_proof_via_fake_adapter(self) -> None:
         proof = qw.qwen_text_proof(
-            "hello world", session=self.session, expected_prefix="Qwen: "
+            "hello world",
+            session=self.session,
+            expected_prefix="Qwen: ",
+            runtime=self.runtime,
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["text_received"])
@@ -215,7 +179,10 @@ class QwenOneShotCliTests(unittest.TestCase):
         config.write_text("QWEN_KEY=admitted-content\n", encoding="utf-8")
 
         before = qw.qwen_repo_read_proof(
-            session=self.session, project_root=project, config_path=config
+            session=self.session,
+            project_root=project,
+            config_path=config,
+            runtime=self.runtime,
         )
         self.assertEqual(before["status"], "error")
         self.assertEqual(
@@ -224,7 +191,10 @@ class QwenOneShotCliTests(unittest.TestCase):
 
         qw.admit_project_config(self.session["qwen_home"], config)
         proof = qw.qwen_repo_read_proof(
-            session=self.session, project_root=project, config_path=config
+            session=self.session,
+            project_root=project,
+            config_path=config,
+            runtime=self.runtime,
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["content_matches_admitted_file"])
@@ -245,7 +215,7 @@ class QwenOneShotCliTests(unittest.TestCase):
 
     def test_timeout_proof(self) -> None:
         proof = qw.qwen_timeout_cancel_proof(
-            session=self.session, timeout_seconds=0.6
+            session=self.session, timeout_seconds=0.6, runtime=self.runtime
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["timed_out"])
@@ -254,7 +224,7 @@ class QwenOneShotCliTests(unittest.TestCase):
 
     def test_cancel_proof(self) -> None:
         proof = qw.qwen_timeout_cancel_proof(
-            session=self.session, cancel_after_seconds=0.6
+            session=self.session, cancel_after_seconds=0.6, runtime=self.runtime
         )
         self.assertEqual(proof["status"], "ok")
         self.assertTrue(proof["cancelled"])
@@ -262,12 +232,12 @@ class QwenOneShotCliTests(unittest.TestCase):
         self.assertEqual(proof["machine_error_code"], osr.ONE_SHOT_CANCELLED)
 
     def test_run_fails_closed_without_session(self) -> None:
-        packet = qw.qwen_one_shot_run("hi", session={})
+        packet = qw.qwen_one_shot_run("hi", session={}, runtime=self.runtime)
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], qw.QWEN_SESSION_INVALID)
 
     def test_run_parses_output(self) -> None:
-        packet = qw.qwen_one_shot_run("hello", session=self.session)
+        packet = qw.qwen_one_shot_run("hello", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["parsed_output"]["detected_format"], "text")
         self.assertIn("Qwen: hello", packet["run"]["stdout"])
@@ -280,6 +250,43 @@ class QwenOneShotCliTests(unittest.TestCase):
         self.assertTrue(receipt["declared_not_live_verified"])
         self.assertEqual(receipt["repo_write_policy"], "denied")
         self.assertFalse(receipt["resume_supported"])
+
+
+class QwenProductionFacadeTests(unittest.TestCase):
+    """Without an explicit test engine the production facade answers
+    fail-closed before any filesystem or process side effect."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_session_disabled_on_production_facade(self) -> None:
+        facade = osr.ProductionOneShotFacade(homes_root=self.root / "homes")
+        packet = facade.session("qwen")
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
+        self.assertEqual(packet["changed_files"], [])
+        self.assertFalse((self.root / "homes").exists())
+
+    def test_default_session_function_uses_fail_closed_facade(self) -> None:
+        packet = qw.qwen_one_shot_session()
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
+        self.assertEqual(packet["changed_files"], [])
+
+    def test_default_run_function_uses_fail_closed_facade(self) -> None:
+        packet = qw.qwen_one_shot_run("hi", session={"qwen_home": "/nonexistent"})
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(
+            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+        )
 
 
 if __name__ == "__main__":

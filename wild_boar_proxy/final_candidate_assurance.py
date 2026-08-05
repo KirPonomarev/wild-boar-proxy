@@ -220,17 +220,26 @@ def _check_provider() -> FinalCheck:
 
 
 def _check_cli() -> FinalCheck:
-    receipt = osr.build_one_shot_runtime_receipt()
+    """R5: the production facade must be fail-closed with a typed code and
+    no runtime-grant mechanism; that IS the required security posture."""
+    receipt = osr.default_production_facade().receipt()
     passed = (
         receipt["status"] == "ok"
-        and receipt["machine_error_code"] == "SYNTHETIC_PROVEN"
+        and receipt.get("cli_disabled") is True
+        and receipt.get("disabled_reason") == "pending_security_admission"
+        and receipt.get("runtime_grant_available") is False
         and receipt.get("declared_not_live_verified") is True
     )
     return FinalCheck(
         check_id="cli",
         category="cli",
         passed=passed,
-        evidence="one-shot runtime receipt SYNTHETIC_PROVEN, declared-not-live",
+        evidence=(
+            "production CLI facade fail-closed "
+            f"(cli_disabled={receipt.get('cli_disabled')}, "
+            f"runtime_grant_available={receipt.get('runtime_grant_available')})"
+        ),
+        detail={"cli_disabled": receipt.get("cli_disabled")},
     )
 
 
@@ -305,30 +314,41 @@ def _check_web() -> FinalCheck:
 
 
 def _check_account_isolation() -> FinalCheck:
-    with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
-        root = Path(tmp)
-        osr._inject_test_config(homes_root=root / "homes")
-        try:
-            qwen = qoc.qwen_one_shot_session()
-            kimi = km.kimi_one_shot_session()
-            qwen_ok = (
-                qwen["status"] == "ok"
-                and oct(Path(qwen["qwen_home"]).stat().st_mode & 0o777) == "0o700"
-            )
-            kimi_ok = (
-                kimi["status"] == "ok"
-                and oct(Path(kimi["kimi_code_home"]).stat().st_mode & 0o777) == "0o700"
-            )
-            distinct = qwen["qwen_home"] != kimi["kimi_code_home"]
-        finally:
-            osr._clear_test_config()
-    passed = qwen_ok and kimi_ok and distinct
+    """R5 typed fail-closed compatibility check.
+
+    Provider sessions on the production facade must fail closed with the
+    typed disabled code, no KeyError, and zero filesystem creation. This
+    probe performs no writes and creates no provider homes.
+    """
+    qwen = qoc.qwen_one_shot_session()
+    kimi = km.kimi_one_shot_session()
+    disabled_code = osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+    qwen_ok = (
+        qwen.get("status") == "error"
+        and qwen.get("machine_error_code") == disabled_code
+        and qwen.get("changed_files") == []
+        and "qwen_home" not in qwen
+    )
+    kimi_ok = (
+        kimi.get("status") == "error"
+        and kimi.get("machine_error_code") == disabled_code
+        and kimi.get("changed_files") == []
+        and "kimi_code_home" not in kimi
+    )
+    passed = qwen_ok and kimi_ok
     return FinalCheck(
         check_id="account_isolation",
         category="isolation",
         passed=passed,
-        evidence=f"qwen/kimi provider homes 0700 and distinct ({qwen_ok}/{kimi_ok})",
-        detail={"qwen_ok": qwen_ok, "kimi_ok": kimi_ok, "distinct": distinct},
+        evidence=(
+            f"provider sessions fail closed with typed code, no fs creation "
+            f"(qwen={qwen.get('machine_error_code')}, kimi={kimi.get('machine_error_code')})"
+        ),
+        detail={
+            "qwen_code": qwen.get("machine_error_code"),
+            "kimi_code": kimi.get("machine_error_code"),
+            "cli_disabled": True,
+        },
     )
 
 

@@ -6,33 +6,19 @@
 Each test reproduces a specific P0/P1 finding from the independent audit and
 asserts the fix holds. These tests exist specifically because the original
 suite passed while the bugs were present — they close the greenwash gap.
+
+R5: one-shot runtime fixtures come from tests/fakes.py as explicit engine
+instances; there is no module-level injection hook anymore.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 import unittest
-
-
-def _load_test_manifest(path):
-    import json
-    from pathlib import Path
-    from wild_boar_proxy.one_shot_cli_runtime import OneShotToolManifestEntry
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    entries = []
-    for item in data.get("tools", []):
-        entries.append(OneShotToolManifestEntry(
-            tool_id=str(item["tool_id"]),
-            binary_name=str(item["binary_name"]),
-            display_name=str(item.get("display_name", item["tool_id"])),
-            version_args=tuple(str(a) for a in item.get("version_args", ("--version",))),
-            output_profiles=tuple(str(p) for p in item.get("output_profiles", ("text",))),
-            server_owned=False,
-        ))
-    return tuple(entries)
 from pathlib import Path
+
+import fakes
 
 from wild_boar_proxy import actor_dispatcher as ad
 from wild_boar_proxy import execution_core_design_gate as ecg
@@ -88,37 +74,44 @@ class AuditP0SterileEnvScrub(unittest.TestCase):
 
 
 class AuditP0SandboxEnforcement(unittest.TestCase):
-    """P0: child must not write when repo_write=denied."""
+    """P0: child must not write when repo_write=denied.
+
+    R5: the engine accepts no caller sandbox posture; every child runs
+    under the deny-default production profile. The escape script attempts
+    both an absolute write outside the allowed roots and a relative write
+    into its (read-only-after-use) sandbox cwd.
+    """
 
     def test_child_cannot_write_with_denied_sandbox(self) -> None:
-        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            script = root / "escape.sh"
-            script.write_text(
-                "#!/bin/sh\necho hacked > escape.txt 2>/dev/null; exit 0\n",
-                encoding="utf-8",
+            escape_abs = root / "escape.txt"
+            script_body = (
+                "#!/bin/sh\n"
+                f'echo hacked > "{escape_abs}" 2>/dev/null\n'
+                "echo hacked > escape_rel.txt 2>/dev/null\n"
+                "exit 0\n"
             )
-            script.chmod(0o755)
-            manifest = root / "m.json"
-            manifest.write_text(
-                json.dumps({"tools": [{"tool_id": "w", "binary_name": str(script)}]}),
-                encoding="utf-8",
+            script = fakes.write_fake_cli(root, "escape.sh", script_body)
+            manifest = fakes.write_manifest(
+                root, [{"tool_id": "w", "binary_name": str(script)}]
             )
-            osr._inject_test_config(homes_root=root / "h", fake_manifest=_load_test_manifest(manifest))
-            try:
-                handle = osr.one_shot_cli_handle(
-                    "w", sandbox=osr.SandboxProfile(repo_write="denied")
-                )
-                if isinstance(handle, dict):
-                    leaked = []
-                else:
-                    result = handle.wait(timeout_seconds=10)
-                    leaked = list(Path("/tmp").glob("escape.txt"))
-                leaked += list(Path(".").glob("escape.txt"))
-                leaked += list(Path("/tmp").glob("wbp-sandbox-ro-*/escape.txt"))
-                self.assertFalse(leaked, "child wrote file despite repo_write=denied")
-            finally:
-                osr._clear_test_config()
+            runtime = fakes.make_test_runtime(
+                root / "homes", fakes.load_manifest_entries(manifest)
+            )
+            handle = runtime.one_shot_cli_handle("w")
+            if not isinstance(handle, dict):
+                handle.wait(timeout_seconds=10)
+            self.assertFalse(
+                escape_abs.exists(),
+                "child wrote outside the allowed roots despite deny-default sandbox",
+            )
+            leaked = list(
+                Path(tempfile.gettempdir()).glob("wbp-sandbox-ro-*/escape_rel.txt")
+            )
+            self.assertFalse(
+                leaked, "child left a written file in a surviving sandbox cwd"
+            )
 
 
 class AuditP0LedgerPathContainment(unittest.TestCase):

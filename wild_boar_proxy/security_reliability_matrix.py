@@ -168,20 +168,17 @@ def _check_cancellation() -> MatrixCheck:
             ),
             encoding="utf-8",
         )
-        # R40: use _inject_test_config instead of env vars
-        osr._inject_test_config(
-            fake_manifest=_load_test_entries(manifest),
+        # R5: explicit engine instance — no global injection anywhere.
+        runtime = osr.OneShotRuntime(
             homes_root=root / "homes",
+            manifest=_load_test_entries(manifest),
         )
-        try:
-            packet = osr.one_shot_cli_run(
-                "matrix-sleep", cancel_after_seconds=0.4, timeout_seconds=10.0
-            )
-            run = packet.get("run") or {}
-            cancelled = bool(run.get("cancelled"))
-            machine_error_code = packet.get("machine_error_code", "")
-        finally:
-            osr._clear_test_config()
+        packet = runtime.one_shot_cli_run(
+            "matrix-sleep", cancel_after_seconds=0.4, timeout_seconds=10.0
+        )
+        run = packet.get("run") or {}
+        cancelled = bool(run.get("cancelled"))
+        machine_error_code = packet.get("machine_error_code", "")
     return MatrixCheck(
         check_id="cancellation",
         category="cancellation",

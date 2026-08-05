@@ -78,6 +78,7 @@ def create_kimi_snapshot(
     project_root: Path | str,
     *,
     snapshot_root: Path | str | None = None,
+    runtime: osr.OneShotRuntime | None = None,
     max_files: int = SNAPSHOT_MAX_FILES,
     max_total_bytes: int = SNAPSHOT_MAX_TOTAL_BYTES,
 ) -> dict[str, Any]:
@@ -85,6 +86,9 @@ def create_kimi_snapshot(
 
     Files are chmod 0444, dirs 0555, so writes must fail with a real
     EACCES. Bounded by file count and total bytes; failure fails closed.
+    Without an explicit snapshot root the scratch location is derived from
+    the engine instance's sealed homes root; without an engine instance
+    the production facade answers fail-closed.
     """
     project = Path(project_root)
     if not project.is_dir():
@@ -100,12 +104,12 @@ def create_kimi_snapshot(
             extra={"project_root": str(project)},
         )
     snapshot = Path(snapshot_root) if snapshot_root is not None else None
-    created_tmp = False
     if snapshot is None:
+        if runtime is None:
+            return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
         snapshot = Path(
-            tempfile_under_homes("kimi-snapshot", project.name)
+            tempfile_under_homes(runtime, "kimi-snapshot", project.name)
         )
-        created_tmp = True
     if snapshot.exists():
         shutil.rmtree(snapshot)
     changed: list[str] = []
@@ -208,39 +212,32 @@ def create_kimi_snapshot(
     )
 
 
-def tempfile_under_homes(subdir: str, name: str) -> Path:
-    """Snapshot scratch under the server-owned homes root (test-overridable)."""
-    root = osr.provider_homes_root() / subdir
+def tempfile_under_homes(runtime: osr.OneShotRuntime, subdir: str, name: str) -> Path:
+    """Snapshot scratch under the engine instance's sealed homes root."""
+    root = runtime.homes_root / subdir
     root.mkdir(parents=True, exist_ok=True)
     return root / f"{name}-{int(time.time() * 1000)}"
 
 
 def kimi_one_shot_session(
     *,
-    homes_root: Path | str | None = None,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Create the isolated Kimi one-shot session with auth isolation.
 
-    R40: checks CLI security admission BEFORE creating any files.
+    R5: without an explicit engine instance the production facade is used,
+    which is fail-closed (`CLI_DISABLED_PENDING_SECURITY_ADMISSION`)
+    before any filesystem or process side effect. Tests pass their own
+    `OneShotRuntime` built from `tests/fakes.py`.
     """
-    if not osr._CLI_SECURITY_ADMISSION_GRANTED:
-        return build_command_payload(
-            ok=False,
-            human_message="Kimi CLI is disabled pending security admission (R41/R47).",
-            machine_error_code=osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
-            liveness="healthy",
-            severity="error",
-            operator_action="user_action",
-            changed_files=[],
-            exit_code=1,
-            extra={"provider_id": KIMI_PROVIDER_ID},
-        )
-    home_result = osr.create_provider_home(KIMI_PROVIDER_ID, homes_root=homes_root)
+    if runtime is None:
+        return osr.default_production_facade().session(KIMI_PROVIDER_ID)
+    home_result = runtime.create_provider_home(KIMI_PROVIDER_ID)
     if home_result["status"] != "ok":
         return home_result
     home = Path(home_result["home_path"])
-    osr.one_shot_auth_session(KIMI_PROVIDER_ID, home)
-    auth_status = osr.one_shot_auth_status(home)
+    runtime.one_shot_auth_session(KIMI_PROVIDER_ID, home)
+    auth_status = runtime.one_shot_auth_status(home)
     sandbox = osr.probe_os_sandbox()
     return build_command_payload(
         ok=True,
@@ -267,15 +264,15 @@ def kimi_one_shot_session(
     )
 
 
-def _kimi_environment(
+def _kimi_provider_env(
     session: dict[str, Any],
     *,
     snapshot: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Sterile environment with KIMI_CODE_HOME inside the provider home."""
+    """Provider env mapping for the Kimi child (F08 fix: actually passed
+    to the engine as `provider_env`, never built and discarded)."""
     home = Path(session["kimi_code_home"])
-    env = osr.build_sterile_environment(provider_home=home)
-    env[KIMI_CODE_HOME_ENV] = str(home)
+    env: dict[str, str] = {KIMI_CODE_HOME_ENV: str(home)}
     if snapshot is not None:
         env["KIMI_SNAPSHOT_ROOT"] = str(snapshot["root"])
     return env
@@ -285,12 +282,17 @@ def kimi_one_shot_run(
     text: str,
     *,
     session: dict[str, Any],
+    runtime: osr.OneShotRuntime | None = None,
     args: Sequence[str] = (),
     timeout_seconds: float = osr.DEFAULT_RUN_TIMEOUT_SECONDS,
     output_cap_bytes: int = osr.DEFAULT_OUTPUT_CAP_BYTES,
     cancel_after_seconds: float | None = None,
 ) -> dict[str, Any]:
-    """Run the Kimi one-shot CLI with the kimi environment."""
+    """Run the Kimi one-shot CLI with the kimi provider environment.
+
+    Without an explicit engine instance the production facade answers
+    fail-closed.
+    """
     if session.get("kimi_code_home") is None:
         return build_command_payload(
             ok=False,
@@ -303,11 +305,13 @@ def kimi_one_shot_run(
             exit_code=1,
             extra={"tool_id": KIMI_CLI_TOOL_ID},
         )
-    env = _kimi_environment(session)
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+    run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
         args=("--respond", text, *args),
         provider_home=Path(session["kimi_code_home"]),
+        provider_env=_kimi_provider_env(session),
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
@@ -343,9 +347,10 @@ def kimi_text_proof(
     *,
     session: dict[str, Any],
     expected_prefix: str = "",
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Text response proof via the fake adapter (declared-not-live)."""
-    run = kimi_one_shot_run(text, session=session)
+    run = kimi_one_shot_run(text, session=session, runtime=runtime)
     stdout = (run.get("run") or {}).get("stdout", "")
     ok = run["status"] == "ok" and bool(stdout.strip())
     if expected_prefix:
@@ -421,6 +426,7 @@ def kimi_repo_read_proof(
     session: dict[str, Any],
     snapshot: dict[str, Any],
     snapshot_path: Path | str,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Repo-read proof: the fake adapter reads only a snapshot path.
 
@@ -460,11 +466,13 @@ def kimi_repo_read_proof(
             exit_code=1,
             extra={"snapshot_path": str(target)},
         )
-    env = _kimi_environment(session, snapshot=snapshot["snapshot"])
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+    run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
         args=("--read-file", str(target)),
         provider_home=Path(session["kimi_code_home"]),
+        provider_env=_kimi_provider_env(session, snapshot=snapshot["snapshot"]),
     )
     stdout = (run.get("run") or {}).get("stdout", "")
     expected = target.read_text(encoding="utf-8")
@@ -560,14 +568,18 @@ def kimi_timeout_cancel_proof(
     session: dict[str, Any],
     cancel_after_seconds: float | None = None,
     timeout_seconds: float | None = None,
+    runtime: osr.OneShotRuntime | None = None,
 ) -> dict[str, Any]:
     """Timeout / cancel proof: bounded runtime terminates the whole group."""
     if cancel_after_seconds is None and timeout_seconds is None:
         raise ValueError("one of cancel_after_seconds or timeout_seconds is required")
-    run = osr.one_shot_cli_run(
+    if runtime is None:
+        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+    run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
         args=("--sleep", "30"),
         provider_home=Path(session["kimi_code_home"]),
+        provider_env=_kimi_provider_env(session),
         timeout_seconds=timeout_seconds if timeout_seconds is not None else 30.0,
         cancel_after_seconds=cancel_after_seconds,
     )

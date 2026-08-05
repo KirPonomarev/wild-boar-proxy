@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Kirill Ponomarev
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""R42: production server-owned sandbox negative tests."""
+"""R42/R52: production server-owned sandbox negative tests.
+
+F07 fix: the profile under test is THE production builder
+(`one_shot_cli_runtime.build_server_owned_sandbox_profile`) — deny-default,
+never a private test copy with its own `(allow default)` posture.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from wild_boar_proxy import one_shot_cli_runtime as osr
+
 CANARY_CMD = (
     'cat /Volumes/Work/wild-boar-proxy/CANON.md >/dev/null 2>&1 '
     '&& echo REPO_READ=yes || echo REPO_READ=no; '
@@ -21,34 +28,10 @@ CANARY_CMD = (
     '&& echo CODEX_READ=yes || echo CODEX_READ=no; '
     'echo ok > "$HOME/canary_write.txt" 2>/dev/null '
     '&& echo HOME_WRITE=yes || echo HOME_WRITE=no; '
+    'ls "$TMPDIR" >/dev/null 2>&1 '
+    '&& echo TMPDIR_READ=yes || echo TMPDIR_READ=no; '
     'echo x > /dev/null 2>/dev/null && echo DEVNULL=yes || echo DEVNULL=no'
 )
-
-
-def _build_production_profile(*, home_dir: str, sandbox_cwd: str) -> str:
-    codex = os.path.realpath(os.path.expanduser("~/.codex"))
-    repo = "/Volumes/Work/wild-boar-proxy"
-    profiles = os.path.realpath(
-        os.path.expanduser("~/Library/Application Support/WildBoarProxy/CodexProfiles")
-    )
-    home_r = os.path.realpath(home_dir)
-    cwd_r = os.path.realpath(sandbox_cwd)
-    return "\n".join([
-        "(version 1)",
-        "(allow default)",
-        f'(deny file-read-data (subpath "{codex}"))',
-        f'(deny file-write* (subpath "{codex}"))',
-        f'(deny file-read-data (subpath "{repo}"))',
-        f'(deny file-write* (subpath "{repo}"))',
-        f'(deny file-read-data (subpath "{profiles}"))',
-        f'(deny file-write* (subpath "{profiles}"))',
-        "(deny file-write*)",
-        f'(allow file-write* (subpath "{cwd_r}"))',
-        f'(allow file-write* (subpath "{home_r}"))',
-        '(allow file-write-data (subpath "/dev/dtracehelper"))',
-        '(allow file-write-data (subpath "/dev/null"))',
-        "(allow ipc-posix-shm)",
-    ]) + "\n"
 
 
 class ProductionSandboxTests(unittest.TestCase):
@@ -56,27 +39,51 @@ class ProductionSandboxTests(unittest.TestCase):
         if not shutil.which("sandbox-exec"):
             self.skipTest("sandbox-exec not available")
         self.tmp = tempfile.TemporaryDirectory(dir="/tmp")
-        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
         self.home = self.root / "home"
         self.home.mkdir()
         self.cwd = self.root / "cwd"
         self.cwd.mkdir()
+        # A sibling directory the child must NOT be able to read.
+        self.sibling = self.root / "sibling"
+        self.sibling.mkdir()
+        (self.sibling / "secret.txt").write_text("nope\n", encoding="utf-8")
+        # A synthetic ".codex" sibling of the fake home: exists on disk, so
+        # `ls "$HOME/../.codex"` is a real read-denial probe without ever
+        # touching the operator's real Codex home.
+        self.fake_codex = self.root / ".codex"
+        self.fake_codex.mkdir()
+        (self.fake_codex / "config.json").write_text("{}\n", encoding="utf-8")
 
     def tearDown(self) -> None:
         for f in Path("/tmp").glob("wbp_canary_ext_*.txt"):
             f.unlink(missing_ok=True)
-        self.tmp.cleanup()
+
+    def _profile(self) -> str:
+        return osr.build_server_owned_sandbox_profile(
+            home_dir=self.home,
+            sandbox_cwd=self.cwd,
+            binary_path="/bin/sh",
+        )
 
     def _run(self) -> str:
-        profile = _build_production_profile(
-            home_dir=str(self.home), sandbox_cwd=str(self.cwd),
-        )
-        env = {"PATH": "/usr/bin:/bin", "HOME": str(self.home)}
+        profile = self._profile()
+        env = {
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(self.home),
+            "TMPDIR": str(self.sibling),
+        }
         r = subprocess.run(
             ["sandbox-exec", "-p", profile, "/bin/sh", "-c", CANARY_CMD],
             capture_output=True, text=True, env=env, cwd=str(self.cwd), timeout=15,
         )
         return r.stdout
+
+    def test_profile_is_deny_default(self) -> None:
+        profile = self._profile()
+        self.assertIn("(deny default)", profile)
+        self.assertNotIn("(allow default)", profile)
 
     def test_repo_not_readable(self) -> None:
         self.assertIn("REPO_READ=no", self._run())
@@ -88,6 +95,9 @@ class ProductionSandboxTests(unittest.TestCase):
 
     def test_codex_not_readable(self) -> None:
         self.assertIn("CODEX_READ=no", self._run())
+
+    def test_sibling_tmpdir_not_readable(self) -> None:
+        self.assertIn("TMPDIR_READ=no", self._run())
 
     def test_home_write_allowed(self) -> None:
         self.assertIn("HOME_WRITE=yes", self._run())
