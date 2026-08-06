@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-from http.server import ThreadingHTTPServer
 import ipaddress
 import json
 import os
@@ -19,6 +18,7 @@ from typing import Any
 from urllib import error, request
 import webbrowser
 
+from .loopback_http_server import LoopbackThreadingHTTPServer
 from .runtime import RuntimePaths
 from .web_design_live_server import (
     FULL_ACTION_PHASE,
@@ -187,7 +187,7 @@ def build_desktop_web_shell_server(
     port: int = DESKTOP_WEB_SHELL_DEFAULT_PORT,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
     owner_authorization_phrase: str | None = None,
-) -> tuple[ThreadingHTTPServer, Any]:
+) -> tuple[LoopbackThreadingHTTPServer, Any]:
     admitted_host = validate_desktop_bind_host(host)
     if port < 0:
         raise DesktopWebShellError(
@@ -212,7 +212,7 @@ def build_desktop_web_shell_server(
         action_server_port=port,
     )
     try:
-        server = ThreadingHTTPServer(
+        server = LoopbackThreadingHTTPServer(
             (admitted_host, port),
             build_handler(
                 action_phase=action_phase,

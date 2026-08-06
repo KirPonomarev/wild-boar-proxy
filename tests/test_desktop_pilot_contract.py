@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import unittest
 
+import final_assurance_git_fixture as fa_fixture
 from wild_boar_proxy import desktop_pilot_contract as dpc
 from wild_boar_proxy.core import packets
 
@@ -61,13 +62,16 @@ class DesktopPilotReceiptTests(unittest.TestCase):
 
 
 class FinalAssuranceTests(unittest.TestCase):
-    # Real release commit SHAs resolved from the v0.1.0 / v0.2.0 / v0.3.0 tags.
-    # The audit now validates that each identity resolves to an existing commit
-    # in the repo, so placeholder SHAs like "a"*40 are rejected.
-    _SHAS = dpc._resolve_milestone_shas()
-    _SHA_WEB = _SHAS["web_v0_1_0"]
-    _SHA_PROVIDER = _SHAS["provider_v0_2_0"]
-    _SHA_DESKTOP = _SHAS["desktop_v0_3_0"]
+    # Milestone identities come from a hermetic fixture git repository (three
+    # tagged commits, ``dpc._REPO_ROOT`` patched to it): a clean CI checkout
+    # may not carry the v0.1.0/v0.2.0/v0.3.0 tags, and resolving the real
+    # tags would collapse every identity to HEAD (FINAL_ASSURANCE_SHA_COLLISION).
+    @classmethod
+    def setUpClass(cls) -> None:
+        shas = fa_fixture.install_final_assurance_git_fixture(cls)
+        cls._SHA_WEB = shas["web_v0_1_0"]
+        cls._SHA_PROVIDER = shas["provider_v0_2_0"]
+        cls._SHA_DESKTOP = shas["desktop_v0_3_0"]
 
     def test_done_when_all_present(self) -> None:
         r = dpc.run_final_assurance_audit(
@@ -132,6 +136,13 @@ class FinalAssuranceTests(unittest.TestCase):
 
 
 class SyntheticProofTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        # run_final_assurance_synthetic_proof resolves milestone SHAs from git
+        # tags via _REPO_ROOT; point it at the hermetic fixture repo so the
+        # proof does not depend on the host checkout's tags or history depth.
+        fa_fixture.install_final_assurance_git_fixture(cls)
+
     def test_desktop_proof_ok(self) -> None:
         s = dpc.run_desktop_pilot_synthetic_proof()
         _assert_semantics(self, s)

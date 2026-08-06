@@ -25,6 +25,14 @@ class WheelPackageDataTests(unittest.TestCase):
                 "PIP_DISABLE_PIP_VERSION_CHECK": "1",
             }
             try:
+                # Build in pip's isolated build environment: the declared
+                # [build-system] requirements (setuptools>=70.1) are
+                # provisioned there, so the result does not depend on
+                # whatever setuptools/wheel happen to be installed in the
+                # ambient test environment (a clean CI runner ships an old
+                # setuptools without the `wheel` package, which makes
+                # --no-build-isolation fail with "invalid command
+                # 'bdist_wheel'").
                 result = subprocess.run(
                     [
                         sys.executable,
@@ -33,7 +41,6 @@ class WheelPackageDataTests(unittest.TestCase):
                         "wheel",
                         ".",
                         "--no-deps",
-                        "--no-build-isolation",
                         "--wheel-dir",
                         str(wheel_dir),
                     ],

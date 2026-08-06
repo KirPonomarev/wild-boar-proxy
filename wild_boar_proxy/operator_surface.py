@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from wild_boar_proxy.loopback_http_server import LoopbackThreadingHTTPServer
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
@@ -2077,7 +2078,7 @@ def _empty_trace_packet() -> dict[str, Any]:
     }
 
 
-class _TraceObserverServer(http.server.ThreadingHTTPServer):
+class _TraceObserverServer(LoopbackThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(self, server_address: tuple[str, int], handler: type[http.server.BaseHTTPRequestHandler], observer: "WbpTraceObserver") -> None:
@@ -2225,7 +2226,7 @@ class WbpTraceObserver:
         return packet
 
 
-class _ExternalRouteAdapterServer(http.server.ThreadingHTTPServer):
+class _ExternalRouteAdapterServer(LoopbackThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(
@@ -2597,7 +2598,7 @@ class ExternalRouteResponsesAdapter:
         return 200, {"Content-Type": "application/json"}, body_bytes
 
 
-class _HybridOpenAICompatServer(http.server.ThreadingHTTPServer):
+class _HybridOpenAICompatServer(LoopbackThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(

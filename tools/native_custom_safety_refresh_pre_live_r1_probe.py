@@ -78,14 +78,19 @@ def packet(kind: str, status: str = "ok", **values: Any) -> dict[str, Any]:
 
 
 def run_text(repo_root: Path, command: list[str]) -> str:
-    process = subprocess.run(
-        command,
-        cwd=repo_root,
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            cwd=repo_root,
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
     return process.stdout.strip() if process.returncode == 0 else process.stderr.strip()
 
 

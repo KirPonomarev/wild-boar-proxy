@@ -33,18 +33,31 @@ from wild_boar_proxy.native_filesystem_probe import (
 )
 
 
+def _observer_tool_path(name: str) -> str:
+    found = shutil.which(name)
+    if found:
+        return found
+    canonical = Path(f"/usr/sbin/{name}")
+    return str(canonical) if canonical.exists() else ""
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _run(repo_root: Path, command: list[str], *, check: bool = False) -> str:
-    process = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
     if check and process.returncode != 0:
         raise RuntimeError(
             f"{' '.join(command)} failed with {process.returncode}: {process.stderr.strip()}"
@@ -237,9 +250,9 @@ def main() -> int:
         source_trace_path=str(required["source_wbp_trace_packet.json"]),
     )
     capability = build_native_direct_egress_capability_packet(
-        lsof_path=shutil.which("lsof") or "",
-        tcpdump_path=shutil.which("tcpdump") or "",
-        nettop_path=shutil.which("nettop") or "",
+        lsof_path=_observer_tool_path("lsof"),
+        tcpdump_path=_observer_tool_path("tcpdump"),
+        nettop_path=_observer_tool_path("nettop"),
         process_tree_observer_available=True,
     )
     current_inventory = collect_codex_process_inventory(custom_user_data_dir="__no_live_custom__")

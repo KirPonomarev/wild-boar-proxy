@@ -47,13 +47,18 @@ def _read_text(path: Path) -> str:
 
 
 def _run(repo_root: Path, command: list[str], *, check: bool = True) -> str:
-    process = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
     if check and process.returncode != 0:
         raise RuntimeError(
             f"{' '.join(command)} failed with {process.returncode}: {process.stderr.strip()}"
@@ -205,13 +210,28 @@ if (!result.meta_container_present || !result.main_role_normalized || !result.re
 }
 console.log(JSON.stringify(result));
 """
-    process = subprocess.run(
-        ["node", "-e", script],
-        cwd=repo_root / "wild_boar_proxy" / "web_design_ui",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            ["node", "-e", script],
+            cwd=repo_root / "wild_boar_proxy" / "web_design_ui",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return {
+            "status": "blocked",
+            "verification_mode": "node_vm_static_dom",
+            "stderr": "UNAVAILABLE_FILE_NOT_FOUND: node",
+            "stdout": "",
+        }
+    except OSError as exc:
+        return {
+            "status": "blocked",
+            "verification_mode": "node_vm_static_dom",
+            "stderr": f"UNAVAILABLE_OSERROR: node: {exc}",
+            "stdout": "",
+        }
     if process.returncode != 0:
         return {
             "status": "blocked",

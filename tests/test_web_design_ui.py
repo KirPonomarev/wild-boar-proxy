@@ -296,6 +296,26 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         for fragment in forbidden_fragments:
             self.assertNotIn(fragment, combined)
 
+    # Inline static file server with a bind path that never calls
+    # socket.getfqdn: python -m http.server stalls ~35s per fresh process on
+    # CI runners whose resolver drops PTR queries (SD-R57 runner diagnosis).
+    _STATIC_SERVER_SCRIPT = (
+        "import functools\n"
+        "import socketserver\n"
+        "import sys\n"
+        "from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer\n"
+        "\n"
+        "class FastBindServer(ThreadingHTTPServer):\n"
+        "    def server_bind(self):\n"
+        "        socketserver.TCPServer.server_bind(self)\n"
+        "        bind_host, bind_port = self.server_address[:2]\n"
+        "        self.server_name = str(bind_host)\n"
+        "        self.server_port = bind_port\n"
+        "\n"
+        "handler = functools.partial(SimpleHTTPRequestHandler, directory=sys.argv[2])\n"
+        "FastBindServer(('127.0.0.1', int(sys.argv[1])), handler).serve_forever()\n"
+    )
+
     def test_static_preview_serves_index_and_fixture_payloads(self) -> None:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -304,12 +324,9 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         process = subprocess.Popen(
             [
                 "python3",
-                "-m",
-                "http.server",
+                "-c",
+                self._STATIC_SERVER_SCRIPT,
                 str(port),
-                "--bind",
-                "127.0.0.1",
-                "--directory",
                 str(WEB_DESIGN_UI),
             ],
             stdout=subprocess.DEVNULL,
@@ -317,7 +334,9 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
         )
         try:
             base_url = f"http://127.0.0.1:{port}"
-            index = self._fetch_with_retry(f"{base_url}/?state=healthy")
+            index = self._fetch_with_retry(
+                f"{base_url}/?state=healthy", server_process=process
+            )
             self.assertIn("Wild Boar Proxy - предпросмотр операторского интерфейса", index)
             self.assertIn("sourcePicker", index)
             self.assertIn("statePicker", index)
@@ -331,7 +350,9 @@ if (sandbox.trustedOnboardLoginMessagePayload(validEvent, { closed: true }, sess
                 "unknown",
                 "integration_failure",
             ]:
-                body = self._fetch_with_retry(f"{base_url}/fixtures/{state}.json")
+                body = self._fetch_with_retry(
+                    f"{base_url}/fixtures/{state}.json", server_process=process
+                )
                 payload = json.loads(body)
                 self.assertEqual(payload["state_id"], state)
         finally:
@@ -18329,16 +18350,41 @@ if (
         end = next_overlay if next_overlay != -1 else len(html)
         return html[start:end]
 
-    def _fetch_with_retry(self, url: str) -> str:
+    def _fetch_with_retry(
+        self, url: str, server_process: subprocess.Popen | None = None
+    ) -> str:
+        """Bounded readiness poll: retry transient fetch failures until a
+        hard 30s deadline, then fail with diagnostics (attempt count, last
+        error, server process state). No blind sleep: each iteration is a
+        real fetch attempt with its own 2s timeout."""
+        deadline = time.monotonic() + 30.0
+        attempts = 0
         last_error: Exception | None = None
-        for _ in range(20):
+        while True:
+            attempts += 1
             try:
-                with NO_PROXY_OPENER.open(url, timeout=1) as response:
+                with NO_PROXY_OPENER.open(url, timeout=2) as response:
                     return response.read().decode("utf-8")
             except Exception as exc:  # pragma: no cover - diagnostic path
                 last_error = exc
-                time.sleep(0.05)
-        raise AssertionError(f"Could not fetch {url}: {last_error}")
+                if server_process is not None and server_process.poll() is not None:
+                    raise AssertionError(
+                        f"Server process exited with code "
+                        f"{server_process.returncode} before serving {url}: "
+                        f"{exc!r}"
+                    )
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.1)
+        server_state = (
+            "no process handle"
+            if server_process is None
+            else f"process poll={server_process.poll()}"
+        )
+        raise AssertionError(
+            f"Could not fetch {url} within 30s "
+            f"(attempts={attempts}, {server_state}): {last_error!r}"
+        )
 
 
 if __name__ == "__main__":

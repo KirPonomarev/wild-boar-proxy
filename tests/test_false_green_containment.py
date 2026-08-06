@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import unittest
 
+import final_assurance_git_fixture as fa_fixture
 from wild_boar_proxy import (
     desktop_pilot_contract as dpc,
     kimi_glm_provider_slices as kg,
@@ -69,6 +70,14 @@ class VoiceSyntheticProofContainmentTests(unittest.TestCase):
 
 
 class FinalAssuranceIdentityContainmentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Valid identities come from a hermetic fixture git repository (three
+        # tagged commits, ``dpc._REPO_ROOT`` patched to it): a clean CI
+        # checkout may not carry the v0.x release tags, and resolving the real
+        # tags would collapse every identity to HEAD (SHA_COLLISION verdict).
+        cls._SHAS = fa_fixture.install_final_assurance_git_fixture(cls)
+
     def test_fake_shas_rejected_as_invalid_identity(self) -> None:
         r = dpc.run_final_assurance_audit(
             web_release_sha="fake",
@@ -86,9 +95,9 @@ class FinalAssuranceIdentityContainmentTests(unittest.TestCase):
         )
 
     def test_valid_40hex_shas_still_accepted_as_done(self) -> None:
-        # Real release commit SHAs resolved from the v0.1.0 / v0.2.0 / v0.3.0
-        # tags: only identities that resolve to existing commits are accepted.
-        shas = dpc._resolve_milestone_shas()
+        # Fixture repo commit SHAs for the three milestones: only identities
+        # that resolve to existing commits are accepted.
+        shas = self._SHAS
         r = dpc.run_final_assurance_audit(
             web_release_sha=shas["web_v0_1_0"],
             provider_release_sha=shas["provider_v0_2_0"],
@@ -114,8 +123,7 @@ class FinalAssuranceIdentityContainmentTests(unittest.TestCase):
         # (it does not exist as a commit in the repo) and accept a real one.
         self.assertFalse(dpc._validate_git_sha("a" * 40))
         self.assertFalse(dpc._validate_git_sha("0123456789abcdef" * 2 + "0123456789ABCDEF"[:8]))
-        shas = dpc._resolve_milestone_shas()
-        self.assertTrue(dpc._validate_git_sha(shas["web_v0_1_0"]))
+        self.assertTrue(dpc._validate_git_sha(self._SHAS["web_v0_1_0"]))
 
 
 class KimiGlmRouteDefinitionContainmentTests(unittest.TestCase):

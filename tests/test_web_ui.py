@@ -1090,7 +1090,7 @@ class WebUiTests(unittest.TestCase):
             }
             with (
                 mock.patch.dict(os.environ, env_updates, clear=False),
-                mock.patch.object(web_ui, "ThreadingHTTPServer", OneShotServer),
+                mock.patch.object(web_ui, "LoopbackThreadingHTTPServer", OneShotServer),
                 mock.patch("builtins.print") as print_call,
             ):
                 first_result = web_ui.main(["--host", "127.0.0.1", "--port", "0"])

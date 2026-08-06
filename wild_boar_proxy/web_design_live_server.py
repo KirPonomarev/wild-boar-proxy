@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import html
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import hashlib
 import json
 import mimetypes
@@ -33,6 +33,7 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+from wild_boar_proxy.loopback_http_server import LoopbackThreadingHTTPServer
 from wild_boar_proxy.active_project_root import (
     ACTIVE_PROJECT_ROOT_ENV,
     ACTIVE_PROJECT_ROOT_SOURCE_CLI_ARG,
@@ -23975,7 +23976,7 @@ def main(argv: list[str] | None = None) -> int:
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
     server = None
     try:
-        server = ThreadingHTTPServer(
+        server = LoopbackThreadingHTTPServer(
             (args.host, args.port),
             build_handler(
                 launch_client_path=args.launch_client_path,
