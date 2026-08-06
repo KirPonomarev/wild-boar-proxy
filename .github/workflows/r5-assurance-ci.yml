@@ -1,0 +1,349 @@
+name: R5 Assurance CI
+
+# Required CI evidence for EXECUTE_WBP_R5_ZERO_GREENWASH_SECURITY_TRUTH_REPAIR
+# stage R56. Every job emits a canonical JSON receipt per workflow attempt
+# (tools/emit_r5_ci_receipt.py). A rerun never rewrites a previous attempt:
+# the attempt number is part of the receipt identity and failed attempts
+# upload their receipt too (if: always()).
+#
+# Jobs:
+#   r5-unit-isolation  - critical test files individually, combined in both
+#                        orders, static forbidden-symbol tests
+#   r5-full-suite      - make test-full on the exact commit SHA, clean checkout
+#   r5-macos-sandbox   - production sandbox profile builder + canaries on macOS
+#   r5-package         - wheel/sdist build, checksums, artifact content hygiene
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  # unit-isolation and full-suite run on macOS: after the R51/R52 security
+  # repair the provider CLI lane fails closed without sandbox-exec, and the
+  # suite contains macOS-native Keychain/launcher/desktop readiness probes.
+  # The first ubuntu attempt (run 31079679178) proved 143 platform-bound
+  # failures; the release contract for `make test-full` is macOS.
+  unit-isolation:
+    name: r5 / unit-isolation
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and test deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
+          python3 -m pip install --upgrade pytest
+
+      - name: Run critical files individually and combined in both orders
+        id: run
+        shell: bash
+        run: |
+          set +e
+          summary=unit-isolation-summary.txt
+          : > "$summary"
+          failed=0
+          run_one() {
+            echo "=== CMD: python3 -m pytest -q $* ===" | tee -a "$summary"
+            python3 -m pytest -q "$@" 2>&1 | tee -a "$summary"
+            code=${PIPESTATUS[0]}
+            echo "=== EXIT: $code ===" | tee -a "$summary"
+            if [ "$code" -ne 0 ]; then failed=1; fi
+          }
+          # Critical test files individually (incl. static forbidden-symbol
+          # tests in test_r51_production_test_separation.py).
+          run_one tests/test_final_candidate_assurance.py
+          run_one tests/test_qwen_one_shot_cli.py
+          run_one tests/test_kimi_one_shot_cli.py
+          run_one tests/test_one_shot_cli_runtime.py
+          run_one tests/test_server_owned_sandbox.py
+          run_one tests/test_gate_evidence_bundle_v2.py
+          run_one tests/test_r51_production_test_separation.py
+          run_one tests/test_r52_sandbox_adversarial.py
+          run_one tests/test_r53_hermeticity.py
+          run_one tests/test_r5_ci_receipt.py
+          # Combined in both orders.
+          run_one tests/test_final_candidate_assurance.py tests/test_qwen_one_shot_cli.py
+          run_one tests/test_qwen_one_shot_cli.py tests/test_final_candidate_assurance.py
+          passed_total=$(grep -oE '[0-9]+ passed' "$summary" | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          cat > unit-isolation-details.json <<EOF
+          {"runner":"ci","tests_passed":$passed_total,"individual_files":10,"combined_orders":2,"candidate_sha":"$GITHUB_SHA"}
+          EOF
+          echo "exit_code=$failed" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Emit CI receipt
+        if: always()
+        run: |
+          python3 tools/emit_r5_ci_receipt.py \
+            --job-name "r5-unit-isolation" \
+            --command "python3 -m pytest -q <critical files individually + both orders>" \
+            --exit-code "${{ steps.run.outputs.exit_code }}" \
+            --summary-file unit-isolation-summary.txt \
+            --details-json unit-isolation-details.json \
+            --out r5-ci-receipt-unit-isolation.json
+
+      - name: Upload receipt and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-ci-unit-isolation-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: |
+            r5-ci-receipt-unit-isolation.json
+            unit-isolation-summary.txt
+            unit-isolation-details.json
+          if-no-files-found: error
+
+      - name: Enforce test result
+        run: exit ${{ steps.run.outputs.exit_code }}
+
+  full-suite:
+    name: r5 / full-suite
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository (clean checkout at exact commit SHA)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and test deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
+          python3 -m pip install --upgrade pytest
+
+      - name: make test-full
+        id: run
+        shell: bash
+        run: |
+          set +e
+          make test-full 2>&1 | tee full-suite-summary.txt
+          code=${PIPESTATUS[0]}
+          passed_total=$(grep -oE '[0-9]+ passed' full-suite-summary.txt | tail -1 | grep -oE '[0-9]+' || echo 0)
+          cat > full-suite-details.json <<EOF
+          {"runner":"ci","platform":"macos","tests_passed":$passed_total,"clean_run":true,"candidate_sha":"$GITHUB_SHA"}
+          EOF
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Emit CI receipt
+        if: always()
+        run: |
+          python3 tools/emit_r5_ci_receipt.py \
+            --job-name "r5-full-suite" \
+            --command "make test-full" \
+            --exit-code "${{ steps.run.outputs.exit_code }}" \
+            --summary-file full-suite-summary.txt \
+            --details-json full-suite-details.json \
+            --out r5-ci-receipt-full-suite.json
+
+      - name: Upload receipt and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-ci-full-suite-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: |
+            r5-ci-receipt-full-suite.json
+            full-suite-summary.txt
+            full-suite-details.json
+          if-no-files-found: error
+
+      - name: Enforce test result
+        run: exit ${{ steps.run.outputs.exit_code }}
+
+  macos-sandbox:
+    name: r5 / macos-sandbox
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and test deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
+          python3 -m pip install --upgrade pytest
+
+      - name: Require sandbox-exec
+        run: |
+          command -v sandbox-exec
+          test -x /usr/bin/sandbox-exec
+
+      - name: Run production sandbox profile canaries
+        id: run
+        shell: bash
+        run: |
+          set +e
+          summary=macos-sandbox-summary.txt
+          : > "$summary"
+          python3 -m pytest -q \
+            tests/test_r52_sandbox_adversarial.py \
+            tests/test_server_owned_sandbox.py \
+            2>&1 | tee -a "$summary"
+          code=${PIPESTATUS[0]}
+          passed_total=$(grep -oE '[0-9]+ passed' "$summary" | tail -1 | grep -oE '[0-9]+' || echo 0)
+          cat > macos-sandbox-details.json <<EOF
+          {"runner":"ci","platform":"macos","sandbox_exec":true,"tests_passed":$passed_total,"candidate_sha":"$GITHUB_SHA"}
+          EOF
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Emit CI receipt
+        if: always()
+        run: |
+          python3 tools/emit_r5_ci_receipt.py \
+            --job-name "r5-macos-sandbox" \
+            --command "python3 -m pytest -q tests/test_r52_sandbox_adversarial.py tests/test_server_owned_sandbox.py" \
+            --exit-code "${{ steps.run.outputs.exit_code }}" \
+            --summary-file macos-sandbox-summary.txt \
+            --details-json macos-sandbox-details.json \
+            --out r5-ci-receipt-macos-sandbox.json
+
+      - name: Upload receipt and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-ci-macos-sandbox-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: |
+            r5-ci-receipt-macos-sandbox.json
+            macos-sandbox-summary.txt
+            macos-sandbox-details.json
+          if-no-files-found: error
+
+      - name: Enforce test result
+        run: exit ${{ steps.run.outputs.exit_code }}
+
+  package:
+    name: r5 / package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade build pytest
+
+      - name: Build wheel and sdist, checksums, content hygiene
+        id: run
+        shell: bash
+        run: |
+          set +e
+          summary=package-summary.txt
+          : > "$summary"
+          failed=0
+          python3 -m build --wheel --sdist --outdir dist . 2>&1 | tee -a "$summary"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then failed=1; fi
+          wheel=$(ls dist/*.whl 2>/dev/null | head -1 || true)
+          sdist=$(ls dist/*.tar.gz 2>/dev/null | head -1 || true)
+          if [ -z "$wheel" ] || [ -z "$sdist" ]; then
+            echo "missing wheel or sdist" | tee -a "$summary"
+            failed=1
+          fi
+          wheel_sha=""; sdist_sha=""
+          if [ "$failed" -eq 0 ]; then
+            sha256sum dist/*.whl dist/*.tar.gz | tee checksums.txt | tee -a "$summary"
+            wheel_sha=$(sha256sum "$wheel" | cut -d' ' -f1)
+            sdist_sha=$(sha256sum "$sdist" | cut -d' ' -f1)
+            # Artifact content hygiene: no __pycache__/.pyc in the wheel,
+            # no secret-like files in the sdist, required web assets present.
+            WHEEL="$wheel" SDIST="$sdist" python3 - <<'PY' 2>&1 | tee -a "$summary"
+          import os, sys, tarfile, zipfile
+          bad = []
+          with zipfile.ZipFile(os.environ["WHEEL"]) as zf:
+              names = zf.namelist()
+          required = {
+              "wild_boar_proxy/web_design_ui/index.html",
+              "wild_boar_proxy/web_design_ui/assets/boar_mark.png",
+          }
+          missing = required - set(names)
+          if missing:
+              bad.append(f"wheel missing assets: {sorted(missing)}")
+          bad += [n for n in names if "__pycache__" in n or n.endswith(".pyc")]
+          with tarfile.open(os.environ["SDIST"]) as tf:
+              snames = tf.getnames()
+          secretish = [
+              n for n in snames
+              if n.endswith((".pem", ".key")) or "/.env" in n or n.endswith("/.env")
+          ]
+          bad += secretish
+          if bad:
+              print("artifact hygiene FAILED:")
+              for item in bad:
+                  print(f"  {item}")
+              sys.exit(1)
+          print("artifact hygiene OK")
+          PY
+            hygiene_code=$?
+            if [ "$hygiene_code" -ne 0 ]; then failed=1; fi
+          fi
+          cat > package-details.json <<EOF
+          {"runner":"ci","wheel_sha256":"$wheel_sha","sdist_sha256":"$sdist_sha","hygiene_passed":$([ "$failed" -eq 0 ] && echo true || echo false),"candidate_sha":"$GITHUB_SHA"}
+          EOF
+          echo "exit_code=$failed" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Emit CI receipt
+        if: always()
+        shell: bash
+        run: |
+          artifact_arg=()
+          wheel=$(ls dist/*.whl 2>/dev/null | head -1 || true)
+          if [ -n "$wheel" ]; then artifact_arg=(--artifact-file "$wheel"); fi
+          python3 tools/emit_r5_ci_receipt.py \
+            --job-name "r5-package" \
+            --command "python3 -m build --wheel --sdist + sha256sum + content hygiene" \
+            --exit-code "${{ steps.run.outputs.exit_code }}" \
+            --summary-file package-summary.txt \
+            "${artifact_arg[@]}" \
+            --details-json package-details.json \
+            --out r5-ci-receipt-package.json
+
+      - name: Upload receipt, checksums and dist artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-ci-package-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: |
+            r5-ci-receipt-package.json
+            package-summary.txt
+            package-details.json
+            checksums.txt
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: warn
+
+      - name: Enforce build result
+        run: exit ${{ steps.run.outputs.exit_code }}
