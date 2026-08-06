@@ -14,11 +14,12 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs
 
+from .loopback_http_server import LoopbackThreadingHTTPServer
 from .web_ingress import (
     FORM_CONTENT_TYPE,
     MAX_WEB_REQUEST_BODY_BYTES,
@@ -1271,7 +1272,7 @@ def main(argv: list[str] | None = None) -> int:
     web_token_state = create_web_token(RuntimePaths.from_env().managed_dir)
     server = None
     try:
-        server = ThreadingHTTPServer(
+        server = LoopbackThreadingHTTPServer(
             (args.host, args.port),
             build_handler(
                 WildBoarWebUi(),

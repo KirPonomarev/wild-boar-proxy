@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=68"]
+# setuptools>=70.1 provides a native bdist_wheel command; older releases
+# require the legacy `wheel` package to be present in the build environment.
+requires = ["setuptools>=70.1"]
 build-backend = "setuptools.build_meta"
 
 [project]

@@ -2846,7 +2846,12 @@ class CliTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
-            timeout=30,
+            # Bounded at 120s: on a loaded shared CI runner the first exec of
+            # the freshly built unsigned .app (system policy assessment) plus
+            # cold interpreter/bytecode startup repeatedly exceeded 30s. The
+            # smoke itself uses per-request timeouts, so this cap only guards
+            # against a genuinely hung child.
+            timeout=120,
         )
         self.assertEqual(smoke_result.returncode, 0, smoke_result.stderr)
         packet = json.loads(smoke_result.stdout)
@@ -3710,6 +3715,7 @@ class CliTests(unittest.TestCase):
             f"exec {shlex.quote(sys.executable)} - \"$@\" <<'PY'\n"
             "import json\n"
             "import re\n"
+            "import socketserver\n"
             "import sys\n"
             "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
             "from pathlib import Path\n"
@@ -3755,6 +3761,13 @@ class CliTests(unittest.TestCase):
             "\n"
             "class ReusableThreadingHTTPServer(ThreadingHTTPServer):\n"
             "    allow_reuse_address = True\n"
+            "    def server_bind(self):\n"
+            "        # No reverse-DNS getfqdn on bind: it stalls ~35s per fresh\n"
+            "        # process on CI runners whose resolver drops PTR queries.\n"
+            "        socketserver.TCPServer.server_bind(self)\n"
+            "        bind_host, bind_port = self.server_address[:2]\n"
+            "        self.server_name = str(bind_host)\n"
+            "        self.server_port = bind_port\n"
             "\n"
             "ReusableThreadingHTTPServer((host, port), Handler).serve_forever()\n"
             "PY\n",
@@ -3765,24 +3778,38 @@ class CliTests(unittest.TestCase):
     def start_owned_stable_runtime_process(self, port: int) -> Path:
         fake_cli = self.bin_dir / "fake-stable-cli-proxy-api"
         self.write_test_stable_runtime_cli_proxy(fake_cli)
-        process = subprocess.Popen(
-            [str(fake_cli), "-config", str(self.stable_dir / "config.yaml")],
-            cwd=ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
+        # The fake runtime is a freshly written executable script; on a loaded
+        # shared CI runner its first exec (system policy assessment of a new
+        # unsigned executable + interpreter startup) can take well over 5s, so
+        # the readiness wait is bounded at 30s with honest failure output
+        # instead of a short fixed window. stderr is captured so a real startup
+        # failure is diagnosable from the assertion message.
+        stderr_log = Path(self.temp_dir.name) / "fake-stable-runtime-stderr.log"
+        with stderr_log.open("wb") as stderr_handle:
+            process = subprocess.Popen(
+                [str(fake_cli), "-config", str(self.stable_dir / "config.yaml")],
+                cwd=ROOT,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_handle,
+                text=True,
+            )
         threading.Thread(target=process.wait, daemon=True).start()
         self.addCleanup(self.terminate_process, process)
         self.addCleanup(self.terminate_owned_stable_runtime_processes)
-        deadline = time.time() + 5
+        deadline = time.time() + 30
         while time.time() < deadline:
             if process.poll() is not None:
-                self.fail(f"fake stable runtime exited early: {process.returncode}")
+                self.fail(
+                    f"fake stable runtime exited early: {process.returncode}: "
+                    f"{stderr_log.read_text(encoding='utf-8', errors='replace')[-2000:]}"
+                )
             if runtime_mod.socket_is_listening("127.0.0.1", port):
                 return fake_cli
             time.sleep(0.05)
-        self.fail("fake stable runtime did not start listening")
+        self.fail(
+            "fake stable runtime did not start listening within 30s; "
+            f"stderr tail: {stderr_log.read_text(encoding='utf-8', errors='replace')[-2000:]}"
+        )
         return fake_cli
 
     def terminate_process(self, process: subprocess.Popen[str]) -> None:
@@ -4244,6 +4271,7 @@ class CliTests(unittest.TestCase):
                 "python3 - <<'PY' >/dev/null 2>&1 &\n"
                 "import json\n"
                 "import os\n"
+                "import socketserver\n"
                 "import threading\n"
                 "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
                 "from pathlib import Path\n"
@@ -4286,7 +4314,15 @@ class CliTests(unittest.TestCase):
                 "        self.send_error(404)\n"
                 "    def log_message(self, fmt, *args):\n"
                 "        return\n"
-                "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+                "class FastBindServer(ThreadingHTTPServer):\n"
+                "    def server_bind(self):\n"
+                "        # No reverse-DNS getfqdn on bind: it stalls ~35s per fresh\n"
+                "        # process on CI runners whose resolver drops PTR queries.\n"
+                "        socketserver.TCPServer.server_bind(self)\n"
+                "        bind_host, bind_port = self.server_address[:2]\n"
+                "        self.server_name = str(bind_host)\n"
+                "        self.server_port = bind_port\n"
+                "server = FastBindServer(('127.0.0.1', port), Handler)\n"
                 "server.serve_forever()\n"
                 "server.server_close()\n"
                 "PY\n"
@@ -7140,6 +7176,7 @@ class CliTests(unittest.TestCase):
             "python3 - <<'PY' >/dev/null 2>&1 &\n"
             "import json\n"
             "import os\n"
+            "import socketserver\n"
             "import threading\n"
             "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
             "from pathlib import Path\n"
@@ -7182,7 +7219,15 @@ class CliTests(unittest.TestCase):
             "        self.send_error(404)\n"
             "    def log_message(self, fmt, *args):\n"
             "        return\n"
-            "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+            "class FastBindServer(ThreadingHTTPServer):\n"
+            "    def server_bind(self):\n"
+            "        # No reverse-DNS getfqdn on bind: it stalls ~35s per fresh\n"
+            "        # process on CI runners whose resolver drops PTR queries.\n"
+            "        socketserver.TCPServer.server_bind(self)\n"
+            "        bind_host, bind_port = self.server_address[:2]\n"
+            "        self.server_name = str(bind_host)\n"
+            "        self.server_port = bind_port\n"
+            "server = FastBindServer(('127.0.0.1', port), Handler)\n"
             "server.serve_forever()\n"
             "server.server_close()\n"
             "PY\n"
@@ -24986,6 +25031,7 @@ class CliTests(unittest.TestCase):
             "import hashlib\n"
             "import json\n"
             "import os\n"
+            "import socketserver\n"
             "import threading\n"
             "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
             "from pathlib import Path\n"
@@ -25046,7 +25092,15 @@ class CliTests(unittest.TestCase):
             "        self.send_error(404)\n"
             "    def log_message(self, fmt, *args):\n"
             "        return\n"
-            "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+            "class FastBindServer(ThreadingHTTPServer):\n"
+            "    def server_bind(self):\n"
+            "        # No reverse-DNS getfqdn on bind: it stalls ~35s per fresh\n"
+            "        # process on CI runners whose resolver drops PTR queries.\n"
+            "        socketserver.TCPServer.server_bind(self)\n"
+            "        bind_host, bind_port = self.server_address[:2]\n"
+            "        self.server_name = str(bind_host)\n"
+            "        self.server_port = bind_port\n"
+            "server = FastBindServer(('127.0.0.1', port), Handler)\n"
             "server.serve_forever()\n"
             "server.server_close()\n"
             "PY\n"

@@ -24,13 +24,18 @@ def _utc_now() -> str:
 
 
 def _run(repo_root: Path, command: list[str], *, check: bool = True) -> str:
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
     if check and completed.returncode != 0:
         raise subprocess.CalledProcessError(
             completed.returncode, command, completed.stdout, completed.stderr

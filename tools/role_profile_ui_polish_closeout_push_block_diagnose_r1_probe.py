@@ -44,15 +44,22 @@ def _run(
     timeout: int | None = None,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    process = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=timeout,
-        env=env,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+            env=env,
+        )
+    except FileNotFoundError:
+        marker = f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+        return subprocess.CompletedProcess(command, 127, stdout=marker, stderr=marker)
+    except OSError as exc:
+        marker = f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
+        return subprocess.CompletedProcess(command, 127, stdout=marker, stderr=marker)
     if check and process.returncode != 0:
         raise RuntimeError(
             f"{' '.join(command)} failed with {process.returncode}: {process.stderr.strip()}"

@@ -17,6 +17,13 @@ on:
   pull_request:
   push:
 
+# macOS runners are the scarce resource: a superseded commit on the same
+# branch must release its runner instead of queueing behind itself.
+# main pushes are never cancelled (each is a distinct candidate receipt).
+concurrency:
+  group: r5-assurance-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 permissions:
   contents: read
 
@@ -136,8 +143,9 @@ jobs:
           make test-full 2>&1 | tee full-suite-summary.txt
           code=${PIPESTATUS[0]}
           passed_total=$(grep -oE '[0-9]+ passed' full-suite-summary.txt | tail -1 | grep -oE '[0-9]+' || echo 0)
+          if [ "$code" -eq 0 ]; then clean_run=true; else clean_run=false; fi
           cat > full-suite-details.json <<EOF
-          {"runner":"ci","platform":"macos","tests_passed":$passed_total,"clean_run":true,"candidate_sha":"$GITHUB_SHA"}
+          {"runner":"ci","platform":"macos","tests_passed":$passed_total,"clean_run":$clean_run,"candidate_sha":"$GITHUB_SHA"}
           EOF
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0

@@ -20,6 +20,14 @@ from pathlib import Path
 from wild_boar_proxy import web_lifecycle
 from wild_boar_proxy.core import packets
 
+# Bounded readiness window for the spawned server child. The production
+# default (15s) is calibrated for an interactive workstation; a loaded
+# shared CI runner can need longer for a fresh interpreter to import the
+# server module and bind. 30s is still a hard bound: on expiry web_start
+# fails honestly with WEB_LISTENER_NOT_READY plus full packet diagnostics
+# (listener_ok/readiness/pid/orphan_cleanup).
+STARTUP_PROBE_TIMEOUT_SECONDS = 30.0
+
 
 def _free_port() -> int:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -59,6 +67,7 @@ class WebLifecycleIntegrationTests(unittest.TestCase):
             host="127.0.0.1",
             port=self.port,
             active_project_root=str(self.managed_dir),
+            startup_probe_timeout=STARTUP_PROBE_TIMEOUT_SECONDS,
         )
         _assert_semantics(self, start_packet)
         self.assertEqual(start_packet["status"], "ok", f"start failed: {start_packet}")
@@ -92,6 +101,7 @@ class WebLifecycleIntegrationTests(unittest.TestCase):
         web_lifecycle.web_start(
             self.paths, host="127.0.0.1", port=self.port,
             active_project_root=str(self.managed_dir),
+            startup_probe_timeout=STARTUP_PROBE_TIMEOUT_SECONDS,
         )
         second = web_lifecycle.web_start(
             self.paths, host="127.0.0.1", port=self.port,

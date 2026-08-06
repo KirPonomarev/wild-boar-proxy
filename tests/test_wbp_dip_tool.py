@@ -1801,24 +1801,32 @@ class WbpDipToolTests(unittest.TestCase):
         self.assertFalse(packet_contains_text(packet, TASK))
 
     def test_tool_dry_run_full_work_mode_reports_full_packet_limits(self) -> None:
-        stdout = StringIO()
-        with mock.patch(
-            "wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli",
-            return_value=Path(
-                "/Applications/ChatGPT.app/Contents/Resources/codex"
-            ),
-        ), redirect_stdout(stdout):
-            exit_code = main(
-                [
-                    "--dry-run",
-                    "--json",
-                    "--work-mode",
-                    "full",
-                    "--codex-bin",
-                    "/Applications/ChatGPT.app/Contents/Resources/codex",
-                    TASK,
-                ]
-            )
+        # Hermetic: the dry-run packet's exit code depends on codex_bin being
+        # an executable file (``codex_bin.is_file() and os.access(X_OK)`` in
+        # wbp_dip_tool.main). Pointing at the real
+        # /Applications/ChatGPT.app/Contents/Resources/codex made the result
+        # depend on whether the host has the app installed; use a fixture
+        # executable instead so the test is independent of the host.
+        with tempfile.TemporaryDirectory() as raw_root:
+            codex_bin = Path(raw_root) / "codex"
+            codex_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex_bin.chmod(0o755)
+            stdout = StringIO()
+            with mock.patch(
+                "wild_boar_proxy.wbp_dip_tool.resolve_official_codex_cli",
+                return_value=codex_bin,
+            ), redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--dry-run",
+                        "--json",
+                        "--work-mode",
+                        "full",
+                        "--codex-bin",
+                        str(codex_bin),
+                        TASK,
+                    ]
+                )
 
         self.assertEqual(exit_code, 0)
         packet = json.loads(stdout.getvalue())

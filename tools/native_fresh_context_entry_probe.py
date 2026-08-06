@@ -17,13 +17,18 @@ def _utc_now() -> str:
 
 
 def _run(repo_root: Path, command: list[str]) -> str:
-    return subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout.strip()
+    try:
+        return subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
 
 
 def _host_process_chain() -> list[dict[str, object]]:

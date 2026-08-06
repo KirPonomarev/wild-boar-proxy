@@ -7790,7 +7790,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
             with (
                 mock.patch.dict(os.environ, env_updates, clear=False),
-                mock.patch.object(live_server, "ThreadingHTTPServer", OneShotServer),
+                mock.patch.object(live_server, "LoopbackThreadingHTTPServer", OneShotServer),
             ):
                 first_result = live_server.main(["--host", "127.0.0.1", "--port", "0"])
                 second_result = live_server.main(["--host", "127.0.0.1", "--port", "0"])
@@ -7840,7 +7840,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
             with (
                 mock.patch.dict(os.environ, env_updates, clear=False),
-                mock.patch.object(live_server, "ThreadingHTTPServer", OneShotServer),
+                mock.patch.object(live_server, "LoopbackThreadingHTTPServer", OneShotServer),
                 mock.patch.object(live_server, "build_handler", side_effect=fake_build_handler),
             ):
                 result = live_server.main(
@@ -33449,8 +33449,24 @@ def write_test_device_login_cli_proxy(
 
 
 def fetch(url: str) -> str:
-    with NO_PROXY_OPENER.open(url, timeout=3) as response:
-        return response.read().decode("utf-8")
+    """Fetch with bounded retry on transient socket/timeout failures.
+
+    Under full-suite load a shared runner can starve the in-process server
+    thread beyond the 3s per-attempt timeout; retry until a hard 15s
+    deadline instead of flaking. HTTPError (an expected protocol response,
+    e.g. 404/403 assertions) is never retried and propagates immediately.
+    """
+    deadline = time.monotonic() + 15.0
+    while True:
+        try:
+            with NO_PROXY_OPENER.open(url, timeout=3) as response:
+                return response.read().decode("utf-8")
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
 
 
 def _web_origin(url: str) -> str:

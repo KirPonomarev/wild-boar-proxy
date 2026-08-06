@@ -45,18 +45,31 @@ from wild_boar_proxy.operator_surface import OwnerSideProcessNetworkObserver, Wb
 from wild_boar_proxy.token_command import emit_local_token
 
 
+def _observer_tool_path(name: str) -> str:
+    found = shutil.which(name)
+    if found:
+        return found
+    canonical = Path(f"/usr/sbin/{name}")
+    return str(canonical) if canonical.exists() else ""
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _run(repo_root: Path, command: list[str], *, check: bool = False) -> str:
-    process = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return f"UNAVAILABLE_FILE_NOT_FOUND: {command[0]}"
+    except OSError as exc:
+        return f"UNAVAILABLE_OSERROR: {command[0]}: {exc}"
     if check and process.returncode != 0:
         raise RuntimeError(
             f"{' '.join(command)} failed with {process.returncode}: {process.stderr.strip()}"
@@ -313,9 +326,9 @@ def _launch_native(
 def _capability_only(repo_root: Path, evidence_dir: Path) -> dict[str, Any]:
     packets = _sync_packets(repo_root, evidence_dir)
     capability = build_native_direct_egress_capability_packet(
-        lsof_path=shutil.which("lsof") or "",
-        tcpdump_path=shutil.which("tcpdump") or "",
-        nettop_path=shutil.which("nettop") or "",
+        lsof_path=_observer_tool_path("lsof"),
+        tcpdump_path=_observer_tool_path("tcpdump"),
+        nettop_path=_observer_tool_path("nettop"),
         process_tree_observer_available=True,
     )
     summary = {
@@ -345,9 +358,9 @@ def _capability_only(repo_root: Path, evidence_dir: Path) -> dict[str, Any]:
 def _live(repo_root: Path, evidence_dir: Path, *, model: str, wait_seconds: int) -> dict[str, Any]:
     packets = _sync_packets(repo_root, evidence_dir)
     capability = build_native_direct_egress_capability_packet(
-        lsof_path=shutil.which("lsof") or "",
-        tcpdump_path=shutil.which("tcpdump") or "",
-        nettop_path=shutil.which("nettop") or "",
+        lsof_path=_observer_tool_path("lsof"),
+        tcpdump_path=_observer_tool_path("tcpdump"),
+        nettop_path=_observer_tool_path("nettop"),
         process_tree_observer_available=True,
     )
     packets["observer_capability_packet.json"] = capability
