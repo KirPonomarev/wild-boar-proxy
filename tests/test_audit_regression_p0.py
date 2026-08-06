@@ -22,6 +22,7 @@ import fakes
 
 from wild_boar_proxy import actor_dispatcher as ad
 from wild_boar_proxy import execution_core_design_gate as ecg
+from wild_boar_proxy import gate_evidence_bundle_v2 as gebv
 from wild_boar_proxy import one_shot_cli_runtime as osr
 from wild_boar_proxy.thread_context_ledger import ThreadContextLedger
 
@@ -158,20 +159,33 @@ class AuditP0BindingIdUniqueness(unittest.TestCase):
 
 
 class AuditP1DesignGateHonestChecks(unittest.TestCase):
-    """P1: design gate must reject fake stages and bad SHA."""
+    """P1/R54: the design gate must reject forged input and answer with
+    typed evidence failures, never caller-fed truth."""
 
-    def test_fake_stages_and_bad_sha_rejected(self) -> None:
-        packet = ecg.run_execution_core_design_gate(
-            main_head="not-a-git-sha",
-        )
-        self.assertFalse(packet["design_gate_earned"])
-        self.assertIsNone(packet["design_gate_marker"])
+    def test_main_head_kwarg_rejected_as_forged_input(self) -> None:
+        with self.assertRaises(TypeError):
+            ecg.run_execution_core_design_gate(main_head="not-a-git-sha")  # type: ignore[call-arg]
 
-    def test_bad_sha_rejected_even_with_real_stages(self) -> None:
-        packet = ecg.run_execution_core_design_gate(
-            main_head="abc",
-        )
-        self.assertFalse(packet["design_gate_earned"])
+    def test_completed_stages_kwarg_rejected_as_forged_input(self) -> None:
+        with self.assertRaises(TypeError):
+            ecg.run_execution_core_design_gate(  # type: ignore[call-arg]
+                completed_stages=["B00_BASELINE_ADMISSION_REPAIR"]
+            )
+
+    def test_gate_failure_codes_are_typed(self) -> None:
+        packet = ecg.run_execution_core_design_gate()
+        if not packet["design_gate_earned"]:
+            self.assertIn(
+                packet["machine_error_code"],
+                {
+                    gebv.EVIDENCE_SCHEMA_INVALID,
+                    gebv.EVIDENCE_DIGEST_MISMATCH,
+                    gebv.EVIDENCE_COMMIT_UNREACHABLE,
+                    gebv.EVIDENCE_STAGE_INVALIDATED,
+                    gebv.EVIDENCE_CANDIDATE_MISMATCH,
+                    ecg.DESIGN_GATE_NOT_EARNED,
+                },
+            )
 
 
 if __name__ == "__main__":
