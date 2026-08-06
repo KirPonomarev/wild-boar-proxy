@@ -21,9 +21,14 @@ permissions:
   contents: read
 
 jobs:
+  # unit-isolation and full-suite run on macOS: after the R51/R52 security
+  # repair the provider CLI lane fails closed without sandbox-exec, and the
+  # suite contains macOS-native Keychain/launcher/desktop readiness probes.
+  # The first ubuntu attempt (run 31079679178) proved 143 platform-bound
+  # failures; the release contract for `make test-full` is macOS.
   unit-isolation:
     name: r5 / unit-isolation
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 30
 
     steps:
@@ -105,7 +110,7 @@ jobs:
 
   full-suite:
     name: r5 / full-suite
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 90
 
     steps:
@@ -132,7 +137,7 @@ jobs:
           code=${PIPESTATUS[0]}
           passed_total=$(grep -oE '[0-9]+ passed' full-suite-summary.txt | tail -1 | grep -oE '[0-9]+' || echo 0)
           cat > full-suite-details.json <<EOF
-          {"runner":"ci","tests_passed":$passed_total,"clean_run":true,"candidate_sha":"$GITHUB_SHA"}
+          {"runner":"ci","platform":"macos","tests_passed":$passed_total,"clean_run":true,"candidate_sha":"$GITHUB_SHA"}
           EOF
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
