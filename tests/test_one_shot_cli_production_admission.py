@@ -211,7 +211,7 @@ class ProductionAdmissionTests(unittest.TestCase):
         record = payload["records"][self.entry.tool_id]
         self.assertEqual(record["manifest_sha256"], osr.manifest_entry_digest(self.entry))
         self.assertEqual(record["binary_sha256"], probe["binary_sha256"])
-        self.assertEqual(record["binary_realpath"], "/bin/echo")
+        self.assertEqual(record["binary_realpath"], os.path.realpath("/bin/echo"))
 
     def test_failed_atomic_replace_preserves_previous_canonical_admission(self) -> None:
         admitted = self._admit()
