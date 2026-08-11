@@ -82,6 +82,8 @@ binary, provider adapter, login, or live-network permission is absent.
   which observed binary revision is admitted. Neither alone permits a run.
 - Official standalone binaries may resolve from fixed conventional install
   roots, but no ambient `PATH`, caller path, or shell lookup is authoritative.
+- Tests that assert admitted executable identity compare canonical realpaths,
+  not platform-specific aliases such as literal `/bin/echo`.
 - Holding an exact admission digest and rechecking it immediately before spawn
   is the conservative B09 boundary; binary replacement invalidates admission.
 
@@ -106,11 +108,11 @@ binary, provider adapter, login, or live-network permission is absent.
 
 ## Verification
 
-- tests: 106 initial focused tests passed; after the Linux CI portability
-  repair, 20 focused portability/fail-closed tests passed, `make test-core`
-  passed 630 tests and 132 subtests in 66.37 seconds, `make test-full` passed
-  5066 tests and 985 subtests in 1298.89 seconds, and
-  `make test-custom-stability` passed 27 tests and 5 subtests in 2.63 seconds
+- tests: 106 initial focused tests passed; after the final Linux CI portability
+  repair, 20 focused portability/fail-closed tests passed in 2.65 seconds,
+  `make test-core` passed 630 tests and 132 subtests in 65.72 seconds,
+  `make test-full` passed 5066 tests and 985 subtests in 1296.91 seconds, and
+  `make test-custom-stability` passed 27 tests and 5 subtests in 2.65 seconds
 - build: `make check` compiled the repository Python surfaces and collected
   5066 tests; only the pre-existing Pillow `getdata` deprecation warning was
   emitted by the full suite
@@ -125,6 +127,11 @@ binary, provider adapter, login, or live-network permission is absent.
   platform-neutral sandbox transport; the candidate was invalidated, no
   same-signature rerun was used, and the test-only repair retained the separate
   production fail-closed proof
+- second CI diagnosis: the refreshed exact candidate then exposed one later
+  assertion that expected literal `/bin/echo` instead of its canonical Linux
+  realpath `/usr/bin/echo`; that candidate was also invalidated without a
+  rerun, the assertion was made canonical, and the full verification set was
+  executed again
 
 ## Open Questions
 
