@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 from typing import Any
 from urllib import error, request
 import webbrowser
@@ -42,6 +43,7 @@ DESKTOP_WEB_SHELL_ENTRYPOINT = "wild_boar_proxy.desktop_web_shell"
 DESKTOP_WEB_SHELL_STRATEGY = "web_design_live_server_local_only"
 DESKTOP_WEB_SHELL_DEFAULT_HOST = "127.0.0.1"
 DESKTOP_WEB_SHELL_DEFAULT_PORT = 8788
+DESKTOP_WEB_SHELL_SMOKE_TOTAL_TIMEOUT_SECONDS = 30.0
 DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH = "/api/action"
 DESKTOP_WEB_SHELL_PUBLIC_BIND_ERROR = "DESKTOP_WEB_SHELL_PUBLIC_BIND_REJECTED"
 DESKTOP_WEB_SHELL_BIND_ERROR = "DESKTOP_WEB_SHELL_BIND_FAILED"
@@ -122,6 +124,13 @@ def _post_json_without_auth(url: str, *, timeout_seconds: float = 3.0) -> dict[s
             "http_status": int(exc.code),
             "payload": json.loads(exc.read().decode("utf-8")),
         }
+
+
+def _remaining_smoke_timeout(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Desktop web shell smoke deadline expired.")
+    return remaining
 
 
 def _desktop_sandbox_copy_port(action_server_port: int) -> int:
@@ -404,18 +413,37 @@ def run_desktop_web_shell_smoke(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
+        smoke_deadline = (
+            time.monotonic() + DESKTOP_WEB_SHELL_SMOKE_TOTAL_TIMEOUT_SECONDS
+        )
         actual_port = int(server.server_port)
         admitted_host = validate_desktop_bind_host(host)
         base_url = _base_url(admitted_host, actual_port)
-        index_html = _fetch_text(f"{base_url}/")
-        live_readonly = _fetch_json(f"{base_url}/api/live-readonly")
-        accounts_readonly = _fetch_json(f"{base_url}/api/accounts-readonly")
-        api_connections_readonly = _fetch_json(
-            f"{base_url}/api/api-connections-readonly"
+        index_html = _fetch_text(
+            f"{base_url}/",
+            timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
         )
-        action_metadata = json.loads(_fetch_text(f"{base_url}/api/actions"))
+        live_readonly = _fetch_json(
+            f"{base_url}/api/live-readonly",
+            timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
+        )
+        accounts_readonly = _fetch_json(
+            f"{base_url}/api/accounts-readonly",
+            timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
+        )
+        api_connections_readonly = _fetch_json(
+            f"{base_url}/api/api-connections-readonly",
+            timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
+        )
+        action_metadata = json.loads(
+            _fetch_text(
+                f"{base_url}/api/actions",
+                timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
+            )
+        )
         unauthorized_post = _post_json_without_auth(
-            f"{base_url}{DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH}"
+            f"{base_url}{DESKTOP_WEB_SHELL_UNAUTHORIZED_POST_PATH}",
+            timeout_seconds=_remaining_smoke_timeout(smoke_deadline),
         )
         packet = build_desktop_web_shell_packet(
             host=admitted_host,
