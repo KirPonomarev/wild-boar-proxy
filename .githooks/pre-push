@@ -4,7 +4,6 @@
 
 set -euo pipefail
 
-git rev-parse --show-toplevel >/dev/null
+repo_root="$(git rev-parse --show-toplevel)"
 
-git config core.hooksPath .githooks
-echo "Configured git hooks path: .githooks"
+exec python3 "$repo_root/tools/check_push_ancestry.py"
