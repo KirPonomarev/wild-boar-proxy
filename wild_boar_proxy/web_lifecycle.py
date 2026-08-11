@@ -777,7 +777,19 @@ def web_start(
             )
         if _loopback_listener_open(host, port, timeout=0.5):
             listener_ok = True
-            readiness = _probe_live_readonly(host, port, timeout=2.0)
+            # Give the heavyweight live-readonly snapshot the remaining
+            # startup budget. A fixed short request timeout can abandon a
+            # still-running handler and immediately start another one,
+            # amplifying cold-start load until the outer deadline expires.
+            # The request remains strictly bounded by the original deadline.
+            remaining_probe_budget = deadline - time.monotonic()
+            if remaining_probe_budget <= 0:
+                break
+            readiness = _probe_live_readonly(
+                host,
+                port,
+                timeout=remaining_probe_budget,
+            )
             if readiness.get("readiness_ok"):
                 break
         time.sleep(STARTUP_PROBE_INTERVAL_SECONDS)

@@ -370,6 +370,53 @@ class ClearStaleLedgerContractTests(WebLifecyclePathsTests):
 
 
 class FailedStartOrphanCleanupTests(WebLifecyclePathsTests):
+    def test_live_readiness_request_uses_remaining_startup_budget(self) -> None:
+        port = _free_loopback_port()
+        fake_process = mock.MagicMock()
+        fake_process.pid = 999996
+        fake_process.poll.return_value = None
+        observed_timeouts: list[float] = []
+
+        def ready_probe(_host: str, _port: int, timeout: float):
+            observed_timeouts.append(timeout)
+            return {
+                "readiness_ok": True,
+                "readiness_probed": True,
+                "http_status": 200,
+                "commands_present": True,
+            }
+
+        startup_budget = 0.2
+        with (
+            mock.patch.object(web_lifecycle.subprocess, "Popen", return_value=fake_process),
+            mock.patch.object(
+                web_lifecycle,
+                "_process_start_time",
+                return_value="Thu Jan  1 00:00:00 1970",
+            ),
+            mock.patch.object(
+                web_lifecycle,
+                "_loopback_listener_open",
+                side_effect=[False, True],
+            ),
+            mock.patch.object(
+                web_lifecycle,
+                "_probe_live_readonly",
+                side_effect=ready_probe,
+            ),
+        ):
+            packet = web_lifecycle.web_start(
+                self.paths,
+                port=port,
+                startup_probe_timeout=startup_budget,
+            )
+
+        _assert_packet_semantics(self, packet)
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(len(observed_timeouts), 1)
+        self.assertGreater(observed_timeouts[0], 0)
+        self.assertLessEqual(observed_timeouts[0], startup_budget)
+
     def test_failed_start_stops_child_and_cleans_all_artifacts(self) -> None:
         port = _free_loopback_port()
         fake_process = mock.MagicMock()
