@@ -18,10 +18,10 @@ bounded startup deadline.
 ## Contour Capsule
 
 - goal: bind the heavyweight live-readonly readiness request to the remaining outer startup budget so one cold request can finish without two-second timeout retry amplification
-- branch: codex/r60b-web-readiness-budget
-- head: 4795e295cf835890746cf20178d3c8ce478f0388 (verified implementation head; this closeout is documentation-only)
+- branch: codex/r60b-web-readiness-budget-v2
+- head: 0d555de78cfc0b654271d6e44e0a624a64e18f06 (recovery integration head; implementation commit remains 4795e295cf835890746cf20178d3c8ce478f0388)
 - touched files: wild_boar_proxy/web_lifecycle.py, tests/test_web_lifecycle.py, audit_results/R60B_WEB_READINESS_BUDGET_REPAIR_SPEC_2026-08-11.md, audit_results/R60B_WEB_READINESS_BUDGET_REPAIR_closeout_2026-08-11.md
-- tests run: 27 focused lifecycle tests; one real manual start/status/open/stop lifecycle; 630 core tests and 132 subtests; 27 Custom stability tests and 5 subtests; 5067 full-suite tests and 985 subtests
+- tests run: 65 combined focused tests and 3 subtests; 4 real lifecycle integration tests; one real manual start/status/open/stop lifecycle; 630 core tests and 132 subtests; 27 Custom stability tests and 5 subtests; 5068 recovery full-suite tests and 985 subtests
 - blocked risks: none within the admitted lifecycle scope; full live-readonly snapshot cost remains intentionally bounded by the existing startup deadline
 - closure state: CLOSED
 
@@ -31,6 +31,14 @@ bounded startup deadline.
 - build: `make check` compiled repository Python surfaces and collected 5067 tests; `make test-custom-stability` passed 27 tests and 5 subtests in 3.80 seconds; the only full-suite warning was the pre-existing Pillow `getdata` deprecation
 - manual: one isolated temporary managed root completed real `web_start`, `web_status`, `web_open`, and `web_stop`; start proved listener and full live-readonly readiness, status classified `running`, stop closed the listener, final status classified `no_ledger`, and no owner artifacts remained
 - live verification: local loopback only; no provider request, credential, login, external network call, public bind, host proxy change, or fixed production managed-root mutation occurred
+
+## Recovery Verification
+
+- the original PR #148 push and pull-request full suites were preserved without rerun after they exposed two sibling auth-recovery test-clock failures outside the R60B write set;
+- R60C, R60D, and R60E repaired those independent baseline timing contracts and merged through PR #149 as `9189214a8538931b7675ffa6c700ad6a4962cf01`;
+- a new recovery branch preserved the original R60B commits, merged that green baseline without conflict as `0d555de78cfc0b654271d6e44e0a624a64e18f06`, and retained the exact four-file R60B diff against `main`;
+- renewed verification passed 65 combined focused tests and 3 subtests in 13.75 seconds, 4 lifecycle integration tests in 15.66 seconds, `make check` with 5068 collected tests, 630 core tests and 132 subtests, 27 Custom stability tests and 5 subtests, and 5068 full-suite tests with 985 subtests in 1356.70 seconds;
+- the only recovery full-suite warning remained the pre-existing Pillow `getdata` deprecation.
 
 ## Failure Diagnosis and Repair
 
@@ -44,13 +52,13 @@ bounded startup deadline.
 
 - spec: `audit_results/R60B_WEB_READINESS_BUDGET_REPAIR_SPEC_2026-08-11.md`
 - packet: real lifecycle command packets proved `status=ok`, listener/readiness truth, `running`, exact stop cleanup, and terminal `no_ledger`
-- report: the failed pre-repair full-suite and focused reproduction outputs were preserved in the external execution-state history; the repaired candidate completed every admitted local gate from zero
+- report: the failed pre-repair and PR #148 outputs remain preserved in external execution-state history; revisions 102 through 104 bind the non-rewriting recovery branch, green baseline merge, and renewed local gates
 
 ## Git
 
-- branch: codex/r60b-web-readiness-budget
-- commit: 4795e295cf835890746cf20178d3c8ce478f0388 contains the verified runtime repair, regression, and spec
-- pushed: yes; origin branch was read back exactly at 4795e295cf835890746cf20178d3c8ce478f0388 before this documentation-only closeout was authored
+- branch: codex/r60b-web-readiness-budget-v2
+- commit: 4795e295cf835890746cf20178d3c8ce478f0388 contains the verified runtime repair, regression, and spec; 0d555de78cfc0b654271d6e44e0a624a64e18f06 integrates it with the green PR #149 baseline
+- pushed: yes; the logically complete recovery integration plus refreshed closeout commit is pushed and read back from the new branch before merge admission
 
 ## Scope Check
 
@@ -59,5 +67,5 @@ bounded startup deadline.
 
 ## Notes
 
-- blockers encountered: the R60A full-suite verification exposed this unrelated but production-relevant cold-start lifecycle defect; R60A stayed isolated in an exact stash while this dedicated contour localized and repaired it
+- blockers encountered: the R60A full-suite verification exposed this unrelated but production-relevant cold-start lifecycle defect; PR #148 then exposed independent baseline test-clock failures, which were isolated and merged separately before the R60B recovery branch renewed all gates; R60A stayed isolated in an exact stash throughout
 - resume from here: CLOSED
