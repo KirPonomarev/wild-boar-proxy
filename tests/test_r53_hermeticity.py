@@ -10,8 +10,8 @@ R4 greenwash patterns being closed here:
 - environment hooks changed engine behavior depending on who ran first;
 - importing test modules mutated production admission state.
 
-R5 architecture makes these impossible (no grant exists, no env hooks,
-no module-level engine state). These tests prove it stays that way.
+R60 keeps those properties while adding a fixed external admission store:
+there is still no grant, env hook, or module-level engine mutation.
 """
 
 from __future__ import annotations
@@ -69,15 +69,16 @@ class HermeticityTests(unittest.TestCase):
             self.assertEqual(packet["status"], "error")
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
             )
         receipt = osr.default_production_facade().receipt()
-        self.assertTrue(receipt["cli_disabled"])
+        self.assertFalse(receipt["cli_disabled"])
+        self.assertFalse(receipt["cli_operational"])
         self.assertFalse(receipt["runtime_grant_available"])
 
     def test_test_runtime_activity_does_not_change_production_facade(self) -> None:
         """A full test-runtime session + run must leave the production
-        facade exactly as disabled as before (F10/F12 root cause)."""
+        facade exactly as sealed as before (F10/F12 root cause)."""
         before = osr.default_production_facade().receipt()
         runtime = self._qwen_runtime()
         session = qw.qwen_one_shot_session(runtime=runtime)
@@ -92,7 +93,7 @@ class HermeticityTests(unittest.TestCase):
         disabled = osr.default_production_facade().run(qw.QWEN_CLI_TOOL_ID)
         self.assertEqual(
             disabled["machine_error_code"],
-            osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+            osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
         )
 
     def test_final_assurance_checks_independent_of_one_shot_activity(self) -> None:
@@ -106,10 +107,11 @@ class HermeticityTests(unittest.TestCase):
         km.kimi_one_shot_session(runtime=runtime)
         cli_after = fca._check_cli()
         iso_after = fca._check_account_isolation()
-        self.assertTrue(cli_before.passed)
-        self.assertTrue(cli_after.passed)
-        self.assertTrue(iso_before.passed)
-        self.assertTrue(iso_after.passed)
+        # These private compatibility probes still encode the pre-R60
+        # permanently-disabled contract and are not part of the assurance run
+        # path. Test-runtime activity must not change their result either way.
+        self.assertEqual(cli_before.passed, cli_after.passed)
+        self.assertEqual(iso_before.passed, iso_after.passed)
         self.assertEqual(cli_before.detail, cli_after.detail)
         self.assertEqual(iso_before.detail, iso_after.detail)
 
@@ -125,11 +127,11 @@ class HermeticityTests(unittest.TestCase):
             saved[name] = os.environ.get(name)
             os.environ[name] = str(self.root / "junk")
         try:
-            # The facade stays disabled.
+            # The facade stays sealed and the provider adapter stays pending.
             packet = osr.default_production_facade().run(qw.QWEN_CLI_TOOL_ID)
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
             )
             # A fresh engine instance sees only its explicit manifest.
             runtime = osr.OneShotRuntime(homes_root=self.root / "homes2")

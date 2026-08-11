@@ -37,6 +37,10 @@ case "$1" in
     wait "$CHILD"
     echo "slept"
     ;;
+  --orphan)
+    sleep "${2:-30}" &
+    echo "$!"
+    ;;
   --env-report)
     echo "PATH=$PATH"
     echo "HOME=$HOME"
@@ -130,8 +134,19 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertFalse(entry.server_owned)  # fake hook, not server-owned
         self.assertEqual(entry.tool_id, "fake-cli")
         self.assertEqual(entry.version_args, ("--version",))
-        # The production server-owned manifest stays honestly empty.
-        self.assertEqual(osr.SERVER_OWNED_TOOL_MANIFEST, ())
+        # Fake declarations remain instance-local while production carries
+        # immutable, non-operational Qwen/Kimi declarations.
+        self.assertEqual(
+            {item.tool_id for item in osr.SERVER_OWNED_TOOL_MANIFEST},
+            {"qwen-cli", "kimi-cli"},
+        )
+        for item in osr.SERVER_OWNED_TOOL_MANIFEST:
+            self.assertTrue(item.server_owned)
+            self.assertFalse(item.provider_adapter_admitted)
+            self.assertTrue(item.allowed_argv_schema)
+            self.assertTrue(item.allowed_environment_keys)
+            self.assertEqual(item.sandbox_policy, "deny_default_offline")
+            self.assertEqual(item.session_policy, osr.ONE_SHOT_NO_RESUME_REASON)
 
     def test_sterile_probe_returns_realpath_version_digest(self) -> None:
         packet = self.runtime.run_sterile_probe("fake-cli")
@@ -173,7 +188,7 @@ class FakeAdapterTests(unittest.TestCase):
         for key in ("LEAK_TEST_SECRET", "LEAK_TEST_TOKEN", "LEAK_TEST_PASSWORD"):
             self.assertNotIn(key, env)
         self.assertTrue(env["PATH"].startswith("/usr/bin"))
-        self.assertNotIn("/opt/homebrew", env["PATH"])
+        self.assertEqual(env["PATH"], os.pathsep.join(osr.STERILE_PATH_ENTRIES))
         self.assertEqual(env["HOME"], str((self.homes_root / "probe-home").resolve()))
 
         handle = self.runtime.one_shot_cli_handle(
@@ -302,6 +317,16 @@ class FakeAdapterTests(unittest.TestCase):
         with self.assertRaises(ProcessLookupError):
             os.killpg(handle.pid, 0)
 
+    def test_normal_parent_exit_cleans_background_group_member(self) -> None:
+        packet = self.runtime.one_shot_cli_run(
+            "fake-cli",
+            args=("--orphan", "30"),
+        )
+        self.assertEqual(packet["status"], "ok")
+        child_pid = int(packet["run"]["stdout"].strip())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(child_pid, 0)
+
     def test_timeout_is_bounded(self) -> None:
         packet = self.runtime.one_shot_cli_run(
             "fake-cli",
@@ -313,6 +338,8 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertEqual(run["machine_error_code"], osr.ONE_SHOT_RUN_TIMEOUT)
         self.assertTrue(run["timed_out"])
         self.assertFalse(run["cancelled"])
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(run["pid"], 0)
 
     def test_output_cap_truncates_honestly(self) -> None:
         packet = self.runtime.one_shot_cli_run(
@@ -397,10 +424,15 @@ class FakeAdapterTests(unittest.TestCase):
     def test_runtime_receipt_declared_not_live(self) -> None:
         receipt = osr.default_production_facade().receipt()
         self.assertEqual(receipt["status"], "ok")
-        self.assertTrue(receipt["cli_disabled"])
-        self.assertEqual(receipt["disabled_reason"], "pending_security_admission")
+        self.assertFalse(receipt["cli_disabled"])
+        self.assertFalse(receipt["cli_operational"])
+        self.assertTrue(receipt["production_admission_supported"])
         self.assertFalse(receipt["runtime_grant_available"])
         self.assertTrue(receipt["declared_not_live_verified"])
+        self.assertEqual(
+            {item["tool_id"] for item in receipt["server_owned_tools"]},
+            {"qwen-cli", "kimi-cli"},
+        )
         self.assertEqual(receipt["schema_version"], osr.ONE_SHOT_RUNTIME_SCHEMA_VERSION)
 
     def test_handle_env_digest_stable(self) -> None:
@@ -415,30 +447,36 @@ class FakeAdapterTests(unittest.TestCase):
 
 
 class ProductionFacadeTests(unittest.TestCase):
-    """The production facade is disabled before ANY side effect."""
+    """Pending provider adapters fail closed before persistent side effects."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
-        self.facade = osr.ProductionOneShotFacade(homes_root=self.root / "homes")
+        self.facade = osr.ProductionOneShotFacade(
+            homes_root=self.root / "homes",
+            admission_root=self.root / "admission",
+        )
 
-    def test_every_operational_surface_is_disabled_without_fs_writes(self) -> None:
+    def test_pending_provider_surfaces_are_typed_without_fs_writes(self) -> None:
         for call in (
             lambda: self.facade.create_home("qwen"),
             lambda: self.facade.session("qwen"),
             lambda: self.facade.auth_session("qwen"),
-            lambda: self.facade.probe("qwen-cli"),
             lambda: self.facade.run("qwen-cli"),
         ):
             packet = call()
             self.assertEqual(packet["status"], "error")
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
             )
             self.assertEqual(packet["changed_files"], [])
-            self.assertTrue(packet["cli_disabled"])
+            self.assertFalse(packet["cli_disabled"])
+        probe = self.facade.probe("qwen-cli")
+        self.assertEqual(probe["status"], "error")
+        self.assertEqual(probe["machine_error_code"], osr.TOOL_BINARY_NOT_FOUND)
+        self.assertFalse(probe["probe_grants_operational_authority"])
         self.assertFalse((self.root / "homes").exists())
         self.assertEqual(list(self.root.rglob("*")), [])
 
@@ -447,6 +485,7 @@ class ProductionFacadeTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "ok")
         self.assertEqual(receipt["changed_files"], [])
         self.assertFalse((self.root / "homes").exists())
+        self.assertFalse((self.root / "admission").exists())
 
 
 if __name__ == "__main__":

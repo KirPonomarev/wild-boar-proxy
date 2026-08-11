@@ -1,22 +1,23 @@
 # SPDX-FileCopyrightText: 2026 Kirill Ponomarev
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Generic server-owned one-shot CLI runtime (B09, R5 separation).
+"""Generic server-owned one-shot CLI runtime (B09 production admission).
 
-Architecture after the R5 production/test separation:
+Production authority has two independently required layers:
 
-- `OneShotRuntime` is the engine. Every instance carries its own sealed
-  configuration (homes root, manifest). There is no module-level mutable
-  state, no environment-variable hook, no test-injection API, and no
-  runtime admission/grant mechanism anywhere in this package.
-- `ProductionOneShotFacade` is the only production entry surface. It is
-  built from server-owned constants and is fail-closed: every operational
-  method returns `CLI_DISABLED_PENDING_SECURITY_ADMISSION` before any
-  filesystem probe, binary resolution, digest, or subprocess. Production
-  CLI stays disabled for the whole R5 contour and beyond; enabling it is
-  a separate future contour with its own admission evidence.
-- Tests construct their own `OneShotRuntime` from `tests/fakes.py` and
-  never touch the production facade. Production code never imports tests.
+- an immutable code declaration describes every executable, argv,
+  environment, parser, bound, process, sandbox, auth, session, and network
+  surface that WBP may admit;
+- a WBP-owned external admission record binds that declaration to one exact
+  executable realpath, content digest, and observed version.
+
+`OneShotRuntime` remains the sealed execution engine used by explicit test
+adapters. `ProductionOneShotFacade` is the only production entry surface. It
+can probe a declared executable without granting operational authority, but it
+revalidates both layers immediately before every operational spawn. Qwen and
+Kimi are declared here while their provider adapters remain not admitted until
+their separate B10/B11 contours. No environment hook, caller-selected path,
+global grant, or mutable module-level manifest exists.
 
 Sandbox truth: every child process spawned by `OneShotRuntime` runs under
 a macOS seatbelt profile built by the single production builder
@@ -33,36 +34,72 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import tempfile
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+import fcntl
 
 from .core import packets as command_packets
 from .runtime import build_command_payload
 from .runtime_errors import RuntimeErrorInfo
 
-ONE_SHOT_RUNTIME_SCHEMA_VERSION = 2
+ONE_SHOT_RUNTIME_SCHEMA_VERSION = 3
+ONE_SHOT_ADMISSION_SCHEMA_VERSION = 1
 
 # Production server-owned homes root. FIXED constant, not overridable by
 # environment, config, prompt, or caller.
 DEFAULT_HOMES_ROOT = (
     Path.home() / "Library" / "Application Support" / "WildBoarProxy" / "one-shot-homes"
 )
+DEFAULT_ADMISSION_ROOT = (
+    Path.home()
+    / "Library"
+    / "Application Support"
+    / "WildBoarProxy"
+    / "one-shot-cli-admission"
+)
+ADMISSION_FILENAME = "admissions.json"
+ADMISSION_LOCK_FILENAME = "writer.lock"
 
 DEFAULT_PROBE_TIMEOUT_SECONDS = 20.0
 DEFAULT_RUN_TIMEOUT_SECONDS = 300.0
 DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024
-DEFAULT_DIGEST_SIZE_LIMIT = 5_000_000
+DEFAULT_DIGEST_SIZE_LIMIT = 512 * 1024 * 1024
 CANCEL_GRACE_SECONDS = 5.0
 
-# Sterile PATH: system bins only; brew/user bins are not inherited so
-# first-launch config from user tooling cannot leak in.
-STERILE_PATH_ENTRIES = ("/usr/bin", "/bin", "/usr/sbin", "/sbin")
+# Fixed executable roots. These are code-owned and never inherited from the
+# ambient PATH. System roots stay first for deterministic system-tool lookup;
+# conventional standalone-CLI roots are explicit candidates rather than an
+# authorization to search arbitrary user locations.
+STERILE_PATH_ENTRIES = (
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    str(Path.home() / ".local" / "bin"),
+    str(DEFAULT_ADMISSION_ROOT / "bin"),
+)
+
+TRUSTED_BINARY_REALPATH_ROOTS = (
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/System",
+    "/Library",
+    "/opt/homebrew",
+    "/usr/local",
+    str(Path.home() / ".local"),
+    str(DEFAULT_ADMISSION_ROOT),
+)
 
 # Environment keys that must never cross into a one-shot child.
 SECRET_ENV_SUFFIXES = (
@@ -84,19 +121,47 @@ ONE_SHOT_SCHEMA_INVALID = "ONE_SHOT_SCHEMA_INVALID"
 ONE_SHOT_PATH_VIOLATION = "ONE_SHOT_PATH_VIOLATION"
 CLI_DISABLED_PENDING_SECURITY_ADMISSION = "CLI_DISABLED_PENDING_SECURITY_ADMISSION"
 CLI_UNAVAILABLE_UNSAFE = "CLI_UNAVAILABLE_UNSAFE"
+CLI_PROVIDER_ADAPTER_NOT_ADMITTED = "CLI_PROVIDER_ADAPTER_NOT_ADMITTED"
+CLI_BINARY_ADMISSION_MISSING = "CLI_BINARY_ADMISSION_MISSING"
+CLI_BINARY_ADMISSION_INVALID = "CLI_BINARY_ADMISSION_INVALID"
+CLI_BINARY_IDENTITY_DRIFT = "CLI_BINARY_IDENTITY_DRIFT"
+CLI_ADMISSION_DIGEST_MISMATCH = "CLI_ADMISSION_DIGEST_MISMATCH"
+CLI_AUTH_NOT_ADMITTED = "CLI_AUTH_NOT_ADMITTED"
+CLI_NETWORK_POLICY_NOT_ADMITTED = "CLI_NETWORK_POLICY_NOT_ADMITTED"
+ONE_SHOT_SECRET_INPUT_BLOCKED = "ONE_SHOT_SECRET_INPUT_BLOCKED"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 KEY_VALUE_LINE_RE = re.compile(r"^([A-Za-z0-9_]+)=(.*)$")
+ONE_SHOT_QUOTED_SECRET_PATTERNS = (
+    re.compile(
+        r"(?i)((?<![A-Za-z0-9_])[\"']?"
+        r"(?:api[_-]?key|password|secret|token)[\"']?\s*"
+        r"[:=]\s*[\"']?)[A-Za-z0-9._~+/=-]{8,}"
+    ),
+    re.compile(
+        r"(?i)((?<![A-Za-z0-9_])[\"']?authorization[\"']?\s*"
+        r"[:=]\s*[\"']?"
+        r"(?:bearer\s+)?)[A-Za-z0-9._~+/=-]{8,}"
+    ),
+)
+
+
+def _redact_one_shot_text(value: Any) -> str:
+    original = str(value or "")
+    redacted = str(command_packets.redact_command_packet_value(original))
+    for pattern in ONE_SHOT_QUOTED_SECRET_PATTERNS:
+        redacted = pattern.sub(lambda match: match.group(1) + "<redacted>", redacted)
+    return redacted
 
 
 @dataclass(frozen=True)
 class OneShotToolManifestEntry:
     """Server-owned description of an invocable CLI tool.
 
-    `binary_name` is a bare executable name resolved through the sterile
-    PATH for server-owned entries. Absolute paths are admitted only for
-    fake-adapter entries (`server_owned=False`) that tests place into
-    their own runtime instances.
+    A server-owned `binary_name` is resolved only through fixed candidate
+    roots, or is an absolute path whose resolved owner/mode/root policy passes.
+    Fake-adapter entries (`server_owned=False`) may use test-owned absolute
+    paths only inside explicitly constructed engine instances.
     """
 
     tool_id: str
@@ -105,6 +170,20 @@ class OneShotToolManifestEntry:
     version_args: tuple[str, ...] = ("--version",)
     output_profiles: tuple[str, ...] = ("text",)
     server_owned: bool = True
+    provider_id: str = "test-adapter"
+    allowed_argv_schema: tuple[str, ...] = ()
+    operational_args: tuple[str, ...] = ()
+    allowed_environment_keys: tuple[str, ...] = ()
+    cwd_policy: str = "sealed_sandbox_cwd"
+    output_parser: str = "auto"
+    timeout_seconds: float = DEFAULT_RUN_TIMEOUT_SECONDS
+    output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES
+    process_group_policy: str = "new_session_group_termination"
+    sandbox_policy: str = "deny_default_offline"
+    auth_strategy: str = "test_presence_only"
+    session_policy: str = ONE_SHOT_NO_RESUME_REASON
+    network_policy: str = "denied"
+    provider_adapter_admitted: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -114,6 +193,20 @@ class OneShotToolManifestEntry:
             "version_args": list(self.version_args),
             "output_profiles": list(self.output_profiles),
             "server_owned": self.server_owned,
+            "provider_id": self.provider_id,
+            "allowed_argv_schema": list(self.allowed_argv_schema),
+            "operational_args": list(self.operational_args),
+            "allowed_environment_keys": list(self.allowed_environment_keys),
+            "cwd_policy": self.cwd_policy,
+            "output_parser": self.output_parser,
+            "timeout_seconds": self.timeout_seconds,
+            "output_cap_bytes": self.output_cap_bytes,
+            "process_group_policy": self.process_group_policy,
+            "sandbox_policy": self.sandbox_policy,
+            "auth_strategy": self.auth_strategy,
+            "session_policy": self.session_policy,
+            "network_policy": self.network_policy,
+            "provider_adapter_admitted": self.provider_adapter_admitted,
         }
 
 
@@ -157,12 +250,14 @@ class OneShotCliRunResult:
     resume_reason: str = ONE_SHOT_NO_RESUME_REASON
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        safe_stdout = _redact_one_shot_text(self.stdout)
+        safe_stderr = _redact_one_shot_text(self.stderr)
+        raw = {
             "status": self.status,
             "machine_error_code": self.machine_error_code,
             "exit_code": self.exit_code,
-            "stdout": self.stdout,
-            "stderr": self.stderr,
+            "stdout": safe_stdout,
+            "stderr": safe_stderr,
             "stdout_truncated": self.stdout_truncated,
             "stderr_truncated": self.stderr_truncated,
             "timed_out": self.timed_out,
@@ -172,11 +267,373 @@ class OneShotCliRunResult:
             "resume_supported": self.resume_supported,
             "resume_reason": self.resume_reason,
         }
+        redacted = command_packets.redact_command_packet_value(raw)
+        redacted["output_redacted"] = (
+            safe_stdout != self.stdout or safe_stderr != self.stderr
+        )
+        return redacted
 
 
-# Server-owned tool manifest. Real provider CLIs are registered only by a
-# future admitted contour. An empty server-owned set is the honest state.
-SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = ()
+# Immutable production declarations. B09 admits the generic binary boundary,
+# not provider-specific inference. The adapter flags therefore remain false
+# until B10/B11 establish the exact argv, output, login, and network policies.
+SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = (
+    OneShotToolManifestEntry(
+        tool_id="qwen-cli",
+        provider_id="qwen",
+        binary_name="qwen",
+        display_name="Qwen Code CLI",
+        version_args=("--version",),
+        output_profiles=("text", "json_lines"),
+        allowed_argv_schema=("provider_adapter_required",),
+        allowed_environment_keys=(
+            "QWEN_HOME",
+            "QWEN_RUNTIME_DIR",
+            "QWEN_PROJECT_ROOT",
+        ),
+        output_parser="json_lines_or_text",
+        auth_strategy="interactive_isolated_home_pending_b10",
+        network_policy="denied_pending_b10",
+        provider_adapter_admitted=False,
+    ),
+    OneShotToolManifestEntry(
+        tool_id="kimi-cli",
+        provider_id="kimi",
+        binary_name="kimi",
+        display_name="Kimi Code CLI",
+        version_args=("--version",),
+        output_profiles=("text", "json_lines"),
+        allowed_argv_schema=("provider_adapter_required",),
+        allowed_environment_keys=("KIMI_CODE_HOME", "KIMI_SNAPSHOT_ROOT"),
+        output_parser="json_lines_or_text",
+        auth_strategy="interactive_isolated_home_pending_b11",
+        network_policy="denied_pending_b11",
+        provider_adapter_admitted=False,
+    ),
+)
+
+_ADMISSION_RECORD_KEYS = frozenset(
+    {
+        "tool_id",
+        "provider_id",
+        "manifest_sha256",
+        "binary_realpath",
+        "binary_sha256",
+        "binary_uid",
+        "binary_mode",
+        "version_text",
+        "observed_at_utc",
+    }
+)
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class AdmissionStoreRead:
+    records: Mapping[str, Mapping[str, Any]]
+    machine_error_code: str
+    reason: str
+
+    @property
+    def ok(self) -> bool:
+        return self.machine_error_code == ONE_SHOT_OK
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
+
+
+def manifest_entry_digest(entry: OneShotToolManifestEntry) -> str:
+    """Digest the complete immutable declaration for one tool."""
+    return hashlib.sha256(_canonical_json_bytes(entry.to_dict())).hexdigest()
+
+
+def _declaration_invalid_reason(entry: OneShotToolManifestEntry) -> str | None:
+    identifier = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    if not entry.server_owned:
+        return "declaration_not_server_owned"
+    if not identifier.fullmatch(entry.tool_id) or not identifier.fullmatch(
+        entry.provider_id
+    ):
+        return "declaration_identifier_invalid"
+    binary_name = str(entry.binary_name or "")
+    if not binary_name or "\x00" in binary_name or not entry.version_args:
+        return "declaration_binary_or_version_probe_invalid"
+    if _contains_secret_shape(entry.version_args, entry.operational_args):
+        return "declaration_contains_secret_shaped_argv"
+    if not entry.allowed_argv_schema:
+        return "declaration_argv_schema_missing"
+    if any(key not in PROVIDER_HOME_ENV_VARS for key in entry.allowed_environment_keys):
+        return "declaration_environment_key_not_allowlisted"
+    if entry.cwd_policy != "sealed_sandbox_cwd":
+        return "declaration_cwd_policy_invalid"
+    if entry.output_parser not in {
+        "auto",
+        "text",
+        "key_value",
+        "json_lines",
+        "json_lines_or_text",
+    }:
+        return "declaration_output_parser_invalid"
+    if not set(entry.output_profiles).issubset({"text", "key_value", "json_lines"}):
+        return "declaration_output_profile_invalid"
+    if (
+        isinstance(entry.timeout_seconds, bool)
+        or not isinstance(entry.timeout_seconds, (int, float))
+        or not 0 < entry.timeout_seconds <= DEFAULT_RUN_TIMEOUT_SECONDS
+    ):
+        return "declaration_timeout_invalid"
+    if (
+        isinstance(entry.output_cap_bytes, bool)
+        or not isinstance(entry.output_cap_bytes, int)
+        or not 0 < entry.output_cap_bytes <= DEFAULT_OUTPUT_CAP_BYTES
+    ):
+        return "declaration_output_cap_invalid"
+    if entry.process_group_policy != "new_session_group_termination":
+        return "declaration_process_group_policy_invalid"
+    if entry.sandbox_policy != "deny_default_offline":
+        return "declaration_sandbox_policy_invalid"
+    if entry.session_policy != ONE_SHOT_NO_RESUME_REASON:
+        return "declaration_session_policy_invalid"
+    if not entry.auth_strategy:
+        return "declaration_auth_strategy_invalid"
+    if entry.network_policy != "denied" and not entry.network_policy.startswith(
+        "denied_pending_"
+    ):
+        return "declaration_network_policy_invalid"
+    return None
+
+
+def _contains_secret_shape(*values: Any) -> bool:
+    if command_packets.command_packet_has_secret_leak(
+        {"one_shot_input": list(values)}
+    ):
+        return True
+    return any(_redact_one_shot_text(value) != str(value or "") for value in values)
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _trusted_realpath_root(path: Path) -> Path | None:
+    roots = sorted(
+        (Path(item).resolve(strict=False) for item in TRUSTED_BINARY_REALPATH_ROOTS),
+        key=lambda item: len(str(item)),
+        reverse=True,
+    )
+    for root in roots:
+        if _path_is_within(path, root):
+            return root
+    return None
+
+
+def _validate_server_owned_binary(path: Path | str) -> tuple[str | None, str]:
+    """Validate one exact executable against fixed roots and owner/mode policy."""
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        return None, "binary_path_not_absolute"
+    try:
+        resolved = candidate.resolve(strict=True)
+        info = resolved.stat()
+    except OSError:
+        return None, "binary_missing"
+    if not stat.S_ISREG(info.st_mode) or not os.access(resolved, os.X_OK):
+        return None, "binary_not_executable_regular_file"
+    trusted_root = _trusted_realpath_root(resolved)
+    if trusted_root is None:
+        return None, "binary_realpath_outside_trusted_roots"
+    allowed_owners = {0, os.getuid()}
+    current = resolved
+    while True:
+        try:
+            current_info = current.stat()
+        except OSError:
+            return None, "binary_path_component_unreadable"
+        if current_info.st_uid not in allowed_owners:
+            return None, "binary_owner_unsafe"
+        if stat.S_IMODE(current_info.st_mode) & 0o022:
+            return None, "binary_mode_unsafe"
+        if current == trusted_root:
+            break
+        parent = current.parent
+        if parent == current or not _path_is_within(parent, trusted_root):
+            return None, "binary_realpath_root_mismatch"
+        current = parent
+    return str(resolved), "ok"
+
+
+def _validate_admission_record(tool_id: str, value: Any) -> bool:
+    if not isinstance(value, dict) or set(value) != _ADMISSION_RECORD_KEYS:
+        return False
+    string_fields = _ADMISSION_RECORD_KEYS - {"binary_uid"}
+    if any(not isinstance(value.get(field), str) for field in string_fields):
+        return False
+    if value.get("tool_id") != tool_id or not tool_id:
+        return False
+    if not isinstance(value.get("binary_uid"), int) or value["binary_uid"] < 0:
+        return False
+    if not _SHA256_RE.fullmatch(value.get("manifest_sha256", "")):
+        return False
+    if not _SHA256_RE.fullmatch(value.get("binary_sha256", "")):
+        return False
+    realpath = value.get("binary_realpath", "")
+    if not realpath.startswith(os.path.sep) or os.path.realpath(realpath) != realpath:
+        return False
+    if not re.fullmatch(r"0o[0-7]{3,4}", value.get("binary_mode", "")):
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", value["provider_id"]):
+        return False
+    if not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["observed_at_utc"]
+    ):
+        return False
+    if not value["version_text"] or len(value["version_text"].encode("utf-8")) > 4096:
+        return False
+    if _contains_secret_shape(value["version_text"]):
+        return False
+    return True
+
+
+def _owned_path_is_safe(path: Path, *, expected_mode: int, directory: bool) -> bool:
+    try:
+        info = path.lstat()
+    except OSError:
+        return False
+    expected_kind = stat.S_ISDIR if directory else stat.S_ISREG
+    return (
+        expected_kind(info.st_mode)
+        and not stat.S_ISLNK(info.st_mode)
+        and info.st_uid == os.getuid()
+        and stat.S_IMODE(info.st_mode) == expected_mode
+    )
+
+
+def _read_admission_store(root: Path | str) -> AdmissionStoreRead:
+    root_path = Path(root)
+    if not os.path.lexists(root_path):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_MISSING, "store_absent")
+    if not _owned_path_is_safe(root_path, expected_mode=0o700, directory=True):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "store_mode_or_owner")
+    lock_path = root_path / ADMISSION_LOCK_FILENAME
+    if os.path.lexists(lock_path) and not _owned_path_is_safe(
+        lock_path, expected_mode=0o600, directory=False
+    ):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "lock_mode_or_owner")
+    admission_path = root_path / ADMISSION_FILENAME
+    if not os.path.lexists(admission_path):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_MISSING, "file_absent")
+    if not _owned_path_is_safe(admission_path, expected_mode=0o600, directory=False):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "file_mode_or_owner")
+    try:
+        raw = admission_path.read_bytes()
+        payload = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "file_unreadable")
+    if not isinstance(payload, dict) or set(payload) != {"schema_version", "records"}:
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "schema_shape")
+    if payload.get("schema_version") != ONE_SHOT_ADMISSION_SCHEMA_VERSION:
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "schema_version")
+    records = payload.get("records")
+    if not isinstance(records, dict) or any(
+        not isinstance(tool_id, str) or not _validate_admission_record(tool_id, value)
+        for tool_id, value in records.items()
+    ):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "record_shape")
+    if raw != _canonical_json_bytes(payload):
+        return AdmissionStoreRead({}, CLI_BINARY_ADMISSION_INVALID, "noncanonical_json")
+    return AdmissionStoreRead(records, ONE_SHOT_OK, "ok")
+
+
+def _write_admission_record(
+    root: Path | str,
+    record: Mapping[str, Any],
+) -> tuple[bool, str, str, list[str]]:
+    """Atomically replace the canonical store while holding its real lock."""
+    root_path = Path(root)
+    changed: list[str] = []
+    try:
+        if not os.path.lexists(root_path):
+            root_path.mkdir(parents=True, mode=0o700)
+            os.chmod(root_path, 0o700)
+            changed.append(str(root_path))
+    except OSError:
+        return False, CLI_BINARY_ADMISSION_INVALID, "store_create_failed", changed
+    if not _owned_path_is_safe(root_path, expected_mode=0o700, directory=True):
+        return False, CLI_BINARY_ADMISSION_INVALID, "store_mode_or_owner", changed
+
+    lock_path = root_path / ADMISSION_LOCK_FILENAME
+    lock_existed = os.path.lexists(lock_path)
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    lock_fd: int | None = None
+    temp_path: str | None = None
+    try:
+        lock_fd = os.open(lock_path, flags, 0o600)
+        lock_info = os.fstat(lock_fd)
+        if (
+            not stat.S_ISREG(lock_info.st_mode)
+            or lock_info.st_uid != os.getuid()
+            or stat.S_IMODE(lock_info.st_mode) != 0o600
+        ):
+            return False, CLI_BINARY_ADMISSION_INVALID, "lock_mode_or_owner", changed
+        if not lock_existed:
+            changed.append(str(lock_path))
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        current = _read_admission_store(root_path)
+        if not current.ok and current.machine_error_code != CLI_BINARY_ADMISSION_MISSING:
+            return False, current.machine_error_code, current.reason, changed
+        records = dict(current.records)
+        tool_id = str(record.get("tool_id", ""))
+        if not _validate_admission_record(tool_id, dict(record)):
+            return False, CLI_BINARY_ADMISSION_INVALID, "record_shape", changed
+        records[tool_id] = dict(record)
+        payload = {
+            "schema_version": ONE_SHOT_ADMISSION_SCHEMA_VERSION,
+            "records": dict(sorted(records.items())),
+        }
+        temp_fd, temp_path = tempfile.mkstemp(prefix=".admissions-", dir=root_path)
+        try:
+            os.fchmod(temp_fd, 0o600)
+            with os.fdopen(temp_fd, "wb") as handle:
+                handle.write(_canonical_json_bytes(payload))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, root_path / ADMISSION_FILENAME)
+            temp_path = None
+            directory_fd = os.open(root_path, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            return False, CLI_BINARY_ADMISSION_INVALID, "atomic_write_failed", changed
+        admission_path = root_path / ADMISSION_FILENAME
+        if str(admission_path) not in changed:
+            changed.append(str(admission_path))
+        return True, ONE_SHOT_OK, "ok", changed
+    except OSError:
+        return False, CLI_BINARY_ADMISSION_INVALID, "lock_or_write_failed", changed
+    finally:
+        if temp_path is not None:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+        if lock_fd is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            os.close(lock_fd)
 
 
 # Environment keys that must NEVER cross into a one-shot child. These are
@@ -263,16 +720,16 @@ def env_digest(mapping: Mapping[str, str]) -> str:
 
 
 def compute_tool_digest(path: str, *, size_limit: int = DEFAULT_DIGEST_SIZE_LIMIT) -> str:
-    """Bounded sha256 of the tool binary."""
+    """Exact sha256 of a size-bounded tool binary."""
+    if os.stat(path).st_size > size_limit:
+        raise OSError("tool binary exceeds the admission digest bound")
     hasher = hashlib.sha256()
     with open(path, "rb") as fh:
-        remaining = size_limit
-        while remaining > 0:
-            chunk = fh.read(min(1024 * 1024, remaining))
+        while True:
+            chunk = fh.read(1024 * 1024)
             if not chunk:
                 break
             hasher.update(chunk)
-            remaining -= len(chunk)
     return hasher.hexdigest()
 
 
@@ -373,17 +830,30 @@ def _resolve_binary(entry: OneShotToolManifestEntry, env: Mapping[str, str]) -> 
     if not binary:
         return None
     if os.path.sep in binary:
-        # Absolute paths are admitted only for fake-adapter entries that
-        # tests place into their own runtime instances.
         if not entry.server_owned:
             resolved = Path(binary).resolve()
             if resolved.is_file() and os.access(resolved, os.X_OK):
                 return str(resolved)
+        else:
+            resolved, _reason = _validate_server_owned_binary(binary)
+            if resolved is not None:
+                return resolved
         return None
-    found = shutil.which(binary, path=env.get("PATH", os.pathsep.join(STERILE_PATH_ENTRIES)))
-    if not found:
+    if entry.server_owned:
+        if Path(binary).name != binary or binary in {".", ".."}:
+            return None
+        for root in STERILE_PATH_ENTRIES:
+            candidate = Path(root) / binary
+            if not candidate.is_file() or not os.access(candidate, os.X_OK):
+                continue
+            resolved, _reason = _validate_server_owned_binary(candidate)
+            if resolved is not None:
+                return resolved
         return None
-    return str(Path(found).resolve())
+    found = shutil.which(
+        binary, path=env.get("PATH", os.pathsep.join(STERILE_PATH_ENTRIES))
+    )
+    return str(Path(found).resolve()) if found else None
 
 
 def _read_capped(fh: Any, cap_bytes: int) -> tuple[str, bool]:
@@ -396,8 +866,20 @@ def _read_capped(fh: Any, cap_bytes: int) -> tuple[str, bool]:
 def _kill_process_group(pid: int) -> None:
     try:
         os.killpg(pid, signal.SIGKILL)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return
+
+
+def _process_group_exists(pid: int) -> bool:
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The original child group is no longer signalable by its owner.
+        # Treat it as outside this handle rather than risk a reused pgid.
+        return False
+    return True
 
 
 def _run_bounded(
@@ -431,13 +913,13 @@ def _run_bounded(
                 text=False,
                 shell=False,
             )
-        except FileNotFoundError as exc:
+        except FileNotFoundError:
             return OneShotCliRunResult(
                 status="error",
                 machine_error_code=TOOL_BINARY_NOT_FOUND,
                 exit_code=None,
                 stdout="",
-                stderr=str(exc),
+                stderr="one-shot executable was not found.",
                 stdout_truncated=False,
                 stderr_truncated=False,
                 timed_out=False,
@@ -445,13 +927,13 @@ def _run_bounded(
                 duration_seconds=round(time.monotonic() - started, 3),
                 pid=None,
             )
-        except OSError as exc:
+        except OSError:
             return OneShotCliRunResult(
                 status="error",
                 machine_error_code=ONE_SHOT_RUN_FAILED,
                 exit_code=None,
                 stdout="",
-                stderr=str(exc),
+                stderr="one-shot process could not be started.",
                 stdout_truncated=False,
                 stderr_truncated=False,
                 timed_out=False,
@@ -473,6 +955,9 @@ def _run_bounded(
                 process.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 pass
+
+        if _process_group_exists(process.pid):
+            _kill_process_group(process.pid)
 
         stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
         stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
@@ -537,7 +1022,7 @@ class OneShotCliRunHandle:
 
     def cancel(self, *, grace_seconds: float = CANCEL_GRACE_SECONDS) -> dict[str, Any]:
         """Terminate the whole process group; never just the leader."""
-        if self._process.poll() is not None:
+        if self._process.poll() is not None and not _process_group_exists(self.pid):
             return {"cancelled": False, "reason": "process_already_exited"}
         try:
             os.killpg(self.pid, signal.SIGTERM)
@@ -545,11 +1030,15 @@ class OneShotCliRunHandle:
             return {"cancelled": False, "reason": "process_group_gone"}
         deadline = time.monotonic() + grace_seconds
         while time.monotonic() < deadline:
-            if self._process.poll() is not None:
+            if not _process_group_exists(self.pid):
                 break
             time.sleep(0.05)
-        if self._process.poll() is None:
+        if _process_group_exists(self.pid):
             _kill_process_group(self.pid)
+        try:
+            self._process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            pass
         with self._lock:
             self.cancelled = True
         return {
@@ -564,14 +1053,28 @@ class OneShotCliRunHandle:
         with self._lock:
             if self._result is not None:
                 return self._result
+        timed_out = False
         try:
             self._process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
-            pass
+            timed_out = True
+            try:
+                os.killpg(self.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                self._process.wait(timeout=CANCEL_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                _kill_process_group(self.pid)
+                try:
+                    self._process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    pass
+        if _process_group_exists(self.pid):
+            _kill_process_group(self.pid)
         stdout, stdout_truncated = _read_capped(self._stdout_file, self._output_cap_bytes)
         stderr, stderr_truncated = _read_capped(self._stderr_file, self._output_cap_bytes)
         exit_code = self._process.returncode
-        timed_out = exit_code is None
         machine_error_code = (
             ONE_SHOT_CANCELLED
             if self.cancelled
@@ -740,10 +1243,10 @@ class OneShotRuntime:
                 runtime_dir.mkdir(parents=True, exist_ok=True)
                 changed.append(str(runtime_dir))
             os.chmod(runtime_dir, 0o700)
-        except OSError as exc:
+        except OSError:
             return build_command_payload(
                 ok=False,
-                human_message=f"provider home creation failed: {exc}",
+                human_message="provider home creation failed.",
                 machine_error_code=ONE_SHOT_RUN_FAILED,
                 liveness="healthy",
                 severity="error",
@@ -821,11 +1324,11 @@ class OneShotRuntime:
             )
         try:
             digest = compute_tool_digest(realpath)
-        except OSError as exc:
+        except OSError:
             digest = ""
             return build_command_payload(
                 ok=False,
-                human_message=f"tool digest failed for '{tool_id}': {exc}",
+                human_message=f"tool digest failed for '{tool_id}'.",
                 machine_error_code=ONE_SHOT_PROBE_FAILED,
                 liveness="healthy",
                 severity="error",
@@ -844,7 +1347,12 @@ class OneShotRuntime:
             return handle
         probe = handle.wait(timeout_seconds=timeout_seconds)
         ok = probe.machine_error_code == ONE_SHOT_OK and not probe.timed_out
-        version_text = probe.stdout.strip().splitlines()[0] if probe.stdout.strip() else ""
+        version_source = probe.stdout.strip() or probe.stderr.strip()
+        version_text = (
+            _redact_one_shot_text(version_source.splitlines()[0])
+            if version_source
+            else ""
+        )
         return build_command_payload(
             ok=ok,
             human_message=(
@@ -900,6 +1408,22 @@ class OneShotRuntime:
                 changed_files=[],
                 exit_code=1,
                 extra={"tool_id": tool_id, "server_owned": True},
+            )
+        if _contains_secret_shape(tuple(str(item) for item in args), stdin_text or ""):
+            return build_command_payload(
+                ok=False,
+                human_message="one-shot input was blocked by the secret boundary.",
+                machine_error_code=ONE_SHOT_SECRET_INPUT_BLOCKED,
+                liveness="healthy",
+                severity="error",
+                operator_action="user_action",
+                changed_files=[],
+                exit_code=1,
+                extra={
+                    "tool_id": tool_id,
+                    "input_blocked": True,
+                    "secret_value_exposed": False,
+                },
             )
         prepared_env = self._prepare_child_env(
             provider_home=provider_home, provider_env=provider_env
@@ -990,7 +1514,7 @@ class OneShotRuntime:
                 text=False,
                 shell=False,
             )
-        except OSError as exc:
+        except OSError:
             stdout_file.close()
             stderr_file.close()
             if stdin_file is not None:
@@ -998,7 +1522,7 @@ class OneShotRuntime:
             shutil.rmtree(sandbox_cwd, ignore_errors=True)
             return build_command_payload(
                 ok=False,
-                human_message=f"one-shot spawn failed for '{tool_id}': {exc}",
+                human_message=f"one-shot spawn failed for '{tool_id}'.",
                 machine_error_code=ONE_SHOT_RUN_FAILED,
                 liveness="healthy",
                 severity="error",
@@ -1106,10 +1630,10 @@ class OneShotRuntime:
                 json.dumps(payload, sort_keys=True), encoding="utf-8"
             )
             os.chmod(session_file, 0o600)
-        except OSError as exc:
+        except OSError:
             return build_command_payload(
                 ok=False,
-                human_message=f"auth session start failed: {exc}",
+                human_message="auth session start failed.",
                 machine_error_code=ONE_SHOT_RUN_FAILED,
                 liveness="healthy",
                 severity="error",
@@ -1175,10 +1699,10 @@ class OneShotRuntime:
                 session_file.unlink()
                 removed = True
                 changed.append(str(session_file))
-        except OSError as exc:
+        except OSError:
             return build_command_payload(
                 ok=False,
-                human_message=f"auth session end failed: {exc}",
+                human_message="auth session end failed.",
                 machine_error_code=ONE_SHOT_RUN_FAILED,
                 liveness="healthy",
                 severity="error",
@@ -1207,14 +1731,11 @@ class OneShotRuntime:
 
 
 class ProductionOneShotFacade:
-    """Sealed production facade for one-shot CLI surfaces.
+    """Immutable production facade backed by exact binary admissions.
 
-    R5: production CLI is disabled. There is no runtime grant, no
-    admission boolean, no environment hook, and no caller-controlled
-    configuration on any operational method. Every method returns
-    `CLI_DISABLED_PENDING_SECURITY_ADMISSION` before any provider home
-    creation, auth/session creation, filesystem probe, binary resolution,
-    digest, version/help execution, subprocess, or snapshot creation.
+    The default singleton is sealed to code-owned constants. Explicitly
+    constructed instances exist only so hermetic tests can use throwaway roots;
+    they never mutate or enable the singleton. There is no ambient grant.
     """
 
     def __init__(
@@ -1222,65 +1743,513 @@ class ProductionOneShotFacade:
         *,
         homes_root: Path | str = DEFAULT_HOMES_ROOT,
         manifest: Sequence[OneShotToolManifestEntry] = SERVER_OWNED_TOOL_MANIFEST,
+        admission_root: Path | str = DEFAULT_ADMISSION_ROOT,
     ) -> None:
-        # Sealed at construction; never mutated afterwards. Tests may
-        # point a throwaway facade at a synthetic root to prove that no
-        # filesystem or process side effect ever happens while disabled.
         self._homes_root = Path(homes_root)
         self._manifest = tuple(manifest)
+        self._admission_root = Path(admission_root)
+        self._runtime = OneShotRuntime(
+            homes_root=self._homes_root,
+            manifest=self._manifest,
+        )
 
     @property
     def homes_root(self) -> Path:
         return self._homes_root
 
-    def _disabled_packet(self, surface: str, **extra: Any) -> dict[str, Any]:
+    @property
+    def admission_root(self) -> Path:
+        return self._admission_root
+
+    def _blocked_packet(
+        self,
+        surface: str,
+        machine_error_code: str,
+        reason: str,
+        *,
+        changed_files: Sequence[str] = (),
+        **extra: Any,
+    ) -> dict[str, Any]:
         payload_extra = {
             "surface": surface,
-            "cli_disabled": True,
-            "disabled_reason": "pending_security_admission",
+            "cli_disabled": False,
+            "cli_operational": False,
+            "production_admission_supported": True,
+            "blocked_reason": reason,
             "resume_supported": False,
             "resume_reason": ONE_SHOT_NO_RESUME_REASON,
         }
         payload_extra.update(extra)
         return build_command_payload(
             ok=False,
-            human_message=(
-                f"one-shot CLI surface '{surface}' is disabled pending "
-                f"security admission."
-            ),
-            machine_error_code=CLI_DISABLED_PENDING_SECURITY_ADMISSION,
+            human_message=f"one-shot CLI surface '{surface}' is blocked ({reason}).",
+            machine_error_code=machine_error_code,
             liveness="healthy",
             severity="error",
             operator_action="user_action",
-            changed_files=[],
+            changed_files=list(changed_files),
             exit_code=1,
             extra=payload_extra,
         )
 
+    def _entry_for_tool(self, tool_id: str) -> OneShotToolManifestEntry | None:
+        tool_id = str(tool_id or "").strip()
+        matches = [entry for entry in self._manifest if entry.tool_id == tool_id]
+        return matches[0] if len(matches) == 1 else None
+
+    def _entry_for_provider(self, provider_id: str) -> OneShotToolManifestEntry | None:
+        provider_id = str(provider_id or "").strip()
+        matches = [entry for entry in self._manifest if entry.provider_id == provider_id]
+        return matches[0] if len(matches) == 1 else None
+
+    def _unknown_packet(
+        self, surface: str, *, tool_id: str = "", provider_id: str = ""
+    ) -> dict[str, Any]:
+        return self._blocked_packet(
+            surface,
+            ONE_SHOT_TOOL_UNKNOWN,
+            "declaration_unknown_or_ambiguous",
+            tool_id=tool_id,
+            provider_id=provider_id,
+        )
+
+    def _adapter_block(
+        self, surface: str, entry: OneShotToolManifestEntry
+    ) -> dict[str, Any] | None:
+        if entry.server_owned and entry.provider_adapter_admitted:
+            return None
+        return self._blocked_packet(
+            surface,
+            CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
+            "provider_adapter_not_admitted",
+            tool_id=entry.tool_id,
+            provider_id=entry.provider_id,
+            provider_adapter_admitted=False,
+        )
+
+    def _declaration_block(
+        self, surface: str, entry: OneShotToolManifestEntry
+    ) -> dict[str, Any] | None:
+        reason = _declaration_invalid_reason(entry)
+        if reason is None:
+            return None
+        return self._blocked_packet(
+            surface,
+            ONE_SHOT_SCHEMA_INVALID,
+            reason,
+            tool_id=entry.tool_id,
+            provider_id=entry.provider_id,
+        )
+
+    def _read_target_admission(
+        self,
+        surface: str,
+        entry: OneShotToolManifestEntry,
+        *,
+        revalidate_version: bool = True,
+    ) -> tuple[Mapping[str, Any] | None, dict[str, Any] | None]:
+        store = _read_admission_store(self._admission_root)
+        if not store.ok:
+            return None, self._blocked_packet(
+                surface,
+                store.machine_error_code,
+                store.reason,
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                admission_root=str(self._admission_root),
+            )
+        record = store.records.get(entry.tool_id)
+        if record is None:
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_ADMISSION_MISSING,
+                "tool_record_absent",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        if record.get("provider_id") != entry.provider_id:
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_ADMISSION_INVALID,
+                "provider_binding_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        declaration_digest = manifest_entry_digest(entry)
+        if record.get("manifest_sha256") != declaration_digest:
+            return None, self._blocked_packet(
+                surface,
+                CLI_ADMISSION_DIGEST_MISMATCH,
+                "manifest_digest_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                manifest_sha256=declaration_digest,
+            )
+
+        env = build_sterile_environment()
+        current_realpath = _resolve_binary(entry, env)
+        if current_realpath is None or current_realpath != record.get("binary_realpath"):
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_IDENTITY_DRIFT,
+                "binary_realpath_missing_or_drifted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        validated_realpath, identity_reason = _validate_server_owned_binary(
+            current_realpath
+        )
+        if validated_realpath is None:
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_IDENTITY_DRIFT,
+                identity_reason,
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        try:
+            binary_info = Path(validated_realpath).stat()
+            current_digest = compute_tool_digest(validated_realpath)
+        except OSError:
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_IDENTITY_DRIFT,
+                "binary_identity_unreadable",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        if (
+            current_digest != record.get("binary_sha256")
+            or binary_info.st_uid != record.get("binary_uid")
+            or oct(stat.S_IMODE(binary_info.st_mode)) != record.get("binary_mode")
+        ):
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_IDENTITY_DRIFT,
+                "binary_digest_owner_or_mode_drifted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+
+        if revalidate_version:
+            probe = self._runtime.run_sterile_probe(
+                entry.tool_id,
+                timeout_seconds=DEFAULT_PROBE_TIMEOUT_SECONDS,
+                output_cap_bytes=min(entry.output_cap_bytes, DEFAULT_OUTPUT_CAP_BYTES),
+            )
+            if (
+                probe.get("status") != "ok"
+                or probe.get("realpath") != record.get("binary_realpath")
+                or probe.get("binary_sha256") != record.get("binary_sha256")
+                or probe.get("version_text") != record.get("version_text")
+            ):
+                return None, self._blocked_packet(
+                    surface,
+                    CLI_BINARY_IDENTITY_DRIFT,
+                    "version_revalidation_failed",
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                    probe_machine_error_code=probe.get("machine_error_code"),
+                )
+        return record, None
+
+    def _ready_provider_entry(
+        self, surface: str, provider_id: str
+    ) -> tuple[OneShotToolManifestEntry | None, dict[str, Any] | None]:
+        entry = self._entry_for_provider(provider_id)
+        if entry is None:
+            return None, self._unknown_packet(surface, provider_id=str(provider_id))
+        blocked = self._declaration_block(surface, entry)
+        if blocked is not None:
+            return None, blocked
+        blocked = self._adapter_block(surface, entry)
+        if blocked is not None:
+            return None, blocked
+        _record, blocked = self._read_target_admission(surface, entry)
+        if blocked is not None:
+            return None, blocked
+        return entry, None
+
     def create_home(self, provider_id: str) -> dict[str, Any]:
-        return self._disabled_packet("create_home", provider_id=str(provider_id))
+        entry, blocked = self._ready_provider_entry("create_home", provider_id)
+        if blocked is not None:
+            return blocked
+        assert entry is not None
+        packet = self._runtime.create_provider_home(entry.provider_id)
+        packet["production_admission_revalidated"] = True
+        packet["manifest_sha256"] = manifest_entry_digest(entry)
+        return packet
 
     def session(self, provider_id: str) -> dict[str, Any]:
-        return self._disabled_packet("session", provider_id=str(provider_id))
+        entry, blocked = self._ready_provider_entry("session", provider_id)
+        if blocked is not None:
+            return blocked
+        assert entry is not None
+        if entry.auth_strategy != "none":
+            return self._blocked_packet(
+                "session",
+                CLI_AUTH_NOT_ADMITTED,
+                "interactive_login_not_admitted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+            )
+        packet = self._runtime.create_provider_home(entry.provider_id)
+        packet["production_admission_revalidated"] = True
+        packet["auth_required"] = False
+        packet["tool_id"] = entry.tool_id
+        return packet
 
     def auth_session(self, provider_id: str) -> dict[str, Any]:
-        return self._disabled_packet("auth_session", provider_id=str(provider_id))
-
-    def probe(self, tool_id: str) -> dict[str, Any]:
-        return self._disabled_packet("probe", tool_id=str(tool_id))
-
-    def run(self, tool_id: str) -> dict[str, Any]:
-        return self._disabled_packet("run", tool_id=str(tool_id))
-
-    def receipt(self) -> dict[str, Any]:
-        """Honest read-only facade receipt: no filesystem or process touch."""
-        sandbox = probe_os_sandbox()
+        entry, blocked = self._ready_provider_entry("auth_session", provider_id)
+        if blocked is not None:
+            return blocked
+        assert entry is not None
+        if entry.auth_strategy != "none":
+            return self._blocked_packet(
+                "auth_session",
+                CLI_AUTH_NOT_ADMITTED,
+                "interactive_login_not_admitted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+            )
         return build_command_payload(
             ok=True,
-            human_message=(
-                "Production one-shot CLI facade is disabled pending security "
-                "admission; receipt is declared, not live."
+            human_message=f"no auth session is required for '{entry.provider_id}'.",
+            machine_error_code=ONE_SHOT_OK,
+            liveness="healthy",
+            severity="info",
+            operator_action="none",
+            changed_files=[],
+            exit_code=0,
+            extra={
+                "surface": "auth_session",
+                "tool_id": entry.tool_id,
+                "provider_id": entry.provider_id,
+                "auth_required": False,
+                "production_admission_revalidated": True,
+                "resume_supported": False,
+                "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+            },
+        )
+
+    def probe(self, tool_id: str) -> dict[str, Any]:
+        entry = self._entry_for_tool(tool_id)
+        if entry is None:
+            return self._unknown_packet("probe", tool_id=str(tool_id))
+        blocked = self._declaration_block("probe", entry)
+        if blocked is not None:
+            return blocked
+        packet = self._runtime.run_sterile_probe(
+            entry.tool_id,
+            timeout_seconds=DEFAULT_PROBE_TIMEOUT_SECONDS,
+            output_cap_bytes=min(entry.output_cap_bytes, DEFAULT_OUTPUT_CAP_BYTES),
+        )
+        packet["provider_id"] = entry.provider_id
+        packet["manifest_sha256"] = manifest_entry_digest(entry)
+        packet["probe_grants_operational_authority"] = False
+        return packet
+
+    def run(self, tool_id: str) -> dict[str, Any]:
+        entry = self._entry_for_tool(tool_id)
+        if entry is None:
+            return self._unknown_packet("run", tool_id=str(tool_id))
+        blocked = self._declaration_block("run", entry)
+        if blocked is not None:
+            return blocked
+        blocked = self._adapter_block("run", entry)
+        if blocked is not None:
+            return blocked
+        if entry.network_policy != "denied":
+            return self._blocked_packet(
+                "run",
+                CLI_NETWORK_POLICY_NOT_ADMITTED,
+                "network_policy_not_admitted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                network_policy=entry.network_policy,
+            )
+        if entry.auth_strategy != "none":
+            return self._blocked_packet(
+                "run",
+                CLI_AUTH_NOT_ADMITTED,
+                "interactive_login_not_admitted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+            )
+        expected_schema = tuple(f"literal:{arg}" for arg in entry.operational_args)
+        if entry.operational_args:
+            argv_contract_ok = all(
+                token in entry.allowed_argv_schema for token in expected_schema
+            )
+        else:
+            argv_contract_ok = "no_args" in entry.allowed_argv_schema
+        if not argv_contract_ok:
+            return self._blocked_packet(
+                "run",
+                ONE_SHOT_SCHEMA_INVALID,
+                "declaration_argv_schema_invalid",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        record, blocked = self._read_target_admission("run", entry)
+        if blocked is not None:
+            return blocked
+        assert record is not None
+        admitted_entry = replace(entry, binary_name=str(record["binary_realpath"]))
+        runtime = OneShotRuntime(
+            homes_root=self._homes_root,
+            manifest=(admitted_entry,),
+        )
+        packet = runtime.one_shot_cli_run(
+            admitted_entry.tool_id,
+            args=admitted_entry.operational_args,
+            timeout_seconds=admitted_entry.timeout_seconds,
+            output_cap_bytes=admitted_entry.output_cap_bytes,
+        )
+        packet["production_admission_revalidated"] = True
+        packet["manifest_sha256"] = manifest_entry_digest(entry)
+        packet["binary_sha256"] = record["binary_sha256"]
+        return packet
+
+    def admit(
+        self,
+        tool_id: str,
+        *,
+        expected_binary_sha256: str,
+    ) -> dict[str, Any]:
+        """Probe and atomically admit one exact executable digest."""
+        entry = self._entry_for_tool(tool_id)
+        if entry is None:
+            return self._unknown_packet("admit", tool_id=str(tool_id))
+        blocked = self._declaration_block("admit", entry)
+        if blocked is not None:
+            return blocked
+        expected = str(expected_binary_sha256 or "")
+        if not _SHA256_RE.fullmatch(expected):
+            return self._blocked_packet(
+                "admit",
+                ONE_SHOT_SCHEMA_INVALID,
+                "expected_binary_sha256_invalid",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        probe = self.probe(entry.tool_id)
+        if probe.get("status") != "ok":
+            return probe
+        if probe.get("binary_sha256") != expected:
+            return self._blocked_packet(
+                "admit",
+                CLI_ADMISSION_DIGEST_MISMATCH,
+                "expected_binary_digest_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                observed_binary_sha256=probe.get("binary_sha256"),
+            )
+        realpath, identity_reason = _validate_server_owned_binary(
+            str(probe.get("realpath", ""))
+        )
+        if realpath is None:
+            return self._blocked_packet(
+                "admit",
+                CLI_BINARY_ADMISSION_INVALID,
+                identity_reason,
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        version_text = str(probe.get("version_text", "")).strip()
+        if not version_text:
+            return self._blocked_packet(
+                "admit",
+                CLI_BINARY_ADMISSION_INVALID,
+                "version_identity_empty",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        binary_info = Path(realpath).stat()
+        record = {
+            "tool_id": entry.tool_id,
+            "provider_id": entry.provider_id,
+            "manifest_sha256": manifest_entry_digest(entry),
+            "binary_realpath": realpath,
+            "binary_sha256": expected,
+            "binary_uid": binary_info.st_uid,
+            "binary_mode": oct(stat.S_IMODE(binary_info.st_mode)),
+            "version_text": version_text,
+            "observed_at_utc": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
             ),
+        }
+        ok, code, reason, changed = _write_admission_record(
+            self._admission_root, record
+        )
+        if not ok:
+            return self._blocked_packet(
+                "admit",
+                code,
+                reason,
+                changed_files=changed,
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        readback = _read_admission_store(self._admission_root)
+        if not readback.ok or readback.records.get(entry.tool_id) != record:
+            return self._blocked_packet(
+                "admit",
+                CLI_BINARY_ADMISSION_INVALID,
+                "admission_readback_failed",
+                changed_files=changed,
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        return build_command_payload(
+            ok=True,
+            human_message=f"exact binary admitted for '{entry.tool_id}'.",
+            machine_error_code=ONE_SHOT_OK,
+            liveness="healthy",
+            severity="info",
+            operator_action="none",
+            changed_files=changed,
+            exit_code=0,
+            extra={
+                "surface": "admit",
+                "tool_id": entry.tool_id,
+                "provider_id": entry.provider_id,
+                "manifest_sha256": record["manifest_sha256"],
+                "binary_realpath": realpath,
+                "binary_sha256": expected,
+                "version_text": version_text,
+                "admission_record_sha256": hashlib.sha256(
+                    _canonical_json_bytes(record)
+                ).hexdigest(),
+                "provider_adapter_admitted": entry.provider_adapter_admitted,
+                "probe_grants_operational_authority": False,
+                "resume_supported": False,
+                "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+            },
+        )
+
+    def receipt(self) -> dict[str, Any]:
+        """Read-only declaration/store receipt; it never probes or writes."""
+        sandbox = probe_os_sandbox()
+        store = _read_admission_store(self._admission_root)
+        admitted_tool_ids: list[str] = []
+        operational_candidates: list[str] = []
+        for entry in self._manifest:
+            record = store.records.get(entry.tool_id) if store.ok else None
+            if record and record.get("manifest_sha256") == manifest_entry_digest(entry):
+                admitted_tool_ids.append(entry.tool_id)
+                if (
+                    entry.provider_adapter_admitted
+                    and entry.auth_strategy == "none"
+                    and entry.network_policy == "denied"
+                ):
+                    operational_candidates.append(entry.tool_id)
+        return build_command_payload(
+            ok=True,
+            human_message="Production one-shot CLI admission boundary is available.",
             machine_error_code=ONE_SHOT_OK,
             liveness="healthy",
             severity="info",
@@ -1289,14 +2258,25 @@ class ProductionOneShotFacade:
             exit_code=0,
             extra={
                 "schema_version": ONE_SHOT_RUNTIME_SCHEMA_VERSION,
-                "cli_disabled": True,
-                "disabled_reason": "pending_security_admission",
+                "admission_schema_version": ONE_SHOT_ADMISSION_SCHEMA_VERSION,
+                "cli_disabled": False,
+                "cli_operational": False,
+                "production_admission_supported": True,
                 "declared_not_live_verified": True,
                 "server_owned_tools": [entry.to_dict() for entry in self._manifest],
+                "server_owned_manifest_sha256": hashlib.sha256(
+                    _canonical_json_bytes([entry.to_dict() for entry in self._manifest])
+                ).hexdigest(),
                 "homes_root": str(self._homes_root),
+                "admission_root": str(self._admission_root),
+                "admission_store_status": store.machine_error_code,
+                "admission_store_reason": store.reason,
+                "admitted_tool_ids": admitted_tool_ids,
+                "operational_candidate_tool_ids": operational_candidates,
                 "sterile_path": list(STERILE_PATH_ENTRIES),
                 "sandbox": sandbox,
                 "runtime_grant_available": False,
+                "live_binary_revalidation_performed": False,
                 "resume_supported": False,
                 "resume_reason": ONE_SHOT_NO_RESUME_REASON,
             },
@@ -1337,7 +2317,8 @@ def parse_cli_output(
             machine_error_code="schema_invalid",
             operator_action="user_action",
         )
-    cleaned = ANSI_ESCAPE_RE.sub("", text or "")
+    safe_text = _redact_one_shot_text(text)
+    cleaned = ANSI_ESCAPE_RE.sub("", safe_text)
     capped = cleaned[:output_cap_bytes]
     truncated = len(cleaned) > output_cap_bytes
     lines = [line.rstrip("\r") for line in capped.splitlines()]
@@ -1355,7 +2336,7 @@ def parse_cli_output(
                 malformed += 1
         if records or profile == "json_lines":
             detected = "json_lines"
-            return {
+            return command_packets.redact_command_packet_value({
                 "profile": profile,
                 "detected_format": detected,
                 "records": records,
@@ -1364,7 +2345,7 @@ def parse_cli_output(
                 "truncated": truncated,
                 "resume_supported": False,
                 "resume_reason": ONE_SHOT_NO_RESUME_REASON,
-            }
+            })
 
     if profile in {"auto", "key_value"}:
         pairs: dict[str, str] = {}
@@ -1377,7 +2358,7 @@ def parse_cli_output(
                 unmatched += 1
         if pairs or profile == "key_value":
             detected = "key_value"
-            return {
+            return command_packets.redact_command_packet_value({
                 "profile": profile,
                 "detected_format": detected,
                 "pairs": pairs,
@@ -1386,9 +2367,9 @@ def parse_cli_output(
                 "truncated": truncated,
                 "resume_supported": False,
                 "resume_reason": ONE_SHOT_NO_RESUME_REASON,
-            }
+            })
 
-    return {
+    return command_packets.redact_command_packet_value({
         "profile": profile,
         "detected_format": "text",
         "text": "\n".join(lines),
@@ -1396,4 +2377,4 @@ def parse_cli_output(
         "truncated": truncated,
         "resume_supported": False,
         "resume_reason": ONE_SHOT_NO_RESUME_REASON,
-    }
+    })

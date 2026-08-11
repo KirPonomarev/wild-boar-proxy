@@ -11,6 +11,7 @@ CORE_TESTS = \
 	tests/test_external_models.py \
 	tests/test_transport_normalization.py \
 	tests/test_api_transport_adapter.py \
+	tests/test_one_shot_cli_production_admission.py \
 	tests/test_owner_surface_effect_inventory.py \
 	tests/test_process_runner.py \
 	tests/test_state_store_entry_inventory.py \

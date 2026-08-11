@@ -4,9 +4,11 @@
 """R51: production/test separation static proofs.
 
 These tests fail if any R4-era test seam reappears in production code:
-runtime grants, test-config injection, environment hooks, caller-provided
+global grants, test-config injection, environment hooks, caller-provided
 env/sandbox parameters on production callables, `(allow default)` sandbox
-profiles, or production modules importing test helpers.
+profiles, or production modules importing test helpers. R60 adds immutable
+declarations and an exact external binary-admission store without reviving any
+of those seams.
 """
 
 from __future__ import annotations
@@ -111,20 +113,35 @@ class TestSeamsRemovedFromProduction(unittest.TestCase):
 
 
 class ProductionFacadeFailClosed(unittest.TestCase):
-    def test_default_facade_disabled_before_any_side_effect(self) -> None:
+    def test_default_provider_adapter_blocked_before_any_side_effect(self) -> None:
         facade = osr.default_production_facade()
         packet = facade.run("qwen-cli")
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         receipt = facade.receipt()
-        self.assertTrue(receipt["cli_disabled"])
+        self.assertFalse(receipt["cli_disabled"])
+        self.assertFalse(receipt["cli_operational"])
+        self.assertTrue(receipt["production_admission_supported"])
         self.assertFalse(receipt["runtime_grant_available"])
 
     def test_runtime_has_no_module_level_mutable_state(self) -> None:
         """R5: engine configuration lives on instances, not module globals."""
-        self.assertEqual(osr.SERVER_OWNED_TOOL_MANIFEST, ())
+        self.assertIsInstance(osr.SERVER_OWNED_TOOL_MANIFEST, tuple)
+        self.assertEqual(len(osr.SERVER_OWNED_TOOL_MANIFEST), 2)
+        self.assertEqual(
+            len(
+                {
+                    osr.manifest_entry_digest(entry)
+                    for entry in osr.SERVER_OWNED_TOOL_MANIFEST
+                }
+            ),
+            2,
+        )
+        self.assertTrue(
+            all(not entry.provider_adapter_admitted for entry in osr.SERVER_OWNED_TOOL_MANIFEST)
+        )
         # The only module-level facade object is the sealed singleton getter.
         self.assertIs(osr.default_production_facade(), osr.default_production_facade())
 
