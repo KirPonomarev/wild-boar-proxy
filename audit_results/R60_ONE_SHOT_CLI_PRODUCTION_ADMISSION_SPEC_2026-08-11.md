@@ -68,6 +68,10 @@ binary, provider adapter, login, or live-network permission is absent.
   pending physical prerequisite, not permission to install or imitate one.
 - A version probe is a real process and therefore always uses the sterile home,
   scrubbed environment, bounded process group, and deny-default seatbelt.
+- Platform-neutral admission/redaction unit tests may substitute a test-only
+  passthrough transport for `sandbox-exec`; that transport is never exposed to
+  production, and separate tests must continue to prove both absent-sandbox
+  fail-closed behavior and real macOS seatbelt containment.
 - Provider networking remains disabled in B09. A later provider contour must
   explicitly admit the exact network policy before a production inference.
 - One-shot sessions never resume.
@@ -102,9 +106,11 @@ binary, provider adapter, login, or live-network permission is absent.
 
 ## Verification
 
-- tests: 106 focused tests passed; `make test-core` passed 630 tests and 132
-  subtests; `make test-full` passed 5066 tests and 985 subtests in 1295.12
-  seconds; `make test-custom-stability` passed 27 tests and 5 subtests
+- tests: 106 initial focused tests passed; after the Linux CI portability
+  repair, 20 focused portability/fail-closed tests passed, `make test-core`
+  passed 630 tests and 132 subtests in 66.37 seconds, `make test-full` passed
+  5066 tests and 985 subtests in 1298.89 seconds, and
+  `make test-custom-stability` passed 27 tests and 5 subtests in 2.63 seconds
 - build: `make check` compiled the repository Python surfaces and collected
   5066 tests; only the pre-existing Pillow `getdata` deprecation warning was
   emitted by the full suite
@@ -114,6 +120,11 @@ binary, provider adapter, login, or live-network permission is absent.
   Qwen/Kimi adapter codes without touching the fixed production admission root
 - live evidence: none; Qwen/Kimi binaries and isolated logins are absent, and
   `B10_LIVE`/`B11_LIVE` remain pending
+- CI diagnosis: exact candidate Ubuntu Baseline/Release checks exposed 11
+  deterministic pre-spawn failures because the logical policy tests lacked a
+  platform-neutral sandbox transport; the candidate was invalidated, no
+  same-signature rerun was used, and the test-only repair retained the separate
+  production fail-closed proof
 
 ## Open Questions
 
