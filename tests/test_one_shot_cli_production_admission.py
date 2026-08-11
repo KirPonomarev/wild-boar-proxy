@@ -23,6 +23,39 @@ def _canonical(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def _install_test_sandbox_transport(
+    test_case: unittest.TestCase, root: Path
+) -> None:
+    """Provide deterministic sandbox transport for platform-neutral logic tests.
+
+    These tests exercise admission, identity, redaction, and pre-spawn ordering;
+    the real macOS seatbelt boundary is covered separately by
+    test_server_owned_sandbox.py and test_r52_sandbox_adversarial.py.  Production
+    still fails closed when sandbox-exec is absent.
+    """
+    shim = root / "sandbox-exec-test-shim"
+    shim.write_text(
+        "#!/bin/sh\n"
+        "[ \"$1\" = \"-f\" ] || exit 64\n"
+        "[ \"$#\" -ge 3 ] || exit 64\n"
+        "[ -r \"$2\" ] || exit 65\n"
+        "shift 2\n"
+        "exec \"$@\"\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o700)
+    real_which = osr.shutil.which
+
+    def test_which(name: str, *args: object, **kwargs: object) -> str | None:
+        if name == "sandbox-exec":
+            return str(shim)
+        return real_which(name, *args, **kwargs)
+
+    patcher = mock.patch.object(osr.shutil, "which", side_effect=test_which)
+    patcher.start()
+    test_case.addCleanup(patcher.stop)
+
+
 def _operational_entry(**updates: object) -> osr.OneShotToolManifestEntry:
     entry = osr.OneShotToolManifestEntry(
         tool_id="system-echo",
@@ -45,6 +78,7 @@ class ProductionAdmissionTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
+        _install_test_sandbox_transport(self, self.root)
         self.homes_root = self.root / "homes"
         self.admission_root = self.root / "admission"
         self.entry = _operational_entry()
@@ -368,6 +402,7 @@ class SecretBoundaryTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
+        _install_test_sandbox_transport(self, self.root)
         self.script = self.root / "constant-output.sh"
         self.script.write_text(
             "#!/bin/sh\n"
