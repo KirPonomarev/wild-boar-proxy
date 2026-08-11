@@ -185,6 +185,63 @@ class DesktopWebShellTest(unittest.TestCase):
             "",
         )
 
+    def test_smoke_requests_share_one_remaining_total_budget(self) -> None:
+        server = mock.MagicMock()
+        server.server_port = 43123
+        web_token_state = mock.MagicMock()
+
+        with (
+            mock.patch.object(
+                desktop_web_shell,
+                "build_desktop_web_shell_server",
+                return_value=(server, web_token_state),
+            ),
+            mock.patch.object(
+                desktop_web_shell.time,
+                "monotonic",
+                side_effect=[100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0],
+            ),
+            mock.patch.object(
+                desktop_web_shell,
+                "_fetch_text",
+                side_effect=["<html></html>", "{}"],
+            ) as fetch_text,
+            mock.patch.object(
+                desktop_web_shell,
+                "_fetch_json",
+                side_effect=[{}, {}, {}],
+            ) as fetch_json,
+            mock.patch.object(
+                desktop_web_shell,
+                "_post_json_without_auth",
+                return_value={},
+            ) as post_json,
+            mock.patch.object(
+                desktop_web_shell,
+                "build_desktop_web_shell_packet",
+                return_value={"status": "ok"},
+            ),
+            mock.patch.object(desktop_web_shell, "delete_web_token"),
+            mock.patch.object(
+                desktop_web_shell,
+                "_cleanup_desktop_sandbox_root_if_needed",
+            ),
+        ):
+            packet, exit_code = desktop_web_shell.run_desktop_web_shell_smoke()
+
+        self.assertEqual(exit_code, 0, packet)
+        observed_timeouts = [
+            fetch_text.call_args_list[0].kwargs["timeout_seconds"],
+            fetch_json.call_args_list[0].kwargs["timeout_seconds"],
+            fetch_json.call_args_list[1].kwargs["timeout_seconds"],
+            fetch_json.call_args_list[2].kwargs["timeout_seconds"],
+            fetch_text.call_args_list[1].kwargs["timeout_seconds"],
+            post_json.call_args.kwargs["timeout_seconds"],
+        ]
+        self.assertEqual(observed_timeouts, [29.0, 28.0, 27.0, 26.0, 25.0, 24.0])
+        server.shutdown.assert_called_once_with()
+        server.server_close.assert_called_once_with()
+
     def test_main_smoke_json_forwards_explicit_sandbox_action_phase(self) -> None:
         with (
             mock.patch.object(
