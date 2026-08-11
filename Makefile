@@ -6,6 +6,7 @@ CUSTOM_STABILITY_PYTHON ?= $(shell $(PYTHON) -c 'import sys; print(sys.executabl
 CORE_TESTS = \
 	tests/test_closeout_resilience.py \
 	tests/test_repo_hygiene.py \
+	tests/test_push_ancestry_guard.py \
 	tests/test_truth_tree_harness.py \
 	tests/test_external_models.py \
 	tests/test_owner_surface_effect_inventory.py \

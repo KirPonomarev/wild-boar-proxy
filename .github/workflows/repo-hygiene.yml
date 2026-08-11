@@ -24,11 +24,62 @@ jobs:
       - name: Install test dependency
         run: python3 -m pip install --upgrade pytest
 
-      - name: Compile repo hygiene guard
-        run: python3 -m compileall -q tools/check_repo_hygiene.py tests/test_repo_hygiene.py
+      - name: Compile repository guards
+        run: >-
+          python3 -m compileall -q
+          tools/check_repo_hygiene.py
+          tools/check_push_ancestry.py
+          tests/test_repo_hygiene.py
+          tests/test_push_ancestry_guard.py
 
-      - name: Test repo hygiene guard
-        run: python3 -m pytest tests/test_repo_hygiene.py -q
+      - name: Test repository guards
+        run: >-
+          python3 -m pytest
+          tests/test_repo_hygiene.py
+          tests/test_push_ancestry_guard.py
+          -q
+
+      - name: Enforce branch update ancestry
+        shell: bash
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_AFTER_SHA: ${{ github.event.after }}
+          EVENT_BEFORE_SHA: ${{ github.event.before }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PUSH_REF: ${{ github.ref }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            previous="$EVENT_BEFORE_SHA"
+            current="$PUSH_SHA"
+            target_ref="$PUSH_REF"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" = "synchronize" ]; then
+            previous="$EVENT_BEFORE_SHA"
+            current="$EVENT_AFTER_SHA"
+            target_ref="refs/heads/$PR_HEAD_REF"
+          else
+            exit 0
+          fi
+
+          object_id_pattern='^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$'
+          if [[ "$previous" =~ $object_id_pattern ]] && [[ "$current" =~ $object_id_pattern ]]; then
+            if [[ ! "$previous" =~ ^0+$ ]]; then
+              git cat-file -e "${previous}^{commit}" 2>/dev/null || \
+                git fetch --no-tags origin "$previous" || true
+            fi
+            if [[ ! "$current" =~ ^0+$ ]]; then
+              git cat-file -e "${current}^{commit}" 2>/dev/null || \
+                git fetch --no-tags origin "$current" || true
+            fi
+          fi
+
+          python3 tools/check_push_ancestry.py \
+            --previous "$previous" \
+            --current "$current" \
+            --ref "$target_ref"
 
       - name: Run repo hygiene range guard
         shell: bash
