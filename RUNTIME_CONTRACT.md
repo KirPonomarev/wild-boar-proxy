@@ -176,6 +176,36 @@
 - recovery must not depend on a lucky shell environment or implicit PATH state
 - if managed cannot be proven healthy after cleanup and bounded preflight, the system must report down or fall back to `stable`
 
+## One-shot CLI production admission
+
+- production one-shot authority requires both an immutable server-owned tool
+  declaration and a matching external binary-admission record
+- the declaration binds provider identity, version probe, allowed argv and
+  environment schema, cwd policy, output parser and bounds, process-group
+  policy, sandbox policy, auth strategy, session policy, and network policy
+- the admission record binds that declaration digest to one exact executable
+  realpath, full content digest, owner, mode, and observed version
+- a probe never grants operational authority; it runs with the sterile fixed
+  PATH, isolated temporary home, bounded output/time, a new process group, and
+  the same deny-default offline seatbelt used by an operational child
+- executable lookup uses only code-owned fixed candidate roots; ambient PATH,
+  caller paths, environment-selected manifests, and global runtime grants are
+  never authority surfaces
+- admission storage is canonical JSON under a fixed WBP-owned mode-`0700`
+  root; the admission file and real writer lock are mode `0600`, owner-checked,
+  and the file is atomically replaced while the lock is held
+- missing, malformed, noncanonical, mode/owner-unsafe, symlink-drifted,
+  declaration-drifted, binary-drifted, or version-drifted admission fails
+  closed before persistent provider-home creation or operational dispatch
+- exact admission is revalidated immediately before every production run;
+  one-shot sessions never resume
+- secret-shaped argv or stdin is rejected before spawn; captured stdout and
+  stderr are bounded and redacted before packet serialization; raw process
+  exception text is not a packet surface
+- the Qwen and Kimi declarations are present, but their provider adapters,
+  interactive login, and network policies remain not admitted until their
+  respective B10 and B11 contours
+
 ## Runtime attestation
 
 No `healthy`, `PASS`, `alpha-ready`, `pilot-ready`, `stable-10-proved`, or `stable-15-proved`

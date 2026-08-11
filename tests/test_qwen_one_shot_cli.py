@@ -253,8 +253,7 @@ class QwenOneShotCliTests(unittest.TestCase):
 
 
 class QwenProductionFacadeTests(unittest.TestCase):
-    """Without an explicit test engine the production facade answers
-    fail-closed before any filesystem or process side effect."""
+    """The declared Qwen provider stays blocked until its B10 adapter."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -263,12 +262,15 @@ class QwenProductionFacadeTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_session_disabled_on_production_facade(self) -> None:
-        facade = osr.ProductionOneShotFacade(homes_root=self.root / "homes")
+    def test_session_blocked_on_production_facade(self) -> None:
+        facade = osr.ProductionOneShotFacade(
+            homes_root=self.root / "homes",
+            admission_root=self.root / "admission",
+        )
         packet = facade.session("qwen")
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         self.assertEqual(packet["changed_files"], [])
         self.assertFalse((self.root / "homes").exists())
@@ -277,7 +279,7 @@ class QwenProductionFacadeTests(unittest.TestCase):
         packet = qw.qwen_one_shot_session()
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         self.assertEqual(packet["changed_files"], [])
 
@@ -285,7 +287,7 @@ class QwenProductionFacadeTests(unittest.TestCase):
         packet = qw.qwen_one_shot_run("hi", session={"qwen_home": "/nonexistent"})
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
 
 

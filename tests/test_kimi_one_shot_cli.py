@@ -155,7 +155,7 @@ class KimiOneShotCliTests(unittest.TestCase):
         packet = km.create_kimi_snapshot(project)
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         after = set(self.root.rglob("*"))
         self.assertEqual(before, after)
@@ -264,8 +264,7 @@ class KimiOneShotCliTests(unittest.TestCase):
 
 
 class KimiProductionFacadeTests(unittest.TestCase):
-    """Without an explicit test engine the production facade answers
-    fail-closed before any filesystem or process side effect."""
+    """The declared Kimi provider stays blocked until its B11 adapter."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -274,12 +273,15 @@ class KimiProductionFacadeTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_session_disabled_on_production_facade(self) -> None:
-        facade = osr.ProductionOneShotFacade(homes_root=self.root / "homes")
+    def test_session_blocked_on_production_facade(self) -> None:
+        facade = osr.ProductionOneShotFacade(
+            homes_root=self.root / "homes",
+            admission_root=self.root / "admission",
+        )
         packet = facade.session("kimi")
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         self.assertEqual(packet["changed_files"], [])
         self.assertFalse((self.root / "homes").exists())
@@ -288,7 +290,7 @@ class KimiProductionFacadeTests(unittest.TestCase):
         packet = km.kimi_one_shot_session()
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
         self.assertEqual(packet["changed_files"], [])
 
@@ -296,7 +298,7 @@ class KimiProductionFacadeTests(unittest.TestCase):
         packet = km.kimi_one_shot_run("hi", session={"kimi_code_home": "/nonexistent"})
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
+            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         )
 
 
