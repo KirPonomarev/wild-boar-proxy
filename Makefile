@@ -9,6 +9,8 @@ CORE_TESTS = \
 	tests/test_push_ancestry_guard.py \
 	tests/test_truth_tree_harness.py \
 	tests/test_external_models.py \
+	tests/test_transport_normalization.py \
+	tests/test_api_transport_adapter.py \
 	tests/test_owner_surface_effect_inventory.py \
 	tests/test_process_runner.py \
 	tests/test_state_store_entry_inventory.py \

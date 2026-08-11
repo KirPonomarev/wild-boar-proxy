@@ -134,6 +134,38 @@ class DispatchClassificationTests(unittest.TestCase):
             "error",
         )
 
+    def test_observed_error_is_not_false_success(self) -> None:
+        self.assertEqual(
+            tn.classify_dispatch_result(
+                response_observed=True,
+                error_code=tn.ERR_INVALID_CREDENTIAL,
+            ),
+            "error",
+        )
+
+
+class TransportErrorTests(unittest.TestCase):
+    def test_serialized_error_preserves_retry_and_ambiguity_truth(self) -> None:
+        error = tn.TransportError(
+            tn.ERR_AMBIGUOUS_DELIVERY,
+            "delivery outcome is ambiguous",
+            retryable=False,
+            ambiguous=True,
+        )
+        self.assertEqual(
+            error.as_dict(),
+            {
+                "code": tn.ERR_AMBIGUOUS_DELIVERY,
+                "message": "delivery outcome is ambiguous",
+                "retryable": False,
+                "ambiguous": True,
+            },
+        )
+
+    def test_new_guard_codes_are_in_typed_taxonomy(self) -> None:
+        self.assertIn(tn.ERR_IDENTITY_DRIFT, tn.TYPED_ERROR_CODES)
+        self.assertIn(tn.ERR_SECRET_INPUT_BLOCKED, tn.TYPED_ERROR_CODES)
+
 
 if __name__ == "__main__":
     unittest.main()

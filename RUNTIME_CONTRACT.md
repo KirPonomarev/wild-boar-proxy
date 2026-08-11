@@ -245,3 +245,39 @@ External adapters normalize one shared surface (B03):
 `transport.send()` adapter. Ambiguous-delivery results are never retried and
 never replaced by another actor's response under the original identity.
 Cross-provider fallback is off by default.
+
+API adapter truth rules:
+
+- deterministic controlled dispatch validates the registered route but neither
+  requires nor probes a live credential; it is always marked
+  `SYNTHETIC_PROVEN` and never proves a provider call
+- live dispatch requires presence-only credential admission before constructing
+  provider headers
+- every request must match the resolved dispatch plan's dispatch, transport,
+  provider, model, permission, and bound context identities; any supplied slot,
+  binding, binding revision, assignment, or assignment revision must also match,
+  and successful receipts always use the exact plan-owned identity values
+- the registered route record is authoritative; a caller-supplied route that is
+  not canonically equivalent is rejected and cannot override the endpoint; its
+  canonical digest is rechecked between admission, dispatch, and live rebind
+- secret-shaped credential values in prompt text are rejected before provider
+  invocation
+- a failure before invoking the bounded HTTP request reports
+  `dispatch_attempted=false`; an exception after invocation begins reports
+  `ambiguous_delivery`, `dispatch_attempted=true`, and
+  `retry_permitted=false`
+- a returned non-2xx HTTP response is an observed typed error, never successful
+  actor output; 401/403 map to `invalid_credential`, 404 to
+  `model_not_available`, 408 to `timeout`, 429 to `quota_exhausted`, and 5xx to
+  `network_failed`
+- result classification gives an error code precedence over
+  `response_observed`; observation alone can never turn an error into `ok`
+- `LIVE_PROVEN` requires a 2xx response and a non-empty normalized provider
+  output; credential presence, an error payload, or a transport attempt is
+  insufficient
+- provider output is redacted before entering a receipt and is bound by a
+  SHA-256 digest; when an assembled stream requires redaction, none of its
+  original non-empty deltas are emitted; raw provider bodies and raw exception
+  text are structurally absent from the receipt
+- failure never enables cross-provider fallback, actor substitution, or an
+  automatic retry

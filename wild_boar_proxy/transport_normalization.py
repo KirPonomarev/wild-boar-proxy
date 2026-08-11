@@ -51,6 +51,8 @@ ERR_AMBIGUOUS_DELIVERY = "ambiguous_delivery"
 ERR_CANCELLED = "cancelled"
 ERR_TIMEOUT = "timeout"
 ERR_CAPABILITY_NOT_ADMITTED = "capability_not_admitted"
+ERR_IDENTITY_DRIFT = "identity_drift"
+ERR_SECRET_INPUT_BLOCKED = "secret_input_blocked"
 TYPED_ERROR_CODES = (
     ERR_NETWORK_FAILED,
     ERR_INVALID_CREDENTIAL,
@@ -63,6 +65,8 @@ TYPED_ERROR_CODES = (
     ERR_CANCELLED,
     ERR_TIMEOUT,
     ERR_CAPABILITY_NOT_ADMITTED,
+    ERR_IDENTITY_DRIFT,
+    ERR_SECRET_INPUT_BLOCKED,
 )
 
 # Ambiguous-delivery errors are NEVER retried and NEVER replaced by another
@@ -109,6 +113,9 @@ class NormalizedStreamEvent:
     error_message: str = ""
     finish_reason: str = ""
 
+    def as_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
 
 @dataclasses.dataclass(frozen=True)
 class NormalizedToolCall:
@@ -141,8 +148,13 @@ class TransportError:
     retryable: bool = False
     ambiguous: bool = False
 
-    def as_dict(self) -> dict[str, str]:
-        return {"code": self.code, "message": self.message}
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "message": self.message,
+            "retryable": self.retryable,
+            "ambiguous": self.ambiguous,
+        }
 
 
 @dataclasses.dataclass(frozen=True)
@@ -284,10 +296,12 @@ def classify_dispatch_result(
 
     A possibly-delivered request is never ``ok`` and never retried.
     """
-    if response_observed:
-        return "ok"
     if error_code in AMBIGUOUS_ERROR_CODES:
         return "ambiguous"
+    if error_code:
+        return "error"
+    if response_observed:
+        return "ok"
     return "error"
 
 

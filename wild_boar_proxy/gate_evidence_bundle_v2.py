@@ -41,7 +41,9 @@ EVIDENCE_CANDIDATE_MISMATCH = "EVIDENCE_CANDIDATE_MISMATCH"
 RECEIPT_SCHEMA_VERSION = 2
 RECEIPT_TYPE_CLOSEOUT_REFERENCE = "closeout_reference"
 
-# Required execution-core stages (B00–B13), full stage ids.
+# Required execution-core stages (B00–B13) plus immutable, uniquely named
+# repair supplements. Historical receipts are never rewritten or duplicated;
+# the supplement proves the later candidate contains the correction.
 REQUIRED_STAGES: tuple[str, ...] = (
     "B00_BASELINE_ADMISSION_REPAIR",
     "B01_ACTOR_ADR_AND_SPIKES",
@@ -51,6 +53,7 @@ REQUIRED_STAGES: tuple[str, ...] = (
     "B05_DISPATCHER_ASSIGNMENTS_PERMISSIONS_DIAGNOSTICS",
     "B06_LEGACY_SURFACE_AND_EVIDENCE_MATRIX_REGRESSION",
     "B07_CODE_MULTI_API_CORE",
+    "R59_API_TRANSPORT_TRUTH_HARDENING",
     "B08_CODE_QWEN_API",
     "B09_ONE_SHOT_CLI_RUNTIME",
     "B10_CODE_QWEN_ONE_SHOT_CLI",

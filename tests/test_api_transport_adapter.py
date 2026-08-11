@@ -5,26 +5,38 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from wild_boar_proxy import actor_registry as ar
 from wild_boar_proxy import actor_dispatcher as ad
 from wild_boar_proxy import api_transport_adapter as ata
 from wild_boar_proxy.deepseek_route_profile import build_deepseek_route_definition
 from wild_boar_proxy.external_models import routes as external_routes
+from wild_boar_proxy.external_models.http_client import HttpJsonResponse
 from wild_boar_proxy.kimi_glm_provider_slices import (
     build_glm_route_definition,
     build_kimi_route_definition,
 )
 from wild_boar_proxy.transport_normalization import (
+    ERR_AMBIGUOUS_DELIVERY,
+    ERR_IDENTITY_DRIFT,
     ERR_INVALID_CREDENTIAL,
+    ERR_INVALID_UPSTREAM_RESPONSE,
+    ERR_MODEL_NOT_AVAILABLE,
+    ERR_NETWORK_FAILED,
+    ERR_QUOTA_EXHAUSTED,
+    ERR_SECRET_INPUT_BLOCKED,
     ERR_STREAM_INCOMPLETE,
+    ERR_TIMEOUT,
     NormalizedRequest,
 )
+from wild_boar_proxy.runtime_errors import RuntimeErrorInfo
 
 
 def _write_routes(dir_path: Path) -> dict[str, dict[str, object]]:
@@ -109,6 +121,7 @@ class BindTests(unittest.TestCase):
         self.assertEqual(admission["status"], "ok")
         self.assertEqual(admission["provider_id"], "deepseek")
         self.assertTrue(admission["credential_present"])
+        self.assertEqual(len(admission["route_record_sha256"]), 64)
         self.assertFalse(admission["secret_value_exposed"])
 
     def test_bind_rejects_unknown_route(self) -> None:
@@ -140,6 +153,55 @@ class BindTests(unittest.TestCase):
         plan["model_policy"] = {"model_id": "no-such-model"}
         admission = self.adapter.bind(plan)
         self.assertEqual(admission["machine_error_code"], "MODEL_NOT_IN_CATALOG")
+
+    def test_controlled_admission_does_not_probe_credentials(self) -> None:
+        plan = self._plan("DIP")
+        with patch.object(
+            self.adapter,
+            "_credential_presence",
+            side_effect=AssertionError("credential probe must not run"),
+        ):
+            admission = self.adapter.bind(plan, require_credential=False)
+        self.assertEqual(admission["status"], "ok")
+        self.assertFalse(admission["credential_required"])
+        self.assertFalse(admission["credential_present"])
+        self.assertEqual(admission["credential_source"], "not_probed")
+
+    def test_bind_rejects_route_provider_identity_drift(self) -> None:
+        plan = self._plan("DIP")
+        routes = self.adapter._load_routes()
+        route = routes[str(plan["route_id"])]
+        route["provider"] = "kimi"
+        external_routes.write_routes_file(
+            self.root / "routes.json",
+            {"schema_version": 1, "routes": list(routes.values())},
+        )
+        admission = self.adapter.bind(plan)
+        self.assertEqual(admission["machine_error_code"], "ROUTE_PROVIDER_MISMATCH")
+
+    def test_credential_broker_exceptions_fail_closed(self) -> None:
+        plan = self._plan("DIP")
+        routes = self.adapter._load_routes()
+        routes[str(plan["route_id"])]["auth"] = {
+            "type": "bearer",
+            "secret_ref": "DEEPSEEK_API_KEY",
+        }
+        external_routes.write_routes_file(
+            self.root / "routes.json",
+            {"schema_version": 1, "routes": list(routes.values())},
+        )
+        with patch.object(
+            ata.external_credentials,
+            "credential_status",
+            return_value={"credential_present": False},
+        ), patch.object(
+            ata,
+            "lookup_keychain_credential",
+            side_effect=RuntimeError("keychain unavailable"),
+        ):
+            admission = self.adapter.bind(plan)
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["machine_error_code"], "CREDENTIAL_MISSING")
 
 
 class ControlledDispatchTests(unittest.TestCase):
@@ -195,6 +257,10 @@ class ControlledDispatchTests(unittest.TestCase):
         )
         self.assertFalse(deepseek_receipt["live_provider_proven"])
         self.assertTrue(deepseek_receipt["does_not_prove_live_provider"])
+        self.assertEqual(deepseek_receipt["evidence_level"], "SYNTHETIC_PROVEN")
+        self.assertEqual(deepseek_receipt["binding_revision"], 1)
+        self.assertEqual(deepseek_receipt["assignment_revision"], 1)
+        self.assertEqual(deepseek_receipt["context_digest"], "ctx-1")
         self.assertFalse(deepseek_receipt["fallback_used"])
         self.assertFalse(deepseek_receipt["actor_substitution_used"])
 
@@ -208,7 +274,7 @@ class ControlledDispatchTests(unittest.TestCase):
             dispatch_id="dispatch-dip",
             transport_kind="api",
             provider_id="deepseek",
-            model_id="deepseek-chat",
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
             text="hello",
             idempotency_key="idem-dip",
             context_digest="ctx-1",
@@ -231,6 +297,183 @@ class ControlledDispatchTests(unittest.TestCase):
         plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
         self.assertEqual(plan["effective_permission"], "context_only")
         self.assertEqual(plan["binding_permission_ceiling"], "context_only")
+
+    def test_controlled_bearer_dispatch_is_credential_free(self) -> None:
+        routes = self.adapter._load_routes()
+        deepseek = routes[str(self.route_ids["deepseek"]["route_id"])]
+        deepseek["auth"] = {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"}
+        external_routes.write_routes_file(
+            self.root / "routes.json",
+            {"schema_version": 1, "routes": list(routes.values())},
+        )
+        with patch.object(
+            self.adapter,
+            "_credential_presence",
+            side_effect=AssertionError("credential probe must not run"),
+        ):
+            receipt = self._dispatch("DIP")
+        self.assertEqual(receipt["status"], "ok")
+        self.assertTrue(receipt["controlled"])
+        self.assertFalse(receipt["live_provider_called"])
+        self.assertEqual(receipt["evidence_level"], "SYNTHETIC_PROVEN")
+
+    def test_request_identity_drift_blocks_before_dispatch(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-drift",
+            transport_kind="api",
+            provider_id="qwen",
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="hello",
+            idempotency_key="idem-drift",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        receipt = self.adapter.dispatch(
+            request,
+            plan,
+            controlled=True,
+            dispatch_id="dispatch-drift",
+        )
+        self.assertEqual(receipt["machine_error_code"], ERR_IDENTITY_DRIFT)
+        self.assertFalse(receipt["dispatch_attempted"])
+
+    def test_secret_shaped_prompt_blocks_before_dispatch(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-secret",
+            transport_kind="api",
+            provider_id=str(plan["provider_id"]),
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="api_key=abcdefgh12345678",
+            idempotency_key="idem-secret",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        receipt = self.adapter.dispatch(
+            request,
+            plan,
+            controlled=True,
+            dispatch_id="dispatch-secret",
+        )
+        self.assertEqual(receipt["machine_error_code"], ERR_SECRET_INPUT_BLOCKED)
+        self.assertFalse(receipt["dispatch_attempted"])
+        self.assertNotIn("abcdefgh", json.dumps(receipt))
+
+    def test_caller_route_override_drift_is_rejected(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-route-drift",
+            transport_kind="api",
+            provider_id=str(plan["provider_id"]),
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="hello",
+            idempotency_key="idem-route-drift",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        drifted_route = dict(self.route_ids["deepseek"])
+        drifted_route["base_url"] = "https://unregistered.invalid"
+        receipt = self.adapter.dispatch(
+            request,
+            plan,
+            controlled=True,
+            dispatch_id="dispatch-route-drift",
+            route=drifted_route,
+        )
+        self.assertEqual(receipt["machine_error_code"], "ROUTE_RECORD_DRIFT")
+        self.assertFalse(receipt["dispatch_attempted"])
+
+    def test_route_mutation_between_admission_and_dispatch_is_rejected(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-route-race",
+            transport_kind="api",
+            provider_id=str(plan["provider_id"]),
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="hello",
+            idempotency_key="idem-route-race",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        admitted_routes = self.adapter._load_routes()
+        mutated_routes = json.loads(json.dumps(admitted_routes))
+        mutated_routes[str(plan["route_id"])]["base_url"] = (
+            "https://mutated.invalid"
+        )
+        with patch.object(
+            self.adapter,
+            "_load_routes",
+            side_effect=[admitted_routes, mutated_routes],
+        ):
+            receipt = self.adapter.dispatch(
+                request,
+                plan,
+                controlled=True,
+                dispatch_id="dispatch-route-race",
+            )
+        self.assertEqual(receipt["machine_error_code"], "ROUTE_RECORD_DRIFT")
+        self.assertFalse(receipt["dispatch_attempted"])
+
+    def test_receipt_fills_identity_from_resolved_plan(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-plan-identity",
+            transport_kind="api",
+            provider_id=str(plan["provider_id"]),
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="hello",
+            idempotency_key="idem-plan-identity",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        receipt = self.adapter.dispatch(
+            request,
+            plan,
+            controlled=True,
+            dispatch_id="dispatch-plan-identity",
+        )
+        self.assertEqual(receipt["slot_id"], plan["slot_id"])
+        self.assertEqual(receipt["binding_id"], plan["binding_id"])
+        self.assertEqual(receipt["assignment_id"], plan["assignment_id"])
+
+    def test_non_serializable_provider_payload_fails_before_dispatch(self) -> None:
+        registry = _registry_document(self.route_ids)
+        plan = ad.resolve_alias_dispatch(alias="DIP", registry_document=registry)
+        request = NormalizedRequest(
+            dispatch_id="dispatch-invalid-payload",
+            transport_kind="api",
+            provider_id=str(plan["provider_id"]),
+            model_id=str((plan.get("model_policy") or {}).get("model_id") or ""),
+            text="hello",
+            idempotency_key="idem-invalid-payload",
+            context_digest="ctx-1",
+            requested_permission="context_only",
+            effective_permission="context_only",
+        )
+        with patch.object(
+            self.adapter,
+            "build_provider_request",
+            return_value=({"model": request.model_id, "bad": object()}, {}),
+        ):
+            receipt = self.adapter.dispatch(
+                request,
+                plan,
+                controlled=True,
+                dispatch_id="dispatch-invalid-payload",
+            )
+        self.assertEqual(receipt["machine_error_code"], ERR_INVALID_UPSTREAM_RESPONSE)
+        self.assertFalse(receipt["dispatch_attempted"])
 
 
 class SessionPolicyTests(unittest.TestCase):
@@ -326,7 +569,7 @@ class StreamDispatchTests(unittest.TestCase):
             dispatch_id="dispatch-stream",
             transport_kind="api",
             provider_id="deepseek",
-            model_id="deepseek-chat",
+            model_id=str((self.plan.get("model_policy") or {}).get("model_id") or ""),
             text="stream me",
             idempotency_key="idem-stream",
             context_digest="ctx-1",
@@ -358,6 +601,22 @@ class StreamDispatchTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["machine_error_code"], ERR_STREAM_INCOMPLETE)
 
+    def test_secret_split_across_stream_chunks_redacts_all_deltas(self) -> None:
+        chunks = [
+            {"choices": [{"delta": {"content": "token=abcd"}, "finish_reason": None}]},
+            {"choices": [{"delta": {"content": "efgh1234"}, "finish_reason": None}]},
+            {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+        ]
+        result = self.adapter.stream_dispatch(
+            self._request(), self.plan, chunks, dispatch_id="dispatch-stream"
+        )
+        serialized = json.dumps(result)
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["response_redacted"])
+        self.assertEqual(result["final_response"]["text"], "[redacted]")
+        self.assertNotIn("token=abcd", serialized)
+        self.assertNotIn("efgh1234", serialized)
+
 
 class LiveDispatchGatingTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -379,33 +638,223 @@ class LiveDispatchGatingTests(unittest.TestCase):
         os.environ.pop("WBP_MANAGED_DIR", None)
         self.temp_dir.cleanup()
 
-    def test_live_dispatch_without_credential_fails_closed(self) -> None:
-        # auth=none routes admit; simulate a bearer route without credentials:
-        routes = self.adapter._load_routes()
-        route = routes[str(self.plan["route_id"])]
-        route["auth"] = {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"}
-        external_routes.write_routes_file(
-            self.root / "routes.json",
-            {"schema_version": 1, "routes": list(routes.values())},
-        )
-        request = NormalizedRequest(
+    def _request(self, *, text: str = "hi") -> NormalizedRequest:
+        return NormalizedRequest(
             dispatch_id="dispatch-live",
             transport_kind="api",
-            provider_id="deepseek",
-            model_id="deepseek-chat",
-            text="hi",
+            provider_id=str(self.plan["provider_id"]),
+            model_id=str((self.plan.get("model_policy") or {}).get("model_id") or ""),
+            text=text,
             idempotency_key="idem-live",
             context_digest="ctx-1",
             requested_permission="context_only",
             effective_permission="context_only",
         )
+
+    def _set_auth(self, auth: dict[str, str]) -> None:
+        routes = self.adapter._load_routes()
+        routes[str(self.plan["route_id"])]["auth"] = auth
+        external_routes.write_routes_file(
+            self.root / "routes.json",
+            {"schema_version": 1, "routes": list(routes.values())},
+        )
+
+    def test_live_dispatch_without_credential_fails_closed(self) -> None:
+        # auth=none routes admit; simulate a bearer route without credentials:
+        self._set_auth({"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"})
         receipt = self.adapter.dispatch(
-            request, self.plan, controlled=False, dispatch_id="dispatch-live"
+            self._request(), self.plan, controlled=False, dispatch_id="dispatch-live"
         )
         self.assertEqual(receipt["status"], "error")
         self.assertEqual(receipt["machine_error_code"], "CREDENTIAL_MISSING")
         self.assertFalse(receipt["live_provider_called"])
+        self.assertFalse(receipt["dispatch_attempted"])
         self.assertFalse(receipt["fallback_used"])
+
+    def test_http_error_statuses_never_false_green(self) -> None:
+        expected = {
+            401: ERR_INVALID_CREDENTIAL,
+            403: ERR_INVALID_CREDENTIAL,
+            404: ERR_MODEL_NOT_AVAILABLE,
+            408: ERR_TIMEOUT,
+            429: ERR_QUOTA_EXHAUSTED,
+            500: ERR_NETWORK_FAILED,
+            503: ERR_NETWORK_FAILED,
+        }
+        payload = {"choices": [{"message": {"content": "must not be accepted"}}]}
+        for status_code, error_code in expected.items():
+            with self.subTest(status_code=status_code):
+                response = HttpJsonResponse(
+                    status_code=status_code,
+                    payload=payload,
+                    latency_ms=1,
+                )
+                with patch(
+                    "wild_boar_proxy.external_models.http_client.request_json",
+                    return_value=response,
+                ):
+                    receipt = self.adapter.dispatch(
+                        self._request(),
+                        self.plan,
+                        controlled=False,
+                        dispatch_id="dispatch-live",
+                    )
+                self.assertEqual(receipt["status"], "error")
+                self.assertEqual(receipt["machine_error_code"], error_code)
+                self.assertEqual(receipt["result"], "error")
+                self.assertTrue(receipt["dispatch_attempted"])
+                self.assertTrue(receipt["response_observed"])
+                self.assertTrue(receipt["live_provider_called"])
+                self.assertFalse(receipt["live_provider_proven"])
+                self.assertFalse(receipt["retry_permitted"])
+
+    def test_post_request_exception_is_ambiguous_and_never_retryable(self) -> None:
+        failure = RuntimeErrorInfo(
+            "Provider network failed with Bearer sk-sensitive-value",
+            machine_error_code="provider_network_failed",
+            operator_action="retry",
+        )
+        with patch(
+            "wild_boar_proxy.external_models.http_client.request_json",
+            side_effect=failure,
+        ):
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        self.assertEqual(receipt["machine_error_code"], ERR_AMBIGUOUS_DELIVERY)
+        self.assertEqual(receipt["upstream_error_code"], ERR_NETWORK_FAILED)
+        self.assertEqual(receipt["result"], "ambiguous")
+        self.assertTrue(receipt["dispatch_attempted"])
+        self.assertFalse(receipt["response_observed"])
+        self.assertTrue(receipt["live_provider_called"])
+        self.assertFalse(receipt["live_provider_proven"])
+        self.assertFalse(receipt["retry_permitted"])
+        self.assertNotIn("sensitive", json.dumps(receipt))
+        self.assertNotIn("Bearer", json.dumps(receipt))
+
+    def test_invalid_success_payload_is_observed_error_without_raw_body(self) -> None:
+        response = HttpJsonResponse(
+            status_code=200,
+            payload={"error": "token=abcdefgh12345678"},
+            latency_ms=1,
+        )
+        with patch(
+            "wild_boar_proxy.external_models.http_client.request_json",
+            return_value=response,
+        ):
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        self.assertEqual(receipt["machine_error_code"], ERR_INVALID_UPSTREAM_RESPONSE)
+        self.assertEqual(receipt["result"], "error")
+        self.assertTrue(receipt["dispatch_attempted"])
+        self.assertTrue(receipt["response_observed"])
+        self.assertFalse(receipt["live_provider_proven"])
+        self.assertNotIn("abcdefgh", json.dumps(receipt))
+
+    def test_malformed_http_response_status_is_observed_error(self) -> None:
+        with patch(
+            "wild_boar_proxy.external_models.http_client.request_json",
+            return_value=object(),
+        ):
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        self.assertEqual(receipt["machine_error_code"], ERR_INVALID_UPSTREAM_RESPONSE)
+        self.assertEqual(receipt["result"], "error")
+        self.assertTrue(receipt["dispatch_attempted"])
+        self.assertTrue(receipt["response_observed"])
+        self.assertTrue(receipt["live_provider_called"])
+        self.assertIsNone(receipt["provider_http_status"])
+
+    def test_route_mutation_at_live_rebind_blocks_before_provider(self) -> None:
+        admitted_routes = self.adapter._load_routes()
+        dispatch_routes = json.loads(json.dumps(admitted_routes))
+        mutated_routes = json.loads(json.dumps(admitted_routes))
+        mutated_routes[str(self.plan["route_id"])]["base_url"] = (
+            "https://mutated.invalid"
+        )
+        with patch.object(
+            self.adapter,
+            "_load_routes",
+            side_effect=[admitted_routes, dispatch_routes, mutated_routes],
+        ), patch(
+            "wild_boar_proxy.external_models.http_client.request_json"
+        ) as request_mock:
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        request_mock.assert_not_called()
+        self.assertEqual(receipt["machine_error_code"], "ROUTE_RECORD_DRIFT")
+        self.assertFalse(receipt["dispatch_attempted"])
+        self.assertFalse(receipt["live_provider_called"])
+
+    def test_successful_provider_output_is_redacted_and_digest_bound(self) -> None:
+        response = HttpJsonResponse(
+            status_code=200,
+            payload={
+                "choices": [
+                    {"message": {"content": "result token=abcdefgh12345678"}}
+                ]
+            },
+            latency_ms=1,
+        )
+        with patch(
+            "wild_boar_proxy.external_models.http_client.request_json",
+            return_value=response,
+        ):
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        self.assertEqual(receipt["status"], "ok")
+        self.assertEqual(receipt["evidence_level"], "LIVE_PROVEN")
+        self.assertTrue(receipt["live_provider_proven"])
+        self.assertTrue(receipt["response_redacted"])
+        self.assertEqual(receipt["response_text"], "result [redacted]")
+        self.assertEqual(
+            receipt["response_text_sha256"],
+            hashlib.sha256(b"result [redacted]").hexdigest(),
+        )
+        self.assertNotIn("abcdefgh", json.dumps(receipt))
+
+    def test_pre_dispatch_header_failure_is_not_marked_attempted(self) -> None:
+        failure = RuntimeErrorInfo(
+            "missing secret value that must not escape",
+            machine_error_code="missing_secret",
+            operator_action="user_action",
+        )
+        with patch(
+            "wild_boar_proxy.external_models.validate._provider_headers",
+            side_effect=failure,
+        ), patch(
+            "wild_boar_proxy.external_models.http_client.request_json"
+        ) as request_mock:
+            receipt = self.adapter.dispatch(
+                self._request(),
+                self.plan,
+                controlled=False,
+                dispatch_id="dispatch-live",
+            )
+        request_mock.assert_not_called()
+        self.assertEqual(receipt["machine_error_code"], ERR_INVALID_CREDENTIAL)
+        self.assertFalse(receipt["dispatch_attempted"])
+        self.assertFalse(receipt["live_provider_called"])
+        self.assertNotIn("secret value", json.dumps(receipt))
 
 
 if __name__ == "__main__":
