@@ -1052,6 +1052,14 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
                 "wild_boar_proxy.runtime.login_session_cancel_grace_seconds",
                 return_value=0.2,
             ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.time.time",
+                side_effect=[0.0, 0.0, 0.05],
+            ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.time.sleep",
+                return_value=None,
+            ),
         ):
             terminated = runtime.terminate_login_session_pid(12345)
 
@@ -1084,6 +1092,14 @@ class RuntimeNativeAuthRecoveryTests(unittest.TestCase):
             unittest.mock.patch(
                 "wild_boar_proxy.runtime.login_session_cancel_grace_seconds",
                 return_value=0.2,
+            ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.time.time",
+                side_effect=[0.0, 0.0, 0.05],
+            ),
+            unittest.mock.patch(
+                "wild_boar_proxy.runtime.time.sleep",
+                return_value=None,
             ),
         ):
             terminated = runtime.terminate_login_session_pid(12345)

@@ -15221,7 +15221,17 @@ class WebDesignRouteEffectRegistryTests(unittest.TestCase):
         try:
             live_readonly = json.loads(fetch(f"{base}/api/live-readonly"))
             operator_status = json.loads(fetch(f"{base}/api/operator/status"))
-            custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
+            # This assertion exercises dispatch/output mapping, not the
+            # production two-second readonly timeout. Give the in-process
+            # snapshot a deterministic test budget so host load cannot turn
+            # the representative success packet into the separately tested
+            # CUSTOM_CODEX_READONLY_TIMEOUT packet.
+            with mock.patch.object(
+                live_server,
+                "CUSTOM_CODEX_READONLY_TIMEOUT_SECONDS",
+                30.0,
+            ):
+                custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
             sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
             transcript = json.loads(
                 fetch(f"{base}/api/codex/custom/sessions/session-missing/transcript")
