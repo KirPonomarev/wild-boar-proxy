@@ -53,14 +53,15 @@ class FinalCheck:
 
 
 def _check_cli() -> FinalCheck:
-    """Read-only probe: the production facade must be fail-closed with a
-    typed code and no runtime-grant mechanism. Used by CI receipt
+    """Read-only probe: the production facade must expose the exact-admission
+    boundary without claiming an operational tool or runtime grant. Used by CI receipt
     emitters and hermeticity tests; not part of the assurance run path."""
     receipt = osr.default_production_facade().receipt()
     passed = (
         receipt["status"] == "ok"
-        and receipt.get("cli_disabled") is True
-        and receipt.get("disabled_reason") == "pending_security_admission"
+        and receipt.get("cli_disabled") is False
+        and receipt.get("cli_operational") is False
+        and receipt.get("production_admission_supported") is True
         and receipt.get("runtime_grant_available") is False
         and receipt.get("declared_not_live_verified") is True
     )
@@ -69,35 +70,38 @@ def _check_cli() -> FinalCheck:
         category="cli",
         passed=passed,
         evidence=(
-            "production CLI facade fail-closed "
+            "production CLI facade exact-admission boundary "
             f"(cli_disabled={receipt.get('cli_disabled')}, "
+            f"cli_operational={receipt.get('cli_operational')}, "
             f"runtime_grant_available={receipt.get('runtime_grant_available')})"
         ),
-        detail={"cli_disabled": receipt.get("cli_disabled")},
+        detail={
+            "cli_disabled": receipt.get("cli_disabled"),
+            "cli_operational": receipt.get("cli_operational"),
+        },
     )
 
 
 def _check_account_isolation() -> FinalCheck:
     """Read-only typed fail-closed compatibility probe.
 
-    Provider sessions on the production facade must fail closed with the
-    typed disabled code, no KeyError, and zero filesystem creation. This
+    Provider sessions on the production facade must fail closed at their
+    current distinct authority boundaries, with no KeyError and zero filesystem creation. This
     probe performs no writes and creates no provider homes. Used by CI
     receipt emitters and hermeticity tests; not part of the assurance
     run path.
     """
     qwen = qoc.qwen_one_shot_session()
     kimi = km.kimi_one_shot_session()
-    disabled_code = osr.CLI_DISABLED_PENDING_SECURITY_ADMISSION
     qwen_ok = (
         qwen.get("status") == "error"
-        and qwen.get("machine_error_code") == disabled_code
+        and qwen.get("machine_error_code") == osr.CLI_BINARY_ADMISSION_MISSING
         and qwen.get("changed_files") == []
         and "qwen_home" not in qwen
     )
     kimi_ok = (
         kimi.get("status") == "error"
-        and kimi.get("machine_error_code") == disabled_code
+        and kimi.get("machine_error_code") == osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
         and kimi.get("changed_files") == []
         and "kimi_code_home" not in kimi
     )
@@ -107,13 +111,13 @@ def _check_account_isolation() -> FinalCheck:
         category="isolation",
         passed=passed,
         evidence=(
-            f"provider sessions fail closed with typed code, no fs creation "
+            f"provider sessions fail closed at typed authority boundaries, no fs creation "
             f"(qwen={qwen.get('machine_error_code')}, kimi={kimi.get('machine_error_code')})"
         ),
         detail={
             "qwen_code": qwen.get("machine_error_code"),
             "kimi_code": kimi.get("machine_error_code"),
-            "cli_disabled": True,
+            "cli_disabled": False,
         },
     )
 

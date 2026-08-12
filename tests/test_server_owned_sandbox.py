@@ -84,6 +84,17 @@ class ProductionSandboxTests(unittest.TestCase):
         profile = self._profile()
         self.assertIn("(deny default)", profile)
         self.assertNotIn("(allow default)", profile)
+        self.assertNotIn("(allow network-outbound)", profile)
+
+    def test_provider_network_requires_explicit_profile_flag(self) -> None:
+        profile = osr.build_server_owned_sandbox_profile(
+            home_dir=self.home,
+            sandbox_cwd=self.cwd,
+            binary_path="/bin/sh",
+            allow_provider_network=True,
+        )
+        self.assertIn("(deny default)", profile)
+        self.assertIn("(allow network-outbound)", profile)
 
     def test_repo_not_readable(self) -> None:
         self.assertIn("REPO_READ=no", self._run())

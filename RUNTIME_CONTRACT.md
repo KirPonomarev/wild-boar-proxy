@@ -202,9 +202,28 @@
 - secret-shaped argv or stdin is rejected before spawn; captured stdout and
   stderr are bounded and redacted before packet serialization; raw process
   exception text is not a packet surface
-- the Qwen and Kimi declarations are present, but their provider adapters,
-  interactive login, and network policies remain not admitted until their
-  respective B10 and B11 contours
+- the Qwen production adapter is code-admitted with one sealed headless argv:
+  `--prompt <bounded-nonsecret-text> --output-format json --safe-mode
+  --approval-mode plan --max-session-turns 30 --max-wall-time 300s
+  --max-tool-calls 25 --exclude-tools shell,write,edit,agent`; callers cannot
+  supply argv, environment, provider home, parser, or sandbox policy
+- Qwen operational output must be one complete, non-truncated buffered JSON
+  array containing a non-error `result/success` envelope with non-empty result
+  text; process success with malformed, partial, error, or empty output is still
+  a typed failure
+- Qwen authentication is presence-checked only in its isolated WBP-owned home;
+  WBP neither reads secret values nor performs interactive login in this contour
+- the operational child receives fixed server-owned
+  `QWEN_USAGE_STATISTICS_ENABLED=false` and `QWEN_TELEMETRY_ENABLED=false`;
+  ambient or caller values cannot override this privacy boundary
+- provider network is denied for probes and every default child; it is enabled
+  only for the exact admitted Qwen operational child after binary and auth
+  revalidation, while repository writes remain denied and an explicitly selected
+  project root is read-only
+- Qwen binary admission, auth presence, and a live provider call remain external
+  gates; code admission alone is not live proof
+- the Kimi declaration is present, but its provider adapter, interactive login,
+  and network policy remain not admitted until its separate B11 contour
 
 ## Runtime attestation
 

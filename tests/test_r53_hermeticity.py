@@ -32,7 +32,7 @@ from wild_boar_proxy import qwen_one_shot_cli as qw
 QWEN_FAKE = """#!/bin/sh
 case "$1" in
   --version) echo "fake-qwen-cli 0.1.0" ;;
-  --respond) echo "Qwen: $2" ;;
+  --prompt) printf '[{"type":"result","subtype":"success","is_error":false,"result":"Qwen: %s"}]\n' "$2" ;;
 esac
 exit 0
 """
@@ -69,7 +69,7 @@ class HermeticityTests(unittest.TestCase):
             self.assertEqual(packet["status"], "error")
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
+                osr.CLI_NETWORK_POLICY_NOT_ADMITTED,
             )
         receipt = osr.default_production_facade().receipt()
         self.assertFalse(receipt["cli_disabled"])
@@ -93,7 +93,7 @@ class HermeticityTests(unittest.TestCase):
         disabled = osr.default_production_facade().run(qw.QWEN_CLI_TOOL_ID)
         self.assertEqual(
             disabled["machine_error_code"],
-            osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
+            osr.CLI_NETWORK_POLICY_NOT_ADMITTED,
         )
 
     def test_final_assurance_checks_independent_of_one_shot_activity(self) -> None:
@@ -107,9 +107,9 @@ class HermeticityTests(unittest.TestCase):
         km.kimi_one_shot_session(runtime=runtime)
         cli_after = fca._check_cli()
         iso_after = fca._check_account_isolation()
-        # These private compatibility probes still encode the pre-R60
-        # permanently-disabled contract and are not part of the assurance run
-        # path. Test-runtime activity must not change their result either way.
+        # These private compatibility probes encode the exact production
+        # authority boundaries and are not part of the assurance run path.
+        # Test-runtime activity must not change their result either way.
         self.assertEqual(cli_before.passed, cli_after.passed)
         self.assertEqual(iso_before.passed, iso_after.passed)
         self.assertEqual(cli_before.detail, cli_after.detail)
@@ -127,11 +127,12 @@ class HermeticityTests(unittest.TestCase):
             saved[name] = os.environ.get(name)
             os.environ[name] = str(self.root / "junk")
         try:
-            # The facade stays sealed and the provider adapter stays pending.
+            # The facade stays sealed; legacy hooks cannot bypass Qwen's
+            # dedicated operational path or its exact authority checks.
             packet = osr.default_production_facade().run(qw.QWEN_CLI_TOOL_ID)
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
+                osr.CLI_NETWORK_POLICY_NOT_ADMITTED,
             )
             # A fresh engine instance sees only its explicit manifest.
             runtime = osr.OneShotRuntime(homes_root=self.root / "homes2")

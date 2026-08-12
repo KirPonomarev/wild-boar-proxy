@@ -26,11 +26,8 @@ case "$1" in
   --version)
     echo "fake-qwen-cli 0.1.0"
     ;;
-  --respond)
-    echo "Qwen: $2"
-    echo "ENV[QWEN_HOME]=$QWEN_HOME"
-    echo "ENV[QWEN_RUNTIME_DIR]=$QWEN_RUNTIME_DIR"
-    echo "ENV[HOME]=$HOME"
+  --prompt)
+    printf '[{"type":"result","subtype":"success","is_error":false,"result":"Qwen: %s","env":{"QWEN_HOME":"%s","QWEN_RUNTIME_DIR":"%s","HOME":"%s","QWEN_USAGE_STATISTICS_ENABLED":"%s","QWEN_TELEMETRY_ENABLED":"%s"}}]\n' "$2" "$QWEN_HOME" "$QWEN_RUNTIME_DIR" "$HOME" "$QWEN_USAGE_STATISTICS_ENABLED" "$QWEN_TELEMETRY_ENABLED"
     ;;
   --read-file)
     if [ -f "$2" ]; then
@@ -97,15 +94,16 @@ class QwenOneShotCliTests(unittest.TestCase):
         the child, not just be built in a local variable."""
         packet = qw.qwen_one_shot_run("ping", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
-        stdout = packet["run"]["stdout"]
-        self.assertIn(
-            "ENV[QWEN_HOME]=" + str(Path(self.session["qwen_home"]).resolve()), stdout
+        document = packet["parsed_output"]["document"]
+        env = document[0]["env"]
+        self.assertEqual(env["QWEN_HOME"], str(Path(self.session["qwen_home"]).resolve()))
+        self.assertEqual(
+            env["QWEN_RUNTIME_DIR"],
+            str(Path(self.session["qwen_runtime_dir"]).resolve()),
         )
-        self.assertIn(
-            "ENV[QWEN_RUNTIME_DIR]=" + str(Path(self.session["qwen_runtime_dir"]).resolve()),
-            stdout,
-        )
-        self.assertIn("ENV[HOME]=" + str(Path(self.session["qwen_home"]).resolve()), stdout)
+        self.assertEqual(env["HOME"], str(Path(self.session["qwen_home"]).resolve()))
+        self.assertEqual(env["QWEN_USAGE_STATISTICS_ENABLED"], "false")
+        self.assertEqual(env["QWEN_TELEMETRY_ENABLED"], "false")
 
     def test_project_config_default_denied_and_admission(self) -> None:
         project = self.root / "project"
@@ -239,21 +237,35 @@ class QwenOneShotCliTests(unittest.TestCase):
     def test_run_parses_output(self) -> None:
         packet = qw.qwen_one_shot_run("hello", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["parsed_output"]["detected_format"], "text")
-        self.assertIn("Qwen: hello", packet["run"]["stdout"])
+        self.assertEqual(packet["parsed_output"]["detected_format"], "json")
+        self.assertEqual(packet["parsed_output"]["document"][0]["result"], "Qwen: hello")
         self.assertFalse(packet["resume_supported"])
+
+    def test_caller_supplied_argv_is_rejected(self) -> None:
+        packet = qw.qwen_one_shot_run(
+            "hello", session=self.session, runtime=self.runtime, args=("--yolo",)
+        )
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], osr.ONE_SHOT_SCHEMA_INVALID)
+        self.assertTrue(packet["caller_argv_blocked"])
 
     def test_receipt_declared_not_live(self) -> None:
         receipt = qw.build_qwen_one_shot_receipt()
         self.assertEqual(receipt["status"], "ok")
-        self.assertEqual(receipt["machine_error_code"], "SYNTHETIC_PROVEN")
+        self.assertEqual(
+            receipt["machine_error_code"],
+            "B10_CODE_PRODUCTION_ADAPTER_DECLARED",
+        )
         self.assertTrue(receipt["declared_not_live_verified"])
+        self.assertTrue(receipt["provider_adapter_admitted"])
+        self.assertTrue(receipt["b10_live_pending"])
+        self.assertFalse(receipt["provider_live_proven"])
         self.assertEqual(receipt["repo_write_policy"], "denied")
         self.assertFalse(receipt["resume_supported"])
 
 
 class QwenProductionFacadeTests(unittest.TestCase):
-    """The declared Qwen provider stays blocked until its B10 adapter."""
+    """The Qwen adapter is code-admitted but remains binary/live gated."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -269,26 +281,38 @@ class QwenProductionFacadeTests(unittest.TestCase):
         )
         packet = facade.session("qwen")
         self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
-        )
+        self.assertEqual(packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
         self.assertEqual(packet["changed_files"], [])
         self.assertFalse((self.root / "homes").exists())
 
     def test_default_session_function_uses_fail_closed_facade(self) -> None:
         packet = qw.qwen_one_shot_session()
         self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
-        )
+        self.assertEqual(packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
         self.assertEqual(packet["changed_files"], [])
 
     def test_default_run_function_uses_fail_closed_facade(self) -> None:
         packet = qw.qwen_one_shot_run("hi", session={"qwen_home": "/nonexistent"})
         self.assertEqual(packet["status"], "error")
-        self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+        self.assertEqual(packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
+
+    def test_default_run_rejects_caller_argv_before_facade(self) -> None:
+        packet = qw.qwen_one_shot_run(
+            "hi",
+            session={"qwen_home": "/ignored"},
+            args=("--yolo",),
         )
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], osr.ONE_SHOT_SCHEMA_INVALID)
+        self.assertTrue(packet["caller_argv_blocked"])
+
+    def test_server_manifest_admits_only_qwen_adapter(self) -> None:
+        entries = {entry.provider_id: entry for entry in osr.SERVER_OWNED_TOOL_MANIFEST}
+        self.assertTrue(entries["qwen"].provider_adapter_admitted)
+        self.assertEqual(entries["qwen"].allowed_argv_schema, osr.QWEN_ALLOWED_ARGV_SCHEMA)
+        self.assertEqual(entries["qwen"].operational_args, osr.QWEN_OPERATIONAL_ARGS)
+        self.assertEqual(entries["qwen"].network_policy, osr.QWEN_NETWORK_POLICY)
+        self.assertFalse(entries["kimi"].provider_adapter_admitted)
 
 
 if __name__ == "__main__":

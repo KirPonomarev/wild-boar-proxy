@@ -115,10 +115,15 @@ class TestSeamsRemovedFromProduction(unittest.TestCase):
 class ProductionFacadeFailClosed(unittest.TestCase):
     def test_default_provider_adapter_blocked_before_any_side_effect(self) -> None:
         facade = osr.default_production_facade()
-        packet = facade.run("qwen-cli")
+        packet = facade.run("kimi-cli")
+        qwen = facade.run_prompt("qwen-cli", "bounded test prompt")
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
             packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+        )
+        self.assertEqual(qwen["status"], "error")
+        self.assertEqual(
+            qwen["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING
         )
         receipt = facade.receipt()
         self.assertFalse(receipt["cli_disabled"])
@@ -139,9 +144,11 @@ class ProductionFacadeFailClosed(unittest.TestCase):
             ),
             2,
         )
-        self.assertTrue(
-            all(not entry.provider_adapter_admitted for entry in osr.SERVER_OWNED_TOOL_MANIFEST)
-        )
+        admissions = {
+            entry.provider_id: entry.provider_adapter_admitted
+            for entry in osr.SERVER_OWNED_TOOL_MANIFEST
+        }
+        self.assertEqual(admissions, {"qwen": True, "kimi": False})
         # The only module-level facade object is the sealed singleton getter.
         self.assertIs(osr.default_production_facade(), osr.default_production_facade())
 

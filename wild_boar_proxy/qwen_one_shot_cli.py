@@ -7,9 +7,10 @@ Builds on the B09 generic one-shot runtime: `QWEN_HOME` / `QWEN_RUNTIME_DIR`
 isolation, project-config denial/admission (`.qwen`, `.env`, extensions,
 plugins default-denied unless individually admitted and digested), permission
 controls (repo write denied by default), text / repo-read proof, denied-write
-proof, and timeout / cancel proof. Real Qwen CLI binary probe is B10_LIVE
-scope; all B10_CODE evidence is fake-adapter controlled and declared-not-live.
-One-shot sessions never resume.
+proof, and timeout / cancel proof. R61 adds the server-owned production
+headless adapter while exact binary admission, auth configuration, and real
+provider proof remain B10_LIVE. Test adapters remain controlled and
+declared-not-live. One-shot sessions never resume.
 """
 
 from __future__ import annotations
@@ -314,6 +315,7 @@ def _qwen_provider_env(
     env: dict[str, str] = {
         QWEN_HOME_ENV: str(home),
         QWEN_RUNTIME_DIR_ENV: str(runtime_dir),
+        **osr.QWEN_FIXED_ENV,
     }
     if project_root is not None:
         env["QWEN_PROJECT_ROOT"] = str(Path(project_root))
@@ -349,12 +351,28 @@ def qwen_one_shot_run(
             exit_code=1,
             extra={"tool_id": QWEN_CLI_TOOL_ID},
         )
+    if args:
+        return build_command_payload(
+            ok=False,
+            human_message="caller-supplied Qwen argv is not admitted.",
+            machine_error_code=osr.ONE_SHOT_SCHEMA_INVALID,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"tool_id": QWEN_CLI_TOOL_ID, "caller_argv_blocked": True},
+        )
     if runtime is None:
-        return osr.default_production_facade().run(QWEN_CLI_TOOL_ID)
+        return osr.default_production_facade().run_prompt(
+            QWEN_CLI_TOOL_ID,
+            text,
+            active_project_root=project_root,
+        )
     provider_env = _qwen_provider_env(session, project_root=project_root)
     run = runtime.one_shot_cli_run(
         QWEN_CLI_TOOL_ID,
-        args=("--respond", text, *args),
+        args=("--prompt", text, *osr.QWEN_OPERATIONAL_ARGS),
         stdin_text=None,
         provider_home=Path(session["qwen_home"]),
         provider_env=provider_env,
@@ -375,7 +393,7 @@ def qwen_one_shot_run(
         liveness="healthy",
         severity="info" if run["status"] == "ok" else "error",
         operator_action="none" if run["status"] == "ok" else "user_action",
-        changed_files=[],
+        changed_files=run.get("changed_files", []),
         exit_code=run.get("exit_code"),
         extra={
             "tool_id": QWEN_CLI_TOOL_ID,
@@ -389,6 +407,35 @@ def qwen_one_shot_run(
     )
 
 
+def _qwen_response_text(parsed: dict[str, Any]) -> str:
+    """Extract response text from Qwen's JSON document without inventing it."""
+    document = parsed.get("document")
+    candidates: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            response = value.get("response")
+            if isinstance(response, str):
+                candidates.append(response)
+            result = value.get("result")
+            if (
+                value.get("type") == "result"
+                and value.get("is_error") is False
+                and isinstance(result, str)
+            ):
+                candidates.append(result)
+            if value.get("type") == "text" and isinstance(value.get("text"), str):
+                candidates.append(value["text"])
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(document)
+    return "\n".join(item for item in candidates if item.strip())
+
+
 def qwen_text_proof(
     text: str,
     *,
@@ -399,10 +446,10 @@ def qwen_text_proof(
     """Text response proof: the fake adapter echoes the prompt; the packet
     proves a positive text response without any live claim."""
     run = qwen_one_shot_run(text, session=session, runtime=runtime)
-    stdout = (run.get("run") or {}).get("stdout", "")
-    ok = run["status"] == "ok" and bool(stdout.strip())
+    response_text = _qwen_response_text(run.get("parsed_output") or {})
+    ok = run["status"] == "ok" and bool(response_text.strip())
     if expected_prefix:
-        ok = ok and stdout.startswith(expected_prefix)
+        ok = ok and response_text.startswith(expected_prefix)
     return build_command_payload(
         ok=ok,
         human_message="qwen text proof ok." if ok else "qwen text proof failed.",
@@ -414,8 +461,10 @@ def qwen_text_proof(
         exit_code=0 if ok else 1,
         extra={
             "tool_id": QWEN_CLI_TOOL_ID,
-            "text_received": bool(stdout.strip()),
-            "expected_prefix_match": stdout.startswith(expected_prefix) if expected_prefix else None,
+            "text_received": bool(response_text.strip()),
+            "expected_prefix_match": (
+                response_text.startswith(expected_prefix) if expected_prefix else None
+            ),
             "proof_level": "SYNTHETIC_PROVEN",
             "declared_not_live_verified": True,
             "resume_supported": False,
@@ -605,11 +654,14 @@ def qwen_timeout_cancel_proof(
 
 
 def build_qwen_one_shot_receipt() -> dict[str, Any]:
-    """Declared receipt for the Qwen one-shot layer (B10_CODE)."""
+    """Declared code receipt for the Qwen one-shot production adapter."""
     return build_command_payload(
         ok=True,
-        human_message="Qwen one-shot CLI layer declared; fake-adapter proof only (B10_CODE).",
-        machine_error_code="SYNTHETIC_PROVEN",
+        human_message=(
+            "Qwen one-shot production adapter code declared; exact binary, "
+            "auth, and provider proof remain B10_LIVE."
+        ),
+        machine_error_code="B10_CODE_PRODUCTION_ADAPTER_DECLARED",
         liveness="healthy",
         severity="info",
         operator_action="none",
@@ -618,6 +670,14 @@ def build_qwen_one_shot_receipt() -> dict[str, Any]:
         extra={
             "tool_id": QWEN_CLI_TOOL_ID,
             "declared_not_live_verified": True,
+            "provider_adapter_admitted": True,
+            "binary_live_admitted": False,
+            "auth_live_admitted": False,
+            "provider_live_proven": False,
+            "b10_live_pending": True,
+            "headless_argv_schema": list(osr.QWEN_ALLOWED_ARGV_SCHEMA),
+            "output_parser": "json_document_or_text",
+            "network_policy": osr.QWEN_NETWORK_POLICY,
             "qwen_home_env": QWEN_HOME_ENV,
             "qwen_runtime_dir_env": QWEN_RUNTIME_DIR_ENV,
             "project_denied_names": list(QWEN_PROJECT_DENIED_NAMES),

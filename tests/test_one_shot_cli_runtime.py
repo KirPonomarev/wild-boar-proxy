@@ -135,18 +135,26 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertEqual(entry.tool_id, "fake-cli")
         self.assertEqual(entry.version_args, ("--version",))
         # Fake declarations remain instance-local while production carries
-        # immutable, non-operational Qwen/Kimi declarations.
+        # immutable Qwen/Kimi declarations with independently admitted
+        # provider adapters.
         self.assertEqual(
             {item.tool_id for item in osr.SERVER_OWNED_TOOL_MANIFEST},
             {"qwen-cli", "kimi-cli"},
         )
+        admissions = {}
         for item in osr.SERVER_OWNED_TOOL_MANIFEST:
             self.assertTrue(item.server_owned)
-            self.assertFalse(item.provider_adapter_admitted)
+            admissions[item.provider_id] = item.provider_adapter_admitted
             self.assertTrue(item.allowed_argv_schema)
             self.assertTrue(item.allowed_environment_keys)
-            self.assertEqual(item.sandbox_policy, "deny_default_offline")
+            self.assertEqual(
+                item.sandbox_policy,
+                osr.QWEN_SANDBOX_POLICY
+                if item.provider_id == "qwen"
+                else "deny_default_offline",
+            )
             self.assertEqual(item.session_policy, osr.ONE_SHOT_NO_RESUME_REASON)
+        self.assertEqual(admissions, {"qwen": True, "kimi": False})
 
     def test_sterile_probe_returns_realpath_version_digest(self) -> None:
         packet = self.runtime.run_sterile_probe("fake-cli")
@@ -244,6 +252,24 @@ class FakeAdapterTests(unittest.TestCase):
                 "fake-cli",
                 provider_home=self.homes_root / "x",
                 provider_env={"LEAK_TEST_SECRET": "/tmp/x"},
+            )
+        self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
+
+    def test_qwen_privacy_env_values_are_exact_literals(self) -> None:
+        with self.assertRaises(TypeError):
+            osr.QWEN_FIXED_ENV["QWEN_TELEMETRY_ENABLED"] = "true"  # type: ignore[index]
+        env = self.runtime._prepare_child_env(
+            provider_home=None,
+            provider_env=dict(osr.QWEN_FIXED_ENV),
+        )
+        self.assertEqual(
+            {key: env[key] for key in osr.QWEN_FIXED_ENV},
+            dict(osr.QWEN_FIXED_ENV),
+        )
+        with self.assertRaises(osr.RuntimeErrorInfo) as ctx:
+            self.runtime._prepare_child_env(
+                provider_home=None,
+                provider_env={"QWEN_TELEMETRY_ENABLED": "true"},
             )
         self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
         with self.assertRaises(osr.RuntimeErrorInfo) as ctx:
@@ -373,8 +399,16 @@ class FakeAdapterTests(unittest.TestCase):
         self.assertEqual(jl["records"], [{"a": 1}, {"b": 2}])
         self.assertEqual(jl["malformed_lines"], 1)
 
+        document = osr.parse_cli_output(
+            '{"response": "ok", "usage": {"turns": 1}}\n',
+            profile="json",
+        )
+        self.assertTrue(document["valid"])
+        self.assertEqual(document["detected_format"], "json")
+        self.assertEqual(document["document"]["response"], "ok")
+
         auto = osr.parse_cli_output('{"x": 1}\n', profile="auto")
-        self.assertEqual(auto["detected_format"], "json_lines")
+        self.assertEqual(auto["detected_format"], "json")
 
         plain = osr.parse_cli_output("hello\nworld\n", profile="text")
         self.assertEqual(plain["detected_format"], "text")
@@ -463,16 +497,22 @@ class ProductionFacadeTests(unittest.TestCase):
             lambda: self.facade.create_home("qwen"),
             lambda: self.facade.session("qwen"),
             lambda: self.facade.auth_session("qwen"),
-            lambda: self.facade.run("qwen-cli"),
         ):
             packet = call()
             self.assertEqual(packet["status"], "error")
             self.assertEqual(
                 packet["machine_error_code"],
-                osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED,
+                osr.CLI_BINARY_ADMISSION_MISSING,
             )
             self.assertEqual(packet["changed_files"], [])
             self.assertFalse(packet["cli_disabled"])
+        generic_run = self.facade.run("qwen-cli")
+        self.assertEqual(generic_run["status"], "error")
+        self.assertEqual(
+            generic_run["machine_error_code"],
+            osr.CLI_NETWORK_POLICY_NOT_ADMITTED,
+        )
+        self.assertEqual(generic_run["changed_files"], [])
         probe = self.facade.probe("qwen-cli")
         self.assertEqual(probe["status"], "error")
         self.assertEqual(probe["machine_error_code"], osr.TOOL_BINARY_NOT_FOUND)
