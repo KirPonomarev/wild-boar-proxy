@@ -222,8 +222,26 @@
   project root is read-only
 - Qwen binary admission, auth presence, and a live provider call remain external
   gates; code admission alone is not live proof
-- the Kimi declaration is present, but its provider adapter, interactive login,
-  and network policy remain not admitted until its separate B11 contour
+- the Kimi production adapter is code-admitted with one sealed prompt-mode argv:
+  `--prompt <bounded-nonsecret-text> --output-format stream-json
+  --skills-dir <sealed-empty-dir>` plus an optional validated
+  `--add-dir <read-only-root>`; loop, retry, subagent, background, cron,
+  built-in skill, telemetry, and update behavior is fixed by server-owned
+  documented environment values; callers cannot supply argv,
+  environment, provider home, parser, permissions, or sandbox policy
+- Kimi output must be complete non-truncated JSON Lines whose final record is
+  an assistant message with non-empty string or text-block content; malformed,
+  partial, non-assistant, or empty output is a typed failure, and nonzero exits
+  remain typed process failures without undocumented retryability claims
+- Kimi auth is presence-checked only through safe metadata for `config.toml`
+  and top-level `credentials/*.json` beneath isolated `KIMI_CODE_HOME`; WBP
+  does not read secret values or perform interactive login, fixed privacy and
+  bound variables cannot be overridden, and unadmitted home-level MCP/agent/
+  plugin instruction surfaces block spawn
+- Kimi network is enabled only for the revalidated operational child; probes
+  remain offline, provider-home writes stay isolated, optional project access
+  is OS-sandboxed read-only, and binary admission/auth/live B11 proof remain
+  external gates
 
 ## Runtime attestation
 

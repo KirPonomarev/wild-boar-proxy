@@ -152,10 +152,10 @@ class FakeAdapterTests(unittest.TestCase):
                 item.sandbox_policy,
                 osr.QWEN_SANDBOX_POLICY
                 if item.provider_id == "qwen"
-                else "deny_default_offline",
+                else osr.KIMI_SANDBOX_POLICY,
             )
             self.assertEqual(item.session_policy, osr.ONE_SHOT_NO_RESUME_REASON)
-        self.assertEqual(admissions, {"qwen": True, "kimi": False})
+        self.assertEqual(admissions, {"qwen": True, "kimi": True})
 
     def test_sterile_probe_returns_realpath_version_digest(self) -> None:
         packet = self.runtime.run_sterile_probe("fake-cli")
@@ -255,6 +255,13 @@ class FakeAdapterTests(unittest.TestCase):
                 provider_env={"LEAK_TEST_SECRET": "/tmp/x"},
             )
         self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
+        with self.assertRaises(osr.RuntimeErrorInfo) as ctx:
+            self.runtime.one_shot_cli_run(
+                "fake-cli",
+                provider_home=self.homes_root / "x",
+                provider_env={"QWEN_HOME": "relative/path"},
+            )
+        self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
 
     def test_qwen_privacy_env_values_are_exact_literals(self) -> None:
         with self.assertRaises(TypeError):
@@ -273,11 +280,29 @@ class FakeAdapterTests(unittest.TestCase):
                 provider_env={"QWEN_TELEMETRY_ENABLED": "true"},
             )
         self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
+
+    def test_kimi_bound_env_values_are_exact_literals(self) -> None:
+        with self.assertRaises(TypeError):
+            osr.KIMI_FIXED_ENV["KIMI_DISABLE_TELEMETRY"] = "0"  # type: ignore[index]
+        env = self.runtime._prepare_child_env(
+            provider_home=None,
+            provider_env=dict(osr.KIMI_FIXED_ENV),
+        )
+        self.assertEqual(
+            {key: env[key] for key in osr.KIMI_FIXED_ENV},
+            dict(osr.KIMI_FIXED_ENV),
+        )
+        with self.assertRaises(osr.RuntimeErrorInfo) as ctx:
+            self.runtime._prepare_child_env(
+                provider_home=None,
+                provider_env={"KIMI_DISABLE_TELEMETRY": "0"},
+            )
+        self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
         with self.assertRaises(osr.RuntimeErrorInfo) as ctx:
             self.runtime.one_shot_cli_run(
                 "fake-cli",
                 provider_home=self.homes_root / "x",
-                provider_env={"QWEN_HOME": "relative/path"},
+                provider_env={"KIMI_CODE_HOME": "relative/path"},
             )
         self.assertEqual(ctx.exception.machine_error_code, osr.ONE_SHOT_ENV_VIOLATION)
 
