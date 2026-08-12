@@ -76,6 +76,7 @@ DEFAULT_RUN_TIMEOUT_SECONDS = 300.0
 DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024
 DEFAULT_DIGEST_SIZE_LIMIT = 512 * 1024 * 1024
 CANCEL_GRACE_SECONDS = 5.0
+PROCESS_GROUP_EXIT_WAIT_SECONDS = 2.0
 
 # Fixed executable roots. These are code-owned and never inherited from the
 # ambient PATH. System roots stay first for deterministic system-tool lookup;
@@ -958,6 +959,21 @@ def _process_group_exists(pid: int) -> bool:
     return True
 
 
+def _wait_for_process_group_exit(
+    pid: int,
+    *,
+    timeout_seconds: float = PROCESS_GROUP_EXIT_WAIT_SECONDS,
+) -> bool:
+    """Bound the post-signal race before reporting process-group cleanup."""
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    while _process_group_exists(pid):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.05, remaining))
+    return True
+
+
 def _run_bounded(
     argv: Sequence[str],
     *,
@@ -1034,6 +1050,7 @@ def _run_bounded(
 
         if _process_group_exists(process.pid):
             _kill_process_group(process.pid)
+            _wait_for_process_group_exit(process.pid)
 
         stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
         stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
@@ -1115,6 +1132,7 @@ class OneShotCliRunHandle:
             self._process.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
             pass
+        _wait_for_process_group_exit(self.pid)
         with self._lock:
             self.cancelled = True
         return {
@@ -1148,6 +1166,7 @@ class OneShotCliRunHandle:
                     pass
         if _process_group_exists(self.pid):
             _kill_process_group(self.pid)
+            _wait_for_process_group_exit(self.pid)
         stdout, stdout_truncated = _read_capped(self._stdout_file, self._output_cap_bytes)
         stderr, stderr_truncated = _read_capped(self._stderr_file, self._output_cap_bytes)
         exit_code = self._process.returncode

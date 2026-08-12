@@ -20,6 +20,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy import one_shot_cli_runtime as osr
 
@@ -352,6 +353,21 @@ class FakeAdapterTests(unittest.TestCase):
         child_pid = int(packet["run"]["stdout"].strip())
         with self.assertRaises(ProcessLookupError):
             os.kill(child_pid, 0)
+
+    def test_process_group_exit_wait_absorbs_post_signal_race(self) -> None:
+        with (
+            mock.patch.object(
+                osr,
+                "_process_group_exists",
+                side_effect=(True, True, False),
+            ) as group_exists,
+            mock.patch.object(osr.time, "sleep") as sleep,
+        ):
+            self.assertTrue(
+                osr._wait_for_process_group_exit(12345, timeout_seconds=1.0)
+            )
+        self.assertEqual(group_exists.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
 
     def test_timeout_is_bounded(self) -> None:
         packet = self.runtime.one_shot_cli_run(
