@@ -82,7 +82,7 @@ preconditions are explicit and fail closed.
       JSON Lines; malformed, truncated, error, or result-empty envelopes fail;
 - [x] sterile probes remain offline and the default sandbox remains offline;
 - [x] the R61 supplement is required exactly once by GateEvidenceBundleV2;
-- [ ] focused, core, custom-stability, full-suite, hygiene, diff, and closeout
+- [x] focused, core, custom-stability, full-suite, hygiene, diff, and closeout
       resilience gates pass on the final candidate.
 
 ## Verification
