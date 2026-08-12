@@ -14,10 +14,11 @@ Production authority has two independently required layers:
 `OneShotRuntime` remains the sealed execution engine used by explicit test
 adapters. `ProductionOneShotFacade` is the only production entry surface. It
 can probe a declared executable without granting operational authority, but it
-revalidates both layers immediately before every operational spawn. Qwen and
-Kimi are declared here while their provider adapters remain not admitted until
-their separate B10/B11 contours. No environment hook, caller-selected path,
-global grant, or mutable module-level manifest exists.
+revalidates both layers immediately before every operational spawn. Qwen's
+provider adapter and sealed headless contract are admitted by R61 while binary,
+auth, and live-provider authority remain external gates; Kimi stays pending its
+separate B11 contour. No environment hook, caller-selected path, global grant,
+or mutable module-level manifest exists.
 
 Sandbox truth: every child process spawned by `OneShotRuntime` runs under
 a macOS seatbelt profile built by the single production builder
@@ -42,10 +43,12 @@ import time
 import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 import fcntl
 
+from . import active_project_root as active_root
 from .core import packets as command_packets
 from .runtime import build_command_payload
 from .runtime_errors import RuntimeErrorInfo
@@ -73,6 +76,7 @@ DEFAULT_RUN_TIMEOUT_SECONDS = 300.0
 DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024
 DEFAULT_DIGEST_SIZE_LIMIT = 512 * 1024 * 1024
 CANCEL_GRACE_SECONDS = 5.0
+PROCESS_GROUP_EXIT_WAIT_SECONDS = 2.0
 
 # Fixed executable roots. These are code-owned and never inherited from the
 # ambient PATH. System roots stay first for deterministic system-tool lookup;
@@ -107,6 +111,36 @@ SECRET_ENV_SUFFIXES = (
 )
 
 ONE_SHOT_NO_RESUME_REASON = "one_shot_sessions_are_stateless"
+QWEN_PROMPT_MAX_CHARS = 16 * 1024
+QWEN_AUTH_FILENAME = ".env"
+QWEN_NETWORK_POLICY = "provider_outbound"
+QWEN_SANDBOX_POLICY = "deny_default_provider_network"
+QWEN_AUTH_STRATEGY = "isolated_home_env_file"
+QWEN_FIXED_ENV: Mapping[str, str] = MappingProxyType({
+    "QWEN_USAGE_STATISTICS_ENABLED": "false",
+    "QWEN_TELEMETRY_ENABLED": "false",
+})
+
+QWEN_OPERATIONAL_ARGS: tuple[str, ...] = (
+    "--output-format",
+    "json",
+    "--safe-mode",
+    "--approval-mode",
+    "plan",
+    "--max-session-turns",
+    "30",
+    "--max-wall-time",
+    "300s",
+    "--max-tool-calls",
+    "25",
+    "--exclude-tools",
+    "shell,write,edit,agent",
+)
+QWEN_ALLOWED_ARGV_SCHEMA: tuple[str, ...] = (
+    "literal:--prompt",
+    "prompt:utf8_nonsecret_max_16384",
+    *(f"literal:{item}" for item in QWEN_OPERATIONAL_ARGS),
+)
 
 # Machine error codes.
 ONE_SHOT_OK = "OK"
@@ -129,6 +163,7 @@ CLI_ADMISSION_DIGEST_MISMATCH = "CLI_ADMISSION_DIGEST_MISMATCH"
 CLI_AUTH_NOT_ADMITTED = "CLI_AUTH_NOT_ADMITTED"
 CLI_NETWORK_POLICY_NOT_ADMITTED = "CLI_NETWORK_POLICY_NOT_ADMITTED"
 ONE_SHOT_SECRET_INPUT_BLOCKED = "ONE_SHOT_SECRET_INPUT_BLOCKED"
+ONE_SHOT_OUTPUT_INVALID = "ONE_SHOT_OUTPUT_INVALID"
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 KEY_VALUE_LINE_RE = re.compile(r"^([A-Za-z0-9_]+)=(.*)$")
@@ -152,6 +187,31 @@ def _redact_one_shot_text(value: Any) -> str:
     for pattern in ONE_SHOT_QUOTED_SECRET_PATTERNS:
         redacted = pattern.sub(lambda match: match.group(1) + "<redacted>", redacted)
     return redacted
+
+
+def _qwen_json_output_is_success(
+    parsed: Mapping[str, Any], run_record: Mapping[str, Any]
+) -> bool:
+    """Accept only Qwen's complete buffered JSON success envelope."""
+    if (
+        parsed.get("valid") is not True
+        or parsed.get("truncated") is True
+        or run_record.get("stdout_truncated") is True
+        or run_record.get("stderr_truncated") is True
+    ):
+        return False
+    document = parsed.get("document")
+    if not isinstance(document, list) or not document:
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("type") == "result"
+        and item.get("subtype") == "success"
+        and item.get("is_error") is False
+        and isinstance(item.get("result"), str)
+        and bool(item["result"].strip())
+        for item in document
+    )
 
 
 @dataclass(frozen=True)
@@ -274,9 +334,9 @@ class OneShotCliRunResult:
         return redacted
 
 
-# Immutable production declarations. B09 admits the generic binary boundary,
-# not provider-specific inference. The adapter flags therefore remain false
-# until B10/B11 establish the exact argv, output, login, and network policies.
+# Immutable production declarations. R61 admits the Qwen adapter contract but
+# does not grant binary, auth, or live-provider authority. Kimi remains pending
+# its separate B11 contour.
 SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = (
     OneShotToolManifestEntry(
         tool_id="qwen-cli",
@@ -284,17 +344,20 @@ SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = (
         binary_name="qwen",
         display_name="Qwen Code CLI",
         version_args=("--version",),
-        output_profiles=("text", "json_lines"),
-        allowed_argv_schema=("provider_adapter_required",),
+        output_profiles=("text", "json"),
+        allowed_argv_schema=QWEN_ALLOWED_ARGV_SCHEMA,
+        operational_args=QWEN_OPERATIONAL_ARGS,
         allowed_environment_keys=(
             "QWEN_HOME",
             "QWEN_RUNTIME_DIR",
             "QWEN_PROJECT_ROOT",
+            *QWEN_FIXED_ENV,
         ),
-        output_parser="json_lines_or_text",
-        auth_strategy="interactive_isolated_home_pending_b10",
-        network_policy="denied_pending_b10",
-        provider_adapter_admitted=False,
+        output_parser="json_document_or_text",
+        sandbox_policy=QWEN_SANDBOX_POLICY,
+        auth_strategy=QWEN_AUTH_STRATEGY,
+        network_policy=QWEN_NETWORK_POLICY,
+        provider_adapter_admitted=True,
     ),
     OneShotToolManifestEntry(
         tool_id="kimi-cli",
@@ -366,7 +429,7 @@ def _declaration_invalid_reason(entry: OneShotToolManifestEntry) -> str | None:
         return "declaration_contains_secret_shaped_argv"
     if not entry.allowed_argv_schema:
         return "declaration_argv_schema_missing"
-    if any(key not in PROVIDER_HOME_ENV_VARS for key in entry.allowed_environment_keys):
+    if any(key not in PROVIDER_ENV_VARS for key in entry.allowed_environment_keys):
         return "declaration_environment_key_not_allowlisted"
     if entry.cwd_policy != "sealed_sandbox_cwd":
         return "declaration_cwd_policy_invalid"
@@ -376,9 +439,12 @@ def _declaration_invalid_reason(entry: OneShotToolManifestEntry) -> str | None:
         "key_value",
         "json_lines",
         "json_lines_or_text",
+        "json_document_or_text",
     }:
         return "declaration_output_parser_invalid"
-    if not set(entry.output_profiles).issubset({"text", "key_value", "json_lines"}):
+    if not set(entry.output_profiles).issubset(
+        {"text", "key_value", "json", "json_lines"}
+    ):
         return "declaration_output_profile_invalid"
     if (
         isinstance(entry.timeout_seconds, bool)
@@ -394,14 +460,18 @@ def _declaration_invalid_reason(entry: OneShotToolManifestEntry) -> str | None:
         return "declaration_output_cap_invalid"
     if entry.process_group_policy != "new_session_group_termination":
         return "declaration_process_group_policy_invalid"
-    if entry.sandbox_policy != "deny_default_offline":
+    if entry.sandbox_policy not in {
+        "deny_default_offline",
+        QWEN_SANDBOX_POLICY,
+    }:
         return "declaration_sandbox_policy_invalid"
     if entry.session_policy != ONE_SHOT_NO_RESUME_REASON:
         return "declaration_session_policy_invalid"
     if not entry.auth_strategy:
         return "declaration_auth_strategy_invalid"
-    if entry.network_policy != "denied" and not entry.network_policy.startswith(
-        "denied_pending_"
+    if (
+        entry.network_policy not in {"denied", QWEN_NETWORK_POLICY}
+        and not entry.network_policy.startswith("denied_pending_")
     ):
         return "declaration_network_policy_invalid"
     return None
@@ -676,11 +746,15 @@ STERILE_ENV_ALLOWLIST = frozenset({
 # Provider-specific home/runtime variables. They never enter from the
 # ambient environment; they cross only as an explicit `provider_env`
 # mapping validated by `OneShotRuntime`.
-PROVIDER_HOME_ENV_VARS = frozenset({
+PROVIDER_PATH_ENV_VARS = frozenset({
     "QWEN_HOME", "QWEN_RUNTIME_DIR",
     "KIMI_CODE_HOME",
     "QWEN_PROJECT_ROOT", "KIMI_SNAPSHOT_ROOT",
 })
+PROVIDER_LITERAL_ENV_VALUES: Mapping[str, frozenset[str]] = MappingProxyType({
+    key: frozenset({value}) for key, value in QWEN_FIXED_ENV.items()
+})
+PROVIDER_ENV_VARS = PROVIDER_PATH_ENV_VARS | frozenset(PROVIDER_LITERAL_ENV_VALUES)
 
 
 def build_sterile_environment(
@@ -771,6 +845,7 @@ def build_server_owned_sandbox_profile(
     sandbox_cwd: Path | str,
     binary_path: Path | str | None = None,
     read_only_roots: Sequence[Path | str] = (),
+    allow_provider_network: bool = False,
 ) -> str:
     """THE single production seatbelt profile builder (R52).
 
@@ -787,9 +862,9 @@ def build_server_owned_sandbox_profile(
       (all paths realpath-resolved before embedding);
     - `/dev/null` and `/dev/dtracehelper` writes, posix shm.
 
-    No network operations are allowed: the profile is offline by
-    construction. A future admitted contour that needs a networked
-    provider must extend THIS builder with explicit evidence.
+    Network operations remain denied by default. Only an exact admitted
+    operational provider child may request `allow_provider_network=True`;
+    sterile probes never do so.
     """
     home_r = Path(home_dir).resolve()
     cwd_r = Path(sandbox_cwd).resolve()
@@ -809,6 +884,8 @@ def build_server_owned_sandbox_profile(
     for root in read_only_roots:
         root_r = Path(root).resolve()
         lines.append(f'(allow file-read* (subpath "{root_r}"))')
+    if allow_provider_network:
+        lines.append("(allow network-outbound)")
     lines.extend(
         [
             f'(allow file-read* file-write* (subpath "{home_r}") (subpath "{cwd_r}"))',
@@ -879,6 +956,21 @@ def _process_group_exists(pid: int) -> bool:
         # The original child group is no longer signalable by its owner.
         # Treat it as outside this handle rather than risk a reused pgid.
         return False
+    return True
+
+
+def _wait_for_process_group_exit(
+    pid: int,
+    *,
+    timeout_seconds: float = PROCESS_GROUP_EXIT_WAIT_SECONDS,
+) -> bool:
+    """Bound the post-signal race before reporting process-group cleanup."""
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    while _process_group_exists(pid):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.05, remaining))
     return True
 
 
@@ -958,6 +1050,7 @@ def _run_bounded(
 
         if _process_group_exists(process.pid):
             _kill_process_group(process.pid)
+            _wait_for_process_group_exit(process.pid)
 
         stdout, stdout_truncated = _read_capped(stdout_file, output_cap_bytes)
         stderr, stderr_truncated = _read_capped(stderr_file, output_cap_bytes)
@@ -1039,6 +1132,7 @@ class OneShotCliRunHandle:
             self._process.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
             pass
+        _wait_for_process_group_exit(self.pid)
         with self._lock:
             self.cancelled = True
         return {
@@ -1072,6 +1166,7 @@ class OneShotCliRunHandle:
                     pass
         if _process_group_exists(self.pid):
             _kill_process_group(self.pid)
+            _wait_for_process_group_exit(self.pid)
         stdout, stdout_truncated = _read_capped(self._stdout_file, self._output_cap_bytes)
         stderr, stderr_truncated = _read_capped(self._stderr_file, self._output_cap_bytes)
         exit_code = self._process.returncode
@@ -1176,13 +1271,22 @@ class OneShotRuntime:
         validated: dict[str, str] = {}
         for key, value in (provider_env or {}).items():
             key = str(key)
-            if key not in PROVIDER_HOME_ENV_VARS:
+            if key not in PROVIDER_ENV_VARS:
                 raise RuntimeErrorInfo(
                     f"provider env key '{key}' is not allowlisted.",
                     machine_error_code=ONE_SHOT_ENV_VIOLATION,
                     operator_action="user_action",
                 )
             value = str(value)
+            if key in PROVIDER_LITERAL_ENV_VALUES:
+                if value not in PROVIDER_LITERAL_ENV_VALUES[key]:
+                    raise RuntimeErrorInfo(
+                        f"provider env value for '{key}' is not admitted.",
+                        machine_error_code=ONE_SHOT_ENV_VIOLATION,
+                        operator_action="user_action",
+                    )
+                validated[key] = value
+                continue
             if not value.startswith(os.path.sep):
                 raise RuntimeErrorInfo(
                     f"provider env value for '{key}' must be an absolute path.",
@@ -1387,6 +1491,7 @@ class OneShotRuntime:
         provider_home: Path | str | None = None,
         provider_env: Mapping[str, str] | None = None,
         output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
+        allow_provider_network: bool = False,
     ) -> OneShotCliRunHandle | dict[str, Any]:
         """Spawn a declared tool as a one-shot process group.
 
@@ -1488,6 +1593,7 @@ class OneShotRuntime:
             sandbox_cwd=sandbox_cwd,
             binary_path=realpath,
             read_only_roots=read_only_roots,
+            allow_provider_network=allow_provider_network,
         )
         sandbox_profile_path = sandbox_cwd / "sandbox.sb"
         sandbox_profile_path.write_text(profile_text, encoding="utf-8")
@@ -1556,6 +1662,7 @@ class OneShotRuntime:
         timeout_seconds: float = DEFAULT_RUN_TIMEOUT_SECONDS,
         output_cap_bytes: int = DEFAULT_OUTPUT_CAP_BYTES,
         cancel_after_seconds: float | None = None,
+        allow_provider_network: bool = False,
     ) -> dict[str, Any]:
         """Bounded one-shot run built from instance-sealed configuration."""
         handle = self.one_shot_cli_handle(
@@ -1565,6 +1672,7 @@ class OneShotRuntime:
             provider_home=provider_home,
             provider_env=provider_env,
             output_cap_bytes=output_cap_bytes,
+            allow_provider_network=allow_provider_network,
         )
         if isinstance(handle, dict):
             return handle
@@ -1596,6 +1704,7 @@ class OneShotRuntime:
                 "sandbox": profile,
                 "env_digest": handle.env_digest,
                 "timeout_seconds": timeout_seconds,
+                "provider_network_allowed": bool(allow_provider_network),
                 "resume_supported": False,
                 "resume_reason": ONE_SHOT_NO_RESUME_REASON,
             },
@@ -1970,6 +2079,67 @@ class ProductionOneShotFacade:
             return None, blocked
         return entry, None
 
+    def _qwen_home_readiness(
+        self,
+        surface: str,
+        entry: OneShotToolManifestEntry,
+    ) -> tuple[dict[str, Path] | None, dict[str, Any] | None]:
+        """Validate presence-only Qwen home/auth state without reading secrets."""
+        home = self._homes_root / entry.provider_id
+        runtime_dir = home / "runtime"
+        auth_path = home / QWEN_AUTH_FILENAME
+        if not _owned_path_is_safe(home, expected_mode=0o700, directory=True):
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_provider_home_missing_or_unsafe",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                secret_value_exposed=False,
+            )
+        if not _owned_path_is_safe(runtime_dir, expected_mode=0o700, directory=True):
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_runtime_dir_missing_or_unsafe",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                secret_value_exposed=False,
+            )
+        if not _owned_path_is_safe(auth_path, expected_mode=0o600, directory=False):
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_auth_config_missing_or_unsafe",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        try:
+            auth_size = auth_path.stat().st_size
+        except OSError:
+            auth_size = 0
+        if not 0 < auth_size <= DEFAULT_OUTPUT_CAP_BYTES:
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_auth_config_empty_or_oversized",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        return {
+            "home": home.resolve(),
+            "runtime_dir": runtime_dir.resolve(),
+            "auth_path": auth_path.resolve(),
+        }, None
+
     def create_home(self, provider_id: str) -> dict[str, Any]:
         entry, blocked = self._ready_provider_entry("create_home", provider_id)
         if blocked is not None:
@@ -1985,6 +2155,36 @@ class ProductionOneShotFacade:
         if blocked is not None:
             return blocked
         assert entry is not None
+        if entry.auth_strategy == QWEN_AUTH_STRATEGY and entry.provider_id == "qwen":
+            readiness, blocked = self._qwen_home_readiness("session", entry)
+            if blocked is not None:
+                return blocked
+            assert readiness is not None
+            return build_command_payload(
+                ok=True,
+                human_message="Qwen isolated one-shot session is ready.",
+                machine_error_code=ONE_SHOT_OK,
+                liveness="healthy",
+                severity="info",
+                operator_action="none",
+                changed_files=[],
+                exit_code=0,
+                extra={
+                    "surface": "session",
+                    "tool_id": entry.tool_id,
+                    "provider_id": entry.provider_id,
+                    "qwen_home": str(readiness["home"]),
+                    "qwen_runtime_dir": str(readiness["runtime_dir"]),
+                    "auth_present": True,
+                    "auth_presence_only": True,
+                    "secret_value_exposed": False,
+                    "repo_write_policy": "denied",
+                    "production_admission_revalidated": True,
+                    "manifest_sha256": manifest_entry_digest(entry),
+                    "resume_supported": False,
+                    "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+                },
+            )
         if entry.auth_strategy != "none":
             return self._blocked_packet(
                 "session",
@@ -2005,6 +2205,18 @@ class ProductionOneShotFacade:
         if blocked is not None:
             return blocked
         assert entry is not None
+        if entry.auth_strategy == QWEN_AUTH_STRATEGY and entry.provider_id == "qwen":
+            return self._blocked_packet(
+                "auth_session",
+                CLI_AUTH_NOT_ADMITTED,
+                "operator_managed_isolated_auth_required",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+                auth_filename=QWEN_AUTH_FILENAME,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
         if entry.auth_strategy != "none":
             return self._blocked_packet(
                 "auth_session",
@@ -2050,6 +2262,192 @@ class ProductionOneShotFacade:
         packet["manifest_sha256"] = manifest_entry_digest(entry)
         packet["probe_grants_operational_authority"] = False
         return packet
+
+    def run_prompt(
+        self,
+        tool_id: str,
+        prompt_text: str,
+        *,
+        active_project_root: Path | str | None = None,
+    ) -> dict[str, Any]:
+        """Run one sealed provider prompt without exposing a caller argv path."""
+        entry = self._entry_for_tool(tool_id)
+        if entry is None:
+            return self._unknown_packet("run_prompt", tool_id=str(tool_id))
+        prompt = str(prompt_text or "")
+        if (
+            not prompt.strip()
+            or "\x00" in prompt
+            or len(prompt) > QWEN_PROMPT_MAX_CHARS
+        ):
+            return self._blocked_packet(
+                "run_prompt",
+                ONE_SHOT_SCHEMA_INVALID,
+                "prompt_empty_nul_or_oversized",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                prompt_max_chars=QWEN_PROMPT_MAX_CHARS,
+            )
+        if _contains_secret_shape(prompt):
+            return self._blocked_packet(
+                "run_prompt",
+                ONE_SHOT_SECRET_INPUT_BLOCKED,
+                "prompt_secret_shape_blocked",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                input_blocked=True,
+                secret_value_exposed=False,
+            )
+        blocked = self._declaration_block("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        blocked = self._adapter_block("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        if (
+            entry.provider_id != "qwen"
+            or entry.allowed_argv_schema != QWEN_ALLOWED_ARGV_SCHEMA
+            or entry.operational_args != QWEN_OPERATIONAL_ARGS
+        ):
+            return self._blocked_packet(
+                "run_prompt",
+                ONE_SHOT_SCHEMA_INVALID,
+                "qwen_headless_argv_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        if (
+            entry.network_policy != QWEN_NETWORK_POLICY
+            or entry.sandbox_policy != QWEN_SANDBOX_POLICY
+        ):
+            return self._blocked_packet(
+                "run_prompt",
+                CLI_NETWORK_POLICY_NOT_ADMITTED,
+                "qwen_provider_network_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                network_policy=entry.network_policy,
+                sandbox_policy=entry.sandbox_policy,
+            )
+        if entry.auth_strategy != QWEN_AUTH_STRATEGY:
+            return self._blocked_packet(
+                "run_prompt",
+                CLI_AUTH_NOT_ADMITTED,
+                "qwen_auth_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+            )
+        record, blocked = self._read_target_admission("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        assert record is not None
+        readiness, blocked = self._qwen_home_readiness("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        assert readiness is not None
+
+        selected_root: Path | None = None
+        root_fields: dict[str, Any] = {
+            "active_project_root_required": False,
+            "active_project_root_available": False,
+            "active_project_root_source": "not_requested",
+            "active_project_root_status": "not_requested",
+            "active_project_root_path_recorded": False,
+            "active_project_root_sha256": "",
+            "active_project_root_is_wbp_repo": False,
+            "active_project_root_git_available": False,
+            "active_project_root_fallback_used": False,
+            "active_project_root_legacy_target_repo_alias_used": False,
+        }
+        if active_project_root is not None:
+            selected_root, root_fields = active_root.active_project_root_metadata(
+                active_project_root,
+                source="production_one_shot_prompt",
+                wbp_repo_root=Path(__file__).resolve().parents[1],
+                required=True,
+            )
+            if selected_root is None:
+                return self._blocked_packet(
+                    "run_prompt",
+                    ONE_SHOT_PATH_VIOLATION,
+                    str(root_fields["active_project_root_status"]),
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                    **root_fields,
+                )
+
+        provider_env = {
+            "QWEN_HOME": str(readiness["home"]),
+            "QWEN_RUNTIME_DIR": str(readiness["runtime_dir"]),
+            **QWEN_FIXED_ENV,
+        }
+        if selected_root is not None:
+            provider_env["QWEN_PROJECT_ROOT"] = str(selected_root)
+        admitted_entry = replace(entry, binary_name=str(record["binary_realpath"]))
+        runtime = OneShotRuntime(
+            homes_root=self._homes_root,
+            manifest=(admitted_entry,),
+        )
+        run = runtime.one_shot_cli_run(
+            admitted_entry.tool_id,
+            args=("--prompt", prompt, *admitted_entry.operational_args),
+            provider_home=readiness["home"],
+            provider_env=provider_env,
+            timeout_seconds=admitted_entry.timeout_seconds,
+            output_cap_bytes=admitted_entry.output_cap_bytes,
+            allow_provider_network=True,
+        )
+        stdout = (run.get("run") or {}).get("stdout", "")
+        parsed = parse_cli_output(
+            str(stdout),
+            profile="json",
+            output_cap_bytes=admitted_entry.output_cap_bytes,
+        )
+        run_record = run.get("run") or {}
+        output_valid = _qwen_json_output_is_success(parsed, run_record)
+        ok = run.get("status") == "ok" and output_valid
+        return build_command_payload(
+            ok=ok,
+            human_message=(
+                "Qwen production one-shot response received."
+                if ok
+                else "Qwen production one-shot response failed validation."
+            ),
+            machine_error_code=(
+                ONE_SHOT_OK
+                if ok
+                else (
+                    ONE_SHOT_OUTPUT_INVALID
+                    if run.get("status") == "ok"
+                    else str(run.get("machine_error_code") or ONE_SHOT_RUN_FAILED)
+                )
+            ),
+            liveness="healthy",
+            severity="info" if ok else "error",
+            operator_action="none" if ok else "user_action",
+            changed_files=[str(readiness["home"])],
+            exit_code=0 if ok else 1,
+            extra={
+                "surface": "run_prompt",
+                "tool_id": entry.tool_id,
+                "provider_id": entry.provider_id,
+                "run": run.get("run"),
+                "parsed_output": parsed,
+                "production_admission_revalidated": True,
+                "manifest_sha256": manifest_entry_digest(entry),
+                "binary_sha256": record["binary_sha256"],
+                "auth_present": True,
+                "auth_presence_only": True,
+                "secret_value_exposed": False,
+                "provider_home_may_change": True,
+                "provider_network_allowed": True,
+                "repo_write_policy": "denied",
+                **root_fields,
+                "resume_supported": False,
+                "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+            },
+        )
 
     def run(self, tool_id: str) -> dict[str, Any]:
         entry = self._entry_for_tool(tool_id)
@@ -2306,12 +2704,13 @@ def parse_cli_output(
 
     - `text`: ANSI-stripped lines, capped
     - `key_value`: `name=value` lines only; unmatched lines counted honestly
+    - `json`: one complete JSON document (object or array)
     - `json_lines`: JSON objects per line; mixed content is reported
-    - `auto`: detect json-lines, then key-value, else text; the detected
-      format is always reported
+    - `auto`: detect a complete JSON document, then json-lines, then
+      key-value, else text; the detected format is always reported
     """
     profile = str(profile or "auto").strip()
-    if profile not in {"auto", "text", "key_value", "json_lines"}:
+    if profile not in {"auto", "text", "key_value", "json", "json_lines"}:
         raise RuntimeErrorInfo(
             "unknown CLI output profile.",
             machine_error_code="schema_invalid",
@@ -2322,6 +2721,22 @@ def parse_cli_output(
     capped = cleaned[:output_cap_bytes]
     truncated = len(cleaned) > output_cap_bytes
     lines = [line.rstrip("\r") for line in capped.splitlines()]
+
+    if profile in {"auto", "json"}:
+        try:
+            document = json.loads(capped)
+        except ValueError:
+            document = None
+        if isinstance(document, (dict, list)) or profile == "json":
+            return command_packets.redact_command_packet_value({
+                "profile": profile,
+                "detected_format": "json",
+                "document": document,
+                "valid": isinstance(document, (dict, list)),
+                "truncated": truncated,
+                "resume_supported": False,
+                "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+            })
 
     if profile in {"auto", "json_lines"}:
         records: list[dict[str, Any]] = []
