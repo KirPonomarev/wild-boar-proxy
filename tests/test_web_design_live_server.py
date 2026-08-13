@@ -16841,7 +16841,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 )
                 self.assertEqual(stable_preflight.call_count, 2)
                 self.assertEqual(bridge_prewarm.call_count, 2)
-                bridge_retry_sleep.assert_called_once()
+                self.assertEqual(
+                    bridge_retry_sleep.call_args_list.count(mock.call(1.0)),
+                    1,
+                )
                 launch_native.assert_not_called()
 
     def test_custom_native_launch_retries_stable_bridge_gate_after_successful_prewarm(self) -> None:

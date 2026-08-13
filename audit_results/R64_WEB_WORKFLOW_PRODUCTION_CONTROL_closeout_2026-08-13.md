@@ -22,7 +22,7 @@ route, provider, credential, or authorization authority to the browser.
 - branch: `codex/r64-web-workflow-production-control`
 - head: exact base `43fa86c5b1cf15a2d9a172389f99056bea931274` plus the single logically complete R64 contour commit
 - touched files: R64 spec, ADR, and closeout; workflow control and live-server modules; workflow screen markup, behavior, and styles; workflow control, live-server, UI behavior, and existing UI compatibility tests
-- tests run: focused workflow/backend/UI 19 passed; complete repository suite exercised 5108 tests with 5106 passed plus 997 subtests before two localized UI compatibility fixes; final affected surface 7 passed after those fixes; browser-controlled two-actor workflow passed end to end
+- tests run: focused workflow/backend/UI 19 passed; complete repository suite exercised 5108 tests with 5106 passed plus 997 subtests before two localized UI compatibility fixes; final affected surface 7 passed after those fixes; browser-controlled two-actor workflow passed end to end; exact-head CI exposed and the follow-up corrected one unrelated shared-clock mock isolation race
 - blocked risks: live provider execution, persistent workflow resume, and native-primary orchestration were outside authorization and scope; workflow history remains process-local
 - closure state: CLOSED
 
@@ -52,5 +52,5 @@ route, provider, credential, or authorization authority to the browser.
 
 ## Notes
 
-- blockers encountered: a browser pass exposed mobile navigation overflow after adding the seventh screen; the complete suite then exposed that same viewport constraint and one compatibility marker coupled to the settings heading; both were localized, fixed, and verified on their affected surface
+- blockers encountered: a browser pass exposed mobile navigation overflow after adding the seventh screen; the complete suite then exposed that same viewport constraint and one compatibility marker coupled to the settings heading; both were localized, fixed, and verified on their affected surface; after merge, one of two duplicate exact-head web-e2e jobs exposed a historical global `time.sleep` mock counting unrelated server-thread polling, so the assertion was isolated to the intended one-second retry while its identical duplicate remained green; the first follow-up full-suite job then exposed a local-machine-only Node path in the new syntax probe, which was replaced with the repository's established environment/PATH/fallback discovery pattern
 - resume from here: CLOSED
