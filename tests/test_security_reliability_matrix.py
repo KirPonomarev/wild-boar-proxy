@@ -29,7 +29,7 @@ class SecurityReliabilityMatrixTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["machine_error_code"], srm.MATRIX_OK)
         self.assertEqual(packet["check_count"], len(srm.MATRIX_CHECK_IDS))
-        self.assertEqual(packet["passed_count"], 12)
+        self.assertEqual(packet["passed_count"], 14)
         self.assertEqual(packet["guarded_count"], 1)
         self.assertEqual(packet["failed_checks"], [])
         check_ids = {check["check_id"] for check in packet["checks"]}
@@ -77,6 +77,38 @@ class SecurityReliabilityMatrixTests(unittest.TestCase):
         self.assertNotIn("sk-", body)
         self.assertNotIn("api_key", body.lower())
         self.assertNotIn(".codex", body)
+
+    def test_revision_drift_is_rejected_before_production_dispatch(self) -> None:
+        packet = self._run()
+        drift = next(
+            check for check in packet["checks"]
+            if check["check_id"] == "binary_revision_drift"
+        )
+        self.assertEqual(drift["status"], "passed")
+        self.assertTrue(drift["detail"]["revision_drift_rejected"])
+        self.assertEqual(drift["detail"]["adapter_dispatch_count"], 0)
+
+    def test_production_workflow_boundary_is_exercised(self) -> None:
+        packet = self._run()
+        workflow = next(
+            check for check in packet["checks"]
+            if check["check_id"] == "production_workflow_boundary"
+        )
+        self.assertEqual(workflow["status"], "passed")
+        self.assertTrue(workflow["detail"]["controlled_path"])
+        self.assertTrue(workflow["detail"]["live_authorization_gate"])
+        self.assertTrue(workflow["detail"]["repo_lease_released"])
+
+    def test_web_control_security_is_exercised(self) -> None:
+        packet = self._run()
+        web = next(
+            check for check in packet["checks"]
+            if check["check_id"] == "web_control_security"
+        )
+        self.assertEqual(web["status"], "passed")
+        self.assertTrue(web["detail"]["all_ingress_guards"])
+        self.assertEqual(web["detail"]["provider_dispatches"], 1)
+        self.assertFalse(web["detail"]["live_mode_admitted"])
 
 
 if __name__ == "__main__":

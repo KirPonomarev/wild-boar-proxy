@@ -474,6 +474,8 @@ def run_sequential_workflow(
                     "response_observed": False,
                     "live_provider_called": False,
                     "live_provider_proven": False,
+                    "fallback_used": False,
+                    "actor_substitution_used": False,
                 }
             )
             break
@@ -492,6 +494,8 @@ def run_sequential_workflow(
                     "response_observed": False,
                     "live_provider_called": False,
                     "live_provider_proven": False,
+                    "fallback_used": False,
+                    "actor_substitution_used": False,
                 }
             )
             break
@@ -591,6 +595,7 @@ def run_sequential_workflow(
         run.receipts.append(
             {
                 **base_receipt(step, context),
+                **result_proof_fields(result),
                 "outgoing_context_digest": out_digest,
                 "status": "ok",
                 "machine_error_code": result.get("machine_error_code") or WF_OK,
@@ -601,9 +606,6 @@ def run_sequential_workflow(
                     if visible_context
                     else True
                 ),
-                "controlled": result.get("controlled"),
-                "live_provider_called": result.get("live_provider_called"),
-                "live_provider_proven": result.get("live_provider_proven"),
             }
         )
 
