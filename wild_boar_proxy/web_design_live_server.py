@@ -41,7 +41,11 @@ from wild_boar_proxy.active_project_root import (
     active_project_root_metadata,
 )
 from wild_boar_proxy import state_store
+from wild_boar_proxy import actor_registry
+from wild_boar_proxy import web_workflow_control
+from wild_boar_proxy.api_transport_adapter import ApiTransportAdapter
 from wild_boar_proxy.core import packets as command_packets
+from wild_boar_proxy.external_models.paths import ExternalModelsPaths
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
     UiShellError,
@@ -1248,6 +1252,9 @@ WEB_DESIGN_LIVE_ROUTES = (
     _get_route("/api/live-readonly"),
     _get_route("/api/accounts-readonly"),
     _get_route("/api/api-connections-readonly"),
+    _get_route("/api/workflow/gate"),
+    _get_route("/api/workflow/status"),
+    _get_route("/api/workflow/history"),
     _get_route("/api/actions"),
     _get_route("/api/operator/status"),
     _get_route("/api/operator/models"),
@@ -1311,6 +1318,7 @@ WEB_DESIGN_LIVE_ROUTES = (
         effect_source=EFFECT_SOURCE_DYNAMIC_SUBACTION,
         multiplexed_by="operator_prompt",
     ),
+    _post_route("/api/workflow/run", EFFECT_MUTATE),
     _post_route(
         "/api/wbp/custom-paste-bridge/preflight",
         EFFECT_PROBE,
@@ -17177,6 +17185,7 @@ def build_handler(
     web_token_state: WebTokenState | None = None,
     post_rate_limiter: WebPostRateLimiter | None = None,
     post_rate_limit_per_second: int = DEFAULT_WEB_POST_RATE_LIMIT_PER_SECOND,
+    workflow_control_state: web_workflow_control.WorkflowControlState | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     custom_profile_paths = RuntimePaths.from_env()
     owner_paths = _owner_runtime_paths_for_live_server(custom_profile_paths)
@@ -17248,6 +17257,39 @@ def build_handler(
 
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
+    )
+    workflow_external_paths = ExternalModelsPaths.from_root(
+        owner_paths.managed_dir / "external-models"
+    )
+
+    def _load_workflow_actor_registry() -> dict[str, Any]:
+        packet = actor_registry.read_actor_registry_packet(
+            actor_registry.agent_bindings_path_or_default(owner_paths.managed_dir)
+        )
+        if packet.get("status") != "ok":
+            return {}
+        return {
+            key: packet.get(key)
+            for key in (
+                "schema_version",
+                "packet_kind",
+                "registry_revision",
+                "actors",
+                "slot_bindings",
+                "role_assignments",
+                "agent_bindings",
+            )
+        }
+
+    handler_workflow_control_state = workflow_control_state or web_workflow_control.WorkflowControlState(
+        registry_loader=_load_workflow_actor_registry,
+        adapter=ApiTransportAdapter(
+            routes_file=workflow_external_paths.routes_file,
+            external_models_dir=workflow_external_paths.root_dir,
+            managed_dir=owner_paths.managed_dir,
+        ),
+        lease_root=owner_paths.managed_dir / "workflow-leases",
+        live_dispatch_authorized=codex_custom_live_prompt_authorized,
     )
     launch_copy_runner = None
     if (
@@ -18446,6 +18488,36 @@ def build_handler(
             )
             return
 
+        def _handle_get_api_workflow_gate(self, request_path: str) -> None:
+            self._send_json(
+                web_workflow_control.handle_admitted_workflow_request(
+                    state=handler_workflow_control_state,
+                    method="GET",
+                    path=urlparse(request_path).path,
+                )
+            )
+            return
+
+        def _handle_get_api_workflow_status(self, request_path: str) -> None:
+            self._send_json(
+                web_workflow_control.handle_admitted_workflow_request(
+                    state=handler_workflow_control_state,
+                    method="GET",
+                    path=urlparse(request_path).path,
+                )
+            )
+            return
+
+        def _handle_get_api_workflow_history(self, request_path: str) -> None:
+            self._send_json(
+                web_workflow_control.handle_admitted_workflow_request(
+                    state=handler_workflow_control_state,
+                    method="GET",
+                    path=urlparse(request_path).path,
+                )
+            )
+            return
+
         def _handle_get_api_actions(self, request_path: str) -> None:
             parsed = urlparse(request_path)
             self._send_json(
@@ -19197,6 +19269,17 @@ def build_handler(
 
         def _handle_post_api_operator_run(self, actual_path: str) -> None:
             self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+            return
+
+        def _handle_post_api_workflow_run(self, actual_path: str) -> None:
+            self._send_json(
+                web_workflow_control.handle_admitted_workflow_request(
+                    state=handler_workflow_control_state,
+                    method="POST",
+                    path=actual_path,
+                    payload=self._read_json_body(),
+                )
+            )
             return
 
         def _handle_post_api_wbp_custom_paste_bridge_preflight(self, actual_path: str) -> None:

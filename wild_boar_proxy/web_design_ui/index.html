@@ -41,6 +41,10 @@
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/sliders-horizontal.png" alt="" aria-hidden="true">
             <span>API-подключения</span>
           </a>
+          <a id="workflowsNav" class="nav-item" href="?screen=workflows" data-screen-link="workflows">
+            <img class="ui-icon nav-icon" src="assets/icons/phosphor/git-branch.png" alt="" aria-hidden="true">
+            <span>Воркфлоу</span>
+          </a>
           <a id="diagnosticsNav" class="nav-item" href="?screen=diagnostics" data-screen-link="diagnostics">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
             <span>Диагностика</span>
@@ -2029,6 +2033,108 @@
               <button id="apiConnectionsCredentialCheckAction" class="button small api-route-action" type="button" data-ui-action="api_route_credential_check" data-route-state-requirement="any">Проверить credential</button>
               <button id="apiConnectionsCredentialRetryAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect">Повторить подключение</button>
               <a id="apiConnectionsCredentialDashboardAction" class="button small ghost" href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">Открыть dashboard</a>
+            </div>
+          </section>
+        </section>
+
+        <section id="workflowsScreen" class="screen workflow-screen" data-screen="workflows" hidden>
+          <div id="workflowBanner" class="fixture-banner neutral" role="status">
+            Загрузите server-owned registry, чтобы собрать последовательность API-агентов.
+          </div>
+
+          <div class="workflow-readiness" aria-label="Готовность workflow control">
+            <div class="workflow-readiness-primary">
+              <span class="workflow-kicker">Execution core</span>
+              <strong id="workflowReadinessTitle">Проверяем границу исполнения</strong>
+              <span id="workflowReadinessCopy">Браузер задаёт только намерение; identity и route разрешает сервер.</span>
+            </div>
+            <div class="workflow-stat"><span>API-агенты</span><strong id="workflowActorCount">0</strong></div>
+            <div class="workflow-stat"><span>Writer</span><strong id="workflowWriterStatus">—</strong></div>
+            <div class="workflow-stat"><span>Запуски</span><strong id="workflowHistoryCount">0</strong></div>
+          </div>
+
+          <div class="workflow-control-layout">
+            <aside class="workflow-actor-rail" aria-labelledby="workflowActorsTitle">
+              <div class="workflow-section-heading">
+                <div>
+                  <span class="workflow-kicker">Registry</span>
+                  <h2 id="workflowActorsTitle">Слоты агентов</h2>
+                </div>
+                <span id="workflowRegistryRevision" class="mini-pill neutral">revision —</span>
+              </div>
+              <p class="secondary">Provider, route и revisions приходят только с сервера и не входят в форму.</p>
+              <div id="workflowActorList" class="workflow-actor-list" aria-live="polite"></div>
+            </aside>
+
+            <section class="workflow-composer" aria-labelledby="workflowComposerTitle">
+              <div class="workflow-section-heading">
+                <div>
+                  <span class="workflow-kicker">Sequence</span>
+                  <h2 id="workflowComposerTitle">Сценарий</h2>
+                </div>
+                <span id="workflowStepCount" class="mini-pill blue">0 шагов</span>
+              </div>
+
+              <fieldset class="workflow-mode-control">
+                <legend>Режим исполнения</legend>
+                <label>
+                  <input id="workflowModeControlled" type="radio" name="workflow-mode" value="controlled" checked>
+                  <span><strong>Controlled</strong><small>без provider network</small></span>
+                </label>
+                <label id="workflowModeLiveLabel">
+                  <input id="workflowModeLive" type="radio" name="workflow-mode" value="live" disabled>
+                  <span><strong>Live</strong><small id="workflowLiveModeHint">нужен серверный допуск</small></span>
+                </label>
+              </fieldset>
+
+              <div id="workflowStepList" class="workflow-step-list"></div>
+              <div id="workflowValidation" class="workflow-validation" role="alert" hidden></div>
+              <div class="workflow-composer-actions">
+                <button id="workflowAddStep" class="button" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/plus.png" alt="" aria-hidden="true">
+                  <span>Добавить шаг</span>
+                </button>
+                <button id="workflowRun" class="button primary" type="button" disabled>
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
+                  <span>Запустить воркфлоу</span>
+                </button>
+              </div>
+              <p class="workflow-shortcut">⌘/Ctrl + Enter запускает сценарий · обычный Enter остаётся переносом строки.</p>
+            </section>
+
+            <section class="workflow-progress-panel" aria-labelledby="workflowProgressTitle">
+              <div class="workflow-section-heading">
+                <div>
+                  <span class="workflow-kicker">Receipts</span>
+                  <h2 id="workflowProgressTitle">Ход исполнения</h2>
+                </div>
+                <span id="workflowRunStatus" class="chip neutral"><span class="dot"></span><span>не запускался</span></span>
+              </div>
+              <div id="workflowProgress" class="workflow-progress" aria-live="polite">
+                <div class="workflow-empty-state">
+                  <img class="ui-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
+                  <strong>Здесь появится цепочка receipts</strong>
+                  <span>Каждый шаг показывает доставку контекста и server-issued результат.</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="workflow-history" aria-labelledby="workflowHistoryTitle">
+            <div class="workflow-section-heading">
+              <div>
+                <span class="workflow-kicker">Process memory</span>
+                <h2 id="workflowHistoryTitle">История запусков</h2>
+              </div>
+              <span class="secondary">bounded server history · без prompt и secret values</span>
+            </div>
+            <div class="table-scroll">
+              <table class="table workflow-history-table">
+                <thead>
+                  <tr><th>Статус</th><th>Run ID</th><th>Режим</th><th>Шаги</th><th>Агенты</th><th>Время</th><th>Код</th></tr>
+                </thead>
+                <tbody id="workflowHistoryBody"></tbody>
+              </table>
             </div>
           </section>
         </section>

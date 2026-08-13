@@ -84,7 +84,14 @@ const ACTION_STATUS_VISUAL_CLASS = {
   unknown: "neutral"
 };
 
-const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const WORKFLOW_MAX_STEPS = 12;
+let workflowActorSlots = [];
+let workflowDraftSteps = [];
+let workflowLastResult = null;
+let workflowRunning = false;
+let workflowStepSequence = 0;
+let workflowExecutionAdmitted = false;
 const QUICK_START_DEFAULT_LAUNCH_LABEL = "Проверить запуск";
 const QUICK_START_SESSION_DUAL_LANE_LABEL = "Проверить GPT+API";
 const QUICK_START_BLOCKED_MIXED_LAUNCH_LABEL = QUICK_START_SESSION_DUAL_LANE_LABEL;
@@ -847,6 +854,528 @@ function webPostHeaders(extraHeaders = {}) {
     Authorization: `Bearer ${webBootstrapValue("wbp-web-token")}`,
     "X-WBP-CSRF": webBootstrapValue("wbp-csrf-token")
   };
+}
+
+function workflowFixtureBundle(stateId = "unknown") {
+  const degraded = !["healthy", "degraded"].includes(stateId);
+  const actorSlots = [
+    { primary_alias: "DIP", display_name: "DIP", provider_id: "deepseek", role_label: "researcher" },
+    { primary_alias: "Kimi", display_name: "Kimi", provider_id: "kimi", role_label: "reviewer" }
+  ];
+  return {
+    gate: {
+      status: degraded ? "error" : "ok",
+      design_gate_earned: !degraded,
+      design_gate_marker: degraded ? "DESIGN_GATE_NOT_EARNED" : "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+    },
+    status: {
+      status: "ok",
+      actor_slots: actorSlots,
+      registry: { status: "ok", registry_revision: "fixture", api_slot_count: actorSlots.length },
+      writer: { status: "free", fencing_token_exposed: false },
+      workflow_execution_ready: !degraded,
+      execution_modes: [
+        { id: "controlled", admitted: !degraded, provider_network: false },
+        { id: "live", admitted: false, provider_network: true }
+      ],
+      live_dispatch_authorized: false,
+      history_count: 0
+    },
+    history: { status: "ok", history: [] },
+    fixture: true
+  };
+}
+
+async function fetchWorkflowPacket(path, signal = null) {
+  const response = await fetch(path, { cache: "no-store", signal });
+  if (!response.ok) {
+    throw new Error(`${path} http ${response.status}`);
+  }
+  return response.json();
+}
+
+async function loadWorkflowControl(signal = null) {
+  try {
+    const [gate, status, history] = await Promise.all([
+      fetchWorkflowPacket("api/workflow/gate", signal),
+      fetchWorkflowPacket("api/workflow/status", signal),
+      fetchWorkflowPacket("api/workflow/history", signal)
+    ]);
+    return { gate, status, history, fixture: false };
+  } catch (error) {
+    return {
+      gate: { status: "error", design_gate_earned: false },
+      status: {
+        status: "error",
+        machine_error_code: "UI_WORKFLOW_CONTROL_FETCH_FAILED",
+        actor_slots: [],
+        registry: { status: "blocked" },
+        writer: { status: "unknown" },
+        workflow_execution_ready: false,
+        execution_modes: [],
+        history_count: 0,
+        human_message: error?.message || "workflow control fetch failed"
+      },
+      history: { status: "error", history: [] },
+      fixture: false
+    };
+  }
+}
+
+function workflowModeAdmitted(status, mode) {
+  return Array.isArray(status?.execution_modes)
+    && status.execution_modes.some((item) => item?.id === mode && item?.admitted === true);
+}
+
+function newWorkflowStep(alias = "") {
+  const stepNumber = ++workflowStepSequence;
+  return {
+    step_request_id: `step-${stepNumber}`,
+    alias,
+    prompt: "",
+    role_instruction: "",
+    context_policy: stepNumber === 1 ? "fresh" : "continue",
+    fork_from: "",
+    repo_touching: false
+  };
+}
+
+function ensureWorkflowDraft() {
+  if (!workflowActorSlots.length) {
+    workflowDraftSteps = [];
+    return;
+  }
+  if (workflowDraftSteps.length) {
+    const aliases = new Set(workflowActorSlots.map((slot) => slot.primary_alias));
+    for (const step of workflowDraftSteps) {
+      if (!aliases.has(step.alias)) {
+        step.alias = workflowActorSlots[0]?.primary_alias || "";
+      }
+    }
+    return;
+  }
+  const first = workflowActorSlots[0]?.primary_alias || "";
+  const second = workflowActorSlots[1]?.primary_alias || first;
+  workflowDraftSteps = [newWorkflowStep(first), newWorkflowStep(second)];
+}
+
+function workflowStatusChip(tone, label) {
+  const chip = document.getElementById("workflowRunStatus");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${tone}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function renderWorkflowActorSlots() {
+  const list = document.getElementById("workflowActorList");
+  if (!list) {
+    return;
+  }
+  list.replaceChildren();
+  if (!workflowActorSlots.length) {
+    const empty = document.createElement("div");
+    empty.className = "secondary";
+    empty.textContent = "API-слоты не найдены в каноническом registry.";
+    list.append(empty);
+    return;
+  }
+  for (const slot of workflowActorSlots) {
+    const row = document.createElement("div");
+    row.className = "workflow-actor";
+    const mark = document.createElement("span");
+    mark.className = "workflow-actor-mark";
+    mark.textContent = String(slot.primary_alias || "?").slice(0, 2).toUpperCase();
+    const copy = document.createElement("div");
+    copy.className = "workflow-actor-copy";
+    const title = document.createElement("strong");
+    title.textContent = slot.display_name || slot.primary_alias || "API agent";
+    const meta = document.createElement("span");
+    meta.textContent = `${slot.primary_alias || "alias —"} · ${slot.role_label || "coding agent"} · ${slot.provider_id || "provider"}`;
+    copy.append(title, meta);
+    row.append(mark, copy);
+    list.append(row);
+  }
+}
+
+function workflowField(labelText, control, className = "") {
+  const label = document.createElement("label");
+  if (className) {
+    label.className = className;
+  }
+  const caption = document.createElement("span");
+  caption.textContent = labelText;
+  label.append(caption, control);
+  return label;
+}
+
+function renderWorkflowSteps() {
+  const list = document.getElementById("workflowStepList");
+  if (!list) {
+    return;
+  }
+  list.replaceChildren();
+  workflowDraftSteps.forEach((step, index) => {
+    const row = document.createElement("section");
+    row.className = "workflow-step";
+    row.dataset.stepIndex = String(index);
+
+    const head = document.createElement("div");
+    head.className = "workflow-step-head";
+    const stepName = document.createElement("strong");
+    stepName.textContent = `Шаг ${index + 1}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button small ghost workflow-remove-step";
+    remove.textContent = "Убрать";
+    remove.disabled = workflowDraftSteps.length <= 1;
+    remove.setAttribute("aria-label", `Убрать шаг ${index + 1}`);
+    remove.addEventListener("click", () => {
+      workflowDraftSteps.splice(index, 1);
+      renderWorkflowSteps();
+    });
+    head.append(stepName, remove);
+
+    const grid = document.createElement("div");
+    grid.className = "workflow-step-grid";
+    const alias = document.createElement("select");
+    alias.setAttribute("aria-label", `Агент шага ${index + 1}`);
+    for (const slot of workflowActorSlots) {
+      const option = document.createElement("option");
+      option.value = slot.primary_alias || "";
+      option.textContent = `${slot.display_name || slot.primary_alias} · ${slot.role_label || "agent"}`;
+      option.selected = option.value === step.alias;
+      alias.append(option);
+    }
+    alias.addEventListener("change", () => { step.alias = alias.value; });
+
+    const context = document.createElement("select");
+    context.setAttribute("aria-label", `Контекст шага ${index + 1}`);
+    for (const [value, label] of [["fresh", "Новый контекст"], ["continue", "Продолжить предыдущий"], ["fork", "Ветка от шага"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = value === step.context_policy;
+      option.disabled = value === "fork" && index === 0;
+      context.append(option);
+    }
+    context.addEventListener("change", () => {
+      step.context_policy = context.value;
+      if (context.value !== "fork") {
+        step.fork_from = "";
+      }
+      renderWorkflowSteps();
+    });
+
+    const prompt = document.createElement("textarea");
+    prompt.rows = 3;
+    prompt.maxLength = 49152;
+    prompt.placeholder = "Что должен сделать этот агент?";
+    prompt.value = step.prompt;
+    prompt.addEventListener("input", () => { step.prompt = prompt.value; });
+
+    const role = document.createElement("input");
+    role.type = "text";
+    role.maxLength = 4096;
+    role.placeholder = "Например: проверь решение как reviewer";
+    role.value = step.role_instruction;
+    role.addEventListener("input", () => { step.role_instruction = role.value; });
+
+    grid.append(
+      workflowField("Агент", alias),
+      workflowField("Контекст", context),
+      workflowField("Задача", prompt, "workflow-prompt-field"),
+      workflowField("Роль в этом шаге · необязательно", role, "workflow-role-field")
+    );
+
+    const options = document.createElement("div");
+    options.className = "workflow-step-options";
+    if (step.context_policy === "fork") {
+      const fork = document.createElement("select");
+      fork.setAttribute("aria-label", `Источник ветки шага ${index + 1}`);
+      for (let prior = 0; prior < index; prior += 1) {
+        const option = document.createElement("option");
+        option.value = workflowDraftSteps[prior].step_request_id;
+        option.textContent = `Шаг ${prior + 1}`;
+        option.selected = option.value === step.fork_from;
+        fork.append(option);
+      }
+      if (!step.fork_from && index > 0) {
+        step.fork_from = workflowDraftSteps[index - 1].step_request_id;
+        fork.value = step.fork_from;
+      }
+      fork.addEventListener("change", () => { step.fork_from = fork.value; });
+      options.append(workflowField("Ветка от", fork));
+    } else {
+      const contextNote = document.createElement("span");
+      contextNote.className = "secondary";
+      contextNote.textContent = step.context_policy === "continue"
+        ? "Получит доказанный output предыдущего шага."
+        : "Начнёт без output других шагов.";
+      options.append(contextNote);
+    }
+    const repoLabel = document.createElement("label");
+    repoLabel.className = "workflow-repo-toggle";
+    const repo = document.createElement("input");
+    repo.type = "checkbox";
+    repo.checked = step.repo_touching === true;
+    repo.addEventListener("change", () => { step.repo_touching = repo.checked; });
+    const repoText = document.createElement("span");
+    repoText.textContent = "Нужна repo lease";
+    repoLabel.append(repo, repoText);
+    options.append(repoLabel);
+
+    row.append(head, grid, options);
+    list.append(row);
+  });
+  const count = document.getElementById("workflowStepCount");
+  if (count) {
+    const stepWord = workflowDraftSteps.length === 1
+      ? "шаг"
+      : (workflowDraftSteps.length >= 2 && workflowDraftSteps.length <= 4 ? "шага" : "шагов");
+    count.textContent = `${workflowDraftSteps.length} ${stepWord}`;
+  }
+  const add = document.getElementById("workflowAddStep");
+  if (add) {
+    add.disabled = workflowDraftSteps.length >= WORKFLOW_MAX_STEPS || !workflowActorSlots.length;
+  }
+}
+
+function renderWorkflowRunResult(packet) {
+  workflowLastResult = packet || null;
+  const progress = document.getElementById("workflowProgress");
+  if (!progress) {
+    return;
+  }
+  progress.replaceChildren();
+  const receipts = Array.isArray(packet?.receipts) ? packet.receipts : [];
+  const ok = packet?.status === "ok" && packet?.all_steps_delivered === true;
+  workflowStatusChip(ok ? "green" : "red", ok ? "выполнен" : (packet?.status === "error" ? "остановлен" : "не запускался"));
+  if (!packet || (!receipts.length && packet.status !== "error")) {
+    const empty = document.createElement("div");
+    empty.className = "workflow-empty-state";
+    const title = document.createElement("strong");
+    title.textContent = "Здесь появится цепочка receipts";
+    const copy = document.createElement("span");
+    copy.textContent = "Каждый шаг показывает доставку контекста и server-issued результат.";
+    empty.append(title, copy);
+    progress.append(empty);
+    return;
+  }
+  if (!receipts.length) {
+    const error = document.createElement("div");
+    error.className = "workflow-validation";
+    error.textContent = `${packet.machine_error_code || "WORKFLOW_FAILED"} · ${packet.human_message || "Запуск остановлен до первого шага."}`;
+    progress.append(error);
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "workflow-receipt-list";
+  receipts.forEach((receipt, index) => {
+    const row = document.createElement("div");
+    const delivered = receipt?.status === "ok" && receipt?.context_material_delivered === true;
+    row.className = `workflow-receipt ${delivered ? "ok" : "error"}`;
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${workflowDraftSteps[index]?.alias || receipt?.alias || receipt?.provider || "agent"}`;
+    const state = document.createElement("span");
+    state.textContent = delivered ? "Контекст доставлен · receipt доказан" : "Доставка не доказана · исполнение остановлено";
+    const code = document.createElement("code");
+    code.textContent = receipt?.machine_error_code || (delivered ? "OK" : "WORKFLOW_STEP_FAILED");
+    const source = document.createElement("span");
+    source.textContent = receipt?.visible_context_source_step
+      ? `Источник контекста: ${receipt.visible_context_source_step}`
+      : "Новый контекст";
+    row.append(title, state, code, source);
+    list.append(row);
+  });
+  progress.append(list);
+}
+
+function renderWorkflowHistory(packet) {
+  const body = document.getElementById("workflowHistoryBody");
+  if (!body) {
+    return;
+  }
+  body.replaceChildren();
+  const history = Array.isArray(packet?.history) ? [...packet.history].reverse() : [];
+  if (!history.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.className = "workflow-history-empty";
+    cell.colSpan = 7;
+    cell.textContent = "Запусков в текущем server process пока нет.";
+    row.append(cell);
+    body.append(row);
+    return;
+  }
+  for (const item of history) {
+    const row = document.createElement("tr");
+    const status = document.createElement("span");
+    status.className = `chip ${item?.status === "ok" ? "green" : "red"}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = item?.status === "ok" ? "готово" : "стоп";
+    status.append(dot, label);
+    row.append(
+      td("", status),
+      td("mono-value", String(item?.workflow_run_id || "—").slice(0, 12)),
+      td("", item?.execution_mode || "—"),
+      td("", `${item?.dispatched_steps ?? 0}/${item?.requested_steps ?? 0}`),
+      td("", Array.isArray(item?.actor_aliases) ? item.actor_aliases.join(" → ") : "—"),
+      td("", accountTableCheckLabel(item?.recorded_at_utc)),
+      td("mono-value", item?.machine_error_code || "—")
+    );
+    body.append(row);
+  }
+}
+
+function renderWorkflowControl(bundle, source) {
+  const status = bundle?.status || {};
+  const gate = bundle?.gate || {};
+  workflowActorSlots = Array.isArray(status.actor_slots) ? status.actor_slots : [];
+  ensureWorkflowDraft();
+  renderWorkflowActorSlots();
+  renderWorkflowSteps();
+  renderWorkflowHistory(bundle?.history || {});
+
+  const gateReady = gate.design_gate_earned === true;
+  const executionReady = status.workflow_execution_ready === true;
+  const controlledAdmitted = workflowModeAdmitted(status, "controlled");
+  const liveAdmitted = workflowModeAdmitted(status, "live");
+  workflowExecutionAdmitted = source === "live" && gateReady && executionReady && controlledAdmitted;
+  text("workflowActorCount", workflowActorSlots.length);
+  text("workflowWriterStatus", status?.writer?.status || "unknown");
+  text("workflowHistoryCount", Array.isArray(bundle?.history?.history) ? bundle.history.history.length : 0);
+  text("workflowRegistryRevision", `revision ${status?.registry?.registry_revision ?? "—"}`);
+  text("workflowReadinessTitle", gateReady && executionReady ? "Execution core готов к controlled workflow" : "Workflow control не готов к запуску");
+  text("workflowReadinessCopy", gateReady && executionReady
+    ? "Registry и transport boundary доступны; browser identity authority отключена."
+    : (status.human_message || "Нужны earned gate, валидный registry и transport adapter."));
+
+  const banner = document.getElementById("workflowBanner");
+  if (banner) {
+    banner.className = `fixture-banner ${source === "live" && gateReady && executionReady ? "green" : (source === "live" ? "amber" : "blue")}`;
+    banner.textContent = source === "live"
+      ? (gateReady && executionReady
+        ? "Live server truth загружена. Controlled не вызывает provider network; live требует отдельного server-owned допуска."
+        : "Server truth загружена, но запуск заблокирован до восстановления readiness.")
+      : "Демо показывает компоновку. Запуск доступен только при источнике Live.";
+  }
+  const liveInput = document.getElementById("workflowModeLive");
+  if (liveInput) {
+    liveInput.disabled = !liveAdmitted || source !== "live";
+    if (liveInput.disabled && liveInput.checked) {
+      document.getElementById("workflowModeControlled").checked = true;
+    }
+  }
+  text("workflowLiveModeHint", liveAdmitted ? "допуск подтверждён сервером" : "нужен серверный допуск");
+  const run = document.getElementById("workflowRun");
+  if (run) {
+    run.disabled = !workflowExecutionAdmitted || workflowRunning;
+    run.title = source !== "live"
+      ? "Переключите источник на Live."
+      : (run.disabled ? "Workflow control сейчас не admitted сервером." : "Запустить последовательность через registry-bound transport boundary.");
+  }
+  if (!workflowLastResult) {
+    renderWorkflowRunResult(null);
+  }
+}
+
+function workflowRunPayload() {
+  const mode = document.querySelector('input[name="workflow-mode"]:checked')?.value || "controlled";
+  return {
+    execution_mode: mode,
+    steps: workflowDraftSteps.map((step) => {
+      const item = {
+        step_request_id: step.step_request_id,
+        alias: step.alias,
+        prompt: step.prompt.trim(),
+        context_policy: step.context_policy,
+        repo_touching: step.repo_touching === true
+      };
+      if (step.role_instruction.trim()) {
+        item.role_instruction = step.role_instruction.trim();
+      }
+      if (step.context_policy === "fork") {
+        item.fork_from = step.fork_from;
+      }
+      return item;
+    })
+  };
+}
+
+function validateWorkflowDraft() {
+  if (!workflowActorSlots.length) {
+    return { message: "Нет доступных API-агентов.", index: 0 };
+  }
+  const seen = new Set();
+  for (let index = 0; index < workflowDraftSteps.length; index += 1) {
+    const step = workflowDraftSteps[index];
+    if (!step.alias) {
+      return { message: `Выберите агента для шага ${index + 1}.`, index };
+    }
+    if (!step.prompt.trim()) {
+      return { message: `Добавьте задачу для шага ${index + 1}.`, index };
+    }
+    if (seen.has(step.step_request_id)) {
+      return { message: `Идентификатор шага ${index + 1} повторяется.`, index };
+    }
+    seen.add(step.step_request_id);
+    if (step.context_policy === "fork" && !seen.has(step.fork_from)) {
+      return { message: `Выберите предыдущий шаг для ветки ${index + 1}.`, index };
+    }
+  }
+  return null;
+}
+
+async function runWorkflowControl() {
+  if (workflowRunning || document.querySelector(".desktop")?.dataset?.source !== "live") {
+    return;
+  }
+  const error = validateWorkflowDraft();
+  const validation = document.getElementById("workflowValidation");
+  if (error) {
+    validation.hidden = false;
+    validation.textContent = error.message;
+    document.querySelector(`.workflow-step[data-step-index="${error.index}"] textarea, .workflow-step[data-step-index="${error.index}"] select`)?.focus();
+    return;
+  }
+  validation.hidden = true;
+  workflowRunning = true;
+  const run = document.getElementById("workflowRun");
+  run.disabled = true;
+  run.lastElementChild.textContent = "Выполняется…";
+  workflowStatusChip("blue", "выполняется");
+  try {
+    const response = await fetch("api/workflow/run", {
+      method: "POST",
+      cache: "no-store",
+      headers: webPostHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(workflowRunPayload())
+    });
+    if (!response.ok) {
+      throw new Error(`workflow run http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderWorkflowRunResult(packet);
+    renderWorkflowControl(await loadWorkflowControl(), "live");
+  } catch (error) {
+    renderWorkflowRunResult({
+      status: "error",
+      machine_error_code: "UI_WORKFLOW_RUN_FAILED",
+      human_message: error?.message || "workflow run failed",
+      receipts: []
+    });
+  } finally {
+    workflowRunning = false;
+    run.lastElementChild.textContent = "Запустить воркфлоу";
+    run.disabled = !workflowExecutionAdmitted;
+  }
 }
 
 function operatorSetText(id, value) {
@@ -12667,6 +13196,7 @@ function setSourceCopy(source) {
     "quick-start": "Quick Start · summary control panel",
     accounts: "Аккаунты · live только чтение",
     "api-connections": "API-подключения · список маршрутов",
+    workflows: "Воркфлоу · registry-bound control",
     diagnostics: "Диагностика · detail screen",
     settings: settingsFooter,
     setup: "Setup · admission preview",
@@ -12677,6 +13207,7 @@ function setSourceCopy(source) {
     "quick-start": "Ежедневный пульт подключений: аккаунты Codex и один основной API.",
     accounts: "Пул аккаунтов, статусы проверки и распределение по режимам.",
     "api-connections": "Маршруты внешних моделей, статусы проверки и безопасные действия.",
+    workflows: "Последовательность API-агентов, доставка контекста и доказанные receipts каждого шага.",
     diagnostics: "Проверка цепочки подключения, аккаунтов и режима прокси.",
     settings: settingsSubtitle,
     setup: "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
@@ -15505,55 +16036,34 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
     }
   }
 
+  const settingsTitles = {
+    runtime: "Runtime / Mode",
+    client: "Client / Launch",
+    "accounts-policy": "Accounts Policy",
+    "diagnostics-privacy": "Diagnostics / Privacy",
+    advanced: "Advanced",
+    "data-layout": "Данные приложения",
+    hub: "Настройки"
+  };
+  const screenTitles = {
+    "quick-start": "Быстрый старт",
+    overview: "Обзор",
+    accounts: "Аккаунты",
+    "api-connections": "API-подключения",
+    workflows: "Воркфлоу",
+    diagnostics: "Диагностика",
+    setup: "Настройка Wild Boar Proxy",
+    "select-client": "Выбор клиента",
+    "import-existing": "Импорт существующей настройки"
+  };
+  const settingsTitle = nextSettingsSection === "advanced"
+    ? "Advanced"
+    : (settingsTitles[nextSettingsSection] || settingsTitles.hub);
   text(
     "mainTitle",
-    nextScreen === "accounts"
-      ? "Аккаунты"
-      : (
-        nextScreen === "quick-start"
-          ? "Быстрый старт"
-          : (
-        nextScreen === "api-connections"
-          ? "API-подключения"
-          : (
-        nextScreen === "diagnostics"
-          ? "Диагностика"
-          : (
-            nextScreen === "settings"
-              ? (
-                nextSettingsSection === "runtime"
-                  ? "Runtime / Mode"
-                  : (
-                    nextSettingsSection === "client"
-                      ? "Client / Launch"
-                      : (
-                        nextSettingsSection === "accounts-policy"
-                          ? "Accounts Policy"
-                          : (
-                            nextSettingsSection === "diagnostics-privacy"
-                              ? "Diagnostics / Privacy"
-                              : (
-                                nextSettingsSection === "advanced"
-                                  ? "Advanced"
-                                  : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
-                              )
-                          )
-                      )
-                  )
-              )
-              : (
-                nextScreen === "setup"
-                  ? "Настройка Wild Boar Proxy"
-                  : (
-                    nextScreen === "select-client"
-                      ? "Выбор клиента"
-                      : (nextScreen === "import-existing" ? "Импорт существующей настройки" : "Обзор")
-                  )
-              )
-          )
-          )
-          )
-      )
+    nextScreen === "settings"
+      ? settingsTitle
+      : (screenTitles[nextScreen] || "Обзор")
   );
   setSourceCopy(document.getElementById("sourcePicker").value);
 
@@ -17480,6 +17990,8 @@ async function setFixtureState(stateId, updateUrl = false) {
     renderAccountsSnapshot(accountsFixtureFromOverview(fixture));
   } else if (currentScreen() === "api-connections") {
     renderApiConnectionsSnapshot(apiConnectionsFixtureFromOverview(fixture));
+  } else if (currentScreen() === "workflows") {
+    renderWorkflowControl(workflowFixtureBundle(fixture.state_id || state), "fixture");
   } else if (currentScreen() === "quick-start") {
     renderQuickStart(quickStartAccountsFixtureFromOverview(fixture), quickStartApiFixtureFromOverview(fixture), "fixture", fixture.state_id || state);
   } else {
@@ -17512,7 +18024,9 @@ async function setLiveReadonly(updateUrl = false) {
     }
     : (currentScreen() === "accounts"
       ? await loadAccountsReadonly(signal)
-      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly(signal) : await loadLiveReadonly(signal)));
+      : (currentScreen() === "api-connections"
+        ? await loadApiConnectionsReadonly(signal)
+        : (currentScreen() === "workflows" ? await loadWorkflowControl(signal) : await loadLiveReadonly(signal))));
   if (transitionEpoch !== sourceTransitionEpoch) {
     return null;
   }
@@ -17525,6 +18039,8 @@ async function setLiveReadonly(updateUrl = false) {
     renderAccountsSnapshot(snapshot);
   } else if (currentScreen() === "api-connections") {
     renderApiConnectionsSnapshot(snapshot);
+  } else if (currentScreen() === "workflows") {
+    renderWorkflowControl(snapshot, "live");
   } else if (currentScreen() === "quick-start") {
     renderQuickStart(snapshot.accounts, snapshot.apiConnections, "live", "integration_failure");
   } else {
@@ -17620,6 +18136,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
+  document.getElementById("workflowAddStep")?.addEventListener("click", () => {
+    if (workflowDraftSteps.length >= WORKFLOW_MAX_STEPS) {
+      return;
+    }
+    workflowDraftSteps.push(newWorkflowStep(workflowActorSlots[0]?.primary_alias || ""));
+    renderWorkflowSteps();
+    document.querySelector(".workflow-step:last-child textarea")?.focus();
+  });
+  document.getElementById("workflowRun")?.addEventListener("click", () => runWorkflowControl());
+  document.getElementById("workflowsScreen")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      runWorkflowControl();
+    }
+  });
   for (const link of document.querySelectorAll("[data-screen-link]")) {
     link.addEventListener("click", (event) => {
       event.preventDefault();
