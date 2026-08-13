@@ -9,7 +9,8 @@ policies with digest transitions, exactly one repo-touching lease at a
 time, fail-fast ambiguity, persisted intermediate receipts, no silent actor
 swap, and proven visible delivery. Workflow V1 has no parallel repo steps;
 automated native-primary workflow steps remain disabled until physically
-proven. The dispatch callable is the seam for fake-adapter evidence.
+proven. R63 adds a production dispatch seam whose input contains bounded
+visible context and whose output must prove delivery of that exact context.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any, Callable, Sequence
 
 from .repo_lease import RepoLease
 from .runtime import build_command_payload
+from .thread_context_ledger import redact_text
 
 WORKFLOW_RUNNER_SCHEMA_VERSION = 1
 
@@ -38,7 +40,12 @@ WF_ACTOR_SWAP_VIOLATION = "WORKFLOW_ACTOR_SWAP_VIOLATION"
 WF_REPO_LEASE_BLOCKED = "WORKFLOW_REPO_LEASE_BLOCKED"
 WF_REPO_LEASE_RELEASE_FAILED = "WORKFLOW_REPO_LEASE_RELEASE_FAILED"
 WF_DISPATCH_FAILED = "WORKFLOW_DISPATCH_FAILED"
+WF_DISPATCH_EXCEPTION = "WORKFLOW_DISPATCH_EXCEPTION"
 WF_FORK_TARGET_UNKNOWN = "WORKFLOW_FORK_TARGET_UNKNOWN"
+WF_CONTEXT_DELIVERY_UNPROVEN = "WORKFLOW_CONTEXT_DELIVERY_UNPROVEN"
+
+MAX_WORKFLOW_OUTPUT_CHARS = 32_768
+MAX_VISIBLE_CONTEXT_CHARS = 49_152
 
 
 def _digest(payload: str) -> str:
@@ -64,6 +71,8 @@ class WorkflowStep:
     context_policy: str = CONTEXT_POLICY_FRESH
     fork_from: str = ""
     repo_touching: bool = False
+    alias: str = ""
+    assignment_revision: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -78,7 +87,22 @@ class WorkflowStep:
             "context_policy": self.context_policy,
             "fork_from": self.fork_from,
             "repo_touching": self.repo_touching,
+            "alias": self.alias,
+            "assignment_revision": self.assignment_revision,
         }
+
+
+@dataclass(frozen=True)
+class WorkflowDispatchContext:
+    """Server-owned per-step facts supplied to a production dispatcher."""
+
+    workflow_run_id: str
+    dispatch_id: str
+    turn_id: str
+    incoming_context_digest: str
+    visible_context: str
+    visible_context_sha256: str
+    visible_context_source_step: str
 
 
 @dataclass
@@ -105,10 +129,17 @@ class WorkflowRun:
 # status ("ok" | "ambiguous" | "error"), provider, output_text,
 # machine_error_code.
 DispatchCallable = Callable[[WorkflowStep, str], dict[str, Any]]
+ContextDispatchCallable = Callable[
+    [WorkflowStep, WorkflowDispatchContext], dict[str, Any]
+]
 
 
 class WorkflowAmbiguityError(RuntimeError):
     """Raised by the dispatch seam on an ambiguous result."""
+
+
+def _bounded_redacted(value: object, *, limit: int) -> str:
+    return redact_text(str(value or ""))[:limit]
 
 
 def _validate_steps(steps: Sequence[WorkflowStep]) -> dict[str, Any] | None:
@@ -188,31 +219,45 @@ def _validate_steps(steps: Sequence[WorkflowStep]) -> dict[str, Any] | None:
                 exit_code=1,
                 extra={"step_request_id": step_id},
             )
+        if not str(step.prompt or "").strip() or len(step.prompt) > MAX_VISIBLE_CONTEXT_CHARS:
+            return build_command_payload(
+                ok=False,
+                human_message=f"step '{step_id}' prompt is empty or oversized.",
+                machine_error_code=WF_SCHEMA_INVALID,
+                liveness="healthy",
+                severity="error",
+                operator_action="user_action",
+                changed_files=[],
+                exit_code=1,
+                extra={"step_request_id": step_id},
+            )
     return None
 
 
-def _context_digest_for(
+def _context_for(
     step: WorkflowStep,
     *,
     previous_digest: str | None,
+    previous_material: str,
+    previous_step_id: str,
     digest_by_step: dict[str, str],
-    steps_by_id: dict[str, WorkflowStep],
+    material_by_step: dict[str, str],
     run: WorkflowRun,
-) -> tuple[str | None, dict[str, Any] | None]:
-    """Compute the incoming context digest for the step's policy.
+) -> tuple[str | None, str, str, dict[str, Any] | None]:
+    """Compute digest, visible material, and source for a step's policy.
 
-    Returns (incoming_digest, error_packet).
+    Returns (incoming_digest, visible_material, source_step, error_packet).
     """
     if step.context_policy == CONTEXT_POLICY_FRESH:
-        return _digest(f"fresh:{step.step_request_id}:{step.prompt}"), None
+        return _digest(f"fresh:{step.step_request_id}:{step.prompt}"), "", "", None
     if step.context_policy == CONTEXT_POLICY_CONTINUE:
         if previous_digest is None:
-            return _digest(f"fresh:{step.step_request_id}:{step.prompt}"), None
-        return previous_digest, None
+            return _digest(f"fresh:{step.step_request_id}:{step.prompt}"), "", "", None
+        return previous_digest, previous_material, previous_step_id, None
     if step.context_policy == CONTEXT_POLICY_FORK:
         source_digest = digest_by_step.get(step.fork_from)
         if source_digest is None:
-            return None, build_command_payload(
+            return None, "", "", build_command_payload(
                 ok=False,
                 human_message=(
                     f"fork target '{step.fork_from}' has no completed receipt."
@@ -229,14 +274,15 @@ def _context_digest_for(
                     "workflow_run_id": run.workflow_run_id,
                 },
             )
-        return source_digest, None
-    return None, None
+        return source_digest, material_by_step[step.fork_from], step.fork_from, None
+    return None, "", "", None
 
 
 def run_sequential_workflow(
     steps: Sequence[WorkflowStep],
     *,
-    dispatch: DispatchCallable,
+    dispatch: DispatchCallable | None = None,
+    dispatch_with_context: ContextDispatchCallable | None = None,
     lease_root: Path | str | None = None,
     workflow_run_id: str | None = None,
 ) -> dict[str, Any]:
@@ -249,15 +295,30 @@ def run_sequential_workflow(
     - holds at most one repo lease; external holders block repo steps
     - releases the run's repo lease on completion (or failure)
     """
+    if (dispatch is None) == (dispatch_with_context is None):
+        return build_command_payload(
+            ok=False,
+            human_message="workflow requires exactly one dispatch seam.",
+            machine_error_code=WF_SCHEMA_INVALID,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"schema_version": WORKFLOW_RUNNER_SCHEMA_VERSION},
+        )
     validation = _validate_steps(steps)
     if validation is not None:
         return validation
 
     run = WorkflowRun(workflow_run_id=workflow_run_id or uuid.uuid4().hex)
-    steps_by_id = {step.step_request_id: step for step in steps}
     digest_by_step: dict[str, str] = {}
+    material_by_step: dict[str, str] = {}
     previous_digest: str | None = None
+    previous_material = ""
+    previous_step_id = ""
     lease: RepoLease | None = None
+    terminal_packet: dict[str, Any] | None = None
 
     def ensure_lease() -> dict[str, Any] | None:
         nonlocal lease
@@ -310,17 +371,54 @@ def run_sequential_workflow(
         lease = None
         return None
 
+    def base_receipt(
+        step: WorkflowStep,
+        context: WorkflowDispatchContext,
+    ) -> dict[str, Any]:
+        return {
+            "dispatch_id": context.dispatch_id,
+            "turn_id": context.turn_id,
+            "workflow_run_id": run.workflow_run_id,
+            "step_request_id": step.step_request_id,
+            "slot_id": step.slot_id,
+            "binding_id": step.binding_id,
+            "binding_revision": step.binding_revision,
+            "assignment_id": step.assignment_id,
+            "assignment_revision": step.assignment_revision,
+            "provider": step.provider,
+            "role_instruction": step.role_instruction,
+            "context_policy": step.context_policy,
+            "incoming_context_digest": context.incoming_context_digest,
+            "visible_context_present": bool(context.visible_context),
+            "visible_context_sha256": context.visible_context_sha256,
+            "visible_context_source_step": context.visible_context_source_step,
+        }
+
+    def result_proof_fields(result: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "dispatch_attempted": result.get("dispatch_attempted") is True,
+            "response_observed": result.get("response_observed") is True,
+            "controlled": result.get("controlled"),
+            "live_provider_called": result.get("live_provider_called") is True,
+            "live_provider_proven": result.get("live_provider_proven") is True,
+            "fallback_used": result.get("fallback_used") is True,
+            "actor_substitution_used": result.get("actor_substitution_used") is True,
+        }
+
     for step in steps:
-        incoming_digest, error = _context_digest_for(
+        incoming_digest, visible_context, context_source, error = _context_for(
             step,
             previous_digest=previous_digest,
+            previous_material=previous_material,
+            previous_step_id=previous_step_id,
             digest_by_step=digest_by_step,
-            steps_by_id=steps_by_id,
+            material_by_step=material_by_step,
             run=run,
         )
         if error is not None:
             error["intermediate_receipts"] = run.receipts
-            return error
+            terminal_packet = error
+            break
 
         if step.repo_touching:
             blocked = ensure_lease()
@@ -330,54 +428,84 @@ def run_sequential_workflow(
                 blocked["stopped_at_step"] = step.step_request_id
                 run.stop_reason = WF_REPO_LEASE_BLOCKED
                 run.stopped_at_step = step.step_request_id
-                return blocked
+                terminal_packet = blocked
+                break
 
         dispatch_id = uuid.uuid4().hex
         turn_id = uuid.uuid4().hex
+        context = WorkflowDispatchContext(
+            workflow_run_id=run.workflow_run_id,
+            dispatch_id=dispatch_id,
+            turn_id=turn_id,
+            incoming_context_digest=str(incoming_digest or ""),
+            visible_context=visible_context,
+            visible_context_sha256=_digest(visible_context) if visible_context else "",
+            visible_context_source_step=context_source,
+        )
         try:
-            result = dispatch(step, incoming_digest)
+            result = (
+                dispatch_with_context(step, context)
+                if dispatch_with_context is not None
+                else dispatch(step, context.incoming_context_digest)  # type: ignore[misc]
+            )
         except WorkflowAmbiguityError as exc:
             run.stop_reason = WF_AMBIGUOUS_STOP
             run.stopped_at_step = step.step_request_id
             receipt = {
-                "dispatch_id": dispatch_id,
-                "turn_id": turn_id,
-                "workflow_run_id": run.workflow_run_id,
-                "step_request_id": step.step_request_id,
-                "slot_id": step.slot_id,
-                "binding_id": step.binding_id,
-                "binding_revision": step.binding_revision,
-                "assignment_id": step.assignment_id,
-                "provider": step.provider,
-                "role_instruction": step.role_instruction,
-                "context_policy": step.context_policy,
-                "incoming_context_digest": incoming_digest,
+                **base_receipt(step, context),
                 "status": "ambiguous",
                 "machine_error_code": WF_AMBIGUOUS_STOP,
-                "reason": str(exc),
+                "reason": _bounded_redacted(exc, limit=512),
                 "delivered": False,
             }
             run.receipts.append(receipt)
             break
+        except Exception:  # noqa: BLE001 - callback internals must not escape
+            run.stop_reason = WF_DISPATCH_EXCEPTION
+            run.stopped_at_step = step.step_request_id
+            run.receipts.append(
+                {
+                    **base_receipt(step, context),
+                    "status": "error",
+                    "machine_error_code": WF_DISPATCH_EXCEPTION,
+                    "reason": "workflow dispatch raised unexpectedly",
+                    "delivered": False,
+                    "dispatch_attempted": False,
+                    "response_observed": False,
+                    "live_provider_called": False,
+                    "live_provider_proven": False,
+                }
+            )
+            break
+
+        if not isinstance(result, dict):
+            run.stop_reason = WF_DISPATCH_FAILED
+            run.stopped_at_step = step.step_request_id
+            run.receipts.append(
+                {
+                    **base_receipt(step, context),
+                    "status": "error",
+                    "machine_error_code": WF_DISPATCH_FAILED,
+                    "reason": "workflow dispatch returned an invalid result",
+                    "delivered": False,
+                    "dispatch_attempted": False,
+                    "response_observed": False,
+                    "live_provider_called": False,
+                    "live_provider_proven": False,
+                }
+            )
+            break
 
         result_status = str(result.get("status") or "error")
-        result_provider = str(result.get("provider") or "").strip()
+        result_provider = str(
+            result.get("provider") or result.get("provider_id") or ""
+        ).strip()
         if result_provider != step.provider:
             run.stop_reason = WF_ACTOR_SWAP_VIOLATION
             run.stopped_at_step = step.step_request_id
             receipt = {
-                "dispatch_id": dispatch_id,
-                "turn_id": turn_id,
-                "workflow_run_id": run.workflow_run_id,
-                "step_request_id": step.step_request_id,
-                "slot_id": step.slot_id,
-                "binding_id": step.binding_id,
-                "binding_revision": step.binding_revision,
-                "assignment_id": step.assignment_id,
-                "provider": step.provider,
-                "role_instruction": step.role_instruction,
-                "context_policy": step.context_policy,
-                "incoming_context_digest": incoming_digest,
+                **base_receipt(step, context),
+                **result_proof_fields(result),
                 "status": "error",
                 "machine_error_code": WF_ACTOR_SWAP_VIOLATION,
                 "reason": (
@@ -393,21 +521,14 @@ def run_sequential_workflow(
             run.stop_reason = WF_AMBIGUOUS_STOP
             run.stopped_at_step = step.step_request_id
             receipt = {
-                "dispatch_id": dispatch_id,
-                "turn_id": turn_id,
-                "workflow_run_id": run.workflow_run_id,
-                "step_request_id": step.step_request_id,
-                "slot_id": step.slot_id,
-                "binding_id": step.binding_id,
-                "binding_revision": step.binding_revision,
-                "assignment_id": step.assignment_id,
-                "provider": step.provider,
-                "role_instruction": step.role_instruction,
-                "context_policy": step.context_policy,
-                "incoming_context_digest": incoming_digest,
+                **base_receipt(step, context),
+                **result_proof_fields(result),
                 "status": "ambiguous",
                 "machine_error_code": result.get("machine_error_code") or WF_AMBIGUOUS_STOP,
-                "reason": result.get("human_message", "ambiguous dispatch result"),
+                "reason": _bounded_redacted(
+                    result.get("human_message", "ambiguous dispatch result"),
+                    limit=512,
+                ),
                 "delivered": False,
             }
             run.receipts.append(receipt)
@@ -417,54 +538,84 @@ def run_sequential_workflow(
             run.stop_reason = WF_DISPATCH_FAILED
             run.stopped_at_step = step.step_request_id
             receipt = {
-                "dispatch_id": dispatch_id,
-                "turn_id": turn_id,
-                "workflow_run_id": run.workflow_run_id,
-                "step_request_id": step.step_request_id,
-                "slot_id": step.slot_id,
-                "binding_id": step.binding_id,
-                "binding_revision": step.binding_revision,
-                "assignment_id": step.assignment_id,
-                "provider": step.provider,
-                "role_instruction": step.role_instruction,
-                "context_policy": step.context_policy,
-                "incoming_context_digest": incoming_digest,
+                **base_receipt(step, context),
+                **result_proof_fields(result),
                 "status": "error",
                 "machine_error_code": result.get("machine_error_code") or WF_DISPATCH_FAILED,
-                "reason": result.get("human_message", "dispatch failed"),
+                "reason": _bounded_redacted(
+                    result.get("human_message", "dispatch failed"), limit=512
+                ),
                 "delivered": False,
             }
             run.receipts.append(receipt)
             break
 
-        out_digest = _digest(
-            f"{incoming_digest}:{step.prompt}:{dispatch_id}"
+        if visible_context and dispatch_with_context is not None:
+            proof_digest = str(result.get("visible_context_sha256") or "")
+            if (
+                result.get("context_material_delivered") is not True
+                or proof_digest != context.visible_context_sha256
+            ):
+                run.stop_reason = WF_CONTEXT_DELIVERY_UNPROVEN
+                run.stopped_at_step = step.step_request_id
+                run.receipts.append(
+                    {
+                        **base_receipt(step, context),
+                        **result_proof_fields(result),
+                        "status": "error",
+                        "machine_error_code": WF_CONTEXT_DELIVERY_UNPROVEN,
+                        "reason": "dispatch did not prove the exact visible context",
+                        "delivered": False,
+                    }
+                )
+                break
+
+        output_text = _bounded_redacted(
+            result.get("output_text", result.get("response_text", "")),
+            limit=MAX_WORKFLOW_OUTPUT_CHARS,
         )
+        material = _bounded_redacted(
+            (
+                f"{visible_context}\n\n" if visible_context else ""
+            )
+            + f"Step {step.step_request_id} task:\n{step.prompt}\n\n"
+            + f"Step {step.step_request_id} response:\n{output_text}",
+            limit=MAX_VISIBLE_CONTEXT_CHARS,
+        )
+        out_digest = _digest(material)
         digest_by_step[step.step_request_id] = out_digest
+        material_by_step[step.step_request_id] = material
         previous_digest = out_digest
+        previous_material = material
+        previous_step_id = step.step_request_id
         run.receipts.append(
             {
-                "dispatch_id": dispatch_id,
-                "turn_id": turn_id,
-                "workflow_run_id": run.workflow_run_id,
-                "step_request_id": step.step_request_id,
-                "slot_id": step.slot_id,
-                "binding_id": step.binding_id,
-                "binding_revision": step.binding_revision,
-                "assignment_id": step.assignment_id,
-                "provider": step.provider,
-                "role_instruction": step.role_instruction,
-                "context_policy": step.context_policy,
-                "incoming_context_digest": incoming_digest,
+                **base_receipt(step, context),
                 "outgoing_context_digest": out_digest,
                 "status": "ok",
                 "machine_error_code": result.get("machine_error_code") or WF_OK,
-                "output_text": result.get("output_text", ""),
+                "output_text": output_text,
                 "delivered": True,
+                "context_material_delivered": (
+                    result.get("context_material_delivered") is True
+                    if visible_context
+                    else True
+                ),
+                "controlled": result.get("controlled"),
+                "live_provider_called": result.get("live_provider_called"),
+                "live_provider_proven": result.get("live_provider_proven"),
             }
         )
 
     release_error = release_lease()
+    if terminal_packet is not None:
+        if release_error is not None:
+            release_error["intermediate_receipts"] = run.receipts
+            release_error["prior_machine_error_code"] = terminal_packet.get(
+                "machine_error_code"
+            )
+            return release_error
+        return terminal_packet
     ok = run.stop_reason is None
     final_ok = ok and release_error is None
     failure_message = (
@@ -496,12 +647,29 @@ def run_sequential_workflow(
             "schema_version": WORKFLOW_RUNNER_SCHEMA_VERSION,
             "workflow_run_id": run.workflow_run_id,
             "dispatched_steps": len(run.receipts),
-            "all_steps_delivered": ok,
+            "all_steps_delivered": final_ok,
             "stop_reason": run.stop_reason,
             "stopped_at_step": run.stopped_at_step,
             "receipts": run.receipts,
             "visible_delivery": all(
                 r.get("delivered") for r in run.receipts if r["status"] == "ok"
-            ) and not run.stop_reason,
+            ) and final_ok,
         },
     )
+
+
+__all__ = [
+    "CONTEXT_POLICIES",
+    "CONTEXT_POLICY_CONTINUE",
+    "CONTEXT_POLICY_FORK",
+    "CONTEXT_POLICY_FRESH",
+    "ContextDispatchCallable",
+    "DispatchCallable",
+    "MAX_VISIBLE_CONTEXT_CHARS",
+    "MAX_WORKFLOW_OUTPUT_CHARS",
+    "WorkflowAmbiguityError",
+    "WorkflowDispatchContext",
+    "WorkflowRun",
+    "WorkflowStep",
+    "run_sequential_workflow",
+]

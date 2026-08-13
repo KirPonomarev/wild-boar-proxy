@@ -348,3 +348,31 @@ API adapter truth rules:
   text are structurally absent from the receipt
 - failure never enables cross-provider fallback, actor substitution, or an
   automatic retry
+
+## Sequential workflow production dispatch
+
+- a production API workflow resolves every step from the canonical actor
+  registry and requires exact alias, slot, binding/revision,
+  assignment/revision, provider, API adapter, route, model, permission, and
+  no-fallback identity before transport execution
+- caller step fields, role instructions, and context policies never grant
+  permissions or override registry-owned provider, route, model, credential,
+  endpoint, or fallback policy
+- `fresh` delivers no prior material; `continue` delivers bounded redacted
+  material from the previous completed step; `fork` delivers bounded redacted
+  material from the named completed step
+- context-bearing steps count as delivered only when the production dispatch
+  result proves the exact visible-context digest; digest-only chaining is not
+  visible context delivery
+- workflow output and reusable context are redacted and length-bounded before
+  receipt persistence; receipts expose context source and digest, not a raw
+  context transcript
+- live workflow execution requires an exact per-run server-owned authorization
+  fact before registry resolution, credential presence checks, session
+  preparation, or provider dispatch; controlled execution is always non-live
+  and cannot satisfy a live gate
+- ambiguous delivery, provider mismatch, identity drift, context-proof failure,
+  transport failure, or unexpected dispatch exceptions stop before later
+  steps, never retry, and never substitute another actor
+- an owned repo lease is released on every terminal path, including fork
+  validation failure and unexpected dispatch exceptions

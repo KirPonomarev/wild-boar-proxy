@@ -229,6 +229,48 @@ class SequentialWorkflowRunnerTests(unittest.TestCase):
         self.assertEqual(packet["receipts"][0]["machine_error_code"], "PROVIDER_UNAVAILABLE")
         self.assertFalse(packet["receipts"][0]["delivered"])
 
+    def test_invalid_dispatch_result_releases_owned_lease(self) -> None:
+        def dispatch(step: wf.WorkflowStep, incoming_digest: str):
+            return None
+
+        packet = wf.run_sequential_workflow(
+            [_step("s1", repo_touching=True)],
+            dispatch=dispatch,
+            lease_root=self.lease_root,
+        )
+        self.assertEqual(packet["machine_error_code"], wf.WF_DISPATCH_FAILED)
+        self.assertEqual(
+            RepoLease(self.lease_root).status()["machine_error_code"],
+            "REPO_LEASE_FREE",
+        )
+
+    def test_output_is_redacted_before_receipt_and_context_reuse(self) -> None:
+        marker = "api_" + "key=" + "abcdefgh12345678"
+        seen_context: list[wf.WorkflowDispatchContext] = []
+
+        def dispatch(step: wf.WorkflowStep, context: wf.WorkflowDispatchContext):
+            seen_context.append(context)
+            return {
+                "status": "ok",
+                "provider": step.provider,
+                "output_text": marker if step.step_request_id == "s1" else "done",
+                "machine_error_code": "OK",
+                "context_material_delivered": True,
+                "visible_context_sha256": context.visible_context_sha256,
+            }
+
+        packet = wf.run_sequential_workflow(
+            [
+                _step("s1"),
+                _step("s2", policy=wf.CONTEXT_POLICY_CONTINUE),
+            ],
+            dispatch_with_context=dispatch,
+            lease_root=self.lease_root,
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertNotIn(marker, packet["receipts"][0]["output_text"])
+        self.assertNotIn(marker, seen_context[1].visible_context)
+
     def test_repo_lease_blocked_by_external_holder(self) -> None:
         external = RepoLease(self.lease_root)
         acquired = external.acquire(

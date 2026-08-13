@@ -228,6 +228,23 @@ class GateEvidenceBundleV2Tests(unittest.TestCase):
         reasons = {failure["reason"] for failure in result["failures"]}
         self.assertIn("required_stage_missing", reasons)
 
+    def test_r63_workflow_production_dispatch_supplement_is_required(self) -> None:
+        stage = "R63_WORKFLOW_PRODUCTION_DISPATCH"
+        self.assertIn(stage, gebv.REQUIRED_STAGES)
+
+        def mutate(index):
+            index["references"] = [
+                receipt
+                for receipt in index["references"]
+                if receipt.get("stage_id") != stage
+            ]
+
+        result = self._run(mutate_index=mutate)
+        self.assertFalse(result["earned"])
+        self.assertIn(stage, result["findings"]["missing_required_stages"])
+        reasons = {failure["reason"] for failure in result["failures"]}
+        self.assertIn("required_stage_missing", reasons)
+
     # --- forged vectors ---
 
     def test_stage_labels_only_rejected(self) -> None:
