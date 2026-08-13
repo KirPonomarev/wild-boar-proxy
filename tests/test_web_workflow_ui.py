@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import unittest
 from html.parser import HTMLParser
@@ -94,9 +96,15 @@ class WebWorkflowUiTests(unittest.TestCase):
 
     def test_javascript_is_syntactically_valid(self) -> None:
         node = Path(
-            "/Users/kirillponomarev/.cache/codex-runtimes/"
-            "codex-primary-runtime/dependencies/node/bin/node"
+            os.environ.get("WBP_NODE_BIN")
+            or Path.home()
+            / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
         )
+        if not node.is_file():
+            fallback_node = shutil.which("node")
+            if not fallback_node:
+                self.skipTest("node runtime unavailable for JavaScript syntax probe")
+            node = Path(fallback_node)
         completed = subprocess.run(
             [str(node), "--check", str(UI / "scripts" / "overview.js")],
             check=False,
