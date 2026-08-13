@@ -731,7 +731,12 @@ def compute_bundle_digest(
             info = path.lstat()
             relative = path.relative_to(bundle).as_posix()
             mode = stat.S_IMODE(info.st_mode)
-            if info.st_uid not in {0, os.getuid()} or mode & 0o022:
+            if info.st_uid not in {0, os.getuid()}:
+                raise ValueError("bundle_entry_owner_or_mode_unsafe")
+            # Symlink mode bits are conventionally 0777 on Linux and cannot be
+            # changed without following the link. Their authority is bounded
+            # by owner plus an exact in-bundle target check below.
+            if not stat.S_ISLNK(info.st_mode) and mode & 0o022:
                 raise ValueError("bundle_entry_owner_or_mode_unsafe")
             if stat.S_ISDIR(info.st_mode):
                 records.append({"path": relative, "kind": "directory", "mode": mode})

@@ -59,7 +59,7 @@ multi-file standalone bundles required by current Qwen Code and Kimi Code.
 ## Git
 
 - branch: `codex/r68-cli-bundle-production-admission`
-- commit: this logically complete contour commit
+- commit: this logically complete contour commit set
 - pushed: delivery evidence is recorded externally after exact remote readback
 
 ## Scope Check
@@ -78,5 +78,7 @@ multi-file standalone bundles required by current Qwen Code and Kimi Code.
 
 - blockers encountered: current standalone launchers require read-only support
   trees and `sysctl` bootstrap metadata; both were localized with real sandbox
-  probes and covered by fail-closed regression tests
+  probes and covered by fail-closed regression tests; initial Linux CI exposed
+  the platform-standard `0777` symlink mode, so symlink authority is now bound
+  by owner and exact in-bundle target rather than non-portable mode bits
 - resume from here: CLOSED
