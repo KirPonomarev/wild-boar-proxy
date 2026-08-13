@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Kirill Ponomarev
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Final candidate assurance (B18 / R55 FinalAssuranceV2).
+"""Final candidate assurance (B18 / R66 FinalAssuranceV2).
 
 Read-only assurance over the strict AssuranceEvidenceBundleV2. It does
 NOT create provider homes, auth/session markers, or test injection; does

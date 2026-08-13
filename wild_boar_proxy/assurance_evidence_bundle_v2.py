@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Kirill Ponomarev
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""AssuranceEvidenceBundleV2 (R55).
+"""AssuranceEvidenceBundleV2 (R66 strict live matrix).
 
 Strict evidence verification for final candidate assurance. The assurance
-reads a server-owned bundle of per-check receipts; it never accepts a
-caller test count, an arbitrary network dict, or a synthetic receipt as
-physical acceptance.
+reads a server-owned bundle of per-check receipts; it never accepts a caller
+test count, an arbitrary network dict, a bare boolean, or a synthetic receipt
+as physical acceptance.
 
 Required receipts (12):
 
@@ -21,15 +21,16 @@ Required receipts (12):
 - web_lifecycle_security
 - account_isolation
 - protected_network
-- provider_cli_live (proven live receipt OR typed pending status)
+- provider_cli_live (strict per-provider/per-combination live matrix OR typed
+  external-prerequisite status)
 
 Outcome semantics:
 
-- CLI/provider live pending -> WAIT_EXTERNAL_PREREQUISITE,
+- provider live pending -> WAIT_EXTERNAL_PREREQUISITE,
   ready_for_independent_audit=false, no KeyError;
 - air_gap=false -> PROTECTED_NETWORK_UNPROVEN;
-- one test / synthetic receipt / arbitrary dict -> FULL_SUITE_RECEIPT_INVALID
-  or EVIDENCE_SCHEMA_INVALID;
+- one test / bare boolean / synthetic receipt / arbitrary dict ->
+  FULL_SUITE_RECEIPT_INVALID or EVIDENCE_SCHEMA_INVALID;
 - SYNTHETIC_PROVEN never closes required physical acceptance.
 """
 
@@ -95,6 +96,17 @@ _OBSERVED_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 STATUS_PROVEN = "proven"
 STATUS_PENDING = "pending"
 
+PROOF_INTEGRATION = "INTEGRATION_PROVEN"
+PROOF_LIVE = "LIVE_PROVEN"
+
+MANDATORY_API_PROVIDERS = frozenset({"deepseek", "kimi", "glm", "qwen"})
+MANDATORY_LIVE_COMBINATIONS: dict[str, tuple[str, ...]] = {
+    "api_api": ("api", "api"),
+    "api_cli": ("api", "cli"),
+    "cli_cli": ("cli", "cli"),
+}
+CLI_PROVIDERS = frozenset({"kimi", "qwen"})
+
 
 def _failure(code: str, reason: str, **context: Any) -> dict[str, Any]:
     item: dict[str, Any] = {"code": code, "reason": reason}
@@ -108,6 +120,229 @@ def assurance_receipt_hash(receipt: dict[str, Any]) -> str:
     """Canonical receipt hash: all fields minus receipt_sha256."""
     proj = {k: v for k, v in receipt.items() if k != "receipt_sha256"}
     return hashlib.sha256(gebv.canonical_json_bytes(proj)).hexdigest()
+
+
+def _positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _candidate_bound(evidence: dict[str, Any], candidate: str) -> bool:
+    return evidence.get("candidate_sha") == candidate
+
+
+def _all_true(evidence: dict[str, Any], fields: Iterable[str]) -> bool:
+    return all(evidence.get(field) is True for field in fields)
+
+
+def _all_false(evidence: dict[str, Any], fields: Iterable[str]) -> bool:
+    return all(evidence.get(field) is False for field in fields)
+
+
+def _valid_unique_sha256s(value: Any, *, minimum: int) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= minimum
+        and all(isinstance(item, str) and _SHA64_RE.match(item) for item in value)
+        and len(set(value)) == len(value)
+    )
+
+
+def _valid_live_identity(item: Any, *, candidate: str) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if not _candidate_bound(item, candidate):
+        return False
+    if not all(
+        _nonempty_string(item.get(field))
+        for field in (
+            "actor_id",
+            "binding_id",
+            "assignment_id",
+            "session_id",
+            "dispatch_id",
+            "model_id",
+            "route_id",
+            "output_sha256",
+        )
+    ):
+        return False
+    if not all(
+        _positive_int(item.get(field))
+        for field in (
+            "actor_revision",
+            "binding_revision",
+            "assignment_revision",
+            "session_revision",
+        )
+    ):
+        return False
+    if not _SHA64_RE.match(str(item["output_sha256"])):
+        return False
+    if not _all_true(
+        item,
+        (
+            "credential_present",
+            "dispatch_attempted",
+            "response_observed",
+            "live_provider_called",
+            "live_provider_proven",
+            "output_present",
+        ),
+    ):
+        return False
+    return _all_false(
+        item,
+        ("controlled", "fallback_used", "actor_substitution_used"),
+    )
+
+
+def _valid_provider_live_matrix(evidence: dict[str, Any], *, candidate: str) -> bool:
+    if evidence.get("proof_level") != PROOF_LIVE:
+        return False
+    if not _candidate_bound(evidence, candidate):
+        return False
+    provider_rows = evidence.get("providers")
+    combination_rows = evidence.get("combinations")
+    if not isinstance(provider_rows, list) or not isinstance(combination_rows, list):
+        return False
+
+    providers: dict[str, dict[str, Any]] = {}
+    all_dispatch_ids: set[str] = set()
+    all_session_ids: set[str] = set()
+    for row in provider_rows:
+        if not isinstance(row, dict) or not _valid_live_identity(row, candidate=candidate):
+            return False
+        provider_id = row.get("provider_id")
+        if (
+            not isinstance(provider_id, str)
+            or provider_id not in MANDATORY_API_PROVIDERS
+            or provider_id in providers
+        ):
+            return False
+        if row.get("transport_kind") != "api":
+            return False
+        dispatch_id = str(row["dispatch_id"])
+        session_id = str(row["session_id"])
+        if dispatch_id in all_dispatch_ids or session_id in all_session_ids:
+            return False
+        all_dispatch_ids.add(dispatch_id)
+        all_session_ids.add(session_id)
+        providers[str(provider_id)] = row
+    if set(providers) != MANDATORY_API_PROVIDERS:
+        return False
+
+    combinations: dict[str, dict[str, Any]] = {}
+    for row in combination_rows:
+        if not isinstance(row, dict):
+            return False
+        combination_id = row.get("combination_id")
+        if not isinstance(combination_id, str):
+            return False
+        expected_transports = MANDATORY_LIVE_COMBINATIONS.get(combination_id)
+        if expected_transports is None or combination_id in combinations:
+            return False
+        if not _candidate_bound(row, candidate) or row.get("proof_level") != PROOF_LIVE:
+            return False
+        transports = row.get("transport_kinds")
+        provider_ids = row.get("provider_ids")
+        actors = row.get("actor_ids")
+        binding_ids = row.get("binding_ids")
+        binding_revisions = row.get("binding_revisions")
+        assignment_ids = row.get("assignment_ids")
+        assignment_revisions = row.get("assignment_revisions")
+        session_ids = row.get("session_ids")
+        session_revisions = row.get("session_revisions")
+        dispatch_ids = row.get("dispatch_ids")
+        model_ids = row.get("model_ids")
+        route_ids = row.get("route_ids")
+        outputs = row.get("output_sha256s")
+        credential_presence = row.get("credential_presence")
+        if not all(
+            isinstance(values, list) and len(values) == 2
+            for values in (
+                transports,
+                provider_ids,
+                actors,
+                binding_ids,
+                binding_revisions,
+                assignment_ids,
+                assignment_revisions,
+                session_ids,
+                session_revisions,
+                dispatch_ids,
+                model_ids,
+                route_ids,
+                outputs,
+                credential_presence,
+            )
+        ):
+            return False
+        if tuple(transports) != expected_transports:
+            return False
+        if not all(_nonempty_string(value) for value in provider_ids):
+            return False
+        if combination_id == "api_api" and not (
+            all(value in MANDATORY_API_PROVIDERS for value in provider_ids)
+            and len(set(provider_ids)) == 2
+        ):
+            return False
+        if combination_id == "api_cli" and not (
+            provider_ids[0] in MANDATORY_API_PROVIDERS
+            and provider_ids[1] in CLI_PROVIDERS
+        ):
+            return False
+        if combination_id == "cli_cli" and set(provider_ids) != CLI_PROVIDERS:
+            return False
+        if not all(_nonempty_string(value) for value in actors):
+            return False
+        if not all(_nonempty_string(value) for value in binding_ids):
+            return False
+        if not all(_positive_int(value) for value in binding_revisions):
+            return False
+        if not all(_nonempty_string(value) for value in assignment_ids):
+            return False
+        if not all(_positive_int(value) for value in assignment_revisions):
+            return False
+        if not all(_nonempty_string(value) for value in session_ids):
+            return False
+        if not all(_positive_int(value) for value in session_revisions):
+            return False
+        if not all(_nonempty_string(value) for value in dispatch_ids):
+            return False
+        if not all(_nonempty_string(value) for value in model_ids):
+            return False
+        if not all(_nonempty_string(value) for value in route_ids):
+            return False
+        if not all(isinstance(value, str) and _SHA64_RE.match(value) for value in outputs):
+            return False
+        if credential_presence != [True, True]:
+            return False
+        if len(set(dispatch_ids)) != 2 or len(set(session_ids)) != 2:
+            return False
+        if any(value in all_dispatch_ids for value in dispatch_ids):
+            return False
+        if any(value in all_session_ids for value in session_ids):
+            return False
+        if not _all_true(
+            row,
+            (
+                "dispatches_attempted",
+                "responses_observed",
+                "live_provider_proven",
+                "outputs_present",
+            ),
+        ):
+            return False
+        if not _all_false(row, ("controlled", "fallback_used", "actor_substitution_used")):
+            return False
+        all_dispatch_ids.update(str(value) for value in dispatch_ids)
+        all_session_ids.update(str(value) for value in session_ids)
+        combinations[str(combination_id)] = row
+    return set(combinations) == set(MANDATORY_LIVE_COMBINATIONS)
 
 
 def build_assurance_receipt(
@@ -256,6 +491,9 @@ class AssuranceBundleVerifier:
                 and evidence.get("runner") == "ci"
                 and isinstance(evidence.get("tests_passed"), int)
                 and evidence.get("tests_passed", 0) > 0
+                and _candidate_bound(evidence, candidate)
+                and _positive_int(evidence.get("run_id"))
+                and _positive_int(evidence.get("job_id"))
             ):
                 f.append(
                     _failure(
@@ -265,7 +503,14 @@ class AssuranceBundleVerifier:
                 )
         elif check_id == "package_artifact_checksum":
             digest = evidence.get("artifact_sha256")
-            if not (isinstance(digest, str) and _SHA64_RE.match(digest)):
+            if not (
+                isinstance(digest, str)
+                and _SHA64_RE.match(digest)
+                and _candidate_bound(evidence, candidate)
+                and _nonempty_string(evidence.get("artifact_name"))
+                and _positive_int(evidence.get("artifact_size_bytes"))
+                and evidence.get("runner") == "ci"
+            ):
                 f.append(
                     _failure(
                         "EVIDENCE_SCHEMA_INVALID", "package_checksum_invalid",
@@ -273,7 +518,13 @@ class AssuranceBundleVerifier:
                     )
                 )
         elif check_id == "design_gate":
-            if evidence.get("design_gate_earned") is not True:
+            if not (
+                evidence.get("design_gate_earned") is True
+                and evidence.get("token")
+                == "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+                and _candidate_bound(evidence, candidate)
+                and _SHA64_RE.match(str(evidence.get("gate_bundle_sha256") or ""))
+            ):
                 f.append(
                     _failure(
                         "DESIGN_GATE_NOT_EARNED", "design_gate_not_earned",
@@ -282,7 +533,19 @@ class AssuranceBundleVerifier:
                 )
         elif check_id == "protected_network":
             ports = evidence.get("protected_ports")
-            if evidence.get("air_gap") is not True:
+            if not (
+                evidence.get("air_gap") is True
+                and evidence.get("no_detected_mutation") is True
+                and evidence.get("evidence_basis")
+                in {
+                    "guard_enforcement",
+                    "pre_post_comparison",
+                    "executor_action_ledger",
+                    "system_instrumentation",
+                }
+                and _candidate_bound(evidence, candidate)
+                and _SHA64_RE.match(str(evidence.get("guard_receipt_sha256") or ""))
+            ):
                 f.append(
                     _failure(
                         PROTECTED_NETWORK_UNPROVEN, "air_gap_unproven",
@@ -300,25 +563,133 @@ class AssuranceBundleVerifier:
                     )
                 )
         elif check_id == "provider_cli_live":
-            # A proven live receipt must carry a real ok flag; pending is
-            # handled at the receipt level, not here.
-            if evidence.get("ok") is not True:
+            if not _valid_provider_live_matrix(evidence, candidate=candidate):
                 f.append(
                     _failure(
-                        "EVIDENCE_SCHEMA_INVALID", "provider_cli_live_not_proven",
+                        "EVIDENCE_SCHEMA_INVALID",
+                        "provider_cli_live_matrix_invalid",
+                        check_id=check_id, receipt_id=receipt_id,
+                    )
+                )
+        elif check_id == "migration":
+            if not (
+                evidence.get("proof_level") == PROOF_INTEGRATION
+                and _candidate_bound(evidence, candidate)
+                and evidence.get("migration_verified") is True
+                and _positive_int(evidence.get("source_schema_version"))
+                and _positive_int(evidence.get("target_schema_version"))
+                and evidence["target_schema_version"] > evidence["source_schema_version"]
+                and isinstance(evidence.get("records_verified"), int)
+                and not isinstance(evidence.get("records_verified"), bool)
+                and evidence["records_verified"] >= 0
+                and evidence.get("legacy_projection_lossless") is True
+            ):
+                f.append(
+                    _failure(
+                        "EVIDENCE_SCHEMA_INVALID", "migration_evidence_invalid",
+                        check_id=check_id, receipt_id=receipt_id,
+                    )
+                )
+        elif check_id == "privacy_redaction":
+            if not (
+                evidence.get("proof_level") == PROOF_INTEGRATION
+                and _candidate_bound(evidence, candidate)
+                and _all_true(
+                    evidence,
+                    (
+                        "secret_scan_passed",
+                        "packet_redaction_verified",
+                        "raw_backend_absent",
+                        "credential_values_absent",
+                    ),
+                )
+                and _positive_int(evidence.get("files_scanned"))
+                and _SHA64_RE.match(str(evidence.get("scan_receipt_sha256") or ""))
+            ):
+                f.append(
+                    _failure(
+                        "EVIDENCE_SCHEMA_INVALID", "privacy_redaction_evidence_invalid",
+                        check_id=check_id, receipt_id=receipt_id,
+                    )
+                )
+        elif check_id == "workflow_integration":
+            if not (
+                evidence.get("proof_level") == PROOF_INTEGRATION
+                and _candidate_bound(evidence, candidate)
+                and evidence.get("workflow_mode") == "production_path_controlled"
+                and _all_true(
+                    evidence,
+                    (
+                        "registry_bound",
+                        "independent_receipts",
+                        "visible_context_delivery",
+                        "lease_cleanup_verified",
+                    ),
+                )
+                and _all_false(evidence, ("fallback_used", "actor_substitution_used"))
+                and _valid_unique_sha256s(
+                    evidence.get("receipt_sha256s"), minimum=2
+                )
+            ):
+                f.append(
+                    _failure(
+                        "EVIDENCE_SCHEMA_INVALID", "workflow_integration_evidence_invalid",
+                        check_id=check_id, receipt_id=receipt_id,
+                    )
+                )
+        elif check_id == "web_lifecycle_security":
+            if not (
+                evidence.get("proof_level") == PROOF_INTEGRATION
+                and _candidate_bound(evidence, candidate)
+                and _all_true(
+                    evidence,
+                    (
+                        "loopback_only",
+                        "token_enforced",
+                        "origin_enforced",
+                        "csrf_enforced",
+                        "rate_limit_enforced",
+                        "writer_fencing_verified",
+                        "browser_authority_bounded",
+                    ),
+                )
+                and _SHA64_RE.match(str(evidence.get("security_matrix_sha256") or ""))
+            ):
+                f.append(
+                    _failure(
+                        "EVIDENCE_SCHEMA_INVALID", "web_lifecycle_security_evidence_invalid",
+                        check_id=check_id, receipt_id=receipt_id,
+                    )
+                )
+        elif check_id == "account_isolation":
+            if not (
+                evidence.get("proof_level") == PROOF_INTEGRATION
+                and _candidate_bound(evidence, candidate)
+                and _all_true(
+                    evidence,
+                    (
+                        "dedicated_accounts",
+                        "provider_homes_isolated",
+                        "credential_stores_isolated",
+                        "primary_codex_untouched",
+                        "main_account_reuse_absent",
+                    ),
+                )
+                and _SHA64_RE.match(str(evidence.get("isolation_receipt_sha256") or ""))
+            ):
+                f.append(
+                    _failure(
+                        "EVIDENCE_SCHEMA_INVALID", "account_isolation_evidence_invalid",
                         check_id=check_id, receipt_id=receipt_id,
                     )
                 )
         else:
-            # migration / privacy_redaction / workflow_integration /
-            # web_lifecycle_security / account_isolation: honest ok/passed.
-            if not (evidence.get("ok") is True or evidence.get("passed") is True):
-                f.append(
-                    _failure(
-                        "EVIDENCE_SCHEMA_INVALID", f"{check_id}_not_proven",
-                        check_id=check_id, receipt_id=receipt_id,
-                    )
+            f.append(
+                _failure(
+                    "EVIDENCE_SCHEMA_INVALID", "unknown_assurance_check",
+                    check_id=check_id, receipt_id=receipt_id,
                 )
+            )
         return f
 
     # --- receipt verification ---
@@ -402,6 +773,16 @@ class AssuranceBundleVerifier:
             failures.append(
                 _failure(
                     "EVIDENCE_SCHEMA_INVALID", "pending_without_typed_code",
+                    check_id=check_id, receipt_id=receipt_id,
+                )
+            )
+        if status == STATUS_PENDING and (
+            check_id != "provider_cli_live"
+            or receipt["pending_code"] != WAIT_EXTERNAL_PREREQUISITE
+        ):
+            failures.append(
+                _failure(
+                    "EVIDENCE_SCHEMA_INVALID", "pending_not_external_live_gate",
                     check_id=check_id, receipt_id=receipt_id,
                 )
             )
