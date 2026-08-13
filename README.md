@@ -27,49 +27,75 @@ The project does not replace the proxy engine. It owns the control layer:
 
 ## Current status
 
-**Version 0.2.1** — provider expansion with Kimi/GLM contracts.
+**Version 0.2.1** — multi-actor control, sequential workflows, and strict
+production evidence boundaries.
 
 This is an experimental project in active development. The codebase includes:
 
 **Working (INTEGRATION_PROVEN):**
 - Web lifecycle: local loopback start/status/stop/open
 - Baseline CI: make check + test-core + test-custom-stability + test-web-e2e
-- Flaky test root-caused (probe_codex_app_server parameterized)
-- Credential resolver: owner-env and owner-keychain sources
-- Kimi/GLM route templates pass production validate_route_schema()
-- Alias bindings: Codex/DIP/Kimi/GLM in default_agent_bindings
-- Provider transforms: Kimi reasoning dialects, GLM thinking, streaming accumulator
+- Canonical actor registry with actor, slot binding, dynamic role assignment,
+  permission, and session revisions
+- Primary ChatGPT lane plus two external actor slots with strict alias routing
+- DeepSeek, Kimi, GLM, and Qwen API transport adapters with credential
+  provenance, request identity, typed errors, and no silent fallback
+- Qwen and Kimi one-shot CLI production adapters with isolated homes,
+  scrubbed environments, bounded output, cancellation, and fail-closed
+  admission
+- Registry-bound sequential workflows with fresh/continue/fork context,
+  independent receipts, one-dispatch-per-step, and repository lease fencing
+- Local web workflow control with loopback/token/origin/CSRF/rate-limit
+  ingress, controlled/live separation, bounded browser intent, history, and
+  responsive workflow UI
+- Security/reliability matrix covering drift, provider failures, redaction,
+  writer contention, restart recovery, and protected-surface guards
+- Strict final assurance schemas; generic `ok=true` evidence cannot close a
+  physical acceptance gate
 
-**Contract-validated (SYNTHETIC_PROVEN):**
+**Contract-validated without a live-provider claim:**
 - Account pool failover (typed failure → exactly-one replacement)
-- DeepSeek route profile and error taxonomy
-- Dual-lane context envelope with delegation
 - Capability registry with intelligence-level mapping
-- Design gate accessibility contract
-- Release E2E contract (requires LiveReceipts for acceptance)
+- Controlled multi-actor API workflow combinations and visible cross-step
+  context delivery
+- Release E2E contract (requires exact candidate and LiveReceipts for final
+  physical acceptance)
 - Desktop pilot contract (requires clean machine)
 - Native voice parity (requires physical observation)
 
-**Not yet live-verified (DECLARED):**
-- Kimi model IDs (kimi-k2.5, k2.6) — need live discovery
-- GLM model ID (glm-4.6) — need live discovery confirmation of 5.2/4.7
-- Cross-provider failover is OFF by default
+**Not yet live-verified:**
+- DeepSeek, Kimi, GLM, and Qwen API receipts on the final exact candidate
+- API/API and API/CLI workflow receipts on the final exact candidate
+- CLI/CLI workflow receipt when two real isolated CLI logins are available
+- Exact provider model discovery and real output digests
+- Cross-provider fallback remains OFF; no live evidence may silently enable it
 
 **Waiting for operator:**
-- Live provider smokes (DeepSeek/Kimi/GLM API keys in Keychain)
-- Physical E2E (dedicated accounts)
+- Explicit live-dispatch authorization plus DeepSeek, Kimi, GLM, and Qwen API
+  credentials through project-native owner environment/Keychain surfaces
+- Qwen and Kimi CLI binaries, dedicated isolated logins, and server-owned
+  admission for CLI/CLI proof
+- Physical E2E with dedicated accounts
 - Native voice physical observation
 - Clean-machine desktop install
 
-This release provides:
+The implemented product currently provides:
 
 - local loopback WBP web server with start/status/stop/open operator flow
-- dedicated account pool with typed request-bound failover
-- DeepSeek API lane with credential provenance
-- named dual-lane (GPT/Codex + Deep/DIP) thread context with delegation
+- canonical multi-actor registry, dynamic role metadata, permissions, aliases,
+  and revision-bound sessions
+- DeepSeek, Kimi, GLM, and Qwen API lanes with credential provenance
+- isolated Qwen and Kimi one-shot CLI adapters behind explicit admission
+- named primary/external thread context with fresh/continue/fork delivery
+- sequential registry-bound workflows and local web workflow controls
 - persistent Custom profile with Codex update compatibility
 - baseline core CI (check + test-core + test-custom-stability + test-web-e2e)
 - release CI (web E2E + package smoke + artifact privacy verification)
+
+The repository does not claim final live readiness while the required live
+provider and CLI receipts are pending. Controlled or synthetic evidence proves
+contract behavior only and cannot substitute for real credentials, dispatches,
+responses, or provider outputs.
 
 The repository does not store master plans, roadmaps, or next-contour queues.
 Active planning lives outside the repo in the current task thread, handoff, or
