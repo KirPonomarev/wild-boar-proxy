@@ -147,6 +147,12 @@ class WorkflowApiDispatchTests(unittest.TestCase):
         self.assertFalse(packet["live_provider_proven"])
         self.assertEqual(len(calls), 2)
         self.assertTrue(all(call[2]["controlled"] for call in calls))
+        self.assertTrue(all(receipt["dispatch_attempted"] for receipt in packet["receipts"]))
+        self.assertTrue(all(receipt["response_observed"] for receipt in packet["receipts"]))
+        self.assertTrue(all(receipt["fallback_used"] is False for receipt in packet["receipts"]))
+        self.assertTrue(
+            all(receipt["actor_substitution_used"] is False for receipt in packet["receipts"])
+        )
         self.assertIn("VERIFIED PRIOR WORKFLOW CONTEXT", calls[1][0].text)
         self.assertIn(packet["receipts"][0]["output_text"], calls[1][0].text)
         self.assertTrue(packet["receipts"][1]["context_material_delivered"])
