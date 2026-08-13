@@ -33458,18 +33458,37 @@ def write_test_device_login_cli_proxy(
     path.chmod(0o755)
 
 
+class WebFetchBudgetRegressionTests(unittest.TestCase):
+    def test_fetch_gives_first_attempt_the_full_remaining_deadline(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b"ok"
+        with (
+            mock.patch.object(time, "monotonic", side_effect=(100.0, 100.0)),
+            mock.patch.object(NO_PROXY_OPENER, "open", return_value=response) as open_url,
+        ):
+            self.assertEqual(fetch("http://127.0.0.1:1234/"), "ok")
+        open_url.assert_called_once_with(
+            "http://127.0.0.1:1234/", timeout=15.0
+        )
+
+
 def fetch(url: str) -> str:
     """Fetch with bounded retry on transient socket/timeout failures.
 
     Under full-suite load a shared runner can starve the in-process server
-    thread beyond the 3s per-attempt timeout; retry until a hard 15s
-    deadline instead of flaking. HTTPError (an expected protocol response,
-    e.g. 404/403 assertions) is never retried and propagates immediately.
+    thread. Give each attempt the remaining hard 15s budget so a slow handler
+    can finish; repeatedly abandoning it at 3s only creates more competing
+    requests and BrokenPipe noise. Fast transient connection failures may
+    still retry. HTTPError (an expected protocol response, e.g. 404/403
+    assertions) is never retried and propagates immediately.
     """
     deadline = time.monotonic() + 15.0
     while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("test web fetch deadline exceeded")
         try:
-            with NO_PROXY_OPENER.open(url, timeout=3) as response:
+            with NO_PROXY_OPENER.open(url, timeout=remaining) as response:
                 return response.read().decode("utf-8")
         except urllib.error.HTTPError:
             raise
