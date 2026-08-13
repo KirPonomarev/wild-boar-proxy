@@ -1981,7 +1981,7 @@ if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run on
         self.assertIn("<span>Старт</span>", nav)
         self.assertNotIn("<span>Быстрый старт</span>", nav)
         self.assertIn(
-            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
         )
 
@@ -11930,7 +11930,7 @@ if (!rolePill.title.includes("admitted metadata")) {
         self.assertIn("открытие журналов отложено", html)
         self.assertNotIn("Ссылка на артефакт", html)
         self.assertIn(
-            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
         )
         diagnostics_markup = html.split('id="diagnosticsScreen"', 1)[1].split('id="settingsScreen"', 1)[0]
@@ -12422,7 +12422,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
@@ -12495,7 +12495,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="advancedSettingsPanel"', 1)[0]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
@@ -12568,7 +12568,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         advanced_markup = settings_markup.split('<section id="advancedSettingsPanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
         nav_markup = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"advanced"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=advanced"', settings_markup)
@@ -12672,7 +12672,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="diagnosticsPrivacyPanel"', 1)[0]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"client"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
@@ -12767,7 +12767,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         diagnostics_privacy_markup = settings_markup.split('<section id="diagnosticsPrivacyPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"diagnostics-privacy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=diagnostics-privacy"', settings_markup)
@@ -12856,7 +12856,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         accounts_policy_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[1].split('<section id="clientLaunchPanel"', 1)[0]
 
-        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "workflows", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"accounts-policy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
         self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=accounts-policy"', settings_markup)
