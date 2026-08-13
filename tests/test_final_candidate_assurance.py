@@ -62,6 +62,83 @@ class SyntheticAssuranceFixture:
             "invalidated_stages": [],
         }
         self.state["current_state_sha256"] = gebv.execution_state_hash(self.state)
+
+        def live_identity(provider_id: str, ordinal: int) -> dict:
+            return {
+                "provider_id": provider_id,
+                "transport_kind": "api",
+                "candidate_sha": self.candidate,
+                "actor_id": f"actor-{provider_id}",
+                "actor_revision": 1,
+                "binding_id": f"binding-{provider_id}",
+                "binding_revision": 1,
+                "assignment_id": f"assignment-{provider_id}",
+                "assignment_revision": 1,
+                "session_id": f"session-provider-{ordinal}",
+                "session_revision": 1,
+                "dispatch_id": f"dispatch-provider-{ordinal}",
+                "model_id": f"model-{provider_id}",
+                "route_id": f"route-{provider_id}",
+                "output_sha256": f"{ordinal}" * 64,
+                "credential_present": True,
+                "dispatch_attempted": True,
+                "response_observed": True,
+                "live_provider_called": True,
+                "live_provider_proven": True,
+                "output_present": True,
+                "controlled": False,
+                "fallback_used": False,
+                "actor_substitution_used": False,
+            }
+
+        def combination(
+            combination_id: str, transports: list[str], ordinal: int
+        ) -> dict:
+            return {
+                "combination_id": combination_id,
+                "transport_kinds": transports,
+                "provider_ids": (
+                    ["deepseek", "kimi"]
+                    if combination_id == "api_api"
+                    else ["glm", "qwen"]
+                    if combination_id == "api_cli"
+                    else ["qwen", "kimi"]
+                ),
+                "candidate_sha": self.candidate,
+                "proof_level": aebv.PROOF_LIVE,
+                "actor_ids": [f"actor-combo-{ordinal}-1", f"actor-combo-{ordinal}-2"],
+                "binding_ids": [
+                    f"binding-combo-{ordinal}-1",
+                    f"binding-combo-{ordinal}-2",
+                ],
+                "binding_revisions": [1, 1],
+                "assignment_ids": [
+                    f"assignment-combo-{ordinal}-1",
+                    f"assignment-combo-{ordinal}-2",
+                ],
+                "assignment_revisions": [1, 1],
+                "session_ids": [
+                    f"session-combo-{ordinal}-1",
+                    f"session-combo-{ordinal}-2",
+                ],
+                "session_revisions": [1, 1],
+                "dispatch_ids": [
+                    f"dispatch-combo-{ordinal}-1",
+                    f"dispatch-combo-{ordinal}-2",
+                ],
+                "model_ids": [f"model-combo-{ordinal}-1", f"model-combo-{ordinal}-2"],
+                "route_ids": [f"route-combo-{ordinal}-1", f"route-combo-{ordinal}-2"],
+                "output_sha256s": [f"{ordinal + 4}" * 64, f"{ordinal + 5}" * 64],
+                "credential_presence": [True, True],
+                "dispatches_attempted": True,
+                "responses_observed": True,
+                "live_provider_proven": True,
+                "outputs_present": True,
+                "controlled": False,
+                "fallback_used": False,
+                "actor_substitution_used": False,
+            }
+
         self.evidence: dict[str, dict] = {
             "exact_remote_head": {
                 "local_head": self.candidate, "remote_head": self.candidate,
@@ -72,19 +149,98 @@ class SyntheticAssuranceFixture:
             },
             "macos_sandbox_ci": {
                 "platform": "macos", "sandbox_exec": True, "runner": "ci",
-                "tests_passed": 15,
+                "tests_passed": 15, "candidate_sha": self.candidate,
+                "run_id": 1001, "job_id": 2001,
             },
-            "package_artifact_checksum": {"artifact_sha256": "b" * 64},
-            "migration": {"ok": True},
-            "design_gate": {"design_gate_earned": True},
-            "privacy_redaction": {"passed": True},
-            "workflow_integration": {"ok": True},
-            "web_lifecycle_security": {"ok": True},
-            "account_isolation": {"ok": True},
+            "package_artifact_checksum": {
+                "artifact_sha256": "b" * 64,
+                "artifact_name": "wild_boar_proxy.whl",
+                "artifact_size_bytes": 4096,
+                "candidate_sha": self.candidate,
+                "runner": "ci",
+            },
+            "migration": {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.candidate,
+                "migration_verified": True,
+                "source_schema_version": 1,
+                "target_schema_version": 2,
+                "records_verified": 3,
+                "legacy_projection_lossless": True,
+            },
+            "design_gate": {
+                "design_gate_earned": True,
+                "token": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+                "candidate_sha": self.candidate,
+                "gate_bundle_sha256": "c" * 64,
+            },
+            "privacy_redaction": {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.candidate,
+                "secret_scan_passed": True,
+                "packet_redaction_verified": True,
+                "raw_backend_absent": True,
+                "credential_values_absent": True,
+                "files_scanned": 42,
+                "scan_receipt_sha256": "d" * 64,
+            },
+            "workflow_integration": {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.candidate,
+                "workflow_mode": "production_path_controlled",
+                "registry_bound": True,
+                "independent_receipts": True,
+                "visible_context_delivery": True,
+                "lease_cleanup_verified": True,
+                "fallback_used": False,
+                "actor_substitution_used": False,
+                "receipt_sha256s": ["e" * 64, "f" * 64],
+            },
+            "web_lifecycle_security": {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.candidate,
+                "loopback_only": True,
+                "token_enforced": True,
+                "origin_enforced": True,
+                "csrf_enforced": True,
+                "rate_limit_enforced": True,
+                "writer_fencing_verified": True,
+                "browser_authority_bounded": True,
+                "security_matrix_sha256": "1" * 64,
+            },
+            "account_isolation": {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.candidate,
+                "dedicated_accounts": True,
+                "provider_homes_isolated": True,
+                "credential_stores_isolated": True,
+                "primary_codex_untouched": True,
+                "main_account_reuse_absent": True,
+                "isolation_receipt_sha256": "2" * 64,
+            },
             "protected_network": {
-                "air_gap": True, "protected_ports": [10808, 12334],
+                "air_gap": True,
+                "protected_ports": [10808, 12334],
+                "no_detected_mutation": True,
+                "evidence_basis": "guard_enforcement",
+                "candidate_sha": self.candidate,
+                "guard_receipt_sha256": "3" * 64,
             },
-            "provider_cli_live": {"ok": True},
+            "provider_cli_live": {
+                "proof_level": aebv.PROOF_LIVE,
+                "candidate_sha": self.candidate,
+                "providers": [
+                    live_identity("deepseek", 1),
+                    live_identity("kimi", 2),
+                    live_identity("glm", 3),
+                    live_identity("qwen", 4),
+                ],
+                "combinations": [
+                    combination("api_api", ["api", "api"], 1),
+                    combination("api_cli", ["api", "cli"], 2),
+                    combination("cli_cli", ["cli", "cli"], 3),
+                ],
+            },
         }
 
     def build_bundle(self, *, cli_pending: bool = False) -> dict:
@@ -160,6 +316,17 @@ class FinalAssuranceV2Tests(unittest.TestCase):
 
     def _codes(self, result) -> set[str]:
         return {f["code"] for f in result["failures"]}
+
+    def _replace_evidence(self, bundle: dict, check_id: str, evidence: dict) -> None:
+        for receipt in bundle["receipts"]:
+            if receipt["check_id"] != check_id:
+                continue
+            payload = json.dumps(evidence, sort_keys=True).encode("utf-8")
+            (self.fixture.control / receipt["evidence_ref"]).write_bytes(payload)
+            receipt["evidence_sha256"] = hashlib.sha256(payload).hexdigest()
+            receipt["receipt_sha256"] = aebv.assurance_receipt_hash(receipt)
+            return
+        self.fail(f"receipt missing for {check_id}")
 
     # --- happy paths ---
 
@@ -252,6 +419,115 @@ class FinalAssuranceV2Tests(unittest.TestCase):
         result = self._run(mutate=mutate)
         self.assertFalse(result["ready"])
         self.assertIn("EVIDENCE_SCHEMA_INVALID", self._codes(result))
+
+    def test_bare_boolean_never_closes_any_required_check(self) -> None:
+        for check_id in aebv.REQUIRED_ASSURANCE_CHECKS:
+            with self.subTest(check_id=check_id):
+                def mutate(bundle, selected=check_id):
+                    self._replace_evidence(
+                        bundle, selected, {"ok": True, "passed": True}
+                    )
+
+                result = self._run(mutate=mutate)
+                self.assertFalse(result["ready"])
+                self.assertGreater(len(result["failures"]), 0)
+
+    def test_provider_live_matrix_rejects_false_green_vectors(self) -> None:
+        def mutate_case(case: str):
+            def mutate(bundle):
+                evidence = copy.deepcopy(self.fixture.evidence["provider_cli_live"])
+                if case == "missing_provider":
+                    evidence["providers"].pop()
+                elif case == "credential_absent":
+                    evidence["providers"][0]["credential_present"] = False
+                elif case == "controlled":
+                    evidence["providers"][0]["controlled"] = True
+                elif case == "fallback":
+                    evidence["providers"][0]["fallback_used"] = True
+                elif case == "candidate_drift":
+                    evidence["providers"][0]["candidate_sha"] = "0" * 40
+                elif case == "revision_missing":
+                    evidence["providers"][0].pop("binding_revision")
+                elif case == "output_missing":
+                    evidence["providers"][0]["output_sha256"] = ""
+                elif case == "missing_combination":
+                    evidence["combinations"].pop()
+                elif case == "combination_transport_drift":
+                    evidence["combinations"][1]["transport_kinds"] = ["api", "api"]
+                elif case == "duplicate_dispatch":
+                    evidence["combinations"][0]["dispatch_ids"][1] = (
+                        evidence["combinations"][0]["dispatch_ids"][0]
+                    )
+                else:
+                    self.fail(f"unknown case {case}")
+                self._replace_evidence(bundle, "provider_cli_live", evidence)
+            return mutate
+
+        for case in (
+            "missing_provider",
+            "credential_absent",
+            "controlled",
+            "fallback",
+            "candidate_drift",
+            "revision_missing",
+            "output_missing",
+            "missing_combination",
+            "combination_transport_drift",
+            "duplicate_dispatch",
+        ):
+            with self.subTest(case=case):
+                result = self._run(mutate=mutate_case(case))
+                self.assertFalse(result["ready"])
+                reasons = {failure["reason"] for failure in result["failures"]}
+                self.assertIn("provider_cli_live_matrix_invalid", reasons)
+
+    def test_pending_internal_check_is_invalid_not_waiting(self) -> None:
+        def mutate(bundle):
+            receipt = next(
+                item for item in bundle["receipts"] if item["check_id"] == "migration"
+            )
+            receipt["status"] = aebv.STATUS_PENDING
+            receipt["pending_code"] = aebv.WAIT_EXTERNAL_PREREQUISITE
+            receipt["receipt_sha256"] = aebv.assurance_receipt_hash(receipt)
+
+        result = self._run(mutate=mutate)
+        self.assertFalse(result["ready"])
+        self.assertFalse(result["waiting"])
+        reasons = {failure["reason"] for failure in result["failures"]}
+        self.assertIn("pending_not_external_live_gate", reasons)
+
+    def test_malformed_strict_evidence_fails_without_exception(self) -> None:
+        cases = (
+            ("provider_cli_live", {"proof_level": aebv.PROOF_LIVE,
+                                   "candidate_sha": self.fixture.candidate,
+                                   "providers": [1], "combinations": []}),
+            ("provider_cli_live", {"proof_level": aebv.PROOF_LIVE,
+                                   "candidate_sha": self.fixture.candidate,
+                                   "providers": [], "combinations": [{
+                                       "combination_id": "api_api",
+                                       "transport_kinds": 1,
+                                   }]}),
+            ("workflow_integration", {
+                "proof_level": aebv.PROOF_INTEGRATION,
+                "candidate_sha": self.fixture.candidate,
+                "workflow_mode": "production_path_controlled",
+                "registry_bound": True,
+                "independent_receipts": True,
+                "visible_context_delivery": True,
+                "lease_cleanup_verified": True,
+                "fallback_used": False,
+                "actor_substitution_used": False,
+                "receipt_sha256s": [{}],
+            }),
+        )
+        for check_id, evidence in cases:
+            with self.subTest(check_id=check_id, evidence=evidence):
+                def mutate(bundle, selected=check_id, payload=evidence):
+                    self._replace_evidence(bundle, selected, payload)
+
+                result = self._run(mutate=mutate)
+                self.assertFalse(result["ready"])
+                self.assertGreater(len(result["failures"]), 0)
 
     def test_air_gap_false_rejected(self) -> None:
         def mutate(bundle):
