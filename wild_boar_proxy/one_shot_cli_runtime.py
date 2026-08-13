@@ -14,11 +14,10 @@ Production authority has two independently required layers:
 `OneShotRuntime` remains the sealed execution engine used by explicit test
 adapters. `ProductionOneShotFacade` is the only production entry surface. It
 can probe a declared executable without granting operational authority, but it
-revalidates both layers immediately before every operational spawn. Qwen's
-provider adapter and sealed headless contract are admitted by R61 while binary,
-auth, and live-provider authority remain external gates; Kimi stays pending its
-separate B11 contour. No environment hook, caller-selected path, global grant,
-or mutable module-level manifest exists.
+revalidates both layers immediately before every operational spawn. Qwen's and
+Kimi's sealed headless contracts are admitted by R61 and R62 while binary,
+auth, and live-provider authority remain external gates. No environment hook,
+caller-selected path, global grant, or mutable module-level manifest exists.
 
 Sandbox truth: every child process spawned by `OneShotRuntime` runs under
 a macOS seatbelt profile built by the single production builder
@@ -142,6 +141,39 @@ QWEN_ALLOWED_ARGV_SCHEMA: tuple[str, ...] = (
     *(f"literal:{item}" for item in QWEN_OPERATIONAL_ARGS),
 )
 
+KIMI_PROMPT_MAX_CHARS = 16 * 1024
+KIMI_AUTH_FILENAME = "config.toml"
+KIMI_CREDENTIALS_DIRNAME = "credentials"
+KIMI_SKILLS_DIRNAME = "skills"
+KIMI_NETWORK_POLICY = "provider_outbound"
+KIMI_SANDBOX_POLICY = "deny_default_provider_network"
+KIMI_AUTH_STRATEGY = "isolated_home_config"
+KIMI_FIXED_ENV: Mapping[str, str] = MappingProxyType({
+    "KIMI_DISABLE_TELEMETRY": "1",
+    "KIMI_CODE_BACKGROUND_KEEP_ALIVE_ON_EXIT": "0",
+    "KIMI_CODE_BACKGROUND_MAX_RUNNING_TASKS": "1",
+    "KIMI_CODE_AGENT_SWARM_MAX_CONCURRENCY": "1",
+    "KIMI_SUBAGENT_TIMEOUT_MS": "300000",
+    "KIMI_CODE_BUILTIN_PRODUCT_SKILLS": "0",
+    "KIMI_LOOP_MAX_STEPS_PER_TURN": "25",
+    "KIMI_LOOP_MAX_ATTEMPTS_PER_STEP": "3",
+    "KIMI_CODE_NO_AUTO_UPDATE": "1",
+    "KIMI_DISABLE_CRON": "1",
+})
+KIMI_OPERATIONAL_ARGS: tuple[str, ...] = (
+    "--output-format",
+    "stream-json",
+)
+KIMI_ALLOWED_ARGV_SCHEMA: tuple[str, ...] = (
+    "literal:--prompt",
+    "prompt:utf8_nonsecret_max_16384",
+    *(f"literal:{item}" for item in KIMI_OPERATIONAL_ARGS),
+    "literal:--skills-dir",
+    "path:sealed_empty_skills_dir",
+    "optional:literal:--add-dir",
+    "optional:path:validated_read_only_root",
+)
+
 # Machine error codes.
 ONE_SHOT_OK = "OK"
 ONE_SHOT_TOOL_UNKNOWN = "ONE_SHOT_TOOL_UNKNOWN"
@@ -211,6 +243,39 @@ def _qwen_json_output_is_success(
         and isinstance(item.get("result"), str)
         and bool(item["result"].strip())
         for item in document
+    )
+
+
+def _kimi_stream_output_is_success(
+    parsed: Mapping[str, Any], run_record: Mapping[str, Any]
+) -> bool:
+    """Accept only a complete Kimi stream-json final assistant message."""
+    if (
+        parsed.get("truncated") is True
+        or parsed.get("malformed_lines") != 0
+        or run_record.get("stdout_truncated") is True
+        or run_record.get("stderr_truncated") is True
+    ):
+        return False
+    records = parsed.get("records")
+    if not isinstance(records, list) or not records:
+        return False
+    if any(not isinstance(record, dict) for record in records):
+        return False
+    final = records[-1]
+    if not isinstance(final, dict) or final.get("role") != "assistant":
+        return False
+    content = final.get("content")
+    if isinstance(content, str):
+        return bool(content.strip())
+    if not isinstance(content, list) or not content:
+        return False
+    return any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+        and bool(block["text"].strip())
+        for block in content
     )
 
 
@@ -334,9 +399,8 @@ class OneShotCliRunResult:
         return redacted
 
 
-# Immutable production declarations. R61 admits the Qwen adapter contract but
-# does not grant binary, auth, or live-provider authority. Kimi remains pending
-# its separate B11 contour.
+# Immutable production declarations. R61/R62 admit the Qwen and Kimi adapter
+# contracts but do not grant binary, auth, or live-provider authority.
 SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = (
     OneShotToolManifestEntry(
         tool_id="qwen-cli",
@@ -366,12 +430,18 @@ SERVER_OWNED_TOOL_MANIFEST: tuple[OneShotToolManifestEntry, ...] = (
         display_name="Kimi Code CLI",
         version_args=("--version",),
         output_profiles=("text", "json_lines"),
-        allowed_argv_schema=("provider_adapter_required",),
-        allowed_environment_keys=("KIMI_CODE_HOME", "KIMI_SNAPSHOT_ROOT"),
-        output_parser="json_lines_or_text",
-        auth_strategy="interactive_isolated_home_pending_b11",
-        network_policy="denied_pending_b11",
-        provider_adapter_admitted=False,
+        allowed_argv_schema=KIMI_ALLOWED_ARGV_SCHEMA,
+        operational_args=KIMI_OPERATIONAL_ARGS,
+        allowed_environment_keys=(
+            "KIMI_CODE_HOME",
+            "KIMI_SNAPSHOT_ROOT",
+            *KIMI_FIXED_ENV,
+        ),
+        output_parser="json_lines",
+        sandbox_policy=KIMI_SANDBOX_POLICY,
+        auth_strategy=KIMI_AUTH_STRATEGY,
+        network_policy=KIMI_NETWORK_POLICY,
+        provider_adapter_admitted=True,
     ),
 )
 
@@ -752,7 +822,8 @@ PROVIDER_PATH_ENV_VARS = frozenset({
     "QWEN_PROJECT_ROOT", "KIMI_SNAPSHOT_ROOT",
 })
 PROVIDER_LITERAL_ENV_VALUES: Mapping[str, frozenset[str]] = MappingProxyType({
-    key: frozenset({value}) for key, value in QWEN_FIXED_ENV.items()
+    key: frozenset({value})
+    for key, value in {**QWEN_FIXED_ENV, **KIMI_FIXED_ENV}.items()
 })
 PROVIDER_ENV_VARS = PROVIDER_PATH_ENV_VARS | frozenset(PROVIDER_LITERAL_ENV_VALUES)
 
@@ -1335,6 +1406,8 @@ class OneShotRuntime:
         root = self._homes_root
         home = root / provider_id
         runtime_dir = home / "runtime"
+        skills_dir = home / KIMI_SKILLS_DIRNAME
+        credentials_dir = home / KIMI_CREDENTIALS_DIRNAME
         created = False
         changed: list[str] = []
         try:
@@ -1347,6 +1420,15 @@ class OneShotRuntime:
                 runtime_dir.mkdir(parents=True, exist_ok=True)
                 changed.append(str(runtime_dir))
             os.chmod(runtime_dir, 0o700)
+            if provider_id == "kimi":
+                if not skills_dir.exists():
+                    skills_dir.mkdir(parents=True, exist_ok=True)
+                    changed.append(str(skills_dir))
+                os.chmod(skills_dir, 0o700)
+                if not credentials_dir.exists():
+                    credentials_dir.mkdir(parents=True, exist_ok=True)
+                    changed.append(str(credentials_dir))
+                os.chmod(credentials_dir, 0o700)
         except OSError:
             return build_command_payload(
                 ok=False,
@@ -2140,6 +2222,118 @@ class ProductionOneShotFacade:
             "auth_path": auth_path.resolve(),
         }, None
 
+    def _kimi_home_readiness(
+        self,
+        surface: str,
+        entry: OneShotToolManifestEntry,
+    ) -> tuple[dict[str, Path] | None, dict[str, Any] | None]:
+        """Validate Kimi auth/config presence without reading its contents."""
+        home = self._homes_root / entry.provider_id
+        runtime_dir = home / "runtime"
+        skills_dir = home / KIMI_SKILLS_DIRNAME
+        credentials_dir = home / KIMI_CREDENTIALS_DIRNAME
+        auth_path = home / KIMI_AUTH_FILENAME
+        path_checks = (
+            (home, "isolated_provider_home_missing_or_unsafe"),
+            (runtime_dir, "isolated_runtime_dir_missing_or_unsafe"),
+            (skills_dir, "isolated_skills_dir_missing_or_unsafe"),
+            (credentials_dir, "isolated_credentials_dir_missing_or_unsafe"),
+        )
+        for path, reason in path_checks:
+            if not _owned_path_is_safe(path, expected_mode=0o700, directory=True):
+                return None, self._blocked_packet(
+                    surface,
+                    CLI_AUTH_NOT_ADMITTED,
+                    reason,
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                    auth_present=False,
+                    auth_presence_only=True,
+                    secret_value_exposed=False,
+                )
+        try:
+            skills_empty = next(skills_dir.iterdir(), None) is None
+        except OSError:
+            skills_empty = False
+        if not skills_empty:
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_skills_dir_not_empty",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        if not _owned_path_is_safe(auth_path, expected_mode=0o600, directory=False):
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_auth_config_missing_or_unsafe",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        try:
+            auth_size = auth_path.stat().st_size
+        except OSError:
+            auth_size = 0
+        if not 0 < auth_size <= DEFAULT_OUTPUT_CAP_BYTES:
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_auth_config_empty_or_oversized",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        try:
+            credential_files = list(credentials_dir.iterdir())
+            credentials_safe = bool(credential_files) and all(
+                path.suffix == ".json"
+                and _owned_path_is_safe(path, expected_mode=0o600, directory=False)
+                and 0 < path.stat().st_size <= DEFAULT_OUTPUT_CAP_BYTES
+                for path in credential_files
+            )
+        except OSError:
+            credentials_safe = False
+        if not credentials_safe:
+            return None, self._blocked_packet(
+                surface,
+                CLI_AUTH_NOT_ADMITTED,
+                "isolated_provider_credentials_missing_or_unsafe",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_present=False,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        for forbidden_name in ("mcp.json", "AGENTS.md", "agents", "plugins"):
+            if os.path.lexists(home / forbidden_name):
+                return None, self._blocked_packet(
+                    surface,
+                    CLI_AUTH_NOT_ADMITTED,
+                    "isolated_unadmitted_extension_surface_present",
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                    extension_surface=forbidden_name,
+                    auth_present=False,
+                    auth_presence_only=True,
+                    secret_value_exposed=False,
+                )
+        return {
+            "home": home.resolve(),
+            "runtime_dir": runtime_dir.resolve(),
+            "skills_dir": skills_dir.resolve(),
+            "credentials_dir": credentials_dir.resolve(),
+            "auth_path": auth_path.resolve(),
+        }, None
+
     def create_home(self, provider_id: str) -> dict[str, Any]:
         entry, blocked = self._ready_provider_entry("create_home", provider_id)
         if blocked is not None:
@@ -2185,6 +2379,37 @@ class ProductionOneShotFacade:
                     "resume_reason": ONE_SHOT_NO_RESUME_REASON,
                 },
             )
+        if entry.auth_strategy == KIMI_AUTH_STRATEGY and entry.provider_id == "kimi":
+            readiness, blocked = self._kimi_home_readiness("session", entry)
+            if blocked is not None:
+                return blocked
+            assert readiness is not None
+            return build_command_payload(
+                ok=True,
+                human_message="Kimi isolated one-shot session is ready.",
+                machine_error_code=ONE_SHOT_OK,
+                liveness="healthy",
+                severity="info",
+                operator_action="none",
+                changed_files=[],
+                exit_code=0,
+                extra={
+                    "surface": "session",
+                    "tool_id": entry.tool_id,
+                    "provider_id": entry.provider_id,
+                    "kimi_code_home": str(readiness["home"]),
+                    "kimi_runtime_dir": str(readiness["runtime_dir"]),
+                    "kimi_skills_dir": str(readiness["skills_dir"]),
+                    "auth_present": True,
+                    "auth_presence_only": True,
+                    "secret_value_exposed": False,
+                    "repo_write_policy": "denied",
+                    "production_admission_revalidated": True,
+                    "manifest_sha256": manifest_entry_digest(entry),
+                    "resume_supported": False,
+                    "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+                },
+            )
         if entry.auth_strategy != "none":
             return self._blocked_packet(
                 "session",
@@ -2214,6 +2439,18 @@ class ProductionOneShotFacade:
                 provider_id=entry.provider_id,
                 auth_strategy=entry.auth_strategy,
                 auth_filename=QWEN_AUTH_FILENAME,
+                auth_presence_only=True,
+                secret_value_exposed=False,
+            )
+        if entry.auth_strategy == KIMI_AUTH_STRATEGY and entry.provider_id == "kimi":
+            return self._blocked_packet(
+                "auth_session",
+                CLI_AUTH_NOT_ADMITTED,
+                "operator_managed_isolated_auth_required",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+                auth_filename=KIMI_AUTH_FILENAME,
                 auth_presence_only=True,
                 secret_value_exposed=False,
             )
@@ -2263,6 +2500,162 @@ class ProductionOneShotFacade:
         packet["probe_grants_operational_authority"] = False
         return packet
 
+    def _run_kimi_prompt(
+        self,
+        entry: OneShotToolManifestEntry,
+        prompt: str,
+        *,
+        active_project_root: Path | str | None,
+    ) -> dict[str, Any]:
+        if (
+            entry.allowed_argv_schema != KIMI_ALLOWED_ARGV_SCHEMA
+            or entry.operational_args != KIMI_OPERATIONAL_ARGS
+        ):
+            return self._blocked_packet(
+                "run_prompt",
+                ONE_SHOT_SCHEMA_INVALID,
+                "kimi_prompt_argv_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        if (
+            entry.network_policy != KIMI_NETWORK_POLICY
+            or entry.sandbox_policy != KIMI_SANDBOX_POLICY
+        ):
+            return self._blocked_packet(
+                "run_prompt",
+                CLI_NETWORK_POLICY_NOT_ADMITTED,
+                "kimi_provider_network_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                network_policy=entry.network_policy,
+                sandbox_policy=entry.sandbox_policy,
+            )
+        if entry.auth_strategy != KIMI_AUTH_STRATEGY:
+            return self._blocked_packet(
+                "run_prompt",
+                CLI_AUTH_NOT_ADMITTED,
+                "kimi_auth_contract_mismatch",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+                auth_strategy=entry.auth_strategy,
+            )
+        record, blocked = self._read_target_admission("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        assert record is not None
+        readiness, blocked = self._kimi_home_readiness("run_prompt", entry)
+        if blocked is not None:
+            return blocked
+        assert readiness is not None
+
+        selected_root: Path | None = None
+        root_fields: dict[str, Any] = {
+            "active_project_root_required": False,
+            "active_project_root_available": False,
+            "active_project_root_source": "not_requested",
+            "active_project_root_status": "not_requested",
+            "active_project_root_path_recorded": False,
+            "active_project_root_sha256": "",
+            "active_project_root_is_wbp_repo": False,
+            "active_project_root_git_available": False,
+            "active_project_root_fallback_used": False,
+            "active_project_root_legacy_target_repo_alias_used": False,
+        }
+        if active_project_root is not None:
+            selected_root, root_fields = active_root.active_project_root_metadata(
+                active_project_root,
+                source="production_one_shot_prompt",
+                wbp_repo_root=Path(__file__).resolve().parents[1],
+                required=True,
+            )
+            if selected_root is None:
+                return self._blocked_packet(
+                    "run_prompt",
+                    ONE_SHOT_PATH_VIOLATION,
+                    str(root_fields["active_project_root_status"]),
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                    **root_fields,
+                )
+
+        provider_env = {
+            "KIMI_CODE_HOME": str(readiness["home"]),
+            **KIMI_FIXED_ENV,
+        }
+        args = (
+            "--prompt",
+            prompt,
+            *KIMI_OPERATIONAL_ARGS,
+            "--skills-dir",
+            str(readiness["skills_dir"]),
+        )
+        if selected_root is not None:
+            provider_env["KIMI_SNAPSHOT_ROOT"] = str(selected_root)
+            args = (*args, "--add-dir", str(selected_root))
+        admitted_entry = replace(entry, binary_name=str(record["binary_realpath"]))
+        runtime = OneShotRuntime(
+            homes_root=self._homes_root,
+            manifest=(admitted_entry,),
+        )
+        run = runtime.one_shot_cli_run(
+            admitted_entry.tool_id,
+            args=args,
+            provider_home=readiness["home"],
+            provider_env=provider_env,
+            timeout_seconds=admitted_entry.timeout_seconds,
+            output_cap_bytes=admitted_entry.output_cap_bytes,
+            allow_provider_network=True,
+        )
+        run_record = run.get("run") or {}
+        stdout = run_record.get("stdout", "")
+        parsed = parse_cli_output(
+            str(stdout),
+            profile="json_lines",
+            output_cap_bytes=admitted_entry.output_cap_bytes,
+        )
+        output_valid = _kimi_stream_output_is_success(parsed, run_record)
+        ok = run.get("status") == "ok" and output_valid
+        return build_command_payload(
+            ok=ok,
+            human_message=(
+                "Kimi production one-shot response received."
+                if ok
+                else "Kimi production one-shot response failed validation."
+            ),
+            machine_error_code=(
+                ONE_SHOT_OK
+                if ok
+                else ONE_SHOT_OUTPUT_INVALID
+                if run.get("status") == "ok"
+                else str(run.get("machine_error_code") or ONE_SHOT_RUN_FAILED)
+            ),
+            liveness="healthy",
+            severity="info" if ok else "error",
+            operator_action="none" if ok else "user_action",
+            changed_files=[str(readiness["home"])],
+            exit_code=0 if ok else 1,
+            extra={
+                "surface": "run_prompt",
+                "tool_id": entry.tool_id,
+                "provider_id": entry.provider_id,
+                "run": run.get("run"),
+                "parsed_output": parsed,
+                "production_admission_revalidated": True,
+                "manifest_sha256": manifest_entry_digest(entry),
+                "binary_sha256": record["binary_sha256"],
+                "auth_present": True,
+                "auth_presence_only": True,
+                "secret_value_exposed": False,
+                "provider_home_may_change": True,
+                "provider_network_allowed": True,
+                "repo_write_policy": "denied",
+                **root_fields,
+                "resume_supported": False,
+                "resume_reason": ONE_SHOT_NO_RESUME_REASON,
+            },
+        )
+
     def run_prompt(
         self,
         tool_id: str,
@@ -2275,10 +2668,13 @@ class ProductionOneShotFacade:
         if entry is None:
             return self._unknown_packet("run_prompt", tool_id=str(tool_id))
         prompt = str(prompt_text or "")
+        prompt_max_chars = (
+            KIMI_PROMPT_MAX_CHARS if entry.provider_id == "kimi" else QWEN_PROMPT_MAX_CHARS
+        )
         if (
             not prompt.strip()
             or "\x00" in prompt
-            or len(prompt) > QWEN_PROMPT_MAX_CHARS
+            or len(prompt) > prompt_max_chars
         ):
             return self._blocked_packet(
                 "run_prompt",
@@ -2286,7 +2682,7 @@ class ProductionOneShotFacade:
                 "prompt_empty_nul_or_oversized",
                 tool_id=entry.tool_id,
                 provider_id=entry.provider_id,
-                prompt_max_chars=QWEN_PROMPT_MAX_CHARS,
+                prompt_max_chars=prompt_max_chars,
             )
         if _contains_secret_shape(prompt):
             return self._blocked_packet(
@@ -2304,6 +2700,12 @@ class ProductionOneShotFacade:
         blocked = self._adapter_block("run_prompt", entry)
         if blocked is not None:
             return blocked
+        if entry.provider_id == "kimi":
+            return self._run_kimi_prompt(
+                entry,
+                prompt,
+                active_project_root=active_project_root,
+            )
         if (
             entry.provider_id != "qwen"
             or entry.allowed_argv_schema != QWEN_ALLOWED_ARGV_SCHEMA

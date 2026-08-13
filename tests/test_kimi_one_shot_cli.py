@@ -26,8 +26,8 @@ case "$1" in
   --version)
     echo "fake-kimi-cli 0.1.0"
     ;;
-  --respond)
-    echo "Kimi: $2"
+  --prompt)
+    printf '{"role":"assistant","content":"Kimi: %s"}\n' "$2"
     ;;
   --read-file)
     if [ -f "$2" ]; then
@@ -94,6 +94,13 @@ class KimiOneShotCliTests(unittest.TestCase):
         self.assertTrue(home.is_dir())
         self.assertTrue(str(home).startswith(str(self.homes_root)))
         self.assertEqual(oct(home.stat().st_mode & 0o777), "0o700")
+        self.assertEqual(
+            oct((home / osr.KIMI_SKILLS_DIRNAME).stat().st_mode & 0o777), "0o700"
+        )
+        self.assertEqual(
+            oct((home / osr.KIMI_CREDENTIALS_DIRNAME).stat().st_mode & 0o777),
+            "0o700",
+        )
         self.assertTrue(self.session["auth_present"])
         self.assertTrue(self.session["auth_presence_only"])
         self.assertEqual(self.session["repo_read_policy"], km.KIMI_READ_MODE_NONE)
@@ -114,6 +121,9 @@ class KimiOneShotCliTests(unittest.TestCase):
         stdout = run["run"]["stdout"]
         self.assertIn("KIMI_CODE_HOME=" + str(home.resolve()), stdout)
         self.assertIn("HOME=" + str(home.resolve()), stdout)
+        self.assertEqual(
+            km._kimi_provider_env(self.session)["KIMI_DISABLE_TELEMETRY"], "1"
+        )
 
     def test_snapshot_is_immutable_and_bounded(self) -> None:
         project = self._project(
@@ -155,7 +165,7 @@ class KimiOneShotCliTests(unittest.TestCase):
         packet = km.create_kimi_snapshot(project)
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+            packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING
         )
         after = set(self.root.rglob("*"))
         self.assertEqual(before, after)
@@ -226,9 +236,19 @@ class KimiOneShotCliTests(unittest.TestCase):
     def test_run_parses_output(self) -> None:
         packet = km.kimi_one_shot_run("hello", session=self.session, runtime=self.runtime)
         self.assertEqual(packet["status"], "ok")
-        self.assertEqual(packet["parsed_output"]["detected_format"], "text")
-        self.assertIn("Kimi: hello", packet["run"]["stdout"])
+        self.assertEqual(packet["parsed_output"]["detected_format"], "json_lines")
+        self.assertEqual(
+            packet["parsed_output"]["records"][-1]["content"], "Kimi: hello"
+        )
         self.assertFalse(packet["resume_supported"])
+
+    def test_caller_supplied_argv_is_rejected(self) -> None:
+        packet = km.kimi_one_shot_run(
+            "hello", session=self.session, runtime=self.runtime, args=("--yolo",)
+        )
+        self.assertEqual(packet["status"], "error")
+        self.assertEqual(packet["machine_error_code"], osr.ONE_SHOT_SCHEMA_INVALID)
+        self.assertTrue(packet["caller_argv_blocked"])
 
     def test_timeout_proof(self) -> None:
         proof = km.kimi_timeout_cancel_proof(
@@ -254,8 +274,13 @@ class KimiOneShotCliTests(unittest.TestCase):
     def test_receipt_declared_not_live(self) -> None:
         receipt = km.build_kimi_one_shot_receipt()
         self.assertEqual(receipt["status"], "ok")
-        self.assertEqual(receipt["machine_error_code"], "SYNTHETIC_PROVEN")
+        self.assertEqual(
+            receipt["machine_error_code"], "B11_CODE_PRODUCTION_ADAPTER_DECLARED"
+        )
         self.assertTrue(receipt["declared_not_live_verified"])
+        self.assertTrue(receipt["provider_adapter_admitted"])
+        self.assertTrue(receipt["b11_live_pending"])
+        self.assertFalse(receipt["provider_live_proven"])
         self.assertEqual(receipt["repo_read_policy"], km.KIMI_READ_MODE_NONE)
         self.assertEqual(
             receipt["repo_read_requires"], "os_read_only_sandbox_or_immutable_snapshot"
@@ -264,7 +289,7 @@ class KimiOneShotCliTests(unittest.TestCase):
 
 
 class KimiProductionFacadeTests(unittest.TestCase):
-    """The declared Kimi provider stays blocked until its B11 adapter."""
+    """The Kimi adapter is code-admitted but remains binary/live gated."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -281,7 +306,7 @@ class KimiProductionFacadeTests(unittest.TestCase):
         packet = facade.session("kimi")
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+            packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING
         )
         self.assertEqual(packet["changed_files"], [])
         self.assertFalse((self.root / "homes").exists())
@@ -290,7 +315,7 @@ class KimiProductionFacadeTests(unittest.TestCase):
         packet = km.kimi_one_shot_session()
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+            packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING
         )
         self.assertEqual(packet["changed_files"], [])
 
@@ -298,7 +323,7 @@ class KimiProductionFacadeTests(unittest.TestCase):
         packet = km.kimi_one_shot_run("hi", session={"kimi_code_home": "/nonexistent"})
         self.assertEqual(packet["status"], "error")
         self.assertEqual(
-            packet["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+            packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING
         )
 
 

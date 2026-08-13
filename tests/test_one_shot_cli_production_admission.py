@@ -122,6 +122,30 @@ class ProductionAdmissionTests(unittest.TestCase):
         self.assertEqual(admitted["status"], "ok")
         return facade, entry
 
+    def _kimi_facade(self) -> tuple[osr.ProductionOneShotFacade, osr.OneShotToolManifestEntry]:
+        declared = next(
+            entry for entry in osr.SERVER_OWNED_TOOL_MANIFEST
+            if entry.provider_id == "kimi"
+        )
+        entry = replace(declared, binary_name="/bin/echo")
+        facade = osr.ProductionOneShotFacade(
+            homes_root=self.homes_root,
+            admission_root=self.admission_root,
+            manifest=(entry,),
+        )
+        return facade, entry
+
+    def _admit_kimi(self) -> tuple[osr.ProductionOneShotFacade, osr.OneShotToolManifestEntry]:
+        facade, entry = self._kimi_facade()
+        probe = facade.probe(entry.tool_id)
+        self.assertEqual(probe["status"], "ok")
+        admitted = facade.admit(
+            entry.tool_id,
+            expected_binary_sha256=str(probe["binary_sha256"]),
+        )
+        self.assertEqual(admitted["status"], "ok")
+        return facade, entry
+
     def _load_store(self) -> dict[str, object]:
         return json.loads(
             (self.admission_root / osr.ADMISSION_FILENAME).read_text(encoding="utf-8")
@@ -133,7 +157,7 @@ class ProductionAdmissionTests(unittest.TestCase):
         path.write_bytes(data)
         path.chmod(0o600)
 
-    def test_server_manifest_declares_qwen_admitted_and_kimi_pending_contracts(self) -> None:
+    def test_server_manifest_declares_qwen_and_kimi_admitted_contracts(self) -> None:
         self.assertEqual(
             {entry.provider_id for entry in osr.SERVER_OWNED_TOOL_MANIFEST},
             {"qwen", "kimi"},
@@ -165,8 +189,11 @@ class ProductionAdmissionTests(unittest.TestCase):
                 self.assertEqual(entry.auth_strategy, osr.QWEN_AUTH_STRATEGY)
                 self.assertEqual(entry.allowed_argv_schema, osr.QWEN_ALLOWED_ARGV_SCHEMA)
             else:
-                self.assertFalse(entry.provider_adapter_admitted)
-                self.assertTrue(entry.network_policy.startswith("denied_pending_"))
+                self.assertTrue(entry.provider_adapter_admitted)
+                self.assertEqual(entry.network_policy, osr.KIMI_NETWORK_POLICY)
+                self.assertEqual(entry.sandbox_policy, osr.KIMI_SANDBOX_POLICY)
+                self.assertEqual(entry.auth_strategy, osr.KIMI_AUTH_STRATEGY)
+                self.assertEqual(entry.allowed_argv_schema, osr.KIMI_ALLOWED_ARGV_SCHEMA)
             digests.add(osr.manifest_entry_digest(entry))
         self.assertEqual(len(digests), 2)
 
@@ -203,6 +230,27 @@ class ProductionAdmissionTests(unittest.TestCase):
             "",
             "x" * (osr.QWEN_PROMPT_MAX_CHARS + 1),
             "DASHSCOPE_API_KEY=" + "-".join(("sk", "forbidden-secret-shape")),
+        )
+        with mock.patch.object(osr.subprocess, "Popen") as popen:
+            packets = [facade.run_prompt(entry.tool_id, prompt) for prompt in prompts]
+        self.assertEqual(
+            [packet["machine_error_code"] for packet in packets],
+            [
+                osr.ONE_SHOT_SCHEMA_INVALID,
+                osr.ONE_SHOT_SCHEMA_INVALID,
+                osr.ONE_SHOT_SECRET_INPUT_BLOCKED,
+            ],
+        )
+        popen.assert_not_called()
+        self.assertFalse(self.homes_root.exists())
+        self.assertFalse(self.admission_root.exists())
+
+    def test_kimi_prompt_validation_blocks_before_binary_or_spawn(self) -> None:
+        facade, entry = self._kimi_facade()
+        prompts = (
+            "",
+            "x" * (osr.KIMI_PROMPT_MAX_CHARS + 1),
+            "MOONSHOT_API_KEY=" + "-".join(("sk", "forbidden-secret-shape")),
         )
         with mock.patch.object(osr.subprocess, "Popen") as popen:
             packets = [facade.run_prompt(entry.tool_id, prompt) for prompt in prompts]
@@ -344,7 +392,182 @@ class ProductionAdmissionTests(unittest.TestCase):
                     packet["machine_error_code"], osr.ONE_SHOT_OUTPUT_INVALID
                 )
 
-    def test_pending_provider_adapter_is_distinct_and_precedes_binary_probe(self) -> None:
+    def test_kimi_session_is_read_only_and_requires_safe_auth_presence(self) -> None:
+        facade, entry = self._admit_kimi()
+        missing_home = facade.session(entry.provider_id)
+        self.assertEqual(missing_home["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED)
+        self.assertEqual(missing_home["changed_files"], [])
+        self.assertFalse(self.homes_root.exists())
+
+        created = facade.create_home(entry.provider_id)
+        self.assertEqual(created["status"], "ok")
+        skills_dir = Path(created["home_path"]) / osr.KIMI_SKILLS_DIRNAME
+        self.assertEqual(skills_dir.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(list(skills_dir.iterdir()), [])
+        missing_auth = facade.session(entry.provider_id)
+        self.assertEqual(missing_auth["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED)
+        auth_path = Path(created["home_path"]) / osr.KIMI_AUTH_FILENAME
+        auth_path.write_text('api_key = "test-only-value"\n', encoding="utf-8")
+        auth_path.chmod(0o644)
+        unsafe_auth = facade.session(entry.provider_id)
+        self.assertEqual(unsafe_auth["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED)
+        auth_path.chmod(0o600)
+        missing_credentials = facade.session(entry.provider_id)
+        self.assertEqual(
+            missing_credentials["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED
+        )
+        credentials_dir = Path(created["home_path"]) / osr.KIMI_CREDENTIALS_DIRNAME
+        credential_path = credentials_dir / "kimi-code.json"
+        credential_path.write_text('{"token":"test-only-value"}\n', encoding="utf-8")
+        credential_path.chmod(0o600)
+        ready = facade.session(entry.provider_id)
+        self.assertEqual(ready["status"], "ok")
+        self.assertTrue(ready["auth_present"])
+        self.assertTrue(ready["auth_presence_only"])
+        self.assertFalse(ready["secret_value_exposed"])
+        self.assertNotIn("test-only-value", json.dumps(ready))
+
+        (skills_dir / "untrusted.md").write_text("x", encoding="utf-8")
+        unsafe_skills = facade.session(entry.provider_id)
+        self.assertEqual(
+            unsafe_skills["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED
+        )
+        self.assertEqual(
+            unsafe_skills["blocked_reason"], "isolated_skills_dir_not_empty"
+        )
+        (skills_dir / "untrusted.md").unlink()
+        (Path(created["home_path"]) / "mcp.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        unsafe_extension = facade.session(entry.provider_id)
+        self.assertEqual(
+            unsafe_extension["machine_error_code"], osr.CLI_AUTH_NOT_ADMITTED
+        )
+        self.assertEqual(
+            unsafe_extension["blocked_reason"],
+            "isolated_unadmitted_extension_surface_present",
+        )
+
+    def test_kimi_run_prompt_uses_exact_sealed_contract(self) -> None:
+        facade, entry = self._admit_kimi()
+        created = facade.create_home(entry.provider_id)
+        auth_path = Path(created["home_path"]) / osr.KIMI_AUTH_FILENAME
+        auth_path.write_text('api_key = "test-only-value"\n', encoding="utf-8")
+        auth_path.chmod(0o600)
+        credential_path = (
+            Path(created["home_path"])
+            / osr.KIMI_CREDENTIALS_DIRNAME
+            / "kimi-code.json"
+        )
+        credential_path.write_text('{"token":"test-only-value"}\n', encoding="utf-8")
+        credential_path.chmod(0o600)
+        project = self.root / "project"
+        project.mkdir()
+        fake_run = {
+            "status": "ok",
+            "machine_error_code": osr.ONE_SHOT_OK,
+            "exit_code": 0,
+            "changed_files": [],
+            "run": {
+                "exit_code": 0,
+                "stdout": '{"role":"assistant","content":"ok"}\n',
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+            },
+        }
+        with mock.patch.object(
+            osr.OneShotRuntime,
+            "one_shot_cli_run",
+            return_value=fake_run,
+        ) as one_shot_run:
+            packet = facade.run_prompt(
+                entry.tool_id,
+                "bounded prompt",
+                active_project_root=project,
+            )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["parsed_output"]["detected_format"], "json_lines")
+        self.assertTrue(packet["provider_network_allowed"])
+        self.assertEqual(packet["repo_write_policy"], "denied")
+        self.assertTrue(packet["active_project_root_available"])
+        self.assertFalse(packet["active_project_root_path_recorded"])
+        kwargs = one_shot_run.call_args.kwargs
+        expected_skills = Path(created["home_path"]) / osr.KIMI_SKILLS_DIRNAME
+        self.assertEqual(
+            kwargs["args"],
+            (
+                "--prompt",
+                "bounded prompt",
+                *osr.KIMI_OPERATIONAL_ARGS,
+                "--skills-dir",
+                str(expected_skills.resolve()),
+                "--add-dir",
+                str(project.resolve()),
+            ),
+        )
+        self.assertTrue(kwargs["allow_provider_network"])
+        self.assertEqual(
+            Path(kwargs["provider_home"]).resolve(),
+            Path(created["home_path"]).resolve(),
+        )
+        self.assertEqual(
+            kwargs["provider_env"]["KIMI_CODE_HOME"],
+            str(Path(created["home_path"]).resolve()),
+        )
+        self.assertEqual(
+            kwargs["provider_env"]["KIMI_SNAPSHOT_ROOT"], str(project.resolve())
+        )
+        self.assertEqual(
+            {key: kwargs["provider_env"][key] for key in osr.KIMI_FIXED_ENV},
+            dict(osr.KIMI_FIXED_ENV),
+        )
+
+    def test_kimi_run_prompt_rejects_invalid_stream_output(self) -> None:
+        facade, entry = self._admit_kimi()
+        created = facade.create_home(entry.provider_id)
+        auth_path = Path(created["home_path"]) / osr.KIMI_AUTH_FILENAME
+        auth_path.write_text('api_key = "test-only-value"\n', encoding="utf-8")
+        auth_path.chmod(0o600)
+        credential_path = (
+            Path(created["home_path"])
+            / osr.KIMI_CREDENTIALS_DIRNAME
+            / "kimi-code.json"
+        )
+        credential_path.write_text('{"token":"test-only-value"}\n', encoding="utf-8")
+        credential_path.chmod(0o600)
+        invalid_cases = (
+            ("", False, False),
+            ('{"role":"user","content":"not final assistant"}\n', False, False),
+            ('not-json\n', False, False),
+            ('{"role":"assistant","content":"ok"}\n', True, False),
+            ('{"role":"assistant","content":"ok"}\n', False, True),
+        )
+        for stdout, stdout_truncated, stderr_truncated in invalid_cases:
+            fake_run = {
+                "status": "ok",
+                "machine_error_code": osr.ONE_SHOT_OK,
+                "exit_code": 0,
+                "changed_files": [],
+                "run": {
+                    "exit_code": 0,
+                    "stdout": stdout,
+                    "stdout_truncated": stdout_truncated,
+                    "stderr_truncated": stderr_truncated,
+                },
+            }
+            with self.subTest(stdout=stdout, stdout_truncated=stdout_truncated):
+                with mock.patch.object(
+                    osr.OneShotRuntime,
+                    "one_shot_cli_run",
+                    return_value=fake_run,
+                ):
+                    packet = facade.run_prompt(entry.tool_id, "bounded prompt")
+                self.assertEqual(packet["status"], "error")
+                self.assertEqual(
+                    packet["machine_error_code"], osr.ONE_SHOT_OUTPUT_INVALID
+                )
+
+    def test_admitted_provider_adapters_require_binary_before_home_creation(self) -> None:
         facade = osr.ProductionOneShotFacade(
             homes_root=self.homes_root,
             admission_root=self.admission_root,
@@ -353,8 +576,8 @@ class ProductionAdmissionTests(unittest.TestCase):
             qwen = facade.session("qwen")
             kimi = facade.session("kimi")
         self.assertEqual(qwen["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
-        self.assertEqual(kimi["machine_error_code"], osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED)
-        self.assertEqual(kimi["blocked_reason"], "provider_adapter_not_admitted")
+        self.assertEqual(kimi["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
+        self.assertEqual(kimi["blocked_reason"], "store_absent")
         popen.assert_not_called()
         self.assertFalse(self.homes_root.exists())
 

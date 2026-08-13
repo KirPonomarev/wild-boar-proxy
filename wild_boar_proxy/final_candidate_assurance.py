@@ -101,7 +101,7 @@ def _check_account_isolation() -> FinalCheck:
     )
     kimi_ok = (
         kimi.get("status") == "error"
-        and kimi.get("machine_error_code") == osr.CLI_PROVIDER_ADAPTER_NOT_ADMITTED
+        and kimi.get("machine_error_code") == osr.CLI_BINARY_ADMISSION_MISSING
         and kimi.get("changed_files") == []
         and "kimi_code_home" not in kimi
     )

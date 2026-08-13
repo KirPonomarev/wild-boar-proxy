@@ -306,13 +306,15 @@ class QwenProductionFacadeTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], osr.ONE_SHOT_SCHEMA_INVALID)
         self.assertTrue(packet["caller_argv_blocked"])
 
-    def test_server_manifest_admits_only_qwen_adapter(self) -> None:
+    def test_server_manifest_admits_qwen_and_kimi_adapters(self) -> None:
         entries = {entry.provider_id: entry for entry in osr.SERVER_OWNED_TOOL_MANIFEST}
         self.assertTrue(entries["qwen"].provider_adapter_admitted)
         self.assertEqual(entries["qwen"].allowed_argv_schema, osr.QWEN_ALLOWED_ARGV_SCHEMA)
         self.assertEqual(entries["qwen"].operational_args, osr.QWEN_OPERATIONAL_ARGS)
         self.assertEqual(entries["qwen"].network_policy, osr.QWEN_NETWORK_POLICY)
-        self.assertFalse(entries["kimi"].provider_adapter_admitted)
+        self.assertTrue(entries["kimi"].provider_adapter_admitted)
+        self.assertEqual(entries["kimi"].allowed_argv_schema, osr.KIMI_ALLOWED_ARGV_SCHEMA)
+        self.assertEqual(entries["kimi"].operational_args, osr.KIMI_OPERATIONAL_ARGS)
 
 
 if __name__ == "__main__":

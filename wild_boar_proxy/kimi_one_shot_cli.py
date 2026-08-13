@@ -4,12 +4,11 @@
 """Isolated Kimi one-shot CLI layer (B11_CODE).
 
 Builds on the B09 generic one-shot runtime: `KIMI_CODE_HOME` isolation,
-immutable-snapshot repo-read enforcement (OS read-only sandbox or immutable
-snapshot is required for `repo_read`; otherwise Kimi is limited to `none`),
-denied-write proof via real OS EACCES on snapshot files, auth isolation,
-output normalization, and timeout / cancel proof. Real Kimi CLI binary probe
-is B11_LIVE scope; all B11_CODE evidence is fake-adapter controlled and
-declared-not-live. One-shot sessions never resume.
+immutable-snapshot repo-read enforcement, denied-write proof via real OS
+EACCES on snapshot files, auth isolation, strict stream-json output
+normalization, and timeout / cancel proof. R62 admits the production adapter
+contract; binary admission, auth provisioning, and B11_LIVE remain external
+gates. One-shot sessions never resume.
 """
 
 from __future__ import annotations
@@ -106,7 +105,7 @@ def create_kimi_snapshot(
     snapshot = Path(snapshot_root) if snapshot_root is not None else None
     if snapshot is None:
         if runtime is None:
-            return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+            return osr.default_production_facade().session(KIMI_PROVIDER_ID)
         snapshot = Path(
             tempfile_under_homes(runtime, "kimi-snapshot", project.name)
         )
@@ -272,7 +271,10 @@ def _kimi_provider_env(
     """Provider env mapping for the Kimi child (F08 fix: actually passed
     to the engine as `provider_env`, never built and discarded)."""
     home = Path(session["kimi_code_home"])
-    env: dict[str, str] = {KIMI_CODE_HOME_ENV: str(home)}
+    env: dict[str, str] = {
+        KIMI_CODE_HOME_ENV: str(home),
+        **osr.KIMI_FIXED_ENV,
+    }
     if snapshot is not None:
         env["KIMI_SNAPSHOT_ROOT"] = str(snapshot["root"])
     return env
@@ -283,6 +285,7 @@ def kimi_one_shot_run(
     *,
     session: dict[str, Any],
     runtime: osr.OneShotRuntime | None = None,
+    project_root: Path | str | None = None,
     args: Sequence[str] = (),
     timeout_seconds: float = osr.DEFAULT_RUN_TIMEOUT_SECONDS,
     output_cap_bytes: int = osr.DEFAULT_OUTPUT_CAP_BYTES,
@@ -305,30 +308,75 @@ def kimi_one_shot_run(
             exit_code=1,
             extra={"tool_id": KIMI_CLI_TOOL_ID},
         )
+    if args:
+        return build_command_payload(
+            ok=False,
+            human_message="caller-supplied Kimi argv is not admitted.",
+            machine_error_code=osr.ONE_SHOT_SCHEMA_INVALID,
+            liveness="healthy",
+            severity="error",
+            operator_action="user_action",
+            changed_files=[],
+            exit_code=1,
+            extra={"tool_id": KIMI_CLI_TOOL_ID, "caller_argv_blocked": True},
+        )
     if runtime is None:
-        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+        return osr.default_production_facade().run_prompt(
+            KIMI_CLI_TOOL_ID,
+            text,
+            active_project_root=project_root,
+        )
+    home = Path(session["kimi_code_home"])
+    skills_dir = home / osr.KIMI_SKILLS_DIRNAME
+    skills_dir.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(skills_dir, 0o700)
+    provider_env = _kimi_provider_env(session)
+    run_args = (
+        "--prompt",
+        text,
+        *osr.KIMI_OPERATIONAL_ARGS,
+        "--skills-dir",
+        str(skills_dir.resolve()),
+    )
+    if project_root is not None:
+        selected_root = Path(project_root).resolve()
+        provider_env["KIMI_SNAPSHOT_ROOT"] = str(selected_root)
+        run_args = (*run_args, "--add-dir", str(selected_root))
     run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
-        args=("--respond", text, *args),
-        provider_home=Path(session["kimi_code_home"]),
-        provider_env=_kimi_provider_env(session),
+        args=run_args,
+        provider_home=home,
+        provider_env=provider_env,
         timeout_seconds=timeout_seconds,
         output_cap_bytes=output_cap_bytes,
         cancel_after_seconds=cancel_after_seconds,
     )
     parsed = None
     if run["status"] == "ok":
-        parsed = osr.parse_cli_output(run.get("run", {}).get("stdout", ""), profile="auto")
+        parsed = osr.parse_cli_output(
+            run.get("run", {}).get("stdout", ""), profile="json_lines"
+        )
+    output_valid = bool(
+        parsed is not None
+        and osr._kimi_stream_output_is_success(parsed, run.get("run") or {})
+    )
+    ok = run["status"] == "ok" and output_valid
     return build_command_payload(
-        ok=run["status"] == "ok",
+        ok=ok,
         human_message=(
-            "kimi one-shot response ok." if run["status"] == "ok"
+            "kimi one-shot response ok." if ok
             else "kimi one-shot run failed."
         ),
-        machine_error_code=run["machine_error_code"],
+        machine_error_code=(
+            osr.ONE_SHOT_OK
+            if ok
+            else osr.ONE_SHOT_OUTPUT_INVALID
+            if run["status"] == "ok"
+            else run["machine_error_code"]
+        ),
         liveness="healthy",
-        severity="info" if run["status"] == "ok" else "error",
-        operator_action="none" if run["status"] == "ok" else "user_action",
+        severity="info" if ok else "error",
+        operator_action="none" if ok else "user_action",
         changed_files=[],
         exit_code=run.get("exit_code"),
         extra={
@@ -342,6 +390,29 @@ def kimi_one_shot_run(
     )
 
 
+def _kimi_response_text(parsed: dict[str, Any]) -> str:
+    """Extract text from the final Kimi assistant stream record."""
+    records = parsed.get("records")
+    if not isinstance(records, list) or not records:
+        return ""
+    final = records[-1]
+    if not isinstance(final, dict) or final.get("role") != "assistant":
+        return ""
+    content = final.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        block["text"]
+        for block in content
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+        and block["text"].strip()
+    )
+
+
 def kimi_text_proof(
     text: str,
     *,
@@ -351,10 +422,10 @@ def kimi_text_proof(
 ) -> dict[str, Any]:
     """Text response proof via the fake adapter (declared-not-live)."""
     run = kimi_one_shot_run(text, session=session, runtime=runtime)
-    stdout = (run.get("run") or {}).get("stdout", "")
-    ok = run["status"] == "ok" and bool(stdout.strip())
+    response_text = _kimi_response_text(run.get("parsed_output") or {})
+    ok = run["status"] == "ok" and bool(response_text.strip())
     if expected_prefix:
-        ok = ok and stdout.startswith(expected_prefix)
+        ok = ok and response_text.startswith(expected_prefix)
     return build_command_payload(
         ok=ok,
         human_message="kimi text proof ok." if ok else "kimi text proof failed.",
@@ -366,8 +437,10 @@ def kimi_text_proof(
         exit_code=0 if ok else 1,
         extra={
             "tool_id": KIMI_CLI_TOOL_ID,
-            "text_received": bool(stdout.strip()),
-            "expected_prefix_match": stdout.startswith(expected_prefix) if expected_prefix else None,
+            "text_received": bool(response_text.strip()),
+            "expected_prefix_match": (
+                response_text.startswith(expected_prefix) if expected_prefix else None
+            ),
             "proof_level": "SYNTHETIC_PROVEN",
             "declared_not_live_verified": True,
             "resume_supported": False,
@@ -467,7 +540,7 @@ def kimi_repo_read_proof(
             extra={"snapshot_path": str(target)},
         )
     if runtime is None:
-        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+        return osr.default_production_facade().session(KIMI_PROVIDER_ID)
     run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
         args=("--read-file", str(target)),
@@ -574,7 +647,7 @@ def kimi_timeout_cancel_proof(
     if cancel_after_seconds is None and timeout_seconds is None:
         raise ValueError("one of cancel_after_seconds or timeout_seconds is required")
     if runtime is None:
-        return osr.default_production_facade().run(KIMI_CLI_TOOL_ID)
+        return osr.default_production_facade().session(KIMI_PROVIDER_ID)
     run = runtime.one_shot_cli_run(
         KIMI_CLI_TOOL_ID,
         args=("--sleep", "30"),
@@ -609,11 +682,11 @@ def kimi_timeout_cancel_proof(
 
 
 def build_kimi_one_shot_receipt() -> dict[str, Any]:
-    """Declared receipt for the Kimi one-shot layer (B11_CODE)."""
+    """Declared receipt for the Kimi production adapter (R62/B11_CODE)."""
     return build_command_payload(
         ok=True,
-        human_message="Kimi one-shot CLI layer declared; fake-adapter proof only (B11_CODE).",
-        machine_error_code="SYNTHETIC_PROVEN",
+        human_message="Kimi one-shot production adapter contract declared (B11_CODE).",
+        machine_error_code="B11_CODE_PRODUCTION_ADAPTER_DECLARED",
         liveness="healthy",
         severity="info",
         operator_action="none",
@@ -622,6 +695,9 @@ def build_kimi_one_shot_receipt() -> dict[str, Any]:
         extra={
             "tool_id": KIMI_CLI_TOOL_ID,
             "declared_not_live_verified": True,
+            "provider_adapter_admitted": True,
+            "b11_live_pending": True,
+            "provider_live_proven": False,
             "kimi_code_home_env": KIMI_CODE_HOME_ENV,
             "repo_read_policy": KIMI_READ_MODE_NONE,
             "repo_read_requires": "os_read_only_sandbox_or_immutable_snapshot",
