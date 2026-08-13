@@ -96,6 +96,22 @@ class ProductionSandboxTests(unittest.TestCase):
         self.assertIn("(deny default)", profile)
         self.assertIn("(allow network-outbound)", profile)
 
+    def test_managed_bundle_read_is_exact_and_sysctl_is_read_only(self) -> None:
+        bundle = self.root / "bundle"
+        bundle.mkdir()
+        profile = osr.build_server_owned_sandbox_profile(
+            home_dir=self.home,
+            sandbox_cwd=self.cwd,
+            binary_path="/bin/sh",
+            read_only_roots=(bundle,),
+        )
+        resolved = bundle.resolve()
+        self.assertIn("(allow sysctl-read)", profile)
+        self.assertNotIn("sysctl-write", profile)
+        self.assertIn(f'(literal "{resolved}")', profile)
+        self.assertIn(f'(subpath "{resolved}")', profile)
+        self.assertNotIn("(allow file-write*", profile.split(str(resolved))[0])
+
     def test_repo_not_readable(self) -> None:
         self.assertIn("REPO_READ=no", self._run())
 

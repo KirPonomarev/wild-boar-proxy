@@ -14,6 +14,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from wild_boar_proxy import one_shot_cli_runtime as osr
 from wild_boar_proxy import qwen_one_shot_cli as qw
@@ -286,13 +287,25 @@ class QwenProductionFacadeTests(unittest.TestCase):
         self.assertFalse((self.root / "homes").exists())
 
     def test_default_session_function_uses_fail_closed_facade(self) -> None:
-        packet = qw.qwen_one_shot_session()
+        facade = osr.ProductionOneShotFacade(
+            homes_root=self.root / "default-homes",
+            admission_root=self.root / "default-admission",
+        )
+        with mock.patch.object(osr, "default_production_facade", return_value=facade):
+            packet = qw.qwen_one_shot_session()
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
         self.assertEqual(packet["changed_files"], [])
 
     def test_default_run_function_uses_fail_closed_facade(self) -> None:
-        packet = qw.qwen_one_shot_run("hi", session={"qwen_home": "/nonexistent"})
+        facade = osr.ProductionOneShotFacade(
+            homes_root=self.root / "default-homes",
+            admission_root=self.root / "default-admission",
+        )
+        with mock.patch.object(osr, "default_production_facade", return_value=facade):
+            packet = qw.qwen_one_shot_run(
+                "hi", session={"qwen_home": "/nonexistent"}
+            )
         self.assertEqual(packet["status"], "error")
         self.assertEqual(packet["machine_error_code"], osr.CLI_BINARY_ADMISSION_MISSING)
 

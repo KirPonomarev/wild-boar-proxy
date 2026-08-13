@@ -42,7 +42,8 @@ This is an experimental project in active development. The codebase includes:
   provenance, request identity, typed errors, and no silent fallback
 - Qwen and Kimi one-shot CLI production adapters with isolated homes,
   scrubbed environments, bounded output, cancellation, and fail-closed
-  admission
+  admission; managed standalone releases bind both the launcher SHA-256 and
+  the complete read-only bundle-tree digest
 - Registry-bound sequential workflows with fresh/continue/fork context,
   independent receipts, one-dispatch-per-step, and repository lease fencing
 - Local web workflow control with loopback/token/origin/CSRF/rate-limit
@@ -73,8 +74,9 @@ This is an experimental project in active development. The codebase includes:
 **Waiting for operator:**
 - Explicit live-dispatch authorization plus DeepSeek, Kimi, GLM, and Qwen API
   credentials through project-native owner environment/Keychain surfaces
-- Qwen and Kimi CLI binaries, dedicated isolated logins, and server-owned
-  admission for CLI/CLI proof
+- Dedicated isolated Qwen and Kimi CLI logins for CLI/CLI proof; a host must
+  install checksum-verified bundles, while server-owned bundle admission does
+  not create or authorize credentials
 - Physical E2E with dedicated accounts
 - Native voice physical observation
 - Clean-machine desktop install

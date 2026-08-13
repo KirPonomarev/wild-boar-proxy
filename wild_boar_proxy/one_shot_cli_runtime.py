@@ -53,7 +53,7 @@ from .runtime import build_command_payload
 from .runtime_errors import RuntimeErrorInfo
 
 ONE_SHOT_RUNTIME_SCHEMA_VERSION = 3
-ONE_SHOT_ADMISSION_SCHEMA_VERSION = 1
+ONE_SHOT_ADMISSION_SCHEMA_VERSION = 2
 
 # Production server-owned homes root. FIXED constant, not overridable by
 # environment, config, prompt, or caller.
@@ -67,6 +67,7 @@ DEFAULT_ADMISSION_ROOT = (
     / "WildBoarProxy"
     / "one-shot-cli-admission"
 )
+DEFAULT_BUNDLE_ROOT = DEFAULT_ADMISSION_ROOT / "releases"
 ADMISSION_FILENAME = "admissions.json"
 ADMISSION_LOCK_FILENAME = "writer.lock"
 
@@ -74,6 +75,8 @@ DEFAULT_PROBE_TIMEOUT_SECONDS = 20.0
 DEFAULT_RUN_TIMEOUT_SECONDS = 300.0
 DEFAULT_OUTPUT_CAP_BYTES = 64 * 1024
 DEFAULT_DIGEST_SIZE_LIMIT = 512 * 1024 * 1024
+DEFAULT_BUNDLE_DIGEST_SIZE_LIMIT = 1024 * 1024 * 1024
+DEFAULT_BUNDLE_FILE_COUNT_LIMIT = 100_000
 CANCEL_GRACE_SECONDS = 5.0
 PROCESS_GROUP_EXIT_WAIT_SECONDS = 2.0
 
@@ -454,6 +457,10 @@ _ADMISSION_RECORD_KEYS = frozenset(
         "binary_sha256",
         "binary_uid",
         "binary_mode",
+        "bundle_root_realpath",
+        "bundle_sha256",
+        "bundle_file_count",
+        "bundle_total_bytes",
         "version_text",
         "observed_at_utc",
     }
@@ -613,7 +620,11 @@ def _validate_server_owned_binary(path: Path | str) -> tuple[str | None, str]:
 def _validate_admission_record(tool_id: str, value: Any) -> bool:
     if not isinstance(value, dict) or set(value) != _ADMISSION_RECORD_KEYS:
         return False
-    string_fields = _ADMISSION_RECORD_KEYS - {"binary_uid"}
+    string_fields = _ADMISSION_RECORD_KEYS - {
+        "binary_uid",
+        "bundle_file_count",
+        "bundle_total_bytes",
+    }
     if any(not isinstance(value.get(field), str) for field in string_fields):
         return False
     if value.get("tool_id") != tool_id or not tool_id:
@@ -629,6 +640,26 @@ def _validate_admission_record(tool_id: str, value: Any) -> bool:
         return False
     if not re.fullmatch(r"0o[0-7]{3,4}", value.get("binary_mode", "")):
         return False
+    bundle_root = value.get("bundle_root_realpath", "")
+    bundle_digest = value.get("bundle_sha256", "")
+    bundle_file_count = value.get("bundle_file_count")
+    bundle_total_bytes = value.get("bundle_total_bytes")
+    if not isinstance(bundle_file_count, int) or isinstance(bundle_file_count, bool):
+        return False
+    if not isinstance(bundle_total_bytes, int) or isinstance(bundle_total_bytes, bool):
+        return False
+    if bundle_file_count < 0 or bundle_total_bytes < 0:
+        return False
+    if bundle_root:
+        if (
+            not bundle_root.startswith(os.path.sep)
+            or os.path.realpath(bundle_root) != bundle_root
+            or not _SHA256_RE.fullmatch(bundle_digest)
+            or bundle_file_count <= 0
+        ):
+            return False
+    elif bundle_digest or bundle_file_count or bundle_total_bytes:
+        return False
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", value["provider_id"]):
         return False
     if not re.fullmatch(
@@ -640,6 +671,101 @@ def _validate_admission_record(tool_id: str, value: Any) -> bool:
     if _contains_secret_shape(value["version_text"]):
         return False
     return True
+
+
+def _managed_bundle_root(
+    binary_path: Path | str,
+    *,
+    bundle_roots: Sequence[Path | str],
+) -> Path | None:
+    """Return the first-level immutable package containing a binary.
+
+    Only code-owned bundle roots are considered. A package is exactly one
+    child beneath such a root, preventing a probe from widening read access to
+    the complete admission store or to an ambient package-manager prefix.
+    """
+    binary = Path(binary_path).resolve(strict=False)
+    for raw_root in bundle_roots:
+        root = Path(raw_root).resolve(strict=False)
+        try:
+            relative = binary.relative_to(root)
+        except ValueError:
+            continue
+        if len(relative.parts) < 2:
+            continue
+        package = (root / relative.parts[0]).resolve(strict=False)
+        try:
+            package.relative_to(root)
+        except ValueError:
+            continue
+        if package.is_dir():
+            return package
+    return None
+
+
+def compute_bundle_digest(
+    root: Path | str,
+    *,
+    size_limit: int = DEFAULT_BUNDLE_DIGEST_SIZE_LIMIT,
+    file_count_limit: int = DEFAULT_BUNDLE_FILE_COUNT_LIMIT,
+) -> tuple[str, int, int]:
+    """Hash one safe immutable CLI bundle without following symlink escapes."""
+    bundle = Path(root).resolve(strict=True)
+    root_info = bundle.lstat()
+    if (
+        not stat.S_ISDIR(root_info.st_mode)
+        or root_info.st_uid not in {0, os.getuid()}
+        or stat.S_IMODE(root_info.st_mode) & 0o022
+    ):
+        raise ValueError("bundle_root_owner_or_mode_unsafe")
+
+    records: list[dict[str, Any]] = []
+    file_count = 0
+    total_bytes = 0
+    for current_raw, dirs, files in os.walk(bundle, topdown=True, followlinks=False):
+        current = Path(current_raw)
+        names = sorted([*dirs, *files])
+        dirs[:] = sorted(dirs)
+        for name in names:
+            path = current / name
+            info = path.lstat()
+            relative = path.relative_to(bundle).as_posix()
+            mode = stat.S_IMODE(info.st_mode)
+            if info.st_uid not in {0, os.getuid()} or mode & 0o022:
+                raise ValueError("bundle_entry_owner_or_mode_unsafe")
+            if stat.S_ISDIR(info.st_mode):
+                records.append({"path": relative, "kind": "directory", "mode": mode})
+                continue
+            file_count += 1
+            if file_count > file_count_limit:
+                raise ValueError("bundle_file_count_limit_exceeded")
+            if stat.S_ISLNK(info.st_mode):
+                target = os.readlink(path)
+                resolved_target = (path.parent / target).resolve(strict=True)
+                try:
+                    resolved_target.relative_to(bundle)
+                except ValueError as exc:
+                    raise ValueError("bundle_symlink_escape") from exc
+                records.append(
+                    {"path": relative, "kind": "symlink", "mode": mode, "target": target}
+                )
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError("bundle_special_file_not_admitted")
+            total_bytes += info.st_size
+            if total_bytes > size_limit:
+                raise ValueError("bundle_size_limit_exceeded")
+            records.append(
+                {
+                    "path": relative,
+                    "kind": "file",
+                    "mode": mode,
+                    "size": info.st_size,
+                    "sha256": compute_tool_digest(path, size_limit=size_limit),
+                }
+            )
+    digest = hashlib.sha256(_canonical_json_bytes(records)).hexdigest()
+    return digest, file_count, total_bytes
 
 
 def _owned_path_is_safe(path: Path, *, expected_mode: int, directory: bool) -> bool:
@@ -833,6 +959,7 @@ def build_sterile_environment(
     provider_home: Path | str | None = None,
     provider_env: Mapping[str, str] | None = None,
     keep: Sequence[str] = (),
+    path_entries: Sequence[Path | str] = STERILE_PATH_ENTRIES,
 ) -> dict[str, str]:
     """Strict allowlist environment for one-shot children.
 
@@ -848,7 +975,7 @@ def build_sterile_environment(
     for key, value in os.environ.items():
         if key in allow and key not in ("PATH", "HOME"):
             env[key] = value
-    env["PATH"] = os.pathsep.join(STERILE_PATH_ENTRIES)
+    env["PATH"] = os.pathsep.join(str(item) for item in path_entries)
     if provider_home is not None:
         env["HOME"] = str(Path(provider_home).resolve())
     for key, value in (provider_env or {}).items():
@@ -905,6 +1032,8 @@ _SANDBOX_SYSTEM_READ_SUBPATHS = (
     "/Library",
     "/dev",
     "/private/var/db",
+    # `/bin/sh` resolves through this sealed macOS selector path.
+    "/private/var/select",
     "/private/etc",
     "/etc",
 )
@@ -927,6 +1056,8 @@ def build_server_owned_sandbox_profile(
     - read of `/` itself (required by dyld path resolution);
     - read/exec of the immutable system runtime surface;
     - read+exec of the exact resolved binary being launched;
+    - read/exec of a code-derived, admission-bound CLI bundle root when the
+      launcher belongs to a managed standalone release;
     - read-only access to explicitly admitted read roots (for example an
       immutable snapshot root or a policy-admitted project root);
     - read+write of exactly the sealed provider home and the sandbox cwd
@@ -944,6 +1075,10 @@ def build_server_owned_sandbox_profile(
         "(version 1)",
         "(deny default)",
         "(allow process*)",
+        # Node's `os` module and PyInstaller's Python bootstrap both require
+        # read-only kernel metadata during startup. This does not grant sysctl
+        # writes and is shared by the two admitted standalone runtimes.
+        "(allow sysctl-read)",
         '(allow file-read* (literal "/"))',
         f"(allow file-read* file-map-executable {read_subpaths})",
     ]
@@ -954,7 +1089,22 @@ def build_server_owned_sandbox_profile(
         )
     for root in read_only_roots:
         root_r = Path(root).resolve()
-        lines.append(f'(allow file-read* (subpath "{root_r}"))')
+        ancestors = [
+            parent
+            for parent in reversed(root_r.parents)
+            if str(parent) != os.path.sep
+        ]
+        if ancestors:
+            ancestor_literals = " ".join(
+                f'(literal "{parent}")' for parent in ancestors
+            )
+            lines.append(f"(allow file-read-metadata {ancestor_literals})")
+        # Seatbelt's `subpath` does not grant metadata access to the root
+        # object itself; both clauses are required for `cd bundle/bin/..` and
+        # for single-file launchers that open their adjacent support tree.
+        lines.append(
+            f'(allow file-read* (literal "{root_r}") (subpath "{root_r}"))'
+        )
     if allow_provider_network:
         lines.append("(allow network-outbound)")
     lines.extend(
@@ -973,7 +1123,12 @@ def build_server_owned_sandbox_profile(
 _READ_ONLY_PROVIDER_ENV_KEYS = ("QWEN_PROJECT_ROOT", "KIMI_SNAPSHOT_ROOT")
 
 
-def _resolve_binary(entry: OneShotToolManifestEntry, env: Mapping[str, str]) -> str | None:
+def _resolve_binary(
+    entry: OneShotToolManifestEntry,
+    env: Mapping[str, str],
+    *,
+    search_roots: Sequence[Path | str] = STERILE_PATH_ENTRIES,
+) -> str | None:
     binary = str(entry.binary_name).strip()
     if not binary:
         return None
@@ -990,7 +1145,7 @@ def _resolve_binary(entry: OneShotToolManifestEntry, env: Mapping[str, str]) -> 
     if entry.server_owned:
         if Path(binary).name != binary or binary in {".", ".."}:
             return None
-        for root in STERILE_PATH_ENTRIES:
+        for root in search_roots:
             candidate = Path(root) / binary
             if not candidate.is_file() or not os.access(candidate, os.X_OK):
                 continue
@@ -1291,10 +1446,14 @@ class OneShotRuntime:
         *,
         homes_root: Path | str,
         manifest: Sequence[OneShotToolManifestEntry] = (),
+        bundle_roots: Sequence[Path | str] = (DEFAULT_BUNDLE_ROOT,),
+        binary_search_roots: Sequence[Path | str] = STERILE_PATH_ENTRIES,
     ) -> None:
         root = Path(homes_root)
         self._homes_root = root
         self._manifest = tuple(manifest)
+        self._bundle_roots = tuple(Path(item) for item in bundle_roots)
+        self._binary_search_roots = tuple(str(item) for item in binary_search_roots)
 
     @property
     def homes_root(self) -> Path:
@@ -1303,6 +1462,14 @@ class OneShotRuntime:
     @property
     def manifest(self) -> tuple[OneShotToolManifestEntry, ...]:
         return self._manifest
+
+    @property
+    def bundle_roots(self) -> tuple[Path, ...]:
+        return self._bundle_roots
+
+    @property
+    def binary_search_roots(self) -> tuple[str, ...]:
+        return self._binary_search_roots
 
     def resolve_manifest_entry(self, tool_id: str) -> OneShotToolManifestEntry | None:
         """Resolve a tool id against this instance's manifest.
@@ -1378,7 +1545,11 @@ class OneShotRuntime:
     ) -> dict[str, str]:
         home = self._validate_provider_home(provider_home)
         extra = self._validate_provider_env(provider_env)
-        return build_sterile_environment(provider_home=home, provider_env=extra)
+        return build_sterile_environment(
+            provider_home=home,
+            provider_env=extra,
+            path_entries=self._binary_search_roots,
+        )
 
     def create_provider_home(self, provider_id: str) -> dict[str, Any]:
         """Create an isolated provider home (0700) with a distinct runtime dir.
@@ -1495,7 +1666,11 @@ class OneShotRuntime:
                 extra={"tool_id": tool_id, "server_owned": True},
             )
         env = self._prepare_child_env(provider_home=provider_home, provider_env=None)
-        realpath = _resolve_binary(entry, env)
+        realpath = _resolve_binary(
+            entry,
+            env,
+            search_roots=self._binary_search_roots,
+        )
         if realpath is None:
             return build_command_payload(
                 ok=False,
@@ -1557,7 +1732,7 @@ class OneShotRuntime:
                 "binary_sha256": digest,
                 "version_text": version_text,
                 "env_digest": handle.env_digest,
-                "sterile_path": list(STERILE_PATH_ENTRIES),
+                "sterile_path": list(self._binary_search_roots),
                 "timeout_seconds": timeout_seconds,
                 "resume_supported": False,
                 "resume_reason": ONE_SHOT_NO_RESUME_REASON,
@@ -1615,7 +1790,11 @@ class OneShotRuntime:
         prepared_env = self._prepare_child_env(
             provider_home=provider_home, provider_env=provider_env
         )
-        realpath = _resolve_binary(entry, prepared_env)
+        realpath = _resolve_binary(
+            entry,
+            prepared_env,
+            search_roots=self._binary_search_roots,
+        )
         if realpath is None:
             return build_command_payload(
                 ok=False,
@@ -1670,6 +1849,12 @@ class OneShotRuntime:
             for key in _READ_ONLY_PROVIDER_ENV_KEYS
             if key in prepared_env
         ]
+        bundle_root = _managed_bundle_root(
+            realpath,
+            bundle_roots=self._bundle_roots,
+        )
+        if bundle_root is not None:
+            read_only_roots.append(bundle_root)
         profile_text = build_server_owned_sandbox_profile(
             home_dir=child_home,
             sandbox_cwd=sandbox_cwd,
@@ -1939,9 +2124,15 @@ class ProductionOneShotFacade:
         self._homes_root = Path(homes_root)
         self._manifest = tuple(manifest)
         self._admission_root = Path(admission_root)
+        default_admission_bin = str(DEFAULT_ADMISSION_ROOT / "bin")
+        self._binary_search_roots = tuple(
+            item for item in STERILE_PATH_ENTRIES if item != default_admission_bin
+        ) + (str(self._admission_root / "bin"),)
         self._runtime = OneShotRuntime(
             homes_root=self._homes_root,
             manifest=self._manifest,
+            bundle_roots=(self._admission_root / "releases",),
+            binary_search_roots=self._binary_search_roots,
         )
 
     @property
@@ -2077,8 +2268,12 @@ class ProductionOneShotFacade:
                 manifest_sha256=declaration_digest,
             )
 
-        env = build_sterile_environment()
-        current_realpath = _resolve_binary(entry, env)
+        env = build_sterile_environment(path_entries=self._binary_search_roots)
+        current_realpath = _resolve_binary(
+            entry,
+            env,
+            search_roots=self._binary_search_roots,
+        )
         if current_realpath is None or current_realpath != record.get("binary_realpath"):
             return None, self._blocked_packet(
                 surface,
@@ -2121,6 +2316,45 @@ class ProductionOneShotFacade:
                 tool_id=entry.tool_id,
                 provider_id=entry.provider_id,
             )
+
+        current_bundle_root = _managed_bundle_root(
+            validated_realpath,
+            bundle_roots=(self._admission_root / "releases",),
+        )
+        recorded_bundle_root = str(record.get("bundle_root_realpath") or "")
+        if (str(current_bundle_root) if current_bundle_root is not None else "") != recorded_bundle_root:
+            return None, self._blocked_packet(
+                surface,
+                CLI_BINARY_IDENTITY_DRIFT,
+                "bundle_root_missing_or_drifted",
+                tool_id=entry.tool_id,
+                provider_id=entry.provider_id,
+            )
+        if current_bundle_root is not None:
+            try:
+                bundle_digest, bundle_file_count, bundle_total_bytes = compute_bundle_digest(
+                    current_bundle_root
+                )
+            except (OSError, ValueError):
+                return None, self._blocked_packet(
+                    surface,
+                    CLI_BINARY_IDENTITY_DRIFT,
+                    "bundle_identity_unreadable_or_unsafe",
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                )
+            if (
+                bundle_digest != record.get("bundle_sha256")
+                or bundle_file_count != record.get("bundle_file_count")
+                or bundle_total_bytes != record.get("bundle_total_bytes")
+            ):
+                return None, self._blocked_packet(
+                    surface,
+                    CLI_BINARY_IDENTITY_DRIFT,
+                    "bundle_digest_or_shape_drifted",
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                )
 
         if revalidate_version:
             probe = self._runtime.run_sterile_probe(
@@ -2597,6 +2831,8 @@ class ProductionOneShotFacade:
         runtime = OneShotRuntime(
             homes_root=self._homes_root,
             manifest=(admitted_entry,),
+            bundle_roots=(self._admission_root / "releases",),
+            binary_search_roots=self._binary_search_roots,
         )
         run = runtime.one_shot_cli_run(
             admitted_entry.tool_id,
@@ -2790,6 +3026,8 @@ class ProductionOneShotFacade:
         runtime = OneShotRuntime(
             homes_root=self._homes_root,
             manifest=(admitted_entry,),
+            bundle_roots=(self._admission_root / "releases",),
+            binary_search_roots=self._binary_search_roots,
         )
         run = runtime.one_shot_cli_run(
             admitted_entry.tool_id,
@@ -2902,6 +3140,8 @@ class ProductionOneShotFacade:
         runtime = OneShotRuntime(
             homes_root=self._homes_root,
             manifest=(admitted_entry,),
+            bundle_roots=(self._admission_root / "releases",),
+            binary_search_roots=self._binary_search_roots,
         )
         packet = runtime.one_shot_cli_run(
             admitted_entry.tool_id,
@@ -2969,6 +3209,28 @@ class ProductionOneShotFacade:
                 provider_id=entry.provider_id,
             )
         binary_info = Path(realpath).stat()
+        bundle_root = _managed_bundle_root(
+            realpath,
+            bundle_roots=(self._admission_root / "releases",),
+        )
+        bundle_sha256 = ""
+        bundle_file_count = 0
+        bundle_total_bytes = 0
+        if bundle_root is not None:
+            try:
+                (
+                    bundle_sha256,
+                    bundle_file_count,
+                    bundle_total_bytes,
+                ) = compute_bundle_digest(bundle_root)
+            except (OSError, ValueError) as exc:
+                return self._blocked_packet(
+                    "admit",
+                    CLI_BINARY_ADMISSION_INVALID,
+                    str(exc) or "bundle_identity_unreadable_or_unsafe",
+                    tool_id=entry.tool_id,
+                    provider_id=entry.provider_id,
+                )
         record = {
             "tool_id": entry.tool_id,
             "provider_id": entry.provider_id,
@@ -2977,6 +3239,10 @@ class ProductionOneShotFacade:
             "binary_sha256": expected,
             "binary_uid": binary_info.st_uid,
             "binary_mode": oct(stat.S_IMODE(binary_info.st_mode)),
+            "bundle_root_realpath": str(bundle_root) if bundle_root is not None else "",
+            "bundle_sha256": bundle_sha256,
+            "bundle_file_count": bundle_file_count,
+            "bundle_total_bytes": bundle_total_bytes,
             "version_text": version_text,
             "observed_at_utc": time.strftime(
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
@@ -3020,6 +3286,10 @@ class ProductionOneShotFacade:
                 "manifest_sha256": record["manifest_sha256"],
                 "binary_realpath": realpath,
                 "binary_sha256": expected,
+                "bundle_root_realpath": record["bundle_root_realpath"],
+                "bundle_sha256": record["bundle_sha256"],
+                "bundle_file_count": record["bundle_file_count"],
+                "bundle_total_bytes": record["bundle_total_bytes"],
                 "version_text": version_text,
                 "admission_record_sha256": hashlib.sha256(
                     _canonical_json_bytes(record)
@@ -3073,7 +3343,7 @@ class ProductionOneShotFacade:
                 "admission_store_reason": store.reason,
                 "admitted_tool_ids": admitted_tool_ids,
                 "operational_candidate_tool_ids": operational_candidates,
-                "sterile_path": list(STERILE_PATH_ENTRIES),
+                "sterile_path": list(self._binary_search_roots),
                 "sandbox": sandbox,
                 "runtime_grant_available": False,
                 "live_binary_revalidation_performed": False,
