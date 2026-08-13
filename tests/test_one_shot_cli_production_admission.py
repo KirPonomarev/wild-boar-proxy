@@ -610,6 +610,85 @@ class ProductionAdmissionTests(unittest.TestCase):
         self.assertEqual(record["manifest_sha256"], osr.manifest_entry_digest(self.entry))
         self.assertEqual(record["binary_sha256"], probe["binary_sha256"])
         self.assertEqual(record["binary_realpath"], os.path.realpath("/bin/echo"))
+        self.assertEqual(record["bundle_root_realpath"], "")
+        self.assertEqual(record["bundle_sha256"], "")
+        self.assertEqual(record["bundle_file_count"], 0)
+        self.assertEqual(record["bundle_total_bytes"], 0)
+
+    def test_managed_bundle_admission_binds_support_tree_and_rejects_drift(self) -> None:
+        package = self.admission_root / "releases" / "fixture-v1"
+        binary = package / "bin" / "fixture"
+        support = package / "lib" / "message.txt"
+        binary.parent.mkdir(parents=True)
+        support.parent.mkdir(parents=True)
+        self.admission_root.chmod(0o700)
+        binary.write_text(
+            "#!/bin/sh\n"
+            "if [ \"${1:-}\" = \"--version\" ]; then echo fixture-bundle-1.0; "
+            "else echo fixture-run; fi\n",
+            encoding="utf-8",
+        )
+        binary.chmod(0o700)
+        support.write_text("admitted support\n", encoding="utf-8")
+        support.chmod(0o600)
+        entry = replace(self.entry, binary_name=str(binary.resolve()))
+        trusted_roots = (*osr.TRUSTED_BINARY_REALPATH_ROOTS, str(self.admission_root))
+
+        with mock.patch.object(osr, "TRUSTED_BINARY_REALPATH_ROOTS", trusted_roots):
+            facade = osr.ProductionOneShotFacade(
+                homes_root=self.homes_root,
+                admission_root=self.admission_root,
+                manifest=(entry,),
+            )
+            probe = facade.probe(entry.tool_id)
+            self.assertEqual(probe["status"], "ok", probe)
+            admitted = facade.admit(
+                entry.tool_id,
+                expected_binary_sha256=str(probe["binary_sha256"]),
+            )
+            self.assertEqual(admitted["status"], "ok", admitted)
+            self.assertEqual(admitted["bundle_root_realpath"], str(package.resolve()))
+            self.assertRegex(str(admitted["bundle_sha256"]), r"^[0-9a-f]{64}$")
+            self.assertGreaterEqual(int(admitted["bundle_file_count"]), 2)
+
+            support.write_text("drifted support\n", encoding="utf-8")
+            with mock.patch.object(osr.subprocess, "Popen") as popen:
+                blocked = facade.run(entry.tool_id)
+            self.assertEqual(
+                blocked["machine_error_code"], osr.CLI_BINARY_IDENTITY_DRIFT
+            )
+            self.assertEqual(
+                blocked["blocked_reason"], "bundle_digest_or_shape_drifted"
+            )
+            popen.assert_not_called()
+
+    def test_managed_bundle_admission_rejects_symlink_escape(self) -> None:
+        package = self.admission_root / "releases" / "fixture-v1"
+        binary = package / "bin" / "fixture"
+        binary.parent.mkdir(parents=True)
+        self.admission_root.chmod(0o700)
+        binary.write_text("#!/bin/sh\necho fixture-bundle-1.0\n", encoding="utf-8")
+        binary.chmod(0o700)
+        (package / "escape").symlink_to("/etc/passwd")
+        entry = replace(self.entry, binary_name=str(binary.resolve()))
+        trusted_roots = (*osr.TRUSTED_BINARY_REALPATH_ROOTS, str(self.admission_root))
+
+        with mock.patch.object(osr, "TRUSTED_BINARY_REALPATH_ROOTS", trusted_roots):
+            facade = osr.ProductionOneShotFacade(
+                homes_root=self.homes_root,
+                admission_root=self.admission_root,
+                manifest=(entry,),
+            )
+            probe = facade.probe(entry.tool_id)
+            self.assertEqual(probe["status"], "ok", probe)
+            blocked = facade.admit(
+                entry.tool_id,
+                expected_binary_sha256=str(probe["binary_sha256"]),
+            )
+        self.assertEqual(
+            blocked["machine_error_code"], osr.CLI_BINARY_ADMISSION_INVALID
+        )
+        self.assertEqual(blocked["blocked_reason"], "bundle_symlink_escape")
 
     def test_failed_atomic_replace_preserves_previous_canonical_admission(self) -> None:
         admitted = self._admit()

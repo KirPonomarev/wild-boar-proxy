@@ -225,8 +225,8 @@ def kimi_one_shot_session(
     """Create the isolated Kimi one-shot session with auth isolation.
 
     R5: without an explicit engine instance the production facade is used,
-    which is fail-closed (`CLI_DISABLED_PENDING_SECURITY_ADMISSION`)
-    before any filesystem or process side effect. Tests pass their own
+    which fails closed at the current binary-admission or isolated-auth gate
+    before an operational provider spawn. Tests pass their own
     `OneShotRuntime` built from `tests/fakes.py`.
     """
     if runtime is None:
