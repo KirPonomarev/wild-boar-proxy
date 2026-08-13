@@ -74,3 +74,15 @@ Current CLI contract note:
 
 Acceptance artifacts for the isolated lane must be reproducible, repository
 relative, and free of reviewer-specific temporary paths.
+
+## Canonical Artifact Index
+
+- consolidated contour index:
+  - `audit_results/external_agent_lab_isolated_import_contour.md`
+- contour sequence artifacts:
+  - `audit_results/external_agent_lab_c1_quarantine_import_contour.md`
+  - `audit_results/external_agent_lab_c3_truth_relock_contour.md`
+  - `audit_results/external_agent_lab_c4_merge_readiness_closeout.md`
+  - `audit_results/external_agent_lab_c5_review_closure.md`
+- acceptance artifact:
+  - `external_agent_lab_acceptance_verification.md`
